@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, MicroBatchScan, Offset => OffsetV2, StreamingScan}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -47,9 +47,9 @@ object MemoryStream {
 }
 
 /**
- * A base class for memory stream implementations. Supports adding data and resetting.
+ * A base class for memory scan implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends StreamingScan {
   val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
 
@@ -67,8 +67,6 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 
   def addData(data: TraversableOnce[A]): OffsetV2
 
-  def fullSchema(): StructType = encoder.schema
-
   protected val logicalPlan: LogicalPlan = {
     StreamingRelationV2(
       MemoryStreamTableProvider,
@@ -78,6 +76,10 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
       attributes,
       None)(sqlContext.sparkSession)
   }
+
+  override def description(): String = "MemoryStreamDataSource"
+
+  override def readSchema(): StructType = encoder.schema
 
   override def initialOffset(): OffsetV2 = {
     throw new IllegalStateException("should not be called.")
@@ -104,7 +106,7 @@ class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table with Supp
 
   override def name(): String = "MemoryStreamDataSource"
 
-  override def schema(): StructType = stream.fullSchema()
+  override def schema(): StructType = stream.readSchema()
 
   override def capabilities(): util.Set[TableCapability] = {
     Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
@@ -115,20 +117,14 @@ class MemoryStreamTable(val stream: MemoryStreamBase[_]) extends Table with Supp
   }
 }
 
-class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder with Scan {
+class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder {
 
-  override def build(): Scan = this
-
-  override def description(): String = "MemoryStreamDataSource"
-
-  override def readSchema(): StructType = stream.fullSchema()
-
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    stream.asInstanceOf[MicroBatchStream]
+  override def buildForMicroBatchStreaming(checkpointLocation: String): MicroBatchScan = {
+    stream.asInstanceOf[MicroBatchScan]
   }
 
-  override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-    stream.asInstanceOf[ContinuousStream]
+  override def buildForContinuousStreaming(checkpointLocation: String): ContinuousScan = {
+    stream.asInstanceOf[ContinuousScan]
   }
 }
 
@@ -138,7 +134,7 @@ class MemoryStreamScanBuilder(stream: MemoryStreamBase[_]) extends ScanBuilder w
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext) with MicroBatchStream with Logging {
+    extends MemoryStreamBase[A](sqlContext) with MicroBatchScan with Logging {
 
   protected val output = logicalPlan.output
 

@@ -19,35 +19,34 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.{immutable, GenTraversableOnce}
 
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
-
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, StreamingScan}
 
 /**
  * A helper class that looks like a Map[Source, Offset].
  */
 class StreamProgress(
-    val baseMap: immutable.Map[SparkDataStream, OffsetV2] =
-        new immutable.HashMap[SparkDataStream, OffsetV2])
-  extends scala.collection.immutable.Map[SparkDataStream, OffsetV2] {
+    val baseMap: immutable.Map[StreamingScan, OffsetV2] =
+        new immutable.HashMap[StreamingScan, OffsetV2])
+  extends scala.collection.immutable.Map[StreamingScan, OffsetV2] {
 
-  def toOffsetSeq(source: Seq[SparkDataStream], metadata: OffsetSeqMetadata): OffsetSeq = {
+  def toOffsetSeq(source: Seq[StreamingScan], metadata: OffsetSeqMetadata): OffsetSeq = {
     OffsetSeq(source.map(get), Some(metadata))
   }
 
   override def toString: String =
     baseMap.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
-  override def +[B1 >: OffsetV2](kv: (SparkDataStream, B1)): Map[SparkDataStream, B1] = {
+  override def +[B1 >: OffsetV2](kv: (StreamingScan, B1)): Map[StreamingScan, B1] = {
     baseMap + kv
   }
 
-  override def get(key: SparkDataStream): Option[OffsetV2] = baseMap.get(key)
+  override def get(key: StreamingScan): Option[OffsetV2] = baseMap.get(key)
 
-  override def iterator: Iterator[(SparkDataStream, OffsetV2)] = baseMap.iterator
+  override def iterator: Iterator[(StreamingScan, OffsetV2)] = baseMap.iterator
 
-  override def -(key: SparkDataStream): Map[SparkDataStream, OffsetV2] = baseMap - key
+  override def -(key: StreamingScan): Map[StreamingScan, OffsetV2] = baseMap - key
 
-  def ++(updates: GenTraversableOnce[(SparkDataStream, OffsetV2)]): StreamProgress = {
+  def ++(updates: GenTraversableOnce[(StreamingScan, OffsetV2)]): StreamProgress = {
     new StreamProgress(baseMap ++ updates)
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.sources.v2.reader.{BatchScan, SupportsPushDownFilters}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -68,7 +68,7 @@ case class ParquetScanBuilder(
   // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
-  override def build(): Scan = {
+  override def buildForBatch(): BatchScan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
       readPartitionSchema(), pushedParquetFilters, options)
   }

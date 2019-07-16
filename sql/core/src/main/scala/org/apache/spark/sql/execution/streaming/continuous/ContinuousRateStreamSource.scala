@@ -23,14 +23,18 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
+import org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.types.StructType
 
 case class RateStreamPartitionOffset(
    partition: Int, currentValue: Long, currentTimeMs: Long) extends PartitionOffset
 
-class RateStreamContinuousStream(rowsPerSecond: Long, numPartitions: Int) extends ContinuousStream {
+class RateStreamContinuousScan(rowsPerSecond: Long, numPartitions: Int) extends ContinuousScan {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
+
+  override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
   val creationTime = System.currentTimeMillis()
 

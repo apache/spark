@@ -23,7 +23,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.util.RpcUtils
@@ -83,14 +83,14 @@ private[sql] object EpochCoordinatorRef extends Logging {
    */
   def create(
       writeSupport: StreamingWrite,
-      stream: ContinuousStream,
+      scan: ContinuousScan,
       query: ContinuousExecution,
       epochCoordinatorId: String,
       startEpoch: Long,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
-      writeSupport, stream, query, startEpoch, session, env.rpcEnv)
+      writeSupport, scan, query, startEpoch, session, env.rpcEnv)
     val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
@@ -116,7 +116,7 @@ private[sql] object EpochCoordinatorRef extends Logging {
  */
 private[continuous] class EpochCoordinator(
     writeSupport: StreamingWrite,
-    stream: ContinuousStream,
+    scan: ContinuousScan,
     query: ContinuousExecution,
     startEpoch: Long,
     session: SparkSession,
@@ -224,7 +224,7 @@ private[continuous] class EpochCoordinator(
         partitionOffsets.collect { case ((e, _), o) if e == epoch => o }
       if (thisEpochOffsets.size == numReaderPartitions) {
         logDebug(s"Epoch $epoch has offsets reported from all partitions: $thisEpochOffsets")
-        query.addOffset(epoch, stream, thisEpochOffsets.toSeq)
+        query.addOffset(epoch, scan, thisEpochOffsets.toSeq)
         resolveCommitsAtEpoch(epoch)
       }
       checkProcessingQueueBoundaries()

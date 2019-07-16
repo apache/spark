@@ -22,10 +22,10 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
-import org.apache.spark.sql.sources.v2.reader.Scan
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
@@ -49,11 +49,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
       when(sparkEnv.conf).thenReturn(new SparkConf())
       SparkEnv.set(sparkEnv)
 
-      val scan = getKafkaDataSourceScan(options)
-      val stream = scan.toMicroBatchStream("dummy").asInstanceOf[KafkaMicroBatchStream]
+      val builder = getKafkaDataSourceScanBuilder(options)
+      val scan = builder.buildForMicroBatchStreaming("dummy")
+        .asInstanceOf[KafkaMicroBatchScan]
 
-      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
-      assert(expectedMaxOffsetsPerTrigger === getField(stream, maxOffsetsPerTriggerMethod))
+      assert(expectedPollTimeoutMs === getField(scan, pollTimeoutMsMethod))
+      assert(expectedMaxOffsetsPerTrigger === getField(scan, maxOffsetsPerTriggerMethod))
     }
 
     val expectedValue = 1000L
@@ -67,9 +68,10 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     def verifyFieldsInContinuousStream(
         options: CaseInsensitiveStringMap,
         expectedPollTimeoutMs: Long): Unit = {
-      val scan = getKafkaDataSourceScan(options)
-      val stream = scan.toContinuousStream("dummy").asInstanceOf[KafkaContinuousStream]
-      assert(expectedPollTimeoutMs === getField(stream, pollTimeoutMsMethod))
+      val builder = getKafkaDataSourceScanBuilder(options)
+      val scan = builder.buildForContinuousStreaming("dummy")
+        .asInstanceOf[KafkaContinuousScan]
+      assert(expectedPollTimeoutMs === getField(scan, pollTimeoutMsMethod))
     }
 
     val expectedValue = 1000
@@ -91,9 +93,9 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     new CaseInsensitiveStringMap((options.toMap ++ requiredOptions).asJava)
   }
 
-  private def getKafkaDataSourceScan(options: CaseInsensitiveStringMap): Scan = {
+  private def getKafkaDataSourceScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     val provider = new KafkaSourceProvider()
-    provider.getTable(options).newScanBuilder(options).build()
+    provider.getTable(options).newScanBuilder(options)
   }
 
   private def getField[T](obj: AnyRef, method: PrivateMethod[T]): T = {

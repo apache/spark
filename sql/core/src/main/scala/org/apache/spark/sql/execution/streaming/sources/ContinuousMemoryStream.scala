@@ -43,7 +43,7 @@ import org.apache.spark.util.RpcUtils
  *    the specified offset within the list, or null if that offset doesn't yet have a record.
  */
 class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext, numPartitions: Int = 2)
-  extends MemoryStreamBase[A](sqlContext) with ContinuousStream {
+  extends MemoryStreamBase[A](sqlContext) with ContinuousScan {
 
   private implicit val formats = Serialization.formats(NoTypeHints)
 

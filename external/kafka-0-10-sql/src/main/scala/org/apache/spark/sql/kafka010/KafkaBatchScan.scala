@@ -22,21 +22,24 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReaderFactory}
+import org.apache.spark.sql.sources.v2.reader.{BatchScan, InputPartition, PartitionReaderFactory}
+import org.apache.spark.sql.types.StructType
 
 
-private[kafka010] class KafkaBatch(
+private[kafka010] class KafkaBatchScan(
     strategy: ConsumerStrategy,
     sourceOptions: Map[String, String],
     specifiedKafkaParams: Map[String, String],
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
     endingOffsets: KafkaOffsetRangeLimit)
-  extends Batch with Logging {
+  extends BatchScan with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
   assert(endingOffsets != EarliestOffsetRangeLimit,
     "Ending offset not allowed to be set to earliest offsets.")
+
+  override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
   private val pollTimeoutMs = sourceOptions.getOrElse(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,

@@ -19,13 +19,28 @@ package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.sources.v2.reader.InputPartition;
-import org.apache.spark.sql.sources.v2.reader.Scan;
 
 /**
- * A {@link SparkDataStream} for streaming queries with continuous mode.
+ * An interface that defines how to scan the data from data source for continuous streaming
+ * processing.
+ *
+ * The scanning procedure is:
+ *   1. Determine the start offset of this data stream by {@link #initialOffset()} or recover
+ *      from the checkpoint if it exists.
+ *   2. Create the input partitions to scan the data stream by {@link #planInputPartitions(Offset)}
+ *      with the start offset. Launch a Spark job and submit one task for each input partition to
+ *      produce data.
+ *   3. Create a partition reader factory by {@link #createContinuousReaderFactory()}, serialize
+ *      and send it to each input partition.
+ *   4. For each partition, create the data reader from the reader factory, and scan the data from
+ *      the input partition with this reader.
+ *   5. The reader reports the offset of its current record periodicity. Spark saves offsets to the
+ *      checkpoint.
+ *   6. Call {@link #needsReconfiguration()} periodicity. If it's true, go back to step 1. Otherwise
+ *      the launched Spark job should never stop.
  */
 @Evolving
-public interface ContinuousStream extends SparkDataStream {
+public interface ContinuousScan extends StreamingScan {
 
   /**
    * Returns a list of {@link InputPartition input partitions} given the start offset. Each
@@ -33,7 +48,7 @@ public interface ContinuousStream extends SparkDataStream {
    * number of input partitions returned here is the same as the number of RDD partitions this scan
    * outputs.
    * <p>
-   * If the {@link Scan} supports filter pushdown, this stream is likely configured with a filter
+   * If the data source supports filter pushdown, this scan is likely configured with a filter
    * and is responsible for creating splits for that filter, which is not a full scan.
    * </p>
    * <p>

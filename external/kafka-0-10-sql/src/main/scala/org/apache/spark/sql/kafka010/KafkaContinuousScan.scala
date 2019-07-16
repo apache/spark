@@ -30,10 +30,11 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * A [[ContinuousStream]] for data from kafka.
+ * A [[ContinuousScan]] for data from kafka.
  *
  * @param offsetReader  a reader used to get kafka offsets. Note that the actual data will be
  *                      read by per-task consumers generated later.
@@ -45,14 +46,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *                       scenarios, where some offsets after the specified initial ones can't be
  *                       properly read.
  */
-class KafkaContinuousStream(
+class KafkaContinuousScan(
     offsetReader: KafkaOffsetReader,
     kafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
     initialOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends ContinuousStream with Logging {
+  extends ContinuousScan with Logging {
+
+  override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
   private val pollTimeoutMs =
     options.getLong(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, 512)

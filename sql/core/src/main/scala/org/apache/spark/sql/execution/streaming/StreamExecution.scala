@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.command.StreamingExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, StreamingScan}
 import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
@@ -206,7 +206,7 @@ abstract class StreamExecution(
   /**
    * A list of unique sources in the query plan. This will be set when generating logical plan.
    */
-  @volatile protected var uniqueSources: Seq[SparkDataStream] = Seq.empty
+  @volatile protected var uniqueSources: Seq[StreamingScan] = Seq.empty
 
   /** Defines the internal state of execution */
   protected val state = new AtomicReference[State](INITIALIZING)
@@ -215,7 +215,7 @@ abstract class StreamExecution(
   var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
-  protected var newData: Map[SparkDataStream, LogicalPlan] = _
+  protected var newData: Map[StreamingScan, LogicalPlan] = _
 
   @volatile
   protected var streamDeathCause: StreamingQueryException = null

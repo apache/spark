@@ -28,7 +28,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf.CONTINUOUS_STREAMING_EPOCH_BACKLOG_QUEUE_SIZE
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.test.TestSparkSession
@@ -47,7 +47,7 @@ class EpochCoordinatorSuite
   private val epochBacklogQueueSize = 10
 
   override def beforeEach(): Unit = {
-    val stream = mock[ContinuousStream]
+    val stream = mock[ContinuousScan]
     writeSupport = mock[StreamingWrite]
     query = mock[ContinuousExecution]
     orderVerifier = inOrder(writeSupport, query)

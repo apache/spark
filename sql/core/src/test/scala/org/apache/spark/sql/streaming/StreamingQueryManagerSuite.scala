@@ -308,7 +308,7 @@ class StreamingQueryManagerSuite extends StreamTest {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
           case r: StreamingDataSourceV2Relation =>
-            r.stream.asInstanceOf[MemoryStream[Int]].addData(0)
+            r.scan.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {
         logDebug(s"Stopping query ${queryToStop.name}")

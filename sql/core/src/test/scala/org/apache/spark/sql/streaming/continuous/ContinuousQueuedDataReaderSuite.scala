@@ -27,7 +27,7 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReader, ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReader, ContinuousScan, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
@@ -44,7 +44,7 @@ class ContinuousQueuedDataReaderSuite extends StreamTest with MockitoSugar {
     super.beforeEach()
     epochEndpoint = EpochCoordinatorRef.create(
       mock[StreamingWrite],
-      mock[ContinuousStream],
+      mock[ContinuousScan],
       mock[ContinuousExecution],
       coordinatorId,
       startEpoch,

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Stati
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader.{Statistics => V2Statistics, _}
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, StreamingScan}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -55,7 +55,7 @@ case class DataSourceV2Relation(
   }
 
   override def computeStats(): Statistics = {
-    val scan = newScanBuilder().build()
+    val scan = newScanBuilder().buildForBatch()
     scan match {
       case r: SupportsReportStatistics =>
         val statistics = r.estimateStatistics()
@@ -79,8 +79,7 @@ case class DataSourceV2Relation(
  */
 case class StreamingDataSourceV2Relation(
     output: Seq[Attribute],
-    scan: Scan,
-    stream: SparkDataStream,
+    scan: StreamingScan,
     startOffset: Option[Offset] = None,
     endOffset: Option[Offset] = None)
   extends LeafNode with MultiInstanceRelation {

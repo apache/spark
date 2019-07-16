@@ -29,19 +29,22 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchScan, Offset}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{ManualClock, SystemClock}
 
-class RateStreamMicroBatchStream(
+class RateStreamMicroBatchScan(
     rowsPerSecond: Long,
     // The default values here are used in tests.
     rampUpTimeSeconds: Long = 0,
     numPartitions: Int = 1,
     options: CaseInsensitiveStringMap,
     checkpointLocation: String)
-  extends MicroBatchStream with Logging {
+  extends MicroBatchScan with Logging {
   import RateStreamProvider._
+
+  override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
   private[sources] val clock = {
     // The option to use a manual clock is provided only for unit testing purposes.

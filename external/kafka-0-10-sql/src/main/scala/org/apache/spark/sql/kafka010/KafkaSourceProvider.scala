@@ -34,8 +34,8 @@ import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.reader.{Batch, Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.{BatchScan, ScanBuilder}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, MicroBatchScan}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, WriteBuilder}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
@@ -368,8 +368,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         ACCEPT_ANY_SCHEMA).asJava
     }
 
-    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
-      () => new KafkaScan(options)
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new KafkaScanBuilder(options)
+    }
 
     override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new WriteBuilder {
@@ -395,11 +396,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  class KafkaScan(options: CaseInsensitiveStringMap) extends Scan {
+  class KafkaScanBuilder(options: CaseInsensitiveStringMap) extends ScanBuilder {
 
-    override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
-
-    override def toBatch(): Batch = {
+    override def buildForBatch(): BatchScan = {
       val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
       validateBatchOptions(caseInsensitiveOptions)
       val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveOptions)
@@ -410,7 +409,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
         caseInsensitiveOptions, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
 
-      new KafkaBatch(
+      new KafkaBatchScan(
         strategy(caseInsensitiveOptions),
         caseInsensitiveOptions,
         specifiedKafkaParams,
@@ -419,7 +418,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         endingRelationOffsets)
     }
 
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+    override def buildForMicroBatchStreaming(checkpointLocation: String): MicroBatchScan = {
       val parameters = options.asScala.toMap
       validateStreamOptions(parameters)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -439,7 +438,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         parameters,
         driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-      new KafkaMicroBatchStream(
+      new KafkaMicroBatchScan(
         kafkaOffsetReader,
         kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
         options,
@@ -448,7 +447,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         failOnDataLoss(caseInsensitiveParams))
     }
 
-    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
+    override def buildForContinuousStreaming(checkpointLocation: String): ContinuousScan = {
       val parameters = options.asScala.toMap
       validateStreamOptions(parameters)
       // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -473,7 +472,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         parameters,
         driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-      new KafkaContinuousStream(
+      new KafkaContinuousScan(
         kafkaOffsetReader,
         kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
         options,

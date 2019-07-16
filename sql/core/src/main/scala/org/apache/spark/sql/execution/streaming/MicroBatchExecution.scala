@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Log
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchStream, WriteToMicroBatchDataSource}
+import org.apache.spark.sql.execution.streaming.sources.{RateControlMicroBatchScan, WriteToMicroBatchDataSource}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchScan, Offset => OffsetV2, StreamingScan}
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
 
@@ -48,7 +48,7 @@ class MicroBatchExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
+  @volatile protected var sources: Seq[StreamingScan] = Seq.empty
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
@@ -98,9 +98,8 @@ class MicroBatchExecution(
             nextSourceId += 1
             logInfo(s"Reading table [$table] from DataSourceV2 named '$srcName' [$src]")
             // TODO: operator pushdown.
-            val scan = table.newScanBuilder(options).build()
-            val stream = scan.toMicroBatchStream(metadataPath)
-            StreamingDataSourceV2Relation(output, scan, stream)
+            val scan = table.newScanBuilder(options).buildForMicroBatchStreaming(metadataPath)
+            StreamingDataSourceV2Relation(output, scan)
           })
         } else if (v1.isEmpty) {
           throw new UnsupportedOperationException(
@@ -120,7 +119,7 @@ class MicroBatchExecution(
       // v1 source
       case s: StreamingExecutionRelation => s.source
       // v2 source
-      case r: StreamingDataSourceV2Relation => r.stream
+      case r: StreamingDataSourceV2Relation => r.scan
     }
     uniqueSources = sources.distinct
 
@@ -354,13 +353,13 @@ class MicroBatchExecution(
     if (isCurrentBatchConstructed) return true
 
     // Generate a map from each unique source to the next available offset.
-    val latestOffsets: Map[SparkDataStream, Option[OffsetV2]] = uniqueSources.map {
+    val latestOffsets: Map[StreamingScan, Option[OffsetV2]] = uniqueSources.map {
       case s: Source =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("getOffset") {
           (s, s.getOffset)
         }
-      case s: RateControlMicroBatchStream =>
+      case s: RateControlMicroBatchScan =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           val startOffset = availableOffsets
@@ -368,7 +367,7 @@ class MicroBatchExecution(
             .getOrElse(s.initialOffset())
           (s, Option(s.latestOffset(startOffset)))
         }
-      case s: MicroBatchStream =>
+      case s: MicroBatchScan =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
           (s, Option(s.latestOffset()))
@@ -412,8 +411,8 @@ class MicroBatchExecution(
           if (prevBatchOff.isDefined) {
             prevBatchOff.get.toStreamProgress(sources).foreach {
               case (src: Source, off: Offset) => src.commit(off)
-              case (stream: MicroBatchStream, off) =>
-                stream.commit(stream.deserializeOffset(off.json))
+              case (scan: MicroBatchScan, off) =>
+                scan.commit(scan.deserializeOffset(off.json))
               case (src, _) =>
                 throw new IllegalArgumentException(
                   s"Unknown source is found at constructNextBatch: $src")
@@ -457,22 +456,22 @@ class MicroBatchExecution(
           logDebug(s"Retrieving data from $source: $current -> $available")
           Some(source -> batch.logicalPlan)
 
-        case (stream: MicroBatchStream, available)
-          if committedOffsets.get(stream).map(_ != available).getOrElse(true) =>
-          val current = committedOffsets.get(stream).map {
-            off => stream.deserializeOffset(off.json)
+        case (scan: MicroBatchScan, available)
+          if committedOffsets.get(scan).map(_ != available).getOrElse(true) =>
+          val current = committedOffsets.get(scan).map {
+            off => scan.deserializeOffset(off.json)
           }
           val endOffset: OffsetV2 = available match {
-            case v1: SerializedOffset => stream.deserializeOffset(v1.json)
+            case v1: SerializedOffset => scan.deserializeOffset(v1.json)
             case v2: OffsetV2 => v2
           }
-          val startOffset = current.getOrElse(stream.initialOffset)
-          logDebug(s"Retrieving data from $stream: $current -> $endOffset")
+          val startOffset = current.getOrElse(scan.initialOffset)
+          logDebug(s"Retrieving data from $scan: $current -> $endOffset")
 
           // To be compatible with the v1 source, the `newData` is represented as a logical plan,
           // while the `newData` of v2 source is just the start and end offsets. Here we return a
           // fake logical plan to carry the offsets.
-          Some(stream -> OffsetHolder(startOffset, endOffset))
+          Some(scan -> OffsetHolder(startOffset, endOffset))
 
         case _ => None
       }
@@ -498,7 +497,7 @@ class MicroBatchExecution(
 
       // For v2 sources.
       case r: StreamingDataSourceV2Relation =>
-        newData.get(r.stream).map {
+        newData.get(r.scan).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {

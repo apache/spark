@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relati
 import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
 
@@ -52,7 +52,7 @@ class ContinuousExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  @volatile protected var sources: Seq[ContinuousStream] = Seq()
+  @volatile protected var sources: Seq[ContinuousScan] = Seq()
 
   // For use only in test harnesses.
   private[sql] var currentEpochCoordinatorId: String = _
@@ -76,14 +76,13 @@ class ContinuousExecution(
           nextSourceId += 1
           logInfo(s"Reading table [$table] from DataSourceV2 named '$sourceName' [$ds]")
           // TODO: operator pushdown.
-          val scan = table.newScanBuilder(options).build()
-          val stream = scan.toContinuousStream(metadataPath)
-          StreamingDataSourceV2Relation(output, scan, stream)
+          val scan = table.newScanBuilder(options).buildForContinuousStreaming(metadataPath)
+          StreamingDataSourceV2Relation(output, scan)
         })
     }
 
     sources = _logicalPlan.collect {
-      case r: StreamingDataSourceV2Relation => r.stream.asInstanceOf[ContinuousStream]
+      case r: StreamingDataSourceV2Relation => r.scan.asInstanceOf[ContinuousScan]
     }
     uniqueSources = sources.distinct
 
@@ -168,8 +167,8 @@ class ContinuousExecution(
     val withNewSources: LogicalPlan = logicalPlan transform {
       case relation: StreamingDataSourceV2Relation =>
         val loggedOffset = offsets.offsets(0)
-        val realOffset = loggedOffset.map(off => relation.stream.deserializeOffset(off.json))
-        val startOffset = realOffset.getOrElse(relation.stream.initialOffset)
+        val realOffset = loggedOffset.map(off => relation.scan.deserializeOffset(off.json))
+        val startOffset = realOffset.getOrElse(relation.scan.initialOffset)
         relation.copy(startOffset = Some(startOffset))
     }
 
@@ -194,7 +193,7 @@ class ContinuousExecution(
 
     val stream = withNewSources.collect {
       case relation: StreamingDataSourceV2Relation =>
-        relation.stream.asInstanceOf[ContinuousStream]
+        relation.scan.asInstanceOf[ContinuousScan]
     }.head
 
     sparkSessionForQuery.sparkContext.setLocalProperty(
@@ -299,7 +298,7 @@ class ContinuousExecution(
    */
   def addOffset(
       epoch: Long,
-      stream: ContinuousStream,
+      stream: ContinuousScan,
       partitionOffsets: Seq[PartitionOffset]): Unit = {
     assert(sources.length == 1, "only one continuous source supported currently")
 

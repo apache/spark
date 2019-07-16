@@ -17,21 +17,15 @@
 
 package test.org.apache.spark.sql.sources.v2;
 
-import org.apache.spark.sql.sources.v2.reader.Batch;
+import org.apache.spark.sql.sources.v2.reader.BatchScan;
 import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory;
-import org.apache.spark.sql.sources.v2.reader.Scan;
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder;
 import org.apache.spark.sql.types.StructType;
 
-abstract class JavaSimpleScanBuilder implements ScanBuilder, Scan, Batch {
+abstract class JavaSimpleScanBuilder implements ScanBuilder, BatchScan {
 
   @Override
-  public Scan build() {
-    return this;
-  }
-
-  @Override
-  public Batch toBatch() {
+  public BatchScan buildForBatch() {
     return this;
   }
 

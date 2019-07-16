@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
-import org.apache.spark.sql.sources.v2.reader.streaming.SparkDataStream
+import org.apache.spark.sql.sources.v2.reader.streaming.StreamingScan
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType
  * Note that, we extends `SparkDataStream` here, to make the v1 streaming source API be compatible
  * with data source v2.
  */
-trait Source extends SparkDataStream {
+trait Source extends StreamingScan {
 
   /** Returns the schema of the data from this source */
   def schema: StructType
@@ -66,6 +66,8 @@ trait Source extends SparkDataStream {
    * equal to `end` and will only request offsets greater than `end` in the future.
    */
   def commit(end: Offset) : Unit = {}
+
+  override def readSchema(): StructType = schema
 
   override def initialOffset(): OffsetV2 = {
     throw new IllegalStateException("should not be called.")

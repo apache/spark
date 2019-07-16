@@ -22,29 +22,28 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousPartitionReaderFactory, ContinuousScan, Offset}
 
 /**
  * Physical plan node for scanning data from a streaming data source with continuous mode.
  */
 case class ContinuousScanExec(
     output: Seq[Attribute],
-    @transient scan: Scan,
-    @transient stream: ContinuousStream,
+    @transient scan: ContinuousScan,
     @transient start: Offset) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: ContinuousScanExec => this.stream == other.stream
+    case other: ContinuousScanExec => this.scan == other.scan
     case _ => false
   }
 
-  override def hashCode(): Int = stream.hashCode()
+  override def hashCode(): Int = scan.hashCode()
 
-  override lazy val partitions: Seq[InputPartition] = stream.planInputPartitions(start)
+  override lazy val partitions: Seq[InputPartition] = scan.planInputPartitions(start)
 
   override lazy val readerFactory: ContinuousPartitionReaderFactory = {
-    stream.createContinuousReaderFactory()
+    scan.createContinuousReaderFactory()
   }
 
   override lazy val inputRDD: RDD[InternalRow] = {

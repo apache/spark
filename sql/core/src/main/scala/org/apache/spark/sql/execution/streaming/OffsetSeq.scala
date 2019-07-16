@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExecHelper, StreamingAggregationStateManager}
 import org.apache.spark.sql.internal.SQLConf.{FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, _}
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, StreamingScan}
 
 
 /**
@@ -41,7 +41,7 @@ case class OffsetSeq(offsets: Seq[Option[OffsetV2]], metadata: Option[OffsetSeqM
    * This method is typically used to associate a serialized offset with actual sources (which
    * cannot be serialized).
    */
-  def toStreamProgress(sources: Seq[SparkDataStream]): StreamProgress = {
+  def toStreamProgress(sources: Seq[StreamingScan]): StreamProgress = {
     assert(sources.size == offsets.size, s"There are [${offsets.size}] sources in the " +
       s"checkpoint offsets and now there are [${sources.size}] sources requested by the query. " +
       s"Cannot continue.")

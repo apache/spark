@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, EpochCoordinatorRef, IncrementAndGetEpoch}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, StreamingScan}
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -124,7 +124,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
      * the active query, and then return the source object the data was added, as well as the
      * offset of added data.
      */
-    def addData(query: Option[StreamExecution]): (SparkDataStream, OffsetV2)
+    def addData(query: Option[StreamExecution]): (StreamingScan, OffsetV2)
   }
 
   /** A trait that can be extended when testing a source. */
@@ -135,7 +135,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class AddDataMemory[A](source: MemoryStreamBase[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
-    override def addData(query: Option[StreamExecution]): (SparkDataStream, OffsetV2) = {
+    override def addData(query: Option[StreamExecution]): (StreamingScan, OffsetV2) = {
       (source, source.addData(data))
     }
   }
@@ -682,7 +682,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   // v1 source
                   case r: StreamingExecutionRelation => r.source
                   // v2 source
-                  case r: StreamingDataSourceV2Relation => r.stream
+                  case r: StreamingDataSourceV2Relation => r.scan
                   // We can add data to memory stream before starting it. Then the input plan has
                   // not been processed by the streaming engine and contains `StreamingRelationV2`.
                   case r: StreamingRelationV2 if r.sourceName == "memory" =>

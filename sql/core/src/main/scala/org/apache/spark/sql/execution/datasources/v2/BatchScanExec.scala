@@ -28,21 +28,19 @@ import org.apache.spark.sql.sources.v2.reader._
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
-    @transient scan: Scan) extends DataSourceV2ScanExecBase {
-
-  @transient lazy val batch = scan.toBatch
+    @transient scan: BatchScan) extends DataSourceV2ScanExecBase {
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: BatchScanExec => this.batch == other.batch
+    case other: BatchScanExec => this.scan == other.scan
     case _ => false
   }
 
-  override def hashCode(): Int = batch.hashCode()
+  override def hashCode(): Int = scan.hashCode()
 
-  override lazy val partitions: Seq[InputPartition] = batch.planInputPartitions()
+  override lazy val partitions: Seq[InputPartition] = scan.planInputPartitions()
 
-  override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
+  override lazy val readerFactory: PartitionReaderFactory = scan.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
     new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)

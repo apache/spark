@@ -36,21 +36,26 @@ import org.apache.spark.sql.execution.streaming.{Offset => _, _}
 import org.apache.spark.sql.execution.streaming.sources.TextSocketReader
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.RpcUtils
 
 
 /**
- * A [[ContinuousStream]] that reads text lines through a TCP socket, designed only for tutorials
+ * A [[ContinuousScan]] that reads text lines through a TCP socket, designed only for tutorials
  * and debugging. This ContinuousStream will *not* work in production applications due to
  * multiple reasons, including no support for fault recovery.
  *
  * The driver maintains a socket connection to the host-port, keeps the received messages in
  * buckets and serves the messages to the executors via a RPC endpoint.
  */
-class TextSocketContinuousStream(
-    host: String, port: Int, numPartitions: Int, options: CaseInsensitiveStringMap)
-  extends ContinuousStream with Logging {
+class TextSocketContinuousScan(
+    override val readSchema: StructType,
+    host: String,
+    port: Int,
+    numPartitions: Int,
+    options: CaseInsensitiveStringMap)
+  extends ContinuousScan with Logging {
 
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
@@ -176,7 +181,7 @@ class TextSocketContinuousStream(
               logWarning(s"Stream closed by $host:$port")
               return
             }
-            TextSocketContinuousStream.this.synchronized {
+            TextSocketContinuousScan.this.synchronized {
               currentOffset += 1
               val newData = (line,
                 Timestamp.valueOf(

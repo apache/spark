@@ -26,11 +26,11 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousStream
+import org.apache.spark.sql.execution.streaming.continuous.TextSocketContinuousScan
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, MicroBatchScan}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -84,15 +84,13 @@ class TextSocketTable(host: String, port: Int, numPartitions: Int, includeTimest
     Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = schema()
-
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-      new TextSocketMicroBatchStream(host, port, numPartitions)
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
+    override def buildForMicroBatchStreaming(checkpointLocation: String): MicroBatchScan = {
+      new TextSocketMicroBatchScan(schema(), host, port, numPartitions)
     }
 
-    override def toContinuousStream(checkpointLocation: String): ContinuousStream = {
-      new TextSocketContinuousStream(host, port, numPartitions, options)
+    override def buildForContinuousStreaming(checkpointLocation: String): ContinuousScan = {
+      new TextSocketContinuousScan(schema(), host, port, numPartitions, options)
     }
   }
 }

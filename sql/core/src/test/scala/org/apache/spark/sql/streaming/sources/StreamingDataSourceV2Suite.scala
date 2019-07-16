@@ -38,7 +38,8 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
-class FakeDataStream extends MicroBatchStream with ContinuousStream {
+class FakeScanBuilder extends ScanBuilder with MicroBatchScan with ContinuousScan {
+  override def readSchema(): StructType = new StructType()
   override def deserializeOffset(json: String): Offset = RateStreamOffset(Map())
   override def commit(end: Offset): Unit = {}
   override def stop(): Unit = {}
@@ -57,13 +58,8 @@ class FakeDataStream extends MicroBatchStream with ContinuousStream {
   override def createContinuousReaderFactory(): ContinuousPartitionReaderFactory = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
-}
-
-class FakeScanBuilder extends ScanBuilder with Scan {
-  override def build(): Scan = this
-  override def readSchema(): StructType = StructType(Seq())
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = new FakeDataStream
-  override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
+  override def buildForMicroBatchStreaming(checkpointLocation: String): MicroBatchScan = this
+  override def buildForContinuousStreaming(checkpointLocation: String): ContinuousScan = this
 }
 
 class FakeWriteBuilder extends WriteBuilder with StreamingWrite {

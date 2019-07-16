@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, SparkDataStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchScan, StreamingScan}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -45,7 +45,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[SparkDataStream, Long],
+    inputRows: Map[StreamingScan, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -56,9 +56,9 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[SparkDataStream, LogicalPlan]
+  protected def newData: Map[StreamingScan, LogicalPlan]
   protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
-  protected def sources: Seq[SparkDataStream]
+  protected def sources: Seq[StreamingScan]
   protected def sink: Table
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
@@ -68,8 +68,8 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
-  private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
-  private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerStartOffsets: Map[StreamingScan, String] = _
+  private var currentTriggerEndOffsets: Map[StreamingScan, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
 
@@ -241,16 +241,16 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extract number of input sources for each streaming source in plan */
-  private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
+  private def extractSourceToNumInputRows(): Map[StreamingScan, Long] = {
 
-    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
+    def sumRows(tuples: Seq[(StreamingScan, Long)]): Map[StreamingScan, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
 
     val onlyDataSourceV2Sources = {
       // Check whether the streaming query's logical plan has only V2 micro-batch data sources
       val allStreamingLeaves = logicalPlan.collect {
-        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[MicroBatchStream]
+        case s: StreamingDataSourceV2Relation => s.scan.isInstanceOf[MicroBatchScan]
         case _: StreamingExecutionRelation => false
       }
       allStreamingLeaves.forall(_ == true)
@@ -263,7 +263,7 @@ trait ProgressReporter extends Logging {
       val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
         case s: MicroBatchScanExec =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = s.stream
+          val source = s.scan
           source -> numRows
       }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))

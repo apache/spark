@@ -29,18 +29,17 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
-import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchStream
+import org.apache.spark.sql.execution.streaming.sources.RateControlMicroBatchScan
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchScan, Offset}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.UninterruptibleThread
 
 /**
- * A [[MicroBatchStream]] that reads data from Kafka.
+ * A [[MicroBatchScan]] that reads data from Kafka.
  *
  * The [[KafkaSourceOffset]] is the custom [[Offset]] defined for this source that contains
  * a map of TopicPartition -> offset. Note that this offset is 1 + (available offset). For
@@ -55,13 +54,15 @@ import org.apache.spark.util.UninterruptibleThread
  * To avoid this issue, you should make sure stopping the query before stopping the Kafka brokers
  * and not use wrong broker addresses.
  */
-private[kafka010] class KafkaMicroBatchStream(
+private[kafka010] class KafkaMicroBatchScan(
     kafkaOffsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
-    failOnDataLoss: Boolean) extends RateControlMicroBatchStream with Logging {
+    failOnDataLoss: Boolean) extends RateControlMicroBatchScan with Logging {
+
+  override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
 
   private val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,

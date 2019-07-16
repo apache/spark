@@ -17,26 +17,29 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.Evolving;
-
 /**
- * A physical representation of a data source scan for batch queries. This interface is used to
- * provide physical information, like how many partitions the scanned data has, and how to read
- * records from the partitions.
+ * An interface that defines how to scan the data from data source for batch processing.
+ *
+ * The scanning procedure is:
+ *   1. Create the input partitions of this scan by {@link #planInputPartitions()}. Launch a Spark
+ *      job and submit one task for each input partition to produce data.
+ *   2. Create a partition reader factory by {@link #createReaderFactory()}, serialize and send it
+ *      to each input partition.
+ *   3. For each partition, create the data reader from the reader factory, and scan the data from
+ *      the input partition with this reader.
  */
-@Evolving
-public interface Batch {
+public interface BatchScan extends Scan {
 
   /**
    * Returns a list of {@link InputPartition input partitions}. Each {@link InputPartition}
    * represents a data split that can be processed by one Spark task. The number of input
    * partitions returned here is the same as the number of RDD partitions this scan outputs.
    * <p>
-   * If the {@link Scan} supports filter pushdown, this Batch is likely configured with a filter
+   * If the data source supports filter pushdown, this scan is likely configured with a filter
    * and is responsible for creating splits for that filter, which is not a full scan.
    * </p>
    * <p>
-   * This method will be called only once during a data source scan, to launch one Spark job.
+   * This method will be called only once during a data source batch scan, to launch one Spark job.
    * </p>
    */
   InputPartition[] planInputPartitions();

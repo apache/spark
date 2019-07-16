@@ -30,16 +30,18 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchScan, Offset}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * A MicroBatchReadSupport that reads text lines through a TCP socket, designed only for tutorials
+ * A [[MicroBatchScan]] that reads text lines through a TCP socket, designed only for tutorials
  * and debugging. This MicroBatchReadSupport will *not* work in production applications due to
  * multiple reasons, including no support for fault recovery.
  */
-class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
-  extends MicroBatchStream with Logging {
+class TextSocketMicroBatchScan(
+    override val readSchema: StructType, host: String, port: Int, numPartitions: Int)
+  extends MicroBatchScan with Logging {
 
   @GuardedBy("this")
   private var socket: Socket = null
@@ -82,7 +84,7 @@ class TextSocketMicroBatchStream(host: String, port: Int, numPartitions: Int)
               logWarning(s"Stream closed by $host:$port")
               return
             }
-            TextSocketMicroBatchStream.this.synchronized {
+            TextSocketMicroBatchScan.this.synchronized {
               val newData = (
                 UTF8String.fromString(line),
                 DateTimeUtils.fromMillis(Calendar.getInstance().getTimeInMillis)

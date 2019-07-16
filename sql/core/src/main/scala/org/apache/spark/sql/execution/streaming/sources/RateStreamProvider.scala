@@ -23,11 +23,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousStream
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousScan
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.ScanBuilder
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, MicroBatchScan}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -92,15 +92,15 @@ class RateStreamTable(
     Set(TableCapability.MICRO_BATCH_READ, TableCapability.CONTINUOUS_READ).asJava
   }
 
-  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = () => new Scan {
-    override def readSchema(): StructType = RateStreamProvider.SCHEMA
-
-    override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new RateStreamMicroBatchStream(
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = new ScanBuilder {
+    override def buildForMicroBatchStreaming(checkpointLocation: String): MicroBatchScan = {
+      new RateStreamMicroBatchScan(
         rowsPerSecond, rampUpTimeSeconds, numPartitions, options, checkpointLocation)
+    }
 
-    override def toContinuousStream(checkpointLocation: String): ContinuousStream =
-      new RateStreamContinuousStream(rowsPerSecond, numPartitions)
+    override def buildForContinuousStreaming(checkpointLocation: String): ContinuousScan = {
+      new RateStreamContinuousScan(rowsPerSecond, numPartitions)
+    }
   }
 }
 

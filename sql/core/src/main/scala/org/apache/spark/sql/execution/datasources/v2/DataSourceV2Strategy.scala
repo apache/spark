@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousScan, MicroBatchScan}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
@@ -90,24 +90,24 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
   private def pruneColumns(
       scanBuilder: ScanBuilder,
       relation: DataSourceV2Relation,
-      exprs: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+      exprs: Seq[Expression]): (BatchScan, Seq[AttributeReference]) = {
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns =>
         val requiredColumns = AttributeSet(exprs.flatMap(_.references))
         val neededOutput = relation.output.filter(requiredColumns.contains)
         if (neededOutput != relation.output) {
           r.pruneColumns(neededOutput.toStructType)
-          val scan = r.build()
+          val scan = r.buildForBatch()
           val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
           scan -> scan.readSchema().toAttributes.map {
             // We have to keep the attribute id during transformation.
             a => a.withExprId(nameToAttr(a.name).exprId)
           }
         } else {
-          r.build() -> relation.output
+          r.buildForBatch() -> relation.output
         }
 
-      case _ => scanBuilder.build() -> relation.output
+      case _ => scanBuilder.buildForBatch() -> relation.output
     }
   }
 
@@ -145,18 +145,18 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       ProjectExec(project, withFilter) :: Nil
 
     case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
-      val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
+      val microBatchScan = r.scan.asInstanceOf[MicroBatchScan]
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
         MicroBatchScanExec(
-          r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)) :: Nil
+          r.output, microBatchScan, r.startOffset.get, r.endOffset.get)) :: Nil
 
     case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
-      val continuousStream = r.stream.asInstanceOf[ContinuousStream]
+      val continuousScan = r.scan.asInstanceOf[ContinuousScan]
       // ensure there is a projection, which will produce unsafe rows required by some operators
       ProjectExec(r.output,
         ContinuousScanExec(
-          r.output, r.scan, continuousStream, r.startOffset.get)) :: Nil
+          r.output, continuousScan, r.startOffset.get)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
@@ -227,7 +227,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case Repartition(1, false, child) =>
       val isContinuous = child.find {
-        case r: StreamingDataSourceV2Relation => r.stream.isInstanceOf[ContinuousStream]
+        case r: StreamingDataSourceV2Relation => r.scan.isInstanceOf[ContinuousScan]
         case _ => false
       }.isDefined
 

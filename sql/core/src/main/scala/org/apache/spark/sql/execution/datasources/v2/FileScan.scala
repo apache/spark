@@ -36,9 +36,7 @@ abstract class FileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     readDataSchema: StructType,
-    readPartitionSchema: StructType)
-  extends Scan
-  with Batch with SupportsReportStatistics with Logging {
+    readPartitionSchema: StructType) extends BatchScan with SupportsReportStatistics with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -130,8 +128,6 @@ abstract class FileScan(
       override def numRows(): OptionalLong = OptionalLong.empty()
     }
   }
-
-  override def toBatch: Batch = this
 
   override def readSchema(): StructType =
     StructType(readDataSchema.fields ++ readPartitionSchema.fields)

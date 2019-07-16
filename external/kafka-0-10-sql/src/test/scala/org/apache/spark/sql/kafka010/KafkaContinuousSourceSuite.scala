@@ -213,8 +213,8 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
           assert(
             query.lastExecution.executedPlan.collectFirst {
               case scan: ContinuousScanExec
-                if scan.stream.isInstanceOf[KafkaContinuousStream] =>
-                scan.stream.asInstanceOf[KafkaContinuousStream]
+                if scan.scan.isInstanceOf[KafkaContinuousScan] =>
+                scan.scan.asInstanceOf[KafkaContinuousScan]
             }.exists { stream =>
               // Ensure the new topic is present and the old topic is gone.
               stream.knownPartitions.exists(_.topic == topic2)

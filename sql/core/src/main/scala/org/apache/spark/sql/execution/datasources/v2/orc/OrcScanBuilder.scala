@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.sources.v2.reader.{BatchScan, SupportsPushDownFilters}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -43,7 +43,7 @@ case class OrcScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
-  override def build(): Scan = {
+  override def buildForBatch(): BatchScan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
       readDataSchema(), readPartitionSchema(), options, pushedFilters())
   }
