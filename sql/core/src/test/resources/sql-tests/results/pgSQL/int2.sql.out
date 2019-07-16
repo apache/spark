@@ -266,7 +266,7 @@ struct<five:string,f1:smallint,x:int>
 
 
 -- !query 27
-SELECT '' AS five, i.f1, i.f1 div smallint('2') AS x FROM INT2_TBL i
+SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT2_TBL i
 -- !query 27 schema
 struct<five:string,f1:smallint,x:smallint>
 -- !query 27 output
@@ -278,7 +278,7 @@ struct<five:string,f1:smallint,x:smallint>
 
 
 -- !query 28
-SELECT '' AS five, i.f1, i.f1 div int('2') AS x FROM INT2_TBL i
+SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT2_TBL i
 -- !query 28 schema
 struct<five:string,f1:smallint,x:int>
 -- !query 28 output
