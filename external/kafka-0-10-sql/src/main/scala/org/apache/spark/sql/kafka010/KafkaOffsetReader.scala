@@ -418,17 +418,15 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   private def getPartitions(): ju.Set[TopicPartition] = {
-    var partitions = Set.empty[TopicPartition].asJava
+    consumer.poll(jt.Duration.ZERO)
+    var partitions = consumer.assignment()
     val startTimeMs = System.currentTimeMillis()
     while (partitions.isEmpty && System.currentTimeMillis() - startTimeMs < pollTimeoutMs) {
       // Poll to get the latest assigned partitions
-      consumer.poll(jt.Duration.ZERO)
+      consumer.poll(jt.Duration.ofMillis(100))
       partitions = consumer.assignment()
-      if (partitions.isEmpty) {
-        Thread.sleep(100)
-      }
     }
-    require(!partitions.isEmpty)
+    require(!partitions.isEmpty, "Partitions assigned to the Kafka consumer can't be null")
     logDebug(s"Partitions assigned to consumer: $partitions")
     partitions
   }
