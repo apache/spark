@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.time.Year.isLeap
-import java.time.temporal.IsoFields
+import java.time.temporal.{ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -522,11 +521,11 @@ object DateTimeUtils {
       months: Int,
       microseconds: Long,
       timeZone: TimeZone): SQLTimestamp = {
-    val days = millisToDays(MICROSECONDS.toMillis(start), timeZone)
-    val newDays = dateAddMonths(days, months)
-    start +
-      MILLISECONDS.toMicros(daysToMillis(newDays, timeZone) - daysToMillis(days, timeZone)) +
-      microseconds
+    val resultTimestamp = microsToInstant(start)
+      .atZone(timeZone.toZoneId)
+      .plusMonths(months)
+      .plus(microseconds, ChronoUnit.MICROS)
+    instantToMicros(resultTimestamp.toInstant)
   }
 
   /**
