@@ -1469,8 +1469,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-8753: add interval type") {
-    import org.apache.spark.sql.types.CalendarInterval
-
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
     checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7L * 1000 * 1000 * 3600 * 24 * 7 + 123 )))
     withTempPath(f => {
@@ -1494,7 +1492,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    import org.apache.spark.sql.types.CalendarInterval
     import org.apache.spark.sql.types.CalendarInterval.MICROS_PER_WEEK
 
     val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")

@@ -50,7 +50,7 @@ Spark SQL and DataFrames support the following data types:
   absolute point in time.
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
-* Calendar Interval type
+* CalendarInterval type
   - `CalendarIntervalType`: The data type representing calendar time intervals. The calendar time interval is stored
   internally in two components: number of months and the number of microseconds.
 * Complex types
@@ -306,13 +306,6 @@ please use factory methods provided in
   <td> java.sql.Date </td>
   <td>
   DataTypes.DateType
-  </td>
-</tr>
-<tr>
-  <td> <b>CalendarIntervalType</b> </td>
-  <td> org.apache.spark.sql.types.CalendarInterval </td>
-  <td>
-  CalendarIntervalType
   </td>
 </tr>
 <tr>

@@ -22,7 +22,7 @@ import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{CalendarInterval, StructType}
 
 /**
  * @since 1.3.0
@@ -159,6 +159,7 @@ trait Row extends Serializable {
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
    *   StructType -> org.apache.spark.sql.Row
+   *   CalendarIntervalType -> org.apache.spark.sql.types.CalendarInterval
    * }}}
    */
   def apply(i: Int): Any = get(i)
@@ -184,6 +185,7 @@ trait Row extends Serializable {
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
    *   StructType -> org.apache.spark.sql.Row
+   *   CalendarIntervalType -> org.apache.spark.sql.types.CalendarInterval
    * }}}
    */
   def get(i: Int): Any
@@ -326,6 +328,14 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    */
   def getStruct(i: Int): Row = getAs[Row](i)
+
+  /**
+   * Returns value at position i of calendar Interval type as a
+   * [[org.apache.spark.sql.types.CalendarInterval]] object.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getCalendarInterval(i: Int): CalendarInterval = CalendarInterval.fromString(get(i).toString)
 
   /**
    * Returns the value at position i.

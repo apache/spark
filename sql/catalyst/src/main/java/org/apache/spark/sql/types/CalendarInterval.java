@@ -22,9 +22,13 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.spark.annotation.Unstable;
+
 /**
- * The internal representation of interval type.
+ * The representation class of interval type.
  */
+
+@Unstable
 public final class CalendarInterval implements Serializable {
   public static final long MICROS_PER_MILLI = 1000L;
   public static final long MICROS_PER_SECOND = MICROS_PER_MILLI * 1000;
@@ -103,7 +107,8 @@ public final class CalendarInterval implements Serializable {
       throw new IllegalArgumentException("Interval cannot be null or blank.");
     }
     String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
-    String interval = sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
+    String interval =
+      sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
     CalendarInterval cal = fromString(interval);
     if (cal == null) {
       throw new IllegalArgumentException("Invalid interval: " + s);
