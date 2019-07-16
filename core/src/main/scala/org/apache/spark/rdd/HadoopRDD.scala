@@ -41,7 +41,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -199,21 +199,7 @@ class HadoopRDD[K, V](
 
   private val UNSPLITTABLE_FILE_SIZE_LOG_THRESHOLD = 1024 * 1024 * 1024
 
-  @transient private lazy val compressionCodecs = new CompressionCodecFactory(getJobConf())
-
-  private def checkAndLogUnsplittableLargeFile(split: InputSplit): Unit = {
-    if (split.isInstanceOf[FileSplit]) {
-      val fileSplit = split.asInstanceOf[FileSplit]
-      val path = fileSplit.getPath
-      val codec = compressionCodecs.getCodec(path)
-      if (codec != null && !codec.isInstanceOf[SplittableCompressionCodec]) {
-        if (fileSplit.getLength > UNSPLITTABLE_FILE_SIZE_LOG_THRESHOLD) {
-          logWarning(s"File ${path.toString} is large and unsplittable so the corresponding " +
-            s"rdd partition have to deal with the whole file and consume large time.")
-        }
-      }
-    }
-  }
+  @transient private lazy val codecFactory = new CompressionCodecFactory(getJobConf())
 
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
@@ -227,7 +213,13 @@ class HadoopRDD[K, V](
         allInputSplits
       }
       if (inputSplits.length == 1) {
-        checkAndLogUnsplittableLargeFile(inputSplits(0))
+        val fileSplit = inputSplits(0).asInstanceOf[FileSplit]
+        val path = fileSplit.getPath
+        if (Utils.isFileSplittable(path, codecFactory)
+          && fileSplit.getLength > conf.get(IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD)) {
+          logWarning(s"File ${path.toString} is large and unsplittable so the corresponding " +
+            s"rdd partition have to deal with the whole file and consume large time.")
+        }
       }
       val array = new Array[Partition](inputSplits.size)
       for (i <- 0 until inputSplits.size) {

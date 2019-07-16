@@ -21,6 +21,8 @@ import java.util.{Locale, OptionalLong}
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -36,7 +38,9 @@ abstract class FileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     readDataSchema: StructType,
-    readPartitionSchema: StructType) extends Scan with Batch with SupportsReportStatistics {
+    readPartitionSchema: StructType)
+  extends Scan
+  with Batch with SupportsReportStatistics with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
@@ -91,6 +95,16 @@ abstract class FileScan(
         )
       }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
     }
+
+    if (splitFiles.length == 1) {
+      val path = new Path(splitFiles(0).filePath)
+      if (isSplitable(path) && splitFiles(0).length >
+        sparkSession.sparkContext.getConf.get(IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD)) {
+        logWarning(s"File ${path.toString} is large and unsplittable so the corresponding " +
+          s"rdd partition have to deal with the whole file and consume large time.")
+      }
+    }
+
     FilePartition.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 
