@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import scala.reflect.ClassTag
 
@@ -25,13 +25,16 @@ import org.scalatest.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
   RangePartitioning, RoundRobinPartitioning}
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -301,33 +304,40 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
-    val string = testRelation2.output(0)
-    val double = testRelation2.output(2)
-    val short = testRelation2.output(4)
+    val testRelation = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", ShortType)(),
+      AttributeReference("d", DoubleType, nullable = false)())
+
+    val string = testRelation.output(0)
+    val double = testRelation.output(1)
+    val short = testRelation.output(2)
+    val nonNullableDouble = testRelation.output(3)
     val nullResult = Literal.create(null, StringType)
 
     def checkUDF(udf: Expression, transformed: Expression): Unit = {
       checkAnalysis(
-        Project(Alias(udf, "")() :: Nil, testRelation2),
-        Project(Alias(transformed, "")() :: Nil, testRelation2)
+        Project(Alias(udf, "")() :: Nil, testRelation),
+        Project(Alias(transformed, "")() :: Nil, testRelation)
       )
     }
 
     // non-primitive parameters do not need special null handling
-    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil)
+    val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil, false :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      nullableTypes = true :: false :: Nil)
+      false :: true :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      nullableTypes = false :: false :: Nil)
+      true :: true :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
@@ -335,24 +345,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkUDF(udf3, expected3)
 
     // we can skip special null handling for primitive parameters that are not nullable
-    // TODO: this is disabled for now as we can not completely trust `nullable`.
     val udf4 = ScalaUDF(
       (s: Short, d: Double) => "x",
       StringType,
-      short :: double.withNullability(false) :: Nil,
-      nullableTypes = false :: false :: Nil)
+      short :: nonNullableDouble :: Nil,
+      true :: true :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
-      udf4.copy(children = KnownNotNull(short) :: double.withNullability(false) :: Nil))
-    // checkUDF(udf4, expected4)
+      udf4.copy(children = KnownNotNull(short) :: nonNullableDouble :: Nil))
+    checkUDF(udf4, expected4)
   }
 
   test("SPARK-24891 Fix HandleNullInputsForUDF rule") {
     val a = testRelation.output(0)
     val func = (x: Int, y: Int) => x + y
-    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil)
-    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil)
+    val udf1 = ScalaUDF(func, IntegerType, a :: a :: Nil, false :: false :: Nil)
+    val udf2 = ScalaUDF(func, IntegerType, a :: udf1 :: Nil, false :: false :: Nil)
     val plan = Project(Alias(udf2, "")() :: Nil, testRelation)
     comparePlans(plan.analyze, plan.analyze.analyze)
   }
@@ -395,7 +404,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Join(
           Project(Seq($"x.key"), SubqueryAlias("x", input)),
           Project(Seq($"y.key"), SubqueryAlias("y", input)),
-          Cross, None))
+          Cross, None, JoinHint.NONE))
 
     assertAnalysisSuccess(query)
   }
@@ -576,7 +585,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq(UnresolvedAttribute("a")), pythonUdf, output, project)
     val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
     val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
-    val join = Join(left, right, Inner, None)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
     assertAnalysisSuccess(
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
@@ -603,5 +612,42 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
       checkAnalysis(input, expected)
     }
+  }
+
+  test("SPARK-25691: AliasViewChild with different nullabilities") {
+    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
+      val batches = Batch("View", Once, EliminateView) :: Nil
+    }
+    val relation = LocalRelation('a.int.notNull, 'b.string)
+    val view = View(CatalogTable(
+        identifier = TableIdentifier("v1"),
+        tableType = CatalogTableType.VIEW,
+        storage = CatalogStorageFormat.empty,
+        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      output = Seq('a.int, 'b.string),
+      child = relation)
+    val tz = Option(conf.sessionLocalTimeZone)
+    val expected = Project(Seq(
+        Alias(Cast('a.int.notNull, IntegerType, tz), "a")(),
+        Alias(Cast('b.string, StringType, tz), "b")()),
+      relation)
+    val res = ViewAnalyzer.execute(view)
+    comparePlans(res, expected)
+  }
+
+  test("CTE with non-existing column alias") {
+    assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
+      Seq("cannot resolve '`y`' given input columns: [x]"))
+  }
+
+  test("CTE with non-matching column alias") {
+    assertAnalysisError(parsePlan("WITH t(x, y) AS (SELECT 1) SELECT * FROM t WHERE x = 1"),
+      Seq("Number of column aliases does not match number of columns. Number of column aliases: " +
+        "2; number of columns: 1."))
+  }
+
+  test("SPARK-28251: Insert into non-existing table error message is user friendly") {
+    assertAnalysisError(parsePlan("INSERT INTO test VALUES (1)"),
+      Seq("Table not found: test"))
   }
 }

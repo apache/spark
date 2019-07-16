@@ -106,7 +106,8 @@ class ExecutorSummary private[spark](
     val blacklistedInStages: Set[Int],
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
-    val peakMemoryMetrics: Option[ExecutorMetrics])
+    val peakMemoryMetrics: Option[ExecutorMetrics],
+    val attributes: Map[String, String])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
@@ -133,12 +134,15 @@ private[spark] class ExecutorMetricsJsonSerializer
       jsonGenerator: JsonGenerator,
       serializerProvider: SerializerProvider): Unit = {
     metrics.foreach { m: ExecutorMetrics =>
-      val metricsMap = ExecutorMetricType.values.map { metricType =>
-            metricType.name -> m.getMetricValue(metricType)
-      }.toMap
+      val metricsMap = ExecutorMetricType.metricToOffset.map { case (metric, _) =>
+        metric -> m.getMetricValue(metric)
+      }
       jsonGenerator.writeObject(metricsMap)
     }
   }
+
+  override def isEmpty(provider: SerializerProvider, value: Option[ExecutorMetrics]): Boolean =
+    value.isEmpty
 }
 
 class JobData private[spark](
@@ -206,23 +210,36 @@ class StageData private[spark](
     val numKilledTasks: Int,
     val numCompletedIndices: Int,
 
-    val executorRunTime: Long,
-    val executorCpuTime: Long,
     val submissionTime: Option[Date],
     val firstTaskLaunchedTime: Option[Date],
     val completionTime: Option[Date],
     val failureReason: Option[String],
 
+    val executorDeserializeTime: Long,
+    val executorDeserializeCpuTime: Long,
+    val executorRunTime: Long,
+    val executorCpuTime: Long,
+    val resultSize: Long,
+    val jvmGcTime: Long,
+    val resultSerializationTime: Long,
+    val memoryBytesSpilled: Long,
+    val diskBytesSpilled: Long,
+    val peakExecutionMemory: Long,
     val inputBytes: Long,
     val inputRecords: Long,
     val outputBytes: Long,
     val outputRecords: Long,
+    val shuffleRemoteBlocksFetched: Long,
+    val shuffleLocalBlocksFetched: Long,
+    val shuffleFetchWaitTime: Long,
+    val shuffleRemoteBytesRead: Long,
+    val shuffleRemoteBytesReadToDisk: Long,
+    val shuffleLocalBytesRead: Long,
     val shuffleReadBytes: Long,
     val shuffleReadRecords: Long,
     val shuffleWriteBytes: Long,
+    val shuffleWriteTime: Long,
     val shuffleWriteRecords: Long,
-    val memoryBytesSpilled: Long,
-    val diskBytesSpilled: Long,
 
     val name: String,
     val description: Option[String],
@@ -250,7 +267,10 @@ class TaskData private[spark](
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
-    val taskMetrics: Option[TaskMetrics] = None)
+    val taskMetrics: Option[TaskMetrics] = None,
+    val executorLogs: Map[String, String],
+    val schedulerDelay: Long,
+    val gettingResultTime: Long)
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,
@@ -346,6 +366,7 @@ class VersionInfo private[spark](
 class ApplicationEnvironmentInfo private[spark] (
     val runtime: RuntimeInfo,
     val sparkProperties: Seq[(String, String)],
+    val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
     val classpathEntries: Seq[(String, String)])
 

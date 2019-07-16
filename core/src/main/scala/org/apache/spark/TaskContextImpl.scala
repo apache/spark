@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
@@ -51,7 +52,8 @@ private[spark] class TaskContextImpl(
     localProperties: Properties,
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
-    override val taskMetrics: TaskMetrics = TaskMetrics.empty)
+    override val taskMetrics: TaskMetrics = TaskMetrics.empty,
+    override val resources: Map[String, ResourceInformation] = Map.empty)
   extends TaskContext
   with Logging {
 
@@ -156,8 +158,6 @@ private[spark] class TaskContextImpl(
 
   @GuardedBy("this")
   override def isCompleted(): Boolean = synchronized(completed)
-
-  override def isRunningLocally(): Boolean = false
 
   override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 

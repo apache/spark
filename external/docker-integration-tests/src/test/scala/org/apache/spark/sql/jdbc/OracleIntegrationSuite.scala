@@ -39,13 +39,16 @@ import org.apache.spark.tags.DockerTest
  * while Spark QA test run.
  *
  * The following would be the steps to test this
- * 1. Pull oracle 11g image - docker pull wnameless/oracle-xe-11g
- * 2. Start docker - sudo service docker start
- * 3. Download oracle 11g driver jar and put it in maven local repo:
+ * 1. Build Oracle database in Docker, please refer below link about how to.
+ *    https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
+ * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
+ *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
+ * 3. Start docker - sudo service docker start
+ * 4. Download oracle 11g driver jar and put it in maven local repo:
  *    (com/oracle/ojdbc6/11.2.0.2.0/ojdbc6-11.2.0.2.0.jar)
- * 4. The timeout and interval parameter to be increased from 60,1 to a high value for oracle test
+ * 5. The timeout and interval parameter to be increased from 60,1 to a high value for oracle test
  *    in DockerJDBCIntegrationSuite.scala (Locally tested with 200,200 and executed successfully).
- * 5. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ * 6. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * All tests in this suite are ignored because of the dependency with the oracle jar from maven
  * repository.
@@ -55,7 +58,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:16.04"
+    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
@@ -154,7 +157,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // A value with fractions from DECIMAL(3, 2) is correct:
     assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
     // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999l)) == 0)
+    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
   }
 
 
@@ -373,8 +376,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val e = intercept[org.apache.spark.SparkException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getMessage.contains(
-      "requirement failed: Decimal precision 39 exceeds max precision 38"))
+    assert(e.getCause().isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
 
     // custom schema can read data
     val props = new Properties()
@@ -442,6 +445,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       .option("lowerBound", "2018-07-06")
       .option("upperBound", "2018-07-20")
       .option("numPartitions", 3)
+      // oracle.jdbc.mapDateToTimestamp defaults to true. If this flag is not disabled, column d
+      // (Oracle DATE) will be resolved as Catalyst Timestamp, which will fail bound evaluation of
+      // the partition column. E.g. 2018-07-06 cannot be evaluated as Timestamp, and the error
+      // message says: Timestamp format must be yyyy-mm-dd hh:mm:ss[.fffffffff].
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .option("sessionInitStatement", "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'")
       .load()
 
     df1.logicalPlan match {
@@ -462,6 +471,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       .option("lowerBound", "2018-07-04 03:30:00.0")
       .option("upperBound", "2018-07-27 14:11:05.0")
       .option("numPartitions", 2)
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .option("sessionInitStatement",
+        "ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SS.FF'")
       .load()
 
     df2.logicalPlan match {
@@ -472,5 +484,33 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
           """"T" >= '2018-07-15 20:50:32.5'"""))
     }
     assert(df2.collect.toSet === expectedResult)
+  }
+
+  test("query JDBC option") {
+    val expectedResult = Set(
+      (1, "1991-11-09", "1996-01-01 01:23:45")
+    ).map { case (id, date, timestamp) =>
+      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    val query = "SELECT id, d, t FROM datetime WHERE id = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl',
+         |   query '$query',
+         |   oracle.jdbc.mapDateToTimestamp false)
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
   }
 }

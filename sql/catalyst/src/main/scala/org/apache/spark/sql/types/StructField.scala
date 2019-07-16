@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 
 /**
@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdenti
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case class StructField(
     name: String,
     dataType: DataType,

@@ -276,15 +276,37 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case a And b if a.semanticEquals(b) => a
       case a Or b if a.semanticEquals(b) => a
 
-      case a And (b Or c) if Not(a).semanticEquals(b) => And(a, c)
-      case a And (b Or c) if Not(a).semanticEquals(c) => And(a, b)
-      case (a Or b) And c if a.semanticEquals(Not(c)) => And(b, c)
-      case (a Or b) And c if b.semanticEquals(Not(c)) => And(a, c)
+      // The following optimizations are applicable only when the operands are not nullable,
+      // since the three-value logic of AND and OR are different in NULL handling.
+      // See the chart:
+      // +---------+---------+---------+---------+
+      // | operand | operand |   OR    |   AND   |
+      // +---------+---------+---------+---------+
+      // | TRUE    | TRUE    | TRUE    | TRUE    |
+      // | TRUE    | FALSE   | TRUE    | FALSE   |
+      // | FALSE   | FALSE   | FALSE   | FALSE   |
+      // | UNKNOWN | TRUE    | TRUE    | UNKNOWN |
+      // | UNKNOWN | FALSE   | UNKNOWN | FALSE   |
+      // | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+      // +---------+---------+---------+---------+
 
-      case a Or (b And c) if Not(a).semanticEquals(b) => Or(a, c)
-      case a Or (b And c) if Not(a).semanticEquals(c) => Or(a, b)
-      case (a And b) Or c if a.semanticEquals(Not(c)) => Or(b, c)
-      case (a And b) Or c if b.semanticEquals(Not(c)) => Or(a, c)
+      // (NULL And (NULL Or FALSE)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
+      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(b) => And(a, c)
+      // (NULL And (FALSE Or NULL)) = NULL, but (NULL And FALSE) = FALSE. Thus, a can't be nullable.
+      case a And (b Or c) if !a.nullable && Not(a).semanticEquals(c) => And(a, b)
+      // ((NULL Or FALSE) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
+      case (a Or b) And c if !c.nullable && a.semanticEquals(Not(c)) => And(b, c)
+      // ((FALSE Or NULL) And NULL) = NULL, but (FALSE And NULL) = FALSE. Thus, c can't be nullable.
+      case (a Or b) And c if !c.nullable && b.semanticEquals(Not(c)) => And(a, c)
+
+      // (NULL Or (NULL And TRUE)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
+      case a Or (b And c) if !a.nullable && Not(a).semanticEquals(b) => Or(a, c)
+      // (NULL Or (TRUE And NULL)) = NULL, but (NULL Or TRUE) = TRUE. Thus, a can't be nullable.
+      case a Or (b And c) if !a.nullable && Not(a).semanticEquals(c) => Or(a, b)
+      // ((NULL And TRUE) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
+      case (a And b) Or c if !c.nullable && a.semanticEquals(Not(c)) => Or(b, c)
+      // ((TRUE And NULL) Or NULL) = NULL, but (TRUE Or NULL) = TRUE. Thus, c can't be nullable.
+      case (a And b) Or c if !c.nullable && b.semanticEquals(Not(c)) => Or(a, c)
 
       // Common factor elimination for conjunction
       case and @ (left And right) =>
@@ -578,7 +600,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         // propagating the foldable expressions.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(left, right, joinType, _) if foldableMap.nonEmpty =>
+        case j @ Join(left, right, joinType, _, _) if foldableMap.nonEmpty =>
           val newJoin = j.transformExpressions(replaceFoldable)
           val missDerivedAttrsSet: AttributeSet = AttributeSet(joinType match {
             case _: InnerLike | LeftExistence(_) => Nil
@@ -626,7 +648,6 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: Distinct => true
     case _: AppendColumns => true
     case _: AppendColumnsWithObject => true
-    case _: ResolvedHint => true
     case _: RepartitionByExpression => true
     case _: Repartition => true
     case _: Sort => true

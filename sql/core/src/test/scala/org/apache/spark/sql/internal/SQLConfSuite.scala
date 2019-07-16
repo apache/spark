@@ -20,7 +20,6 @@ package org.apache.spark.sql.internal
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.util.Utils
@@ -118,12 +117,12 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try {
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
       sql(s"reset")
-      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL))
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
@@ -258,7 +257,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
     // check default value
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.INT96)
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
 
     // PARQUET_INT64_AS_TIMESTAMP_MILLIS should be respected.
     spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)
@@ -308,6 +307,17 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(newDisplayValue === "lzo")
 
     SQLConf.unregister(fallback)
+  }
+
+  test("SPARK-24783: spark.sql.shuffle.partitions=0 should throw exception ") {
+    val e = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 0)
+    }
+    assert(e.getMessage.contains("spark.sql.shuffle.partitions"))
+    val e2 = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, -1)
+    }
+    assert(e2.getMessage.contains("spark.sql.shuffle.partitions"))
   }
 
 }

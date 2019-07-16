@@ -31,21 +31,18 @@ import org.apache.spark.util.Utils
 private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("rdd") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val parameterBlockPage = UIUtils.stripXSS(request.getParameter("block.page"))
-    val parameterBlockSortColumn = UIUtils.stripXSS(request.getParameter("block.sort"))
-    val parameterBlockSortDesc = UIUtils.stripXSS(request.getParameter("block.desc"))
-    val parameterBlockPageSize = UIUtils.stripXSS(request.getParameter("block.pageSize"))
-    val parameterBlockPrevPageSize = UIUtils.stripXSS(request.getParameter("block.prevPageSize"))
+    val parameterBlockPage = request.getParameter("block.page")
+    val parameterBlockSortColumn = request.getParameter("block.sort")
+    val parameterBlockSortDesc = request.getParameter("block.desc")
+    val parameterBlockPageSize = request.getParameter("block.pageSize")
 
     val blockPage = Option(parameterBlockPage).map(_.toInt).getOrElse(1)
     val blockSortColumn = Option(parameterBlockSortColumn).getOrElse("Block Name")
     val blockSortDesc = Option(parameterBlockSortDesc).map(_.toBoolean).getOrElse(false)
     val blockPageSize = Option(parameterBlockPageSize).map(_.toInt).getOrElse(100)
-    val blockPrevPageSize = Option(parameterBlockPrevPageSize).map(_.toInt).getOrElse(blockPageSize)
 
     val rddId = parameterId.toInt
     val rddStorageInfo = try {
@@ -60,16 +57,6 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
     val workerTable = UIUtils.listingTable(workerHeader, workerRow,
       rddStorageInfo.dataDistribution.get, id = Some("rdd-storage-by-worker-table"))
 
-    // Block table
-    val page: Int = {
-      // If the user has changed to a larger page size, then go to page 1 in order to avoid
-      // IndexOutOfBoundsException.
-      if (blockPageSize <= blockPrevPageSize) {
-        blockPage
-      } else {
-        1
-      }
-    }
     val blockTableHTML = try {
       val _blockTable = new BlockPagedTable(
         UIUtils.prependBaseUri(request, parent.basePath) + s"/storage/rdd/?id=${rddId}",
@@ -78,7 +65,7 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
         blockSortColumn,
         blockSortDesc,
         store.executorList(true))
-      _blockTable.table(page)
+      _blockTable.table(blockPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         <div class="alert alert-error">{e.getMessage}</div>
@@ -202,7 +189,7 @@ private[ui] class BlockDataSource(
       rddPartition.memoryUsed,
       rddPartition.diskUsed,
       rddPartition.executors
-        .map { id => executorIdToAddress.get(id).getOrElse(id) }
+        .map { id => executorIdToAddress.getOrElse(id, id) }
         .sorted
         .mkString(" "))
   }
@@ -241,8 +228,6 @@ private[ui] class BlockPagedTable(
     "table table-bordered table-condensed table-striped table-head-clickable"
 
   override def pageSizeFormField: String = "block.pageSize"
-
-  override def prevPageSizeFormField: String = "block.prevPageSize"
 
   override def pageNumberFormField: String = "block.page"
 

@@ -25,8 +25,7 @@ import org.apache.spark.util.AccumulatorV2
 
 class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
   test("launch of backend and scheduler") {
-    val conf = new SparkConf().setMaster("myclusterManager").
-        setAppName("testcm").set("spark.driver.allowMultipleContexts", "true")
+    val conf = new SparkConf().setMaster("myclusterManager").setAppName("testcm")
     sc = new SparkContext(conf)
     // check if the scheduler components are created and initialized
     sc.schedulerBackend match {
@@ -85,6 +84,7 @@ private class DummyTaskScheduler extends TaskScheduler {
     taskId: Long, interruptThread: Boolean, reason: String): Boolean = false
   override def killAllTaskAttempts(
     stageId: Int, interruptThread: Boolean, reason: String): Unit = {}
+  override def notifyPartitionCompletion(stageId: Int, partitionId: Int): Unit = {}
   override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
   override def defaultParallelism(): Int = 2
   override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}

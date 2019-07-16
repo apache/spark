@@ -60,7 +60,13 @@ object LoadDriver {
 
 object DefaultConnectionFactoryProvider extends ConnectionFactoryProvider {
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
-    () => LoadDriver(options).connect(options.url, options.asConnectionProperties)
+    () => {
+      val connection = LoadDriver(options).connect(options.url, options.asConnectionProperties)
+      require(connection != null,
+        s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
+
+      connection
+    }
   }
 }
 
@@ -69,14 +75,14 @@ object DefaultConnectionFactoryProvider extends ConnectionFactoryProvider {
  */
 object JdbcUtils extends Logging {
   /**
-   * Returns a factory for creating connections to the given JDBC URL.
-   * You can provide a custom factory by setting the classname in JDBCOptions
-   * using JDBCOption.JDBC_CONNECTION_FACTORY_PROVIDER. This class must implement
-   * the ConnectionFactoryProvider trait. If not specified DefaultConnectionFactoryProvider
-   * will be used.
-   *
-   * @param options - JDBC options that contains url, table and other information.
-   */
+    * Returns a factory for creating connections to the given JDBC URL.
+    * You can provide a custom factory by setting the classname in JDBCOptions
+    * using JDBCOption.JDBC_CONNECTION_FACTORY_PROVIDER. This class must implement
+    * the ConnectionFactoryProvider trait. If not specified DefaultConnectionFactoryProvider
+    * will be used.
+    *
+    * @param options - JDBC options that contains url, table and other information.
+    */
   def createConnectionFactory(options: JDBCOptions): () => Connection = {
     options.connectionFactoryProvider.createConnectionFactory(options)
   }
@@ -454,6 +460,10 @@ object JdbcUtils extends Logging {
     case ShortType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setShort(pos, rs.getShort(pos + 1))
+
+    case ByteType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, rs.getByte(pos + 1))
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

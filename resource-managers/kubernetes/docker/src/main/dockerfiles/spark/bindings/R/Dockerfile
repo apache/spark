@@ -16,8 +16,13 @@
 #
 
 ARG base_img
+
 FROM $base_img
 WORKDIR /
+
+# Reset to root to run installation tasks
+USER 0
+
 RUN mkdir ${SPARK_HOME}/R
 
 RUN apk add --no-cache R R-dev
@@ -27,3 +32,7 @@ ENV R_HOME /usr/lib/R
 
 WORKDIR /opt/spark/work-dir
 ENTRYPOINT [ "/opt/entrypoint.sh" ]
+
+# Specify the User that the actual main process will run as
+ARG spark_uid=185
+USER ${spark_uid}

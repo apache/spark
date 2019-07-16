@@ -17,21 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.orc.{OrcFile, Reader, TypeDescription}
+import org.apache.orc.{OrcFile, Reader, TypeDescription, Writer}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 object OrcUtils extends Logging {
 
@@ -80,11 +84,33 @@ object OrcUtils extends Logging {
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConf()
-    // TODO: We need to support merge schema. Please see SPARK-11412.
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
         CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
+    }
+  }
+
+  /**
+   * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
+   * This is visible for testing.
+   */
+  def readOrcSchemasInParallel(
+    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles)
+        .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
+    }.flatten
+  }
+
+  def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
+    : Option[StructType] = {
+    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    if (orcOptions.mergeSchema) {
+      SchemaMergeUtils.mergeSchemasInParallel(
+        sparkSession, files, OrcUtils.readOrcSchemasInParallel)
+    } else {
+      OrcUtils.readSchema(sparkSession, files)
     }
   }
 
@@ -119,29 +145,56 @@ object OrcUtils extends Logging {
         })
       } else {
         if (isCaseSensitive) {
-          Some(requiredSchema.fieldNames.map { name =>
-            orcFieldNames.indexWhere(caseSensitiveResolution(_, name))
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (name, idx) =>
+            if (orcFieldNames.indexWhere(caseSensitiveResolution(_, name)) != -1) {
+              idx
+            } else {
+              -1
+            }
           })
         } else {
           // Do case-insensitive resolution only if in case-insensitive mode
-          val caseInsensitiveOrcFieldMap =
-            orcFieldNames.zipWithIndex.groupBy(_._1.toLowerCase(Locale.ROOT))
-          Some(requiredSchema.fieldNames.map { requiredFieldName =>
+          val caseInsensitiveOrcFieldMap = orcFieldNames.groupBy(_.toLowerCase(Locale.ROOT))
+          Some(requiredSchema.fieldNames.zipWithIndex.map { case (requiredFieldName, idx) =>
             caseInsensitiveOrcFieldMap
               .get(requiredFieldName.toLowerCase(Locale.ROOT))
               .map { matchedOrcFields =>
                 if (matchedOrcFields.size > 1) {
                   // Need to fail if there is ambiguity, i.e. more than one field is matched.
-                  val matchedOrcFieldsString = matchedOrcFields.map(_._1).mkString("[", ", ", "]")
+                  val matchedOrcFieldsString = matchedOrcFields.mkString("[", ", ", "]")
                   throw new RuntimeException(s"""Found duplicate field(s) "$requiredFieldName": """
                     + s"$matchedOrcFieldsString in case-insensitive mode")
                 } else {
-                  matchedOrcFields.head._2
+                  idx
                 }
               }.getOrElse(-1)
           })
         }
       }
     }
+  }
+
+  /**
+   * Add a metadata specifying Spark version.
+   */
+  def addSparkVersionMetadata(writer: Writer): Unit = {
+    writer.addUserMetadata(SPARK_VERSION_METADATA_KEY, UTF_8.encode(SPARK_VERSION_SHORT))
+  }
+
+  /**
+   * Given a `StructType` object, this methods converts it to corresponding string representation
+   * in ORC.
+   */
+  def orcTypeDescriptionString(dt: DataType): String = dt match {
+    case s: StructType =>
+      val fieldTypes = s.fields.map { f =>
+        s"${quoteIdentifier(f.name)}:${orcTypeDescriptionString(f.dataType)}"
+      }
+      s"struct<${fieldTypes.mkString(",")}>"
+    case a: ArrayType =>
+      s"array<${orcTypeDescriptionString(a.elementType)}>"
+    case m: MapType =>
+      s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case _ => dt.catalogString
   }
 }

@@ -25,8 +25,10 @@ import java.util
 import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.shims.ShimLoader
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
@@ -53,7 +55,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       sharesHadoopClasses: Boolean = true): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
     // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
-    // with the given version, we will use Hadoop 2.6 and then will not share Hadoop classes.
+    // with the given version, we will use Hadoop 2.7 and then will not share Hadoop classes.
     var _sharesHadoopClasses = sharesHadoopClasses
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
@@ -65,13 +67,14 @@ private[hive] object IsolatedClientLoader extends Logging {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
             // version cannot be resolved.
-            logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. " +
-              s"We will change the hadoop version from $hadoopVersion to 2.6.0 and try again. " +
-              "Hadoop classes will not be shared between Spark and Hive metastore client. " +
+            val fallbackVersion = "2.7.4"
+            logWarning(s"Failed to resolve Hadoop artifacts for the version $hadoopVersion. We " +
+              s"will change the hadoop version from $hadoopVersion to $fallbackVersion and try " +
+              "again. Hadoop classes will not be shared between Spark and Hive metastore client. " +
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             _sharesHadoopClasses = false
-            (downloadVersion(resolvedVersion, "2.6.5", ivyPath), "2.6.5")
+            (downloadVersion(resolvedVersion, fallbackVersion, ivyPath), fallbackVersion)
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -92,13 +95,18 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "12" | "0.12" | "0.12.0" => hive.v12
     case "13" | "0.13" | "0.13.0" | "0.13.1" => hive.v13
     case "14" | "0.14" | "0.14.0" => hive.v14
-    case "1.0" | "1.0.0" => hive.v1_0
-    case "1.1" | "1.1.0" => hive.v1_1
+    case "1.0" | "1.0.0" | "1.0.1" => hive.v1_0
+    case "1.1" | "1.1.0" | "1.1.1" => hive.v1_1
     case "1.2" | "1.2.0" | "1.2.1" | "1.2.2" => hive.v1_2
     case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
     case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
     case "2.2" | "2.2.0" => hive.v2_2
-    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" => hive.v2_3
+    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" | "2.3.3" | "2.3.4" | "2.3.5" => hive.v2_3
+    case "3.0" | "3.0.0" => hive.v3_0
+    case "3.1" | "3.1.0" | "3.1.1" => hive.v3_1
+    case version =>
+      throw new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
+        s"Please set ${HiveUtils.HIVE_METASTORE_VERSION.key} with a valid version.")
   }
 
   private def downloadVersion(
@@ -152,7 +160,6 @@ private[hive] object IsolatedClientLoader extends Logging {
  * @param isolationOn When true, custom versions of barrier classes will be constructed.  Must be
  *                    true unless loading the version of hive that is on Sparks classloader.
  * @param sharesHadoopClasses When true, we will share Hadoop classes between Spark and
- * @param rootClassLoader The system root classloader. Must not know about Hive classes.
  * @param baseClassLoader The spark classloader that is used to load shared classes.
  */
 private[hive] class IsolatedClientLoader(
@@ -163,14 +170,10 @@ private[hive] class IsolatedClientLoader(
     val config: Map[String, String] = Map.empty,
     val isolationOn: Boolean = true,
     val sharesHadoopClasses: Boolean = true,
-    val rootClassLoader: ClassLoader = ClassLoader.getSystemClassLoader.getParent.getParent,
     val baseClassLoader: ClassLoader = Thread.currentThread().getContextClassLoader,
     val sharedPrefixes: Seq[String] = Seq.empty,
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
-
-  // Check to make sure that the root classloader does not know about Hive.
-  assert(Try(rootClassLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
 
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
@@ -182,13 +185,12 @@ private[hive] class IsolatedClientLoader(
     name.startsWith("org.slf4j") ||
     name.startsWith("org.apache.log4j") || // log4j1.x
     name.startsWith("org.apache.logging.log4j") || // log4j2
-    name.startsWith("org.apache.derby.") ||
     name.startsWith("org.apache.spark.") ||
     (sharesHadoopClasses && isHadoopClass) ||
     name.startsWith("scala.") ||
     (name.startsWith("com.google") && !name.startsWith("com.google.cloud")) ||
-    name.startsWith("java.lang.") ||
-    name.startsWith("java.net") ||
+    name.startsWith("java.") ||
+    name.startsWith("javax.sql.") ||
     sharedPrefixes.exists(name.startsWith)
   }
 
@@ -196,6 +198,7 @@ private[hive] class IsolatedClientLoader(
   protected def isBarrierClass(name: String): Boolean =
     name.startsWith(classOf[HiveClientImpl].getName) ||
     name.startsWith(classOf[Shim].getName) ||
+    name.startsWith(classOf[ShimLoader].getName) ||
     barrierPrefixes.exists(name.startsWith)
 
   protected def classToPath(name: String): String =
@@ -210,30 +213,51 @@ private[hive] class IsolatedClientLoader(
   private[hive] val classLoader: MutableURLClassLoader = {
     val isolatedClassLoader =
       if (isolationOn) {
-        new URLClassLoader(allJars, rootClassLoader) {
-          override def loadClass(name: String, resolve: Boolean): Class[_] = {
-            val loaded = findLoadedClass(name)
-            if (loaded == null) doLoadClass(name, resolve) else loaded
-          }
-          def doLoadClass(name: String, resolve: Boolean): Class[_] = {
-            val classFileName = name.replaceAll("\\.", "/") + ".class"
-            if (isBarrierClass(name)) {
-              // For barrier classes, we construct a new copy of the class.
-              val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
-              logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
-              defineClass(name, bytes, 0, bytes.length)
-            } else if (!isSharedClass(name)) {
-              logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
-              super.loadClass(name, resolve)
+        if (allJars.isEmpty) {
+          // See HiveUtils; this is the Java 9+ + builtin mode scenario
+          baseClassLoader
+        } else {
+          val rootClassLoader: ClassLoader =
+            if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+              // In Java 9, the boot classloader can see few JDK classes. The intended parent
+              // classloader for delegation is now the platform classloader.
+              // See http://java9.wtf/class-loading/
+              val platformCL =
+              classOf[ClassLoader].getMethod("getPlatformClassLoader").
+                invoke(null).asInstanceOf[ClassLoader]
+              // Check to make sure that the root classloader does not know about Hive.
+              assert(Try(platformCL.loadClass("org.apache.hadoop.hive.conf.HiveConf")).isFailure)
+              platformCL
             } else {
-              // For shared classes, we delegate to baseClassLoader, but fall back in case the
-              // class is not found.
-              logDebug(s"shared class: $name")
-              try {
-                baseClassLoader.loadClass(name)
-              } catch {
-                case _: ClassNotFoundException =>
-                  super.loadClass(name, resolve)
+              // The boot classloader is represented by null (the instance itself isn't accessible)
+              // and before Java 9 can see all JDK classes
+              null
+            }
+          new URLClassLoader(allJars, rootClassLoader) {
+            override def loadClass(name: String, resolve: Boolean): Class[_] = {
+              val loaded = findLoadedClass(name)
+              if (loaded == null) doLoadClass(name, resolve) else loaded
+            }
+            def doLoadClass(name: String, resolve: Boolean): Class[_] = {
+              val classFileName = name.replaceAll("\\.", "/") + ".class"
+              if (isBarrierClass(name)) {
+                // For barrier classes, we construct a new copy of the class.
+                val bytes = IOUtils.toByteArray(baseClassLoader.getResourceAsStream(classFileName))
+                logDebug(s"custom defining: $name - ${util.Arrays.hashCode(bytes)}")
+                defineClass(name, bytes, 0, bytes.length)
+              } else if (!isSharedClass(name)) {
+                logDebug(s"hive class: $name - ${getResource(classToPath(name))}")
+                super.loadClass(name, resolve)
+              } else {
+                // For shared classes, we delegate to baseClassLoader, but fall back in case the
+                // class is not found.
+                logDebug(s"shared class: $name")
+                try {
+                  baseClassLoader.loadClass(name)
+                } catch {
+                  case _: ClassNotFoundException =>
+                    super.loadClass(name, resolve)
+                }
               }
             }
           }

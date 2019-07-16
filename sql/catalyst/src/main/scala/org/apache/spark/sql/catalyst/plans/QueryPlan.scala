@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.internal.SQLConf
@@ -36,13 +37,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = AttributeSet(output)
-
-  /**
-   * All Attributes that appear in expressions from this operator.  Note that this set does not
-   * include attributes that are implicitly referenced by being passed through to the output tuple.
-   */
-  def references: AttributeSet = AttributeSet.fromAttributeSets(expressions.map(_.references))
+  @transient
+  lazy val outputSet: AttributeSet = AttributeSet(output)
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -56,11 +52,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
-   * Attributes that are referenced by expressions but not provided by this node's children.
-   * Subclasses should override this method if they produce attributes internally as it is used by
-   * assertions designed to prevent the construction of invalid plans.
+   * All Attributes that appear in expressions from this operator.  Note that this set does not
+   * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def missingInput: AttributeSet = references -- inputSet -- producedAttributes
+  @transient
+  lazy val references: AttributeSet = {
+    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
+  }
+
+  /**
+   * Attributes that are referenced by expressions but not provided by this node's children.
+   */
+  final def missingInput: AttributeSet = references -- inputSet
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present
@@ -118,7 +121,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case stream: Stream[_] => stream.map(recursiveTransform).force
-      case seq: Traversable[_] => seq.map(recursiveTransform)
+      case seq: Iterable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
       case null => null
     }
@@ -141,16 +144,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /** Returns all of the expressions present in this query plan operator. */
   final def expressions: Seq[Expression] = {
     // Recursively find all expressions from a traversable.
-    def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
+    def seqToExpressions(seq: Iterable[Any]): Iterable[Expression] = seq.flatMap {
       case e: Expression => e :: Nil
-      case s: Traversable[_] => seqToExpressions(s)
+      case s: Iterable[_] => seqToExpressions(s)
       case other => Nil
     }
 
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case s: Some[_] => seqToExpressions(s.toSeq)
-      case seq: Traversable[_] => seqToExpressions(seq)
+      case seq: Iterable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
   }
@@ -172,9 +175,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleString: String = statePrefix + super.simpleString
+  override def simpleString(maxFields: Int): String = statePrefix + super.simpleString(maxFields)
 
-  override def verboseString: String = simpleString
+  override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   /**
    * All the subqueries of current plan.
@@ -278,7 +281,7 @@ object QueryPlan extends PredicateHelper {
    */
   def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {
-      case s: SubqueryExpression => s.canonicalize(input)
+      case s: PlanExpression[_] => s.canonicalize(input)
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {
@@ -299,6 +302,22 @@ object QueryPlan extends PredicateHelper {
       splitConjunctivePredicates(normalized)
     } else {
       Nil
+    }
+  }
+
+  /**
+   * Converts the query plan to string and appends it via provided function.
+   */
+  def append[T <: QueryPlan[T]](
+      plan: => QueryPlan[T],
+      append: String => Unit,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Int = SQLConf.get.maxToStringFields): Unit = {
+    try {
+      plan.treeString(append, verbose, addSuffix, maxFields)
+    } catch {
+      case e: AnalysisException => append(e.toString)
     }
   }
 }

@@ -16,7 +16,6 @@
 #
 
 from __future__ import print_function
-import socket
 
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import write_int, UTF8Deserializer
@@ -29,7 +28,7 @@ class TaskContext(object):
 
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
-    L{TaskContext.get()}.
+    :meth:`TaskContext.get`.
     """
 
     _taskContext = None
@@ -39,6 +38,7 @@ class TaskContext(object):
     _stageId = None
     _taskAttemptId = None
     _localProperties = None
+    _resources = None
 
     def __new__(cls):
         """Even if users construct TaskContext instead of using get, give them the singleton."""
@@ -47,10 +47,6 @@ class TaskContext(object):
             return taskContext
         cls._taskContext = taskContext = object.__new__(cls)
         return taskContext
-
-    def __init__(self):
-        """Construct a TaskContext, use get instead"""
-        pass
 
     @classmethod
     def _getOrCreate(cls):
@@ -100,6 +96,13 @@ class TaskContext(object):
         """
         return self._localProperties.get(key, None)
 
+    def resources(self):
+        """
+        Resources allocated to the task. The key is the resource name and the value is information
+        about the resource.
+        """
+        return self._resources
+
 
 BARRIER_FUNCTION = 1
 
@@ -140,15 +143,15 @@ class BarrierTaskContext(TaskContext):
     _port = None
     _secret = None
 
-    def __init__(self):
-        """Construct a BarrierTaskContext, use get instead"""
-        pass
-
     @classmethod
     def _getOrCreate(cls):
-        """Internal function to get or create global BarrierTaskContext."""
-        if cls._taskContext is None:
-            cls._taskContext = BarrierTaskContext()
+        """
+        Internal function to get or create global BarrierTaskContext. We need to make sure
+        BarrierTaskContext is returned from here because it is needed in python worker reuse
+        scenario, see SPARK-25921 for more details.
+        """
+        if not isinstance(cls._taskContext, BarrierTaskContext):
+            cls._taskContext = object.__new__(cls)
         return cls._taskContext
 
     @classmethod

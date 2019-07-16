@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockManager;
@@ -158,11 +159,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
    */
   private final Location loc;
 
-  private final boolean enablePerfMetrics;
+  private long numProbes = 0L;
 
-  private long numProbes = 0;
-
-  private long numKeyLookups = 0;
+  private long numKeyLookups = 0L;
 
   private long peakMemoryUsedBytes = 0L;
 
@@ -179,8 +178,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       SerializerManager serializerManager,
       int initialCapacity,
       double loadFactor,
-      long pageSizeBytes,
-      boolean enablePerfMetrics) {
+      long pageSizeBytes) {
     super(taskMemoryManager, pageSizeBytes, taskMemoryManager.getTungstenMemoryMode());
     this.taskMemoryManager = taskMemoryManager;
     this.blockManager = blockManager;
@@ -188,7 +186,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
     this.loadFactor = loadFactor;
     this.loc = new Location();
     this.pageSizeBytes = pageSizeBytes;
-    this.enablePerfMetrics = enablePerfMetrics;
     if (initialCapacity <= 0) {
       throw new IllegalArgumentException("Initial capacity must be greater than 0");
     }
@@ -208,14 +205,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
       long pageSizeBytes) {
-    this(taskMemoryManager, initialCapacity, pageSizeBytes, false);
-  }
-
-  public BytesToBytesMap(
-      TaskMemoryManager taskMemoryManager,
-      int initialCapacity,
-      long pageSizeBytes,
-      boolean enablePerfMetrics) {
     this(
       taskMemoryManager,
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
@@ -223,8 +212,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
-      pageSizeBytes,
-      enablePerfMetrics);
+      pageSizeBytes);
   }
 
   /**
@@ -267,32 +255,45 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     private void advanceToNextPage() {
-      synchronized (this) {
-        int nextIdx = dataPages.indexOf(currentPage) + 1;
-        if (destructive && currentPage != null) {
-          dataPages.remove(currentPage);
-          freePage(currentPage);
-          nextIdx --;
+      // SPARK-26265: We will first lock this `MapIterator` and then `TaskMemoryManager` when going
+      // to free a memory page by calling `freePage`. At the same time, it is possibly that another
+      // memory consumer first locks `TaskMemoryManager` and then this `MapIterator` when it
+      // acquires memory and causes spilling on this `MapIterator`. To avoid deadlock here, we keep
+      // reference to the page to free and free it after releasing the lock of `MapIterator`.
+      MemoryBlock pageToFree = null;
+
+      try {
+        synchronized (this) {
+          int nextIdx = dataPages.indexOf(currentPage) + 1;
+          if (destructive && currentPage != null) {
+            dataPages.remove(currentPage);
+            pageToFree = currentPage;
+            nextIdx--;
+          }
+          if (dataPages.size() > nextIdx) {
+            currentPage = dataPages.get(nextIdx);
+            pageBaseObject = currentPage.getBaseObject();
+            offsetInPage = currentPage.getBaseOffset();
+            recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
+            offsetInPage += UnsafeAlignedOffset.getUaoSize();
+          } else {
+            currentPage = null;
+            if (reader != null) {
+              handleFailedDelete();
+            }
+            try {
+              Closeables.close(reader, /* swallowIOException = */ false);
+              reader = spillWriters.getFirst().getReader(serializerManager);
+              recordsInPage = -1;
+            } catch (IOException e) {
+              // Scala iterator does not handle exception
+              Platform.throwException(e);
+            }
+          }
         }
-        if (dataPages.size() > nextIdx) {
-          currentPage = dataPages.get(nextIdx);
-          pageBaseObject = currentPage.getBaseObject();
-          offsetInPage = currentPage.getBaseOffset();
-          recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
-          offsetInPage += UnsafeAlignedOffset.getUaoSize();
-        } else {
-          currentPage = null;
-          if (reader != null) {
-            handleFailedDelete();
-          }
-          try {
-            Closeables.close(reader, /* swallowIOException = */ false);
-            reader = spillWriters.getFirst().getReader(serializerManager);
-            recordsInPage = -1;
-          } catch (IOException e) {
-            // Scala iterator does not handle exception
-            Platform.throwException(e);
-          }
+      } finally {
+        if (pageToFree != null) {
+          freePage(pageToFree);
         }
       }
     }
@@ -341,52 +342,50 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
     }
 
-    public long spill(long numBytes) throws IOException {
-      synchronized (this) {
-        if (!destructive || dataPages.size() == 1) {
-          return 0L;
-        }
-
-        updatePeakMemoryUsed();
-
-        // TODO: use existing ShuffleWriteMetrics
-        ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-
-        long released = 0L;
-        while (dataPages.size() > 0) {
-          MemoryBlock block = dataPages.getLast();
-          // The currentPage is used, cannot be released
-          if (block == currentPage) {
-            break;
-          }
-
-          Object base = block.getBaseObject();
-          long offset = block.getBaseOffset();
-          int numRecords = UnsafeAlignedOffset.getSize(base, offset);
-          int uaoSize = UnsafeAlignedOffset.getUaoSize();
-          offset += uaoSize;
-          final UnsafeSorterSpillWriter writer =
-            new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
-          while (numRecords > 0) {
-            int length = UnsafeAlignedOffset.getSize(base, offset);
-            writer.write(base, offset + uaoSize, length, 0);
-            offset += uaoSize + length + 8;
-            numRecords--;
-          }
-          writer.close();
-          spillWriters.add(writer);
-
-          dataPages.removeLast();
-          released += block.size();
-          freePage(block);
-
-          if (released >= numBytes) {
-            break;
-          }
-        }
-
-        return released;
+    public synchronized long spill(long numBytes) throws IOException {
+      if (!destructive || dataPages.size() == 1) {
+        return 0L;
       }
+
+      updatePeakMemoryUsed();
+
+      // TODO: use existing ShuffleWriteMetrics
+      ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
+
+      long released = 0L;
+      while (dataPages.size() > 0) {
+        MemoryBlock block = dataPages.getLast();
+        // The currentPage is used, cannot be released
+        if (block == currentPage) {
+          break;
+        }
+
+        Object base = block.getBaseObject();
+        long offset = block.getBaseOffset();
+        int numRecords = UnsafeAlignedOffset.getSize(base, offset);
+        int uaoSize = UnsafeAlignedOffset.getUaoSize();
+        offset += uaoSize;
+        final UnsafeSorterSpillWriter writer =
+                new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
+        while (numRecords > 0) {
+          int length = UnsafeAlignedOffset.getSize(base, offset);
+          writer.write(base, offset + uaoSize, length, 0);
+          offset += uaoSize + length + 8;
+          numRecords--;
+        }
+        writer.close();
+        spillWriters.add(writer);
+
+        dataPages.removeLast();
+        released += block.size();
+        freePage(block);
+
+        if (released >= numBytes) {
+          break;
+        }
+      }
+
+      return released;
     }
 
     @Override
@@ -461,15 +460,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
 
-    if (enablePerfMetrics) {
-      numKeyLookups++;
-    }
+    numKeyLookups++;
+
     int pos = hash & mask;
     int step = 1;
     while (true) {
-      if (enablePerfMetrics) {
-        numProbes++;
-      }
+      numProbes++;
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
         loc.with(pos, hash, false);
@@ -716,7 +712,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       final long recordOffset = offset;
       UnsafeAlignedOffset.putSize(base, offset, klen + vlen + uaoSize);
       UnsafeAlignedOffset.putSize(base, offset + uaoSize, klen);
-      offset += (2 * uaoSize);
+      offset += (2L * uaoSize);
       Platform.copyMemory(kbase, koff, base, offset, klen);
       offset += klen;
       Platform.copyMemory(vbase, voff, base, offset, vlen);
@@ -741,7 +737,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         if (numKeys >= growthThreshold && longArray.size() < MAX_CAPACITY) {
           try {
             growAndRehash();
-          } catch (OutOfMemoryError oom) {
+          } catch (SparkOutOfMemoryError oom) {
             canGrowArray = false;
           }
         }
@@ -757,7 +753,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private boolean acquireNewPage(long required) {
     try {
       currentPage = allocatePage(required);
-    } catch (OutOfMemoryError e) {
+    } catch (SparkOutOfMemoryError e) {
       return false;
     }
     dataPages.add(currentPage);
@@ -784,7 +780,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     assert (capacity >= 0);
     capacity = Math.max((int) Math.min(MAX_CAPACITY, ByteArrayMethods.nextPowerOf2(capacity)), 64);
     assert (capacity <= MAX_CAPACITY);
-    longArray = allocateArray(capacity * 2);
+    longArray = allocateArray(capacity * 2L);
     longArray.zeroOut();
 
     this.growthThreshold = (int) (capacity * loadFactor);
@@ -858,10 +854,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   /**
    * Returns the average number of probes per key lookup.
    */
-  public double getAverageProbesPerLookup() {
-    if (!enablePerfMetrics) {
-      throw new IllegalStateException();
-    }
+  public double getAvgHashProbeBucketListIterations() {
     return (1.0 * numProbes) / numKeyLookups;
   }
 

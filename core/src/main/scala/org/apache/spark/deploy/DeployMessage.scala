@@ -96,11 +96,13 @@ private[deploy] object DeployMessages {
    * @param masterWebUiUrl the master Web UI address
    * @param masterAddress the master address used by the worker to connect. It should be
    *                      [[RegisterWorker.masterAddress]].
+   * @param duplicate whether it is a duplicate register request from the worker
    */
   case class RegisteredWorker(
       master: RpcEndpointRef,
       masterWebUiUrl: String,
-      masterAddress: RpcAddress) extends DeployMessage with RegisterWorkerResponse
+      masterAddress: RpcAddress,
+      duplicate: Boolean) extends DeployMessage with RegisterWorkerResponse
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage with RegisterWorkerResponse
 

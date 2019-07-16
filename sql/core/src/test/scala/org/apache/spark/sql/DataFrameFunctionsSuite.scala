@@ -89,13 +89,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val msg1 = intercept[Exception] {
       df5.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg1.contains("Cannot use null as map key!"))
+    assert(msg1.contains("Cannot use null as map key"))
 
     val df6 = Seq((Seq(1, 2), Seq("a"))).toDF("k", "v")
     val msg2 = intercept[Exception] {
       df6.select(map_from_arrays($"k", $"v")).collect
     }.getMessage
-    assert(msg2.contains("The given two arrays should have the same length"))
+    assert(msg2.contains("The key array and value array of MapData must have the same length"))
   }
 
   test("struct with column name") {
@@ -458,15 +458,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df8.selectExpr("arrays_zip(v1, v2)"), expectedValue8)
   }
 
-  test("SPARK-24633: arrays_zip splits input processing correctly") {
-    Seq("true", "false").foreach { wholestageCodegenEnabled =>
-      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholestageCodegenEnabled) {
-        val df = spark.range(1)
-        val exprs = (0 to 5).map(x => array($"id" + lit(x)))
-        checkAnswer(df.select(arrays_zip(exprs: _*)),
-          Row(Seq(Row(0, 1, 2, 3, 4, 5))))
-      }
-    }
+  testWithWholeStageCodegenOnAndOff("SPARK-24633: arrays_zip splits input " +
+    "processing correctly") { _ =>
+    val df = spark.range(1)
+    val exprs = (0 to 5).map(x => array($"id" + lit(x)))
+    checkAnswer(df.select(arrays_zip(exprs: _*)),
+      Row(Seq(Row(0, 1, 2, 3, 4, 5))))
   }
 
   def testSizeOfMap(sizeOfNull: Any): Unit = {
@@ -1211,11 +1208,80 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row("3"), Row(""), Row(null))
     )
 
-    val e = intercept[AnalysisException] {
+    val e1 = intercept[AnalysisException] {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
     }
-    assert(e.message.contains(
-      "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
+    val errorMsg1 =
+      s"""
+         |The first argument to function element_at should have been array or map type, but
+         |its string type.
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e1.message.contains(errorMsg1))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(2, 1), 2S)"),
+      Seq(Row(1))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1Y)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(array(1, 2, 3), 3)"),
+      Seq(Row(3))
+    )
+
+    val e2 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(array('a', 'b'), 1L)")
+    }
+    val errorMsg2 =
+      s"""
+         |Input to function element_at should have been array followed by a int, but it's
+         |[array<string>, bigint].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e2.message.contains(errorMsg2))
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2Y)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1S)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 2L)"),
+      Seq(Row("b"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.0D)"),
+      Seq(Row("a"))
+    )
+
+    checkAnswer(
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), 1.23D)"),
+      Seq(Row(null))
+    )
+
+    val e3 = intercept[AnalysisException] {
+      OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
+    }
+    val errorMsg3 =
+      s"""
+         |Input to function element_at should have been map followed by a value of same
+         |key type, but it's [map<int,string>, string].
+       """.stripMargin.replace("\n", " ").trim()
+    assert(e3.message.contains(errorMsg3))
   }
 
   test("array_union functions") {
@@ -1329,7 +1395,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    df.unpersist()
+    df.unpersist(blocking = true)
     nullTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
@@ -2180,6 +2246,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("exists function - array for primitive type containing null") {
     val df = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
+      Seq(1, 3, 5),
       Seq(5, null, null, 9, 7, null),
       Seq.empty,
       null
@@ -2190,6 +2257,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(
           Row(true),
           Row(false),
+          Row(null),
           Row(false),
           Row(null)))
     }
@@ -2522,7 +2590,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val ex3 = intercept[Exception] {
       dfExample1.selectExpr("transform_keys(i, (k, v) -> v)").show()
     }
-    assert(ex3.getMessage.contains("Cannot use null as map key!"))
+    assert(ex3.getMessage.contains("Cannot use null as map key"))
 
     val ex4 = intercept[AnalysisException] {
       dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
@@ -2818,7 +2886,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
-      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) ::
+      ("xxhash64", (df: DataFrame) => df.select(xxhash64())) ::
+      ("xxhash64", (df: DataFrame) => df.selectExpr("xxhash64()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least one argument"))
@@ -2841,6 +2911,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("SPARK-26370: Fix resolution of higher-order function for the same identifier") {
+    val df = Seq(
+      (Seq(1, 9, 8, 7), 1, 2),
+      (Seq(5, 9, 7), 2, 2),
+      (Seq.empty, 3, 2),
+      (null, 4, 2)
+    ).toDF("i", "x", "d")
+
+    checkAnswer(df.selectExpr("x", "exists(i, x -> x % d == 0)"),
+      Seq(
+        Row(1, true),
+        Row(2, false),
+        Row(3, false),
+        Row(4, null)))
+    checkAnswer(df.filter("exists(i, x -> x % d == 0)"),
+      Seq(Row(Seq(1, 9, 8, 7), 1, 2)))
+    checkAnswer(df.select("x").filter("exists(i, x -> x % d == 0)"),
+      Seq(Row(1)))
   }
 }
 

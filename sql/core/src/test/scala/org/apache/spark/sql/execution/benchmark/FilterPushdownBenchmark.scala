@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.functions.monotonically_increasing_id
@@ -48,7 +49,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     .set("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
-    .setIfMissing("spark.ui.enabled", "false")
+    .setIfMissing(UI_ENABLED, false)
     .setIfMissing("orc.compression", "snappy")
     .setIfMissing("spark.sql.parquet.compression.codec", "snappy")
 
@@ -198,7 +199,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     }
   }
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Pushdown for many distinct value case") {
       withTempPath { dir =>
         withTempTable("orcTable", "parquetTable") {

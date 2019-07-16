@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-sql_2.11</artifactId>
+  <artifactId>spark-sql_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project SQL</name>
   <url>http://spark.apache.org/</url>
@@ -113,12 +113,8 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-vector</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm6-shaded</artifactId>
+      <artifactId>xbean-asm7-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -190,6 +186,19 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
+            <id>add-sources</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>v${hive.version.short}/src/main/scala</source>
+                <source>v${hive.version.short}/src/main/java</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
             <id>add-scala-test-sources</id>
             <phase>generate-test-sources</phase>
             <goals>
@@ -197,6 +206,7 @@
             </goals>
             <configuration>
               <sources>
+                <source>v${hive.version.short}/src/test/scala</source>
                 <source>src/test/gen-java</source>
               </sources>
             </configuration>

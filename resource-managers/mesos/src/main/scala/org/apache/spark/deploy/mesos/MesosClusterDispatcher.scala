@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.mesos
 
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -24,6 +25,7 @@ import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.scheduler.cluster.mesos._
 import org.apache.spark.util.{CommandLineUtils, ShutdownHookManager, SparkUncaughtExceptionHandler, Utils}
 
@@ -60,7 +62,7 @@ private[mesos] class MesosClusterDispatcher(
   }
 
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)
-  private val recoveryMode = conf.get(RECOVERY_MODE).toUpperCase()
+  private val recoveryMode = conf.get(RECOVERY_MODE).toUpperCase(Locale.ROOT)
   logInfo("Recovery mode in Mesos dispatcher set to: " + recoveryMode)
 
   private val engineFactory = recoveryMode match {

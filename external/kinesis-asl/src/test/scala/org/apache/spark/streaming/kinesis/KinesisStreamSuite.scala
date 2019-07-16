@@ -19,7 +19,6 @@ package org.apache.spark.streaming.kinesis
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.Random
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
@@ -152,7 +151,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       _.asInstanceOf[KinesisBackedBlockRDDPartition] }.toSeq
     assert(partitions.map { _.seqNumberRanges } === Seq(seqNumRanges1, seqNumRanges2))
     assert(partitions.map { _.blockId } === Seq(blockId1, blockId2))
-    assert(partitions.forall { _.isBlockIdValid === true })
+    assert(partitions.forall { _.isBlockIdValid })
 
     // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
     val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
@@ -198,10 +197,11 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(120 seconds), interval(10 second)) {
+    eventually(timeout(2.minutes), interval(10.seconds)) {
       testUtils.pushData(testData, aggregateTestData)
-      assert(collected.synchronized { collected === testData.toSet },
-        "\nData received does not match data sent")
+      collected.synchronized {
+        assert(collected === testData.toSet, "\nData received does not match data sent")
+      }
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -217,7 +217,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       .initialPosition(new Latest())
       .checkpointInterval(Seconds(10))
       .storageLevel(StorageLevel.MEMORY_ONLY)
-      .buildWithMessageHandler(addFive(_))
+      .buildWithMessageHandler(addFive)
 
     stream shouldBe a [ReceiverInputDStream[_]]
 
@@ -231,11 +231,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.start()
 
     val testData = 1 to 10
-    eventually(timeout(120 seconds), interval(10 second)) {
+    eventually(timeout(2.minutes), interval(10.seconds)) {
       testUtils.pushData(testData, aggregateTestData)
       val modData = testData.map(_ + 5)
-      assert(collected.synchronized { collected === modData.toSet },
-        "\nData received does not match data sent")
+      collected.synchronized {
+        assert(collected === modData.toSet, "\nData received does not match data sent")
+      }
     }
     ssc.stop(stopSparkContext = false)
   }
@@ -316,10 +317,11 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       val testData2 = 11 to 20
       val testData3 = 21 to 30
 
-      eventually(timeout(60 seconds), interval(10 second)) {
+      eventually(timeout(1.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData1, aggregateTestData)
-        assert(collected.synchronized { collected === testData1.toSet },
-          "\nData received does not match data sent")
+        collected.synchronized {
+          assert(collected === testData1.toSet, "\nData received does not match data sent")
+        }
       }
 
       val shardToSplit = localTestUtils.getShards().head
@@ -332,10 +334,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       assert(splitCloseShards.size == 1)
       assert(splitOpenShards.size == 2)
 
-      eventually(timeout(60 seconds), interval(10 second)) {
+      eventually(timeout(1.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData2, aggregateTestData)
-        assert(collected.synchronized { collected === (testData1 ++ testData2).toSet },
-          "\nData received does not match data sent after splitting a shard")
+        collected.synchronized {
+          assert(collected === (testData1 ++ testData2).toSet,
+            "\nData received does not match data sent after splitting a shard")
+        }
       }
 
       val Seq(shardToMerge, adjShard) = splitOpenShards
@@ -348,10 +352,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       assert(mergedCloseShards.size == 3)
       assert(mergedOpenShards.size == 1)
 
-      eventually(timeout(60 seconds), interval(10 second)) {
+      eventually(timeout(1.minute), interval(10.seconds)) {
         localTestUtils.pushData(testData3, aggregateTestData)
-        assert(collected.synchronized { collected === (testData1 ++ testData2 ++ testData3).toSet },
-          "\nData received does not match data sent after merging shards")
+        collected.synchronized {
+          assert(collected === (testData1 ++ testData2 ++ testData3).toSet,
+            "\nData received does not match data sent after merging shards")
+        }
       }
     } finally {
       ssc.stop(stopSparkContext = false)
@@ -399,7 +405,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     // Run until there are at least 10 batches with some data in them
     // If this times out because numBatchesWithData is empty, then its likely that foreachRDD
     // function failed with exceptions, and nothing got added to `collectedData`
-    eventually(timeout(2 minutes), interval(1 seconds)) {
+    eventually(timeout(2.minutes), interval(1.second)) {
       testUtils.pushData(1 to 5, aggregateTestData)
       assert(isCheckpointPresent && numBatchesWithData > 10)
     }

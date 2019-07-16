@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
+import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
@@ -152,15 +151,14 @@ object HiveAnalysis extends Rule[LogicalPlan] {
         ifPartitionNotExists, query.output.map(_.name))
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
-      DDLUtils.checkDataColNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
-    case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      DDLUtils.checkDataColNames(tableDesc)
+    case CreateTable(tableDesc, mode, Some(query))
+        if DDLUtils.isHiveTable(tableDesc) && query.resolved =>
       CreateHiveTableAsSelectCommand(tableDesc, query, query.output.map(_.name), mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
-        if DDLUtils.isHiveTable(provider) =>
+        if DDLUtils.isHiveTable(provider) && child.resolved =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 
@@ -181,48 +179,16 @@ case class RelationConversions(
     conf: SQLConf,
     sessionCatalog: HiveSessionCatalog) extends Rule[LogicalPlan] {
   private def isConvertible(relation: HiveTableRelation): Boolean = {
-    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-    serde.contains("parquet") && conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
-      serde.contains("orc") && conf.getConf(HiveUtils.CONVERT_METASTORE_ORC)
+    isConvertible(relation.tableMeta)
   }
 
-  // Return true for Apache ORC and Hive ORC-related configuration names.
-  // Note that Spark doesn't support configurations like `hive.merge.orcfile.stripe.level`.
-  private def isOrcProperty(key: String) =
-    key.startsWith("orc.") || key.contains(".orc.")
-
-  private def isParquetProperty(key: String) =
-    key.startsWith("parquet.") || key.contains(".parquet.")
-
-  private def convert(relation: HiveTableRelation): LogicalRelation = {
-    val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
-
-    // Consider table and storage properties. For properties existing in both sides, storage
-    // properties will supersede table properties.
-    if (serde.contains("parquet")) {
-      val options = relation.tableMeta.properties.filterKeys(isParquetProperty) ++
-        relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
-        conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
-      sessionCatalog.metastoreCatalog
-        .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
-    } else {
-      val options = relation.tableMeta.properties.filterKeys(isOrcProperty) ++
-        relation.tableMeta.storage.properties
-      if (conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native") {
-        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
-          relation,
-          options,
-          classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat],
-          "orc")
-      } else {
-        sessionCatalog.metastoreCatalog.convertToLogicalRelation(
-          relation,
-          options,
-          classOf[org.apache.spark.sql.hive.orc.OrcFileFormat],
-          "orc")
-      }
-    }
+  private def isConvertible(tableMeta: CatalogTable): Boolean = {
+    val serde = tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
+    serde.contains("parquet") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_PARQUET) ||
+      serde.contains("orc") && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_ORC)
   }
+
+  private val metastoreCatalog = sessionCatalog.metastoreCatalog
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan resolveOperators {
@@ -231,12 +197,22 @@ case class RelationConversions(
         // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             !r.isPartitioned && isConvertible(r) =>
-        InsertIntoTable(convert(r), partition, query, overwrite, ifPartitionNotExists)
+        InsertIntoTable(metastoreCatalog.convert(r), partition,
+          query, overwrite, ifPartitionNotExists)
 
       // Read path
       case relation: HiveTableRelation
           if DDLUtils.isHiveTable(relation.tableMeta) && isConvertible(relation) =>
-        convert(relation)
+        metastoreCatalog.convert(relation)
+
+      // CTAS
+      case CreateTable(tableDesc, mode, Some(query))
+          if DDLUtils.isHiveTable(tableDesc) && tableDesc.partitionColumnNames.isEmpty &&
+            isConvertible(tableDesc) && SQLConf.get.getConf(HiveUtils.CONVERT_METASTORE_CTAS) =>
+        // validation is required to be done here before relation conversion.
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
+        OptimizedCreateHiveTableAsSelectCommand(
+          tableDesc, query, query.output.map(_.name), mode)
     }
   }
 }

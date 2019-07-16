@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import java.io.Serializable;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,8 +54,8 @@ public final class CalendarInterval implements Serializable {
   private static Pattern yearMonthPattern =
     Pattern.compile("^(?:['|\"])?([+|-])?(\\d+)-(\\d+)(?:['|\"])?$");
 
-  private static Pattern dayTimePattern =
-    Pattern.compile("^(?:['|\"])?([+|-])?(\\d+) (\\d+):(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
+  private static Pattern dayTimePattern = Pattern.compile(
+    "^(?:['|\"])?([+|-])?((\\d+) )?((\\d+):)?(\\d+):(\\d+)(\\.(\\d+))?(?:['|\"])?$");
 
   private static Pattern quoteTrimPattern = Pattern.compile("^(?:['|\"])?(.*?)(?:['|\"])?$");
 
@@ -66,6 +67,10 @@ public final class CalendarInterval implements Serializable {
     }
   }
 
+  /**
+   * Convert a string to CalendarInterval. Return null if the input string is not a valid interval.
+   * This method is case-sensitive and all characters in the input string should be in lower case.
+   */
   public static CalendarInterval fromString(String s) {
     if (s == null) {
       return null;
@@ -85,6 +90,26 @@ public final class CalendarInterval implements Serializable {
       microseconds += toLong(m.group(9));
       return new CalendarInterval((int) months, microseconds);
     }
+  }
+
+  /**
+   * Convert a string to CalendarInterval. Unlike fromString, this method is case-insensitive and
+   * will throw IllegalArgumentException when the input string is not a valid interval.
+   *
+   * @throws IllegalArgumentException if the string is not a valid internal.
+   */
+  public static CalendarInterval fromCaseInsensitiveString(String s) {
+    if (s == null || s.trim().isEmpty()) {
+      throw new IllegalArgumentException("Interval cannot be null or blank.");
+    }
+    String sInLowerCase = s.trim().toLowerCase(Locale.ROOT);
+    String interval =
+      sInLowerCase.startsWith("interval ") ? sInLowerCase : "interval " + sInLowerCase;
+    CalendarInterval cal = fromString(interval);
+    if (cal == null) {
+      throw new IllegalArgumentException("Invalid interval: " + s);
+    }
+    return cal;
   }
 
   public static long toLongWithRange(String fieldName,
@@ -130,11 +155,25 @@ public final class CalendarInterval implements Serializable {
   }
 
   /**
-   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *
    * adapted from HiveIntervalDayTime.valueOf
    */
   public static CalendarInterval fromDayTimeString(String s) throws IllegalArgumentException {
+    return fromDayTimeString(s, "day", "second");
+  }
+
+  /**
+   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   *
+   * adapted from HiveIntervalDayTime.valueOf.
+   * Below interval conversion patterns are supported:
+   * - DAY TO (HOUR|MINUTE|SECOND)
+   * - HOUR TO (MINUTE|SECOND)
+   * - MINUTE TO SECOND
+   */
+  public static CalendarInterval fromDayTimeString(String s, String from, String to)
+      throws IllegalArgumentException {
     CalendarInterval result = null;
     if (s == null) {
       throw new IllegalArgumentException("Interval day-time string was null");
@@ -147,12 +186,42 @@ public final class CalendarInterval implements Serializable {
     } else {
       try {
         int sign = m.group(1) != null && m.group(1).equals("-") ? -1 : 1;
-        long days = toLongWithRange("day", m.group(2), 0, Integer.MAX_VALUE);
-        long hours = toLongWithRange("hour", m.group(3), 0, 23);
-        long minutes = toLongWithRange("minute", m.group(4), 0, 59);
-        long seconds = toLongWithRange("second", m.group(5), 0, 59);
+        long days = m.group(2) == null ? 0 : toLongWithRange("day", m.group(3),
+          0, Integer.MAX_VALUE);
+        long hours = 0;
+        long minutes;
+        long seconds = 0;
+        if (m.group(5) != null || from.equals("minute")) { // 'HH:mm:ss' or 'mm:ss minute'
+          hours = toLongWithRange("hour", m.group(5), 0, 23);
+          minutes = toLongWithRange("minute", m.group(6), 0, 59);
+          seconds = toLongWithRange("second", m.group(7), 0, 59);
+        } else if (m.group(8) != null){ // 'mm:ss.nn'
+          minutes = toLongWithRange("minute", m.group(6), 0, 59);
+          seconds = toLongWithRange("second", m.group(7), 0, 59);
+        } else { // 'HH:mm'
+          hours = toLongWithRange("hour", m.group(6), 0, 23);
+          minutes = toLongWithRange("second", m.group(7), 0, 59);
+        }
         // Hive allow nanosecond precision interval
-        long nanos = toLongWithRange("nanosecond", m.group(7), 0L, 999999999L);
+        String nanoStr = m.group(9) == null ? null : (m.group(9) + "000000000").substring(0, 9);
+        long nanos = toLongWithRange("nanosecond", nanoStr, 0L, 999999999L);
+        switch (to) {
+          case "hour":
+            minutes = 0;
+            seconds = 0;
+            nanos = 0;
+            break;
+          case "minute":
+            seconds = 0;
+            nanos = 0;
+            break;
+          case "second":
+            // No-op
+            break;
+          default:
+            throw new IllegalArgumentException(
+              String.format("Cannot support (interval '%s' %s to %s) expression", s, from, to));
+        }
         result = new CalendarInterval(0, sign * (
           days * MICROS_PER_DAY + hours * MICROS_PER_HOUR + minutes * MICROS_PER_MINUTE +
           seconds * MICROS_PER_SECOND + nanos / 1000L));
@@ -319,6 +388,8 @@ public final class CalendarInterval implements Serializable {
       appendUnit(sb, rest / MICROS_PER_MILLI, "millisecond");
       rest %= MICROS_PER_MILLI;
       appendUnit(sb, rest, "microsecond");
+    } else if (months == 0) {
+      sb.append(" 0 microseconds");
     }
 
     return sb.toString();

@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-hive_2.11</artifactId>
+  <artifactId>spark-hive_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive</name>
   <url>http://spark.apache.org/</url>
@@ -37,7 +37,7 @@
   <dependencies>
     <!-- Added for Hive Parquet SerDe -->
     <dependency>
-      <groupId>com.twitter</groupId>
+      <groupId>${hive.parquet.group}</groupId>
       <artifactId>parquet-hadoop-bundle</artifactId>
     </dependency>
     <dependency>
@@ -97,13 +97,19 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-<!--
-      <classifier>core</classifier>
--->
+      <classifier>${hive.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-contrib</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}.hcatalog</groupId>
+      <artifactId>hive-hcatalog-core</artifactId>
     </dependency>
     <!--
         <dependency>
@@ -130,14 +136,6 @@
     <dependency>
       <groupId>commons-httpclient</groupId>
       <artifactId>commons-httpclient</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-core</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
@@ -218,6 +216,31 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+      <id>hadoop-3.2</id>
+      <dependencies>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-common</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-serde</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>${hive.group}</groupId>
+          <artifactId>hive-shims</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-llap-common</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hive</groupId>
+          <artifactId>hive-llap-client</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
   </profiles>
 
   <build>
@@ -229,7 +252,7 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <!-- Specially disable assertions since some Hive tests fail them -->
-          <argLine>-da -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+          <argLine>-da -Xmx4g -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
         </configuration>
       </plugin>
       <plugin>

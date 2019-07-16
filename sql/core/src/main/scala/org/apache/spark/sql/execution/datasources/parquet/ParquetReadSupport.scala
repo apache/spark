@@ -49,15 +49,16 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
-    extends ReadSupport[UnsafeRow] with Logging {
+class ParquetReadSupport(val convertTz: Option[TimeZone],
+    enableVectorizedReader: Boolean)
+  extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
 
   def this() {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
     // used in the vectorized reader, where we get the convertTz value directly, and the value here
     // is ignored.
-    this(None)
+    this(None, enableVectorizedReader = true)
   }
 
   /**
@@ -65,18 +66,48 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
    * readers.  Responsible for figuring out Parquet requested schema used for column pruning.
    */
   override def init(context: InitContext): ReadContext = {
+    val conf = context.getConfiguration
     catalystRequestedSchema = {
-      val conf = context.getConfiguration
       val schemaString = conf.get(ParquetReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
       assert(schemaString != null, "Parquet requested schema not set.")
       StructType.fromString(schemaString)
     }
 
-    val caseSensitive = context.getConfiguration.getBoolean(SQLConf.CASE_SENSITIVE.key,
+    val caseSensitive = conf.getBoolean(SQLConf.CASE_SENSITIVE.key,
       SQLConf.CASE_SENSITIVE.defaultValue.get)
-    val parquetRequestedSchema = ParquetReadSupport.clipParquetSchema(
-      context.getFileSchema, catalystRequestedSchema, caseSensitive)
+    val schemaPruningEnabled = conf.getBoolean(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key,
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
+    val parquetFileSchema = context.getFileSchema
+    val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
+      catalystRequestedSchema, caseSensitive)
 
+    // We pass two schema to ParquetRecordMaterializer:
+    // - parquetRequestedSchema: the schema of the file data we want to read
+    // - catalystRequestedSchema: the schema of the rows we want to return
+    // The reader is responsible for reconciling the differences between the two.
+    val parquetRequestedSchema = if (schemaPruningEnabled && !enableVectorizedReader) {
+      // Parquet-MR reader requires that parquetRequestedSchema include only those fields present
+      // in the underlying parquetFileSchema. Therefore, we intersect the parquetClippedSchema
+      // with the parquetFileSchema
+      ParquetReadSupport.intersectParquetGroups(parquetClippedSchema, parquetFileSchema)
+        .map(groupType => new MessageType(groupType.getName, groupType.getFields))
+        .getOrElse(ParquetSchemaConverter.EMPTY_MESSAGE)
+    } else {
+      // Spark's vectorized reader only support atomic types currently. It also skip fields
+      // in parquetRequestedSchema which are not present in the file.
+      parquetClippedSchema
+    }
+    logDebug(
+      s"""Going to read the following fields from the Parquet file with the following schema:
+         |Parquet file schema:
+         |$parquetFileSchema
+         |Parquet clipped schema:
+         |$parquetClippedSchema
+         |Parquet requested schema:
+         |$parquetRequestedSchema
+         |Catalyst requested schema:
+         |${catalystRequestedSchema.treeString}
+       """.stripMargin)
     new ReadContext(parquetRequestedSchema, Map.empty[String, String].asJava)
   }
 
@@ -90,19 +121,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
       keyValueMetaData: JMap[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[UnsafeRow] = {
-    log.debug(s"Preparing for read Parquet file with message type: $fileSchema")
     val parquetRequestedSchema = readContext.getRequestedSchema
-
-    logInfo {
-      s"""Going to read the following fields from the Parquet file:
-         |
-         |Parquet form:
-         |$parquetRequestedSchema
-         |Catalyst form:
-         |$catalystRequestedSchema
-       """.stripMargin
-    }
-
     new ParquetRecordMaterializer(
       parquetRequestedSchema,
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
@@ -111,7 +130,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone])
   }
 }
 
-private[parquet] object ParquetReadSupport {
+object ParquetReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
@@ -319,6 +338,35 @@ private[parquet] object ParquetReadSupport {
             }
           }.getOrElse(toParquet.convertField(f))
       }
+    }
+  }
+
+  /**
+   * Computes the structural intersection between two Parquet group types.
+   * This is used to create a requestedSchema for ReadContext of Parquet-MR reader.
+   * Parquet-MR reader does not support the nested field access to non-existent field
+   * while parquet library does support to read the non-existent field by regular field access.
+   */
+  private def intersectParquetGroups(
+      groupType1: GroupType, groupType2: GroupType): Option[GroupType] = {
+    val fields =
+      groupType1.getFields.asScala
+        .filter(field => groupType2.containsField(field.getName))
+        .flatMap {
+          case field1: GroupType =>
+            val field2 = groupType2.getType(field1.getName)
+            if (field2.isPrimitive) {
+              None
+            } else {
+              intersectParquetGroups(field1, field2.asGroupType)
+            }
+          case field1 => Some(field1)
+        }
+
+    if (fields.nonEmpty) {
+      Some(groupType1.withNewFields(fields.asJava))
+    } else {
+      None
     }
   }
 

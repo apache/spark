@@ -19,25 +19,34 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-kubernetes-integration-tests_2.11</artifactId>
+  <artifactId>spark-kubernetes-integration-tests_2.12</artifactId>
   <properties>
     <download-maven-plugin.version>1.3.0</download-maven-plugin.version>
     <exec-maven-plugin.version>1.4.0</exec-maven-plugin.version>
     <extraScalaTestArgs></extraScalaTestArgs>
-    <kubernetes-client.version>3.0.0</kubernetes-client.version>
+    <kubernetes-client.version>4.1.2</kubernetes-client.version>
     <scala-maven-plugin.version>3.2.2</scala-maven-plugin.version>
     <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
     <sbt.project.name>kubernetes-integration-tests</sbt.project.name>
+
+    <!-- Integration Test Configuration Properties -->
+    <!-- Please see README.md in this directory for explanation of these -->
+    <spark.kubernetes.test.sparkTgz></spark.kubernetes.test.sparkTgz>
     <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
     <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
     <spark.kubernetes.test.imageTagFile>${project.build.directory}/imageTag.txt</spark.kubernetes.test.imageTagFile>
     <spark.kubernetes.test.deployMode>minikube</spark.kubernetes.test.deployMode>
     <spark.kubernetes.test.imageRepo>docker.io/kubespark</spark.kubernetes.test.imageRepo>
+    <spark.kubernetes.test.kubeConfigContext></spark.kubernetes.test.kubeConfigContext>
+    <spark.kubernetes.test.master></spark.kubernetes.test.master>
+    <spark.kubernetes.test.namespace></spark.kubernetes.test.namespace>
+    <spark.kubernetes.test.serviceAccountName></spark.kubernetes.test.serviceAccountName>
+
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
   </properties>
@@ -66,6 +75,12 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
       <type>test-jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk</artifactId>
+      <version>1.7.4</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -126,7 +141,7 @@
           <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
           <junitxml>.</junitxml>
           <filereports>SparkTestSuite.txt</filereports>
-          <argLine>-ea -Xmx3g -XX:ReservedCodeCacheSize=512m ${extraScalaTestArgs}</argLine>
+          <argLine>-ea -Xmx4g -XX:ReservedCodeCacheSize=512m ${extraScalaTestArgs}</argLine>
           <stderr/>
           <systemProperties>
             <log4j.configuration>file:src/test/resources/log4j.properties</log4j.configuration>
@@ -135,9 +150,13 @@
             <spark.kubernetes.test.unpackSparkDir>${spark.kubernetes.test.unpackSparkDir}</spark.kubernetes.test.unpackSparkDir>
             <spark.kubernetes.test.imageRepo>${spark.kubernetes.test.imageRepo}</spark.kubernetes.test.imageRepo>
             <spark.kubernetes.test.deployMode>${spark.kubernetes.test.deployMode}</spark.kubernetes.test.deployMode>
+            <spark.kubernetes.test.kubeConfigContext>${spark.kubernetes.test.kubeConfigContext}</spark.kubernetes.test.kubeConfigContext>
             <spark.kubernetes.test.master>${spark.kubernetes.test.master}</spark.kubernetes.test.master>
             <spark.kubernetes.test.namespace>${spark.kubernetes.test.namespace}</spark.kubernetes.test.namespace>
             <spark.kubernetes.test.serviceAccountName>${spark.kubernetes.test.serviceAccountName}</spark.kubernetes.test.serviceAccountName>
+            <spark.kubernetes.test.jvmImage>${spark.kubernetes.test.jvmImage}</spark.kubernetes.test.jvmImage>
+            <spark.kubernetes.test.pythonImage>${spark.kubernetes.test.pythonImage}</spark.kubernetes.test.pythonImage>
+            <spark.kubernetes.test.rImage>${spark.kubernetes.test.rImage}</spark.kubernetes.test.rImage>
           </systemProperties>
           <tagsToExclude>${test.exclude.tags}</tagsToExclude>
           <tagsToInclude>${test.include.tags}</tagsToInclude>
@@ -145,14 +164,10 @@
         <executions>
           <execution>
             <id>test</id>
+            <phase>none</phase>
             <goals>
               <goal>test</goal>
             </goals>
-            <configuration>
-              <!-- The negative pattern below prevents integration tests such as
-                   KubernetesSuite from running in the test phase. -->
-              <suffixes>(?&lt;!Suite)</suffixes>
-            </configuration>
           </execution>
           <execution>
             <id>integration-test</id>

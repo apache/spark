@@ -21,6 +21,7 @@ import java.io.Closeable
 import java.util
 import java.util.{Map => JMap}
 
+import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -30,21 +31,20 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.AccumulatorParam._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
-import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
+import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD}
+import org.apache.spark.resource.ResourceInformation
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
  *
- * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
- * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
+ * @note Only one `SparkContext` should be active per JVM. You must `stop()` the
+ *   active `SparkContext` before creating a new one.
  */
-class JavaSparkContext(val sc: SparkContext)
-  extends JavaSparkContextVarargsWorkaround with Closeable {
+class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /**
    * Create a JavaSparkContext that loads settings from system properties (for instance, when
@@ -115,6 +115,8 @@ class JavaSparkContext(val sc: SparkContext)
 
   def appName: String = sc.appName
 
+  def resources: JMap[String, ResourceInformation] = sc.resources.asJava
+
   def jars: util.List[String] = sc.jars.asJava
 
   def startTime: java.lang.Long = sc.startTime
@@ -168,12 +170,14 @@ class JavaSparkContext(val sc: SparkContext)
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
    */
   def textFile(path: String): JavaRDD[String] = sc.textFile(path)
 
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   * The text files must be encoded as UTF-8.
    */
   def textFile(path: String, minPartitions: Int): JavaRDD[String] =
     sc.textFile(path, minPartitions)
@@ -184,6 +188,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * <p> For example, if you have the following files:
    * {{{
@@ -217,6 +222,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Read a directory of text files from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI. Each file is read as a single record and returned in a
    * key-value pair, where the key is the path of each file, the value is the content of each file.
+   * The text files must be encoded as UTF-8.
    *
    * @see `wholeTextFiles(path: String, minPartitions: Int)`.
    */
@@ -507,140 +513,30 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaNewHadoopRDD(rdd.asInstanceOf[NewHadoopRDD[K, V]])
   }
 
-  /** Build the union of two or more RDDs. */
-  override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
-    val rdds: Seq[RDD[T]] = (Seq(first) ++ rest.asScala).map(_.rdd)
-    implicit val ctag: ClassTag[T] = first.classTag
-    sc.union(rdds)
+  /** Build the union of JavaRDDs. */
+  @varargs
+  def union[T](rdds: JavaRDD[T]*): JavaRDD[T] = {
+    require(rdds.nonEmpty, "Union called on no RDDs")
+    implicit val ctag: ClassTag[T] = rdds.head.classTag
+    sc.union(rdds.map(_.rdd))
   }
 
-  /** Build the union of two or more RDDs. */
-  override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
-      : JavaPairRDD[K, V] = {
-    val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ rest.asScala).map(_.rdd)
-    implicit val ctag: ClassTag[(K, V)] = first.classTag
-    implicit val ctagK: ClassTag[K] = first.kClassTag
-    implicit val ctagV: ClassTag[V] = first.vClassTag
-    new JavaPairRDD(sc.union(rdds))
+  /** Build the union of JavaPairRDDs. */
+  @varargs
+  def union[K, V](rdds: JavaPairRDD[K, V]*): JavaPairRDD[K, V] = {
+    require(rdds.nonEmpty, "Union called on no RDDs")
+    implicit val ctag: ClassTag[(K, V)] = rdds.head.classTag
+    implicit val ctagK: ClassTag[K] = rdds.head.kClassTag
+    implicit val ctagV: ClassTag[V] = rdds.head.vClassTag
+    new JavaPairRDD(sc.union(rdds.map(_.rdd)))
   }
 
-  /** Build the union of two or more RDDs. */
-  override def union(first: JavaDoubleRDD, rest: java.util.List[JavaDoubleRDD]): JavaDoubleRDD = {
-    val rdds: Seq[RDD[Double]] = (Seq(first) ++ rest.asScala).map(_.srdd)
-    new JavaDoubleRDD(sc.union(rdds))
+  /** Build the union of JavaDoubleRDDs. */
+  @varargs
+  def union(rdds: JavaDoubleRDD*): JavaDoubleRDD = {
+    require(rdds.nonEmpty, "Union called on no RDDs")
+    new JavaDoubleRDD(sc.union(rdds.map(_.srdd)))
   }
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   */
-  @deprecated("use sc().longAccumulator()", "2.0.0")
-  def intAccumulator(initialValue: Int): Accumulator[java.lang.Integer] =
-    sc.accumulator(initialValue)(IntAccumulatorParam).asInstanceOf[Accumulator[java.lang.Integer]]
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   *
-   * This version supports naming the accumulator for display in Spark's web UI.
-   */
-  @deprecated("use sc().longAccumulator(String)", "2.0.0")
-  def intAccumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
-    sc.accumulator(initialValue, name)(IntAccumulatorParam)
-      .asInstanceOf[Accumulator[java.lang.Integer]]
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   */
-  @deprecated("use sc().doubleAccumulator()", "2.0.0")
-  def doubleAccumulator(initialValue: Double): Accumulator[java.lang.Double] =
-    sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   *
-   * This version supports naming the accumulator for display in Spark's web UI.
-   */
-  @deprecated("use sc().doubleAccumulator(String)", "2.0.0")
-  def doubleAccumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
-    sc.accumulator(initialValue, name)(DoubleAccumulatorParam)
-      .asInstanceOf[Accumulator[java.lang.Double]]
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   */
-  @deprecated("use sc().longAccumulator()", "2.0.0")
-  def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   *
-   * This version supports naming the accumulator for display in Spark's web UI.
-   */
-  @deprecated("use sc().longAccumulator(String)", "2.0.0")
-  def accumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
-    intAccumulator(initialValue, name)
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   */
-  @deprecated("use sc().doubleAccumulator()", "2.0.0")
-  def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
-    doubleAccumulator(initialValue)
-
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
-   * to using the `add` method. Only the master can access the accumulator's `value`.
-   *
-   * This version supports naming the accumulator for display in Spark's web UI.
-   */
-  @deprecated("use sc().doubleAccumulator(String)", "2.0.0")
-  def accumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
-    doubleAccumulator(initialValue, name)
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
-   * values to using the `add` method. Only the master can access the accumulator's `value`.
-   */
-  @deprecated("use AccumulatorV2", "2.0.0")
-  def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
-    sc.accumulator(initialValue)(accumulatorParam)
-
-  /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
-   * values to using the `add` method. Only the master can access the accumulator's `value`.
-   *
-   * This version supports naming the accumulator for display in Spark's web UI.
-   */
-  @deprecated("use AccumulatorV2", "2.0.0")
-  def accumulator[T](initialValue: T, name: String, accumulatorParam: AccumulatorParam[T])
-      : Accumulator[T] =
-    sc.accumulator(initialValue, name)(accumulatorParam)
-
-  /**
-   * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
-   * can "add" values with `add`. Only the master can access the accumulable's `value`.
-   */
-  @deprecated("use AccumulatorV2", "2.0.0")
-  def accumulable[T, R](initialValue: T, param: AccumulableParam[T, R]): Accumulable[T, R] =
-    sc.accumulable(initialValue)(param)
-
-  /**
-   * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
-   * can "add" values with `add`. Only the master can access the accumulable's `value`.
-   *
-   * This version supports naming the accumulator for display in Spark's web UI.
-   */
-  @deprecated("use AccumulatorV2", "2.0.0")
-  def accumulable[T, R](initialValue: T, name: String, param: AccumulableParam[T, R])
-      : Accumulable[T, R] =
-    sc.accumulable(initialValue, name)(param)
 
   /**
    * Broadcast a read-only variable to the cluster, returning a

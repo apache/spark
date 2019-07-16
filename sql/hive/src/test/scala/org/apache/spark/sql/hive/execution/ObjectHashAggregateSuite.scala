@@ -124,7 +124,7 @@ class ObjectHashAggregateSuite
         .add("f2", ArrayType(BooleanType), nullable = true),
 
       // UDT
-      new UDT.MyDenseVectorUDT(),
+      new TestUDT.MyDenseVectorUDT(),
 
       // Others
       StringType,
@@ -259,7 +259,7 @@ class ObjectHashAggregateSuite
       StringType, BinaryType, NullType, BooleanType
     )
 
-    val udt = new UDT.MyDenseVectorUDT()
+    val udt = new TestUDT.MyDenseVectorUDT()
 
     val fixedLengthTypes = builtinNumericTypes ++ Seq(BooleanType, NullType)
 
@@ -416,7 +416,7 @@ class ObjectHashAggregateSuite
     actual.zip(expected).foreach { case (lhs: Row, rhs: Row) =>
       assert(lhs.length == rhs.length)
       lhs.toSeq.zip(rhs.toSeq).foreach {
-        case (a: Double, b: Double) => checkResult(a, b +- tolerance, DoubleType)
+        case (a: Double, b: Double) => checkResult(a, b +- tolerance, DoubleType, false)
         case (a, b) => a == b
       }
     }

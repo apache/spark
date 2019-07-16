@@ -181,6 +181,8 @@ case class CreateViewCommand(
    * Permanent views are not allowed to reference temp objects, including temp function and views
    */
   private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
+    import sparkSession.sessionState.analyzer.AsTableIdentifier
+
     if (!isTemporary) {
       // This func traverses the unresolved plan `child`. Below are the reasons:
       // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
@@ -190,10 +192,11 @@ case class CreateViewCommand(
       // package (e.g., HiveGenericUDF).
       child.collect {
         // Disallow creating permanent views based on temporary views.
-        case s: UnresolvedRelation
-          if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+        case UnresolvedRelation(AsTableIdentifier(ident))
+            if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
+          // temporary views are only stored in the session catalog
           throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temporary view ${s.tableIdentifier}")
+            s"referencing a temporary view $ident")
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           // Disallow creating permanent views based on temporary UDFs.
           case e: UnresolvedFunction
@@ -242,6 +245,7 @@ case class CreateViewCommand(
       storage = CatalogStorageFormat.empty,
       schema = aliasPlan(session, analyzedPlan).schema,
       properties = newProperties,
+      viewOriginalText = originalText,
       viewText = originalText,
       comment = comment
     )
@@ -299,6 +303,7 @@ case class AlterViewAsCommand(
     val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
       properties = newProperties,
+      viewOriginalText = Some(originalText),
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)

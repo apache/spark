@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.log4j.{Appender, AppenderSkeleton, Logger}
+import org.apache.log4j.AppenderSkeleton
 import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.SparkFunSuite
@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -113,7 +114,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = UTF8String.fromString("abc")
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -126,7 +127,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = UnsafeArrayData.fromPrimitiveArray(Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -142,7 +143,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = ArrayBasedMapData((0 until length).toArray, Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -154,7 +155,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
-    if (!checkResult(actual, expected, expressions.head.dataType)) {
+    if (!checkResult(actual, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -170,7 +171,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actual.length == 1)
     val expected = InternalRow(Seq.fill(length)(true): _*)
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+    if (!checkResult(actual.head, expected, expressions.head)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -189,36 +190,42 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-17702: split wide constructor into blocks due to JVM code size limit") {
-    val length = 5000
-    val expressions = Seq.fill(length) {
-      ToUTCTimestamp(
-        Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
-    }
-    val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq.fill(length)(
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val length = 5000
+      val expressions = Seq.fill(length) {
+        ToUTCTimestamp(
+          Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
+          Literal.create("PST", StringType))
+      }
+      val plan = GenerateMutableProjection.generate(expressions)
+      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+      val expected = Seq.fill(length)(
+        DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
 
-    if (actual != expected) {
-      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      if (actual != expected) {
+        fail(
+          s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      }
     }
   }
 
   test("SPARK-22226: group splitted expressions into one method per nested class") {
-    val length = 10000
-    val expressions = Seq.fill(length) {
-      ToUTCTimestamp(
-        Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
-    }
-    val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq.fill(length)(
-      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
+    withSQLConf(SQLConf.UTC_TIMESTAMP_FUNC_ENABLED.key -> "true") {
+      val length = 10000
+      val expressions = Seq.fill(length) {
+        ToUTCTimestamp(
+          Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
+          Literal.create("PST", StringType))
+      }
+      val plan = GenerateMutableProjection.generate(expressions)
+      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+      val expected = Seq.fill(length)(
+        DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
 
-    if (actual != expected) {
-      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      if (actual != expected) {
+        fail(
+          s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      }
     }
   }
 
@@ -251,7 +258,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 
-    val fromUnsafe = FromUnsafeProjection(schema)
+    val fromUnsafe = SafeProjection.create(schema)
     val internalRow2 = fromUnsafe(unsafeRow)
     assert(internalRow === internalRow2)
 
@@ -338,12 +345,22 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("should not apply common subexpression elimination on conditional expressions") {
     val row = InternalRow(null)
     val bound = BoundReference(0, IntegerType, true)
-    val assertNotNull = AssertNotNull(bound, Nil)
+    val assertNotNull = AssertNotNull(bound)
     val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
     val projection = GenerateUnsafeProjection.generate(
       Seq(expr), subexpressionEliminationEnabled = true)
     // should not throw exception
     projection(row)
+  }
+
+  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
+    val colNumber = 10000
+    val attrs = (1 to colNumber).map(colIndex => AttributeReference(s"_$colIndex", IntegerType)())
+    val lit = Literal(1000)
+    val exprs = attrs.flatMap { a =>
+      Seq(If(lit < a, lit, a), sqrt(a))
+    }
+    UnsafeProjection.create(exprs, attrs)
   }
 
   test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
@@ -365,7 +382,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actualOr.length == 1)
     val expectedOr = false
 
-    if (!checkResult(actualOr.head, expectedOr, exprOr.dataType)) {
+    if (!checkResult(actualOr.head, expectedOr, exprOr)) {
       fail(s"Incorrect Evaluation: expressions: $exprOr, actual: $actualOr, expected: $expectedOr")
     }
 
@@ -379,7 +396,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(actualAnd.length == 1)
     val expectedAnd = false
 
-    if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
+    if (!checkResult(actualAnd.head, expectedAnd, exprAnd)) {
       fail(
         s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
     }
@@ -414,7 +431,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
     // When the number of primitive type mutable states is over the threshold, others are
     // allocated into an array
-    assert(ctx1.arrayCompactedMutableStates.get(CodeGenerator.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.arrayCompactedMutableStates(CodeGenerator.JAVA_INT).arrayNames.size == 1)
     assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
 
     val ctx2 = new CodegenContext
@@ -424,7 +441,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // When the number of non-primitive type mutable states is over the threshold, others are
     // allocated into a new array
     assert(ctx2.inlinedMutableStates.isEmpty)
-    assert(ctx2.arrayCompactedMutableStates.get("InternalRow[]").get.arrayNames.size == 2)
+    assert(ctx2.arrayCompactedMutableStates("InternalRow[]").arrayNames.size == 2)
     assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
     assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
@@ -519,7 +536,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val appender = new MockAppender()
-    withLogAppender(appender) {
+    withLogAppender(appender, loggerName = Some(classOf[CodeGenerator[_, _]].getName)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
       val proj = GenerateUnsafeProjection.generate(Seq(expr))
@@ -527,15 +544,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(actual.getInt(0) == x)
     }
     assert(appender.seenMessage)
-  }
-
-  private def withLogAppender(appender: Appender)(f: => Unit): Unit = {
-    val logger =
-      Logger.getLogger(classOf[CodeGenerator[_, _]].getName)
-    logger.addAppender(appender)
-    try f finally {
-      logger.removeAppender(appender)
-    }
   }
 }
 

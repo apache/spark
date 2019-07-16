@@ -16,11 +16,9 @@
 #
 
 import sys
-if sys.version >= '3':
-    long = int
 
 from pyspark import since, SparkContext
-from pyspark.sql.column import Column, _to_seq, _to_java_column
+from pyspark.sql.column import _to_seq, _to_java_column
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -99,6 +97,32 @@ class Window(object):
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
 
+        A row based boundary is based on the position of the row within the partition.
+        An offset indicates the number of rows above or below the current row, the frame for the
+        current row starts or ends. For instance, given a row based sliding frame with a lower bound
+        offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
+        index 4 to index 7.
+
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rowsBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       b|  3|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        |  1|       a|  2|
+        |  1|       a|  3|
+        |  2|       a|  2|
+        +---+--------+---+
+
         :param start: boundary start, inclusive.
                       The frame is unbounded if this is ``Window.unboundedPreceding``, or
                       any value less than or equal to -9223372036854775808.
@@ -126,26 +150,27 @@ class Window(object):
         and "5" means the five off after the current row.
 
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
-        ``Window.currentRow``, ``pyspark.sql.functions.unboundedPreceding``,
-        ``pyspark.sql.functions.unboundedFollowing`` and ``pyspark.sql.functions.currentRow``
-        to specify special boundary values, rather than using integral values directly.
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``,
-                      a column returned by ``pyspark.sql.functions.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``,
-                    a column returned by ``pyspark.sql.functions.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        A range-based boundary is based on the actual value of the ORDER BY
+        expression(s). An offset is used to alter the value of the ORDER BY expression, for
+        instance if the current ORDER BY expression has a value of 10 and the lower bound offset
+        is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+        number of constraints on the ORDER BY expressions: there can be only one expression and this
+        expression must have a numerical data type. An exception can be made when the offset is
+        unbounded, because no value modification is needed, in this case multiple and non-numeric
+        ORDER BY expression are allowed.
 
-        >>> from pyspark.sql import functions as F, SparkSession, Window
-        >>> spark = SparkSession.builder.getOrCreate()
-        >>> df = spark.createDataFrame(
-        ...     [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
-        >>> window = Window.orderBy("id").partitionBy("category").rangeBetween(
-        ...     F.currentRow(), F.lit(1))
-        >>> df.withColumn("sum", F.sum("id").over(window)).show()
+        >>> from pyspark.sql import Window
+        >>> from pyspark.sql import functions as func
+        >>> from pyspark.sql import SQLContext
+        >>> sc = SparkContext.getOrCreate()
+        >>> sqlContext = SQLContext(sc)
+        >>> tup = [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")]
+        >>> df = sqlContext.createDataFrame(tup, ["id", "category"])
+        >>> window = Window.partitionBy("category").orderBy("id").rangeBetween(Window.currentRow, 1)
+        >>> df.withColumn("sum", func.sum("id").over(window)).show()
         +---+--------+---+
         | id|category|sum|
         +---+--------+---+
@@ -156,15 +181,18 @@ class Window(object):
         |  1|       a|  4|
         |  2|       a|  2|
         +---+--------+---+
+
+        :param start: boundary start, inclusive.
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        :param end: boundary end, inclusive.
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if isinstance(start, (int, long)) and isinstance(end, (int, long)):
-            if start <= Window._PRECEDING_THRESHOLD:
-                start = Window.unboundedPreceding
-            if end >= Window._FOLLOWING_THRESHOLD:
-                end = Window.unboundedFollowing
-        elif isinstance(start, Column) and isinstance(end, Column):
-            start = start._jc
-            end = end._jc
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
@@ -239,34 +267,31 @@ class WindowSpec(object):
         and "5" means the five off after the current row.
 
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
-        ``Window.currentRow``, ``pyspark.sql.functions.unboundedPreceding``,
-        ``pyspark.sql.functions.unboundedFollowing`` and ``pyspark.sql.functions.currentRow``
-        to specify special boundary values, rather than using integral values directly.
+        and ``Window.currentRow`` to specify special boundary values, rather than using integral
+        values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``,
-                      a column returned by ``pyspark.sql.functions.unboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``,
-                    a column returned by ``pyspark.sql.functions.unboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if isinstance(start, (int, long)) and isinstance(end, (int, long)):
-            if start <= Window._PRECEDING_THRESHOLD:
-                start = Window.unboundedPreceding
-            if end >= Window._FOLLOWING_THRESHOLD:
-                end = Window.unboundedFollowing
-        elif isinstance(start, Column) and isinstance(end, Column):
-            start = start._jc
-            end = end._jc
+        if start <= Window._PRECEDING_THRESHOLD:
+            start = Window.unboundedPreceding
+        if end >= Window._FOLLOWING_THRESHOLD:
+            end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 
 def _test():
     import doctest
+    import pyspark.sql.window
     SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod(optionflags=doctest.NORMALIZE_WHITESPACE)
+    globs = pyspark.sql.window.__dict__.copy()
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.window, globs=globs,
+        optionflags=doctest.NORMALIZE_WHITESPACE)
     if failure_count:
         sys.exit(-1)
 

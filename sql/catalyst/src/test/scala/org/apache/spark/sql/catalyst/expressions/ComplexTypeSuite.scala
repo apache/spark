@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
@@ -57,6 +57,39 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nestedArray = Literal.create(Seq(Seq(1)), ArrayType(ArrayType(IntegerType)))
     checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
+  }
+
+  test("SPARK-26637 handles GetArrayItem nullability correctly when input array size is constant") {
+    // CreateArray case
+    val a = AttributeReference("a", IntegerType, nullable = false)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val array = CreateArray(a :: b :: Nil)
+    assert(!GetArrayItem(array, Literal(0)).nullable)
+    assert(GetArrayItem(array, Literal(1)).nullable)
+    assert(!GetArrayItem(array, Subtract(Literal(2), Literal(2))).nullable)
+    assert(GetArrayItem(array, AttributeReference("ordinal", IntegerType)()).nullable)
+
+    // GetArrayStructFields case
+    val f1 = StructField("a", IntegerType, nullable = false)
+    val f2 = StructField("b", IntegerType, nullable = true)
+    val structType = StructType(f1 :: f2 :: Nil)
+    val c = AttributeReference("c", structType, nullable = false)()
+    val inputArray1 = CreateArray(c :: Nil)
+    val inputArray1ContainsNull = c.nullable
+    val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
+    assert(!GetArrayItem(stArray1, Literal(0)).nullable)
+    val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
+    assert(GetArrayItem(stArray2, Literal(0)).nullable)
+
+    val d = AttributeReference("d", structType, nullable = true)()
+    val inputArray2 = CreateArray(c :: d :: Nil)
+    val inputArray2ContainsNull = c.nullable || d.nullable
+    val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
+    assert(!GetArrayItem(stArray3, Literal(0)).nullable)
+    assert(GetArrayItem(stArray3, Literal(1)).nullable)
+    val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
+    assert(GetArrayItem(stArray4, Literal(0)).nullable)
+    assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
 
   test("GetMapValue") {
@@ -102,9 +135,9 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nullStruct_fieldNotNullable = Literal.create(null, typeS_fieldNotNullable)
 
     assert(getStructField(struct_fieldNotNullable, "a").nullable === false)
-    assert(getStructField(struct, "a").nullable === true)
-    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable === true)
-    assert(getStructField(nullStruct, "a").nullable === true)
+    assert(getStructField(struct, "a").nullable)
+    assert(getStructField(nullStruct_fieldNotNullable, "a").nullable)
+    assert(getStructField(nullStruct, "a").nullable)
   }
 
   test("GetArrayStructFields") {
@@ -158,40 +191,37 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
       keys.zip(values).flatMap { case (k, v) => Seq(k, v) }
     }
 
-    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
-      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
-      scala.collection.immutable.ListMap(keys.zip(values): _*)
-    }
-
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
     val strSeq = intSeq.map(_.toString)
+
     checkEvaluation(CreateMap(Nil), Map.empty)
     checkEvaluation(
       CreateMap(interlace(intSeq.map(Literal(_)), longSeq.map(Literal(_)))),
-      createMap(intSeq, longSeq))
+      create_map(intSeq, longSeq))
     checkEvaluation(
       CreateMap(interlace(strSeq.map(Literal(_)), longSeq.map(Literal(_)))),
-      createMap(strSeq, longSeq))
+      create_map(strSeq, longSeq))
     checkEvaluation(
       CreateMap(interlace(longSeq.map(Literal(_)), strSeq.map(Literal(_)))),
-      createMap(longSeq, strSeq))
+      create_map(longSeq, strSeq))
 
     val strWithNull = strSeq.drop(1).map(Literal(_)) :+ Literal.create(null, StringType)
     checkEvaluation(
       CreateMap(interlace(intSeq.map(Literal(_)), strWithNull)),
-      createMap(intSeq, strWithNull.map(_.value)))
-    intercept[RuntimeException] {
-      checkEvaluationWithoutCodegen(
-        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
-        null, null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluationWithUnsafeProjection(
-        CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
-        null, null)
-    }
+      create_map(intSeq, strWithNull.map(_.value)))
 
+    // Map key can't be null
+    checkExceptionInExpression[RuntimeException](
+      CreateMap(interlace(strWithNull, intSeq.map(Literal(_)))),
+      "Cannot use null as map key")
+
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(
+      CreateMap(Seq(Literal(1), Literal(2), Literal(1), Literal(3))),
+      create_map(1 -> 3))
+
+    // ArrayType map key and value
     val map = CreateMap(Seq(
       Literal.create(intSeq, ArrayType(IntegerType, containsNull = false)),
       Literal.create(strSeq, ArrayType(StringType, containsNull = false)),
@@ -202,15 +232,21 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         ArrayType(IntegerType, containsNull = true),
         ArrayType(StringType, containsNull = true),
         valueContainsNull = false))
-    checkEvaluation(map, createMap(Seq(intSeq, intSeq :+ null), Seq(strSeq, strSeq :+ null)))
+    checkEvaluation(map, create_map(intSeq -> strSeq, (intSeq :+ null) -> (strSeq :+ null)))
+
+    // map key can't be map
+    val map2 = CreateMap(Seq(
+      Literal.create(create_map(1 -> 1), MapType(IntegerType, IntegerType)),
+      Literal(1)
+    ))
+    map2.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("The key of map cannot be/contain map"))
+    }
   }
 
   test("MapFromArrays") {
-    def createMap(keys: Seq[Any], values: Seq[Any]): Map[Any, Any] = {
-      // catalyst map is order-sensitive, so we create ListMap here to preserve the elements order.
-      scala.collection.immutable.ListMap(keys.zip(values): _*)
-    }
-
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
     val strSeq = intSeq.map(_.toString)
@@ -228,24 +264,39 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val nullArray = Literal.create(null, ArrayType(StringType, false))
 
-    checkEvaluation(MapFromArrays(intArray, longArray), createMap(intSeq, longSeq))
-    checkEvaluation(MapFromArrays(intArray, strArray), createMap(intSeq, strSeq))
-    checkEvaluation(MapFromArrays(integerArray, strArray), createMap(integerSeq, strSeq))
+    checkEvaluation(MapFromArrays(intArray, longArray), create_map(intSeq, longSeq))
+    checkEvaluation(MapFromArrays(intArray, strArray), create_map(intSeq, strSeq))
+    checkEvaluation(MapFromArrays(integerArray, strArray), create_map(integerSeq, strSeq))
 
     checkEvaluation(
-      MapFromArrays(strArray, intWithNullArray), createMap(strSeq, intWithNullSeq))
+      MapFromArrays(strArray, intWithNullArray), create_map(strSeq, intWithNullSeq))
     checkEvaluation(
-      MapFromArrays(strArray, longWithNullArray), createMap(strSeq, longWithNullSeq))
+      MapFromArrays(strArray, longWithNullArray), create_map(strSeq, longWithNullSeq))
     checkEvaluation(
-      MapFromArrays(strArray, longWithNullArray), createMap(strSeq, longWithNullSeq))
+      MapFromArrays(strArray, longWithNullArray), create_map(strSeq, longWithNullSeq))
     checkEvaluation(MapFromArrays(nullArray, nullArray), null)
 
-    intercept[RuntimeException] {
-      checkEvaluation(MapFromArrays(intWithNullArray, strArray), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(
-        MapFromArrays(intArray, Literal.create(Seq(1), ArrayType(IntegerType))), null)
+    // Map key can't be null
+    checkExceptionInExpression[RuntimeException](
+      MapFromArrays(intWithNullArray, strArray),
+      "Cannot use null as map key")
+
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(
+      MapFromArrays(
+        Literal.create(Seq(1, 1), ArrayType(IntegerType)),
+        Literal.create(Seq(2, 3), ArrayType(IntegerType))),
+      create_map(1 -> 3))
+
+    // map key can't be map
+    val arrayOfMap = Seq(create_map(1 -> "a", 2 -> "b"))
+    val map = MapFromArrays(
+      Literal.create(arrayOfMap, ArrayType(MapType(IntegerType, StringType))),
+      Literal.create(Seq(1), ArrayType(IntegerType)))
+    map.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("The key of map cannot be/contain map"))
     }
   }
 
@@ -348,6 +399,11 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s5 = Literal("a")
     val m5 = Map("a" -> null)
     checkEvaluation(new StringToMap(s5), m5)
+
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(
+      new StringToMap(Literal("a:1,b:2,a:3")),
+      create_map("a" -> "3", "b" -> "2"))
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)

@@ -24,6 +24,7 @@ import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.{Condition, ReentrantLock}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
 import scala.util.control.NonFatal
 
@@ -34,10 +35,17 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.StreamingExplainCommand
+import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
+import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /** States for [[StreamExecution]]'s lifecycle. */
@@ -54,14 +62,15 @@ case object RECONFIGURING extends State
  * and the results are committed transactionally to the given [[Sink]].
  *
  * @param deleteCheckpointOnStop whether to delete the checkpoint if the query is stopped without
- *                               errors
+ *                               errors. Checkpoint deletion can be forced with the appropriate
+ *                               Spark configuration.
  */
 abstract class StreamExecution(
     override val sparkSession: SparkSession,
     override val name: String,
     private val checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    val sink: BaseStreamingSink,
+    val sink: Table,
     val trigger: Trigger,
     val triggerClock: Clock,
     val outputMode: OutputMode,
@@ -88,8 +97,47 @@ abstract class StreamExecution(
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
     val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toUri.toString
+    if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
+        && StreamExecution.containsSpecialCharsInPath(checkpointPath)) {
+      // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
+      // calls). If this legacy checkpoint path exists, we will throw an error to tell the user how
+      // to migrate.
+      val legacyCheckpointDir =
+        new Path(new Path(checkpointPath.toUri.toString).toUri.toString).toUri.toString
+      val legacyCheckpointDirExists =
+        try {
+          fs.exists(new Path(legacyCheckpointDir))
+        } catch {
+          case NonFatal(e) =>
+            // We may not have access to this directory. Don't fail the query if that happens.
+            logWarning(e.getMessage, e)
+            false
+        }
+      if (legacyCheckpointDirExists) {
+        throw new SparkException(
+          s"""Error: we detected a possible problem with the location of your checkpoint and you
+             |likely need to move it before restarting this query.
+             |
+             |Earlier version of Spark incorrectly escaped paths when writing out checkpoints for
+             |structured streaming. While this was corrected in Spark 3.0, it appears that your
+             |query was started using an earlier version that incorrectly handled the checkpoint
+             |path.
+             |
+             |Correct Checkpoint Directory: $checkpointPath
+             |Incorrect Checkpoint Directory: $legacyCheckpointDir
+             |
+             |Please move the data from the incorrect directory to the correct one, delete the
+             |incorrect directory, and then restart this query. If you believe you are receiving
+             |this message in error, you can disable it with the SQL conf
+             |${SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED.key}."""
+            .stripMargin)
+      }
+    }
+    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    fs.mkdirs(checkpointDir)
+    checkpointDir.toString
   }
+  logInfo(s"Checkpoint root $checkpointRoot resolved to $resolvedCheckpointRoot.")
 
   def logicalPlan: LogicalPlan
 
@@ -112,6 +160,9 @@ abstract class StreamExecution(
    */
   @volatile
   var availableOffsets = new StreamProgress
+
+  @volatile
+  var sinkCommitProgress: Option[StreamWriterCommitProgress] = None
 
   /** The current batchId or -1 if execution has not yet been initialized. */
   protected var currentBatchId: Long = -1
@@ -155,7 +206,7 @@ abstract class StreamExecution(
   /**
    * A list of unique sources in the query plan. This will be set when generating logical plan.
    */
-  @volatile protected var uniqueSources: Seq[BaseStreamingSource] = Seq.empty
+  @volatile protected var uniqueSources: Seq[SparkDataStream] = Seq.empty
 
   /** Defines the internal state of execution */
   protected val state = new AtomicReference[State](INITIALIZING)
@@ -164,7 +215,7 @@ abstract class StreamExecution(
   var lastExecution: IncrementalExecution = _
 
   /** Holds the most recent input data for each source. */
-  protected var newData: Map[BaseStreamingSource, LogicalPlan] = _
+  protected var newData: Map[SparkDataStream, LogicalPlan] = _
 
   @volatile
   protected var streamDeathCause: StreamingQueryException = null
@@ -175,6 +226,9 @@ abstract class StreamExecution(
   /** Used to report metrics to coda-hale. This uses id for easier tracking across restarts. */
   lazy val streamMetrics = new MetricsReporter(
     this, s"spark.streaming.${Option(name).getOrElse(id)}")
+
+  /** Isolated spark session to run the batches with. */
+  private val sparkSessionForStream = sparkSession.cloneSession()
 
   /**
    * The thread that runs the micro-batches of this stream. Note that this thread must be
@@ -217,7 +271,7 @@ abstract class StreamExecution(
 
   /** Returns the path of a file with `name` in the checkpoint directory. */
   protected def checkpointFile(name: String): String =
-    new Path(new Path(resolvedCheckpointRoot), name).toUri.toString
+    new Path(new Path(resolvedCheckpointRoot), name).toString
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
@@ -265,8 +319,6 @@ abstract class StreamExecution(
       // force initialization of the logical plan so that the sources can be created
       logicalPlan
 
-      // Isolated spark session to run the batches with.
-      val sparkSessionForStream = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
       // Disable cost-based join optimization as we do not want stateful operations to be rearranged
@@ -329,10 +381,13 @@ abstract class StreamExecution(
         postEvent(
           new QueryTerminatedEvent(id, runId, exception.map(_.cause).map(Utils.exceptionString)))
 
-        // Delete the temp checkpoint only when the query didn't fail
-        if (deleteCheckpointOnStop && exception.isEmpty) {
+        // Delete the temp checkpoint when either force delete enabled or the query didn't fail
+        if (deleteCheckpointOnStop &&
+            (sparkSession.sessionState.conf
+              .getConf(SQLConf.FORCE_DELETE_TEMP_CHECKPOINT_LOCATION) || exception.isEmpty)) {
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
+            logInfo(s"Deleting checkpoint $checkpointPath.")
             val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
             fs.delete(checkpointPath, true)
           } catch {
@@ -383,7 +438,7 @@ abstract class StreamExecution(
    * Blocks the current thread until processing for data from the given `source` has reached at
    * least the given `Offset`. This method is intended for use primarily when writing tests.
    */
-  private[sql] def awaitOffset(sourceIndex: Int, newOffset: Offset, timeoutMs: Long): Unit = {
+  private[sql] def awaitOffset(sourceIndex: Int, newOffset: OffsetV2, timeoutMs: Long): Unit = {
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
@@ -526,6 +581,41 @@ abstract class StreamExecution(
     Option(name).map(_ + "<br/>").getOrElse("") +
       s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
   }
+
+  protected def createStreamingWrite(
+      table: SupportsWrite,
+      options: Map[String, String],
+      inputPlan: LogicalPlan): StreamingWrite = {
+    val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
+      .withQueryId(id.toString)
+      .withInputDataSchema(inputPlan.schema)
+    outputMode match {
+      case Append =>
+        writeBuilder.buildForStreaming()
+
+      case Complete =>
+        // TODO: we should do this check earlier when we have capability API.
+        require(writeBuilder.isInstanceOf[SupportsTruncate],
+          table.name + " does not support Complete mode.")
+        writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
+
+      case Update =>
+        // Although no v2 sinks really support Update mode now, but during tests we do want them
+        // to pretend to support Update mode, and treat Update mode same as Append mode.
+        if (Utils.isTesting) {
+          writeBuilder.buildForStreaming()
+        } else {
+          throw new IllegalArgumentException(
+            "Data source v2 streaming sinks does not support Update mode.")
+        }
+    }
+  }
+
+  protected def purge(threshold: Long): Unit = {
+    logDebug(s"Purging metadata at threshold=$threshold")
+    offsetLog.purge(threshold)
+    commitLog.purge(threshold)
+  }
 }
 
 object StreamExecution {
@@ -561,6 +651,11 @@ object StreamExecution {
       }
     case _ =>
       false
+  }
+
+  /** Whether the path contains special chars that will be escaped when converting to a `URI`. */
+  def containsSpecialCharsInPath(path: Path): Boolean = {
+    path.toUri.getPath != new Path(path.toUri.toString).toUri.getPath
   }
 }
 

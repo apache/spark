@@ -31,11 +31,14 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.arrow.ArrowUtils
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapBuilder, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class ColumnarBatchSuite extends SparkFunSuite {
 
@@ -988,14 +991,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
       // Verify the results of the row.
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 1)
-      assert(batch.rowIterator().hasNext == true)
-      assert(batch.rowIterator().hasNext == true)
+      assert(batch.rowIterator().hasNext)
+      assert(batch.rowIterator().hasNext)
 
       assert(columns(0).getInt(0) == 1)
       assert(columns(0).isNullAt(0) == false)
       assert(columns(1).getDouble(0) == 1.1)
       assert(columns(1).isNullAt(0) == false)
-      assert(columns(2).isNullAt(0) == true)
+      assert(columns(2).isNullAt(0))
       assert(columns(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
@@ -1006,7 +1009,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(row.isNullAt(0) == false)
       assert(row.getDouble(1) == 1.1)
       assert(row.isNullAt(1) == false)
-      assert(row.isNullAt(2) == true)
+      assert(row.isNullAt(2))
       assert(columns(3).getUTF8String(0).toString == "Hello")
       assert(it.hasNext == false)
       assert(it.hasNext == false)
@@ -1123,7 +1126,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             compareStruct(childFields, r1.getStruct(ordinal, fields.length),
               r2.getStruct(ordinal), seed)
           case _ =>
-            throw new NotImplementedError("Not implemented " + field.dataType)
+            throw new UnsupportedOperationException("Not implemented " + field.dataType)
         }
       }
     }
@@ -1268,6 +1271,211 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
     batch.close()
     allocator.close()
+  }
+
+  test("RowToColumnConverter") {
+    val schema = StructType(
+      StructField("str", StringType) ::
+        StructField("bool", BooleanType) ::
+        StructField("byte", ByteType) ::
+        StructField("short", ShortType) ::
+        StructField("int", IntegerType) ::
+        StructField("long", LongType) ::
+        StructField("float", FloatType) ::
+        StructField("double", DoubleType) ::
+        StructField("decimal", DecimalType(25, 5)) ::
+        StructField("date", DateType) ::
+        StructField("ts", TimestampType) ::
+        StructField("cal", CalendarIntervalType) ::
+        StructField("arr_of_int", ArrayType(IntegerType)) ::
+        StructField("int_and_int", StructType(
+          StructField("int1", IntegerType, false) ::
+            StructField("int2", IntegerType) ::
+            Nil
+        )) ::
+        StructField("int_to_int", MapType(IntegerType, IntegerType)) ::
+        Nil)
+    var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+    mapBuilder.put(1, 10)
+    mapBuilder.put(20, null)
+    val row1 = new GenericInternalRow(Array[Any](
+      UTF8String.fromString("a string"),
+      true,
+      1.toByte,
+      2.toShort,
+      3,
+      Long.MaxValue,
+      0.25.toFloat,
+      0.75D,
+      Decimal("1234.23456"),
+      DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")),
+      DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")),
+      new CalendarInterval(1, 0),
+      new GenericArrayData(Array(1, 2, 3, 4, null)),
+      new GenericInternalRow(Array[Any](5.asInstanceOf[Any], 10)),
+      mapBuilder.build()
+    ))
+
+    mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
+    mapBuilder.put(30, null)
+    mapBuilder.put(40, 50)
+    val row2 = new GenericInternalRow(Array[Any](
+      UTF8String.fromString("second string"),
+      false,
+      -1.toByte,
+      17.toShort,
+      Int.MinValue,
+      987654321L,
+      Float.NaN,
+      Double.PositiveInfinity,
+      Decimal("0.01000"),
+      DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("1875-12-12")),
+      DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")),
+      new CalendarInterval(-10, -100),
+      new GenericArrayData(Array(5, 10, -100)),
+      new GenericInternalRow(Array[Any](20.asInstanceOf[Any], null)),
+      mapBuilder.build()
+    ))
+
+    val row3 = new GenericInternalRow(Array[Any](
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ))
+
+    val converter = new RowToColumnConverter(schema)
+    val columns = OnHeapColumnVector.allocateColumns(3, schema)
+    val batch = new ColumnarBatch(columns.toArray, 3)
+    try {
+      converter.convert(row1, columns.toArray)
+      converter.convert(row2, columns.toArray)
+      converter.convert(row3, columns.toArray)
+
+      assert(columns(0).dataType() == StringType)
+      assert(columns(0).getUTF8String(0).toString == "a string")
+      assert(columns(0).getUTF8String(1).toString == "second string")
+      assert(columns(0).isNullAt(2))
+
+      assert(columns(1).dataType() == BooleanType)
+      assert(columns(1).getBoolean(0) == true)
+      assert(columns(1).getBoolean(1) == false)
+      assert(columns(1).isNullAt(2))
+
+      assert(columns(2).dataType() == ByteType)
+      assert(columns(2).getByte(0) == 1.toByte)
+      assert(columns(2).getByte(1) == -1.toByte)
+      assert(columns(2).isNullAt(2))
+
+      assert(columns(3).dataType() == ShortType)
+      assert(columns(3).getShort(0) == 2.toShort)
+      assert(columns(3).getShort(1) == 17.toShort)
+      assert(columns(3).isNullAt(2))
+
+      assert(columns(4).dataType() == IntegerType)
+      assert(columns(4).getInt(0) == 3)
+      assert(columns(4).getInt(1) == Int.MinValue)
+      assert(columns(4).isNullAt(2))
+
+      assert(columns(5).dataType() == LongType)
+      assert(columns(5).getLong(0) == Long.MaxValue)
+      assert(columns(5).getLong(1) == 987654321L)
+      assert(columns(5).isNullAt(2))
+
+      assert(columns(6).dataType() == FloatType)
+      assert(columns(6).getFloat(0) == 0.25.toFloat)
+      assert(columns(6).getFloat(1).isNaN)
+      assert(columns(6).isNullAt(2))
+
+      assert(columns(7).dataType() == DoubleType)
+      assert(columns(7).getDouble(0) == 0.75D)
+      assert(columns(7).getDouble(1) == Double.PositiveInfinity)
+      assert(columns(7).isNullAt(2))
+
+      assert(columns(8).dataType() == DecimalType(25, 5))
+      assert(columns(8).getDecimal(0, 25, 5) == Decimal("1234.23456"))
+      assert(columns(8).getDecimal(1, 25, 5) == Decimal("0.01000"))
+      assert(columns(8).isNullAt(2))
+
+      assert(columns(9).dataType() == DateType)
+      assert(columns(9).getInt(0) ==
+        DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-01")))
+      assert(columns(9).getInt(1) ==
+        DateTimeUtils.fromJavaDate(java.sql.Date.valueOf("1875-12-12")))
+      assert(columns(9).isNullAt(2))
+
+      assert(columns(10).dataType() == TimestampType)
+      assert(columns(10).getLong(0) ==
+        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("2015-01-01 23:50:59.123")))
+      assert(columns(10).getLong(1) ==
+        DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf("1880-01-05 12:45:21.321")))
+      assert(columns(10).isNullAt(2))
+
+      assert(columns(11).dataType() == CalendarIntervalType)
+      assert(columns(11).getInterval(0) == new CalendarInterval(1, 0))
+      assert(columns(11).getInterval(1) == new CalendarInterval(-10, -100))
+      assert(columns(11).isNullAt(2))
+
+      assert(columns(12).dataType() == ArrayType(IntegerType))
+      val arr1 = columns(12).getArray(0)
+      assert(arr1.numElements() == 5)
+      assert(arr1.getInt(0) == 1)
+      assert(arr1.getInt(1) == 2)
+      assert(arr1.getInt(2) == 3)
+      assert(arr1.getInt(3) == 4)
+      assert(arr1.isNullAt(4))
+
+      val arr2 = columns(12).getArray(1)
+      assert(arr2.numElements() == 3)
+      assert(arr2.getInt(0) == 5)
+      assert(arr2.getInt(1) == 10)
+      assert(arr2.getInt(2) == -100)
+
+      assert(columns(12).isNullAt(2))
+
+      assert(columns(13).dataType() == StructType(
+        StructField("int1", IntegerType, false) ::
+          StructField("int2", IntegerType) ::
+          Nil
+      ))
+      val struct1 = columns(13).getStruct(0)
+      assert(struct1.getInt(0) == 5)
+      assert(struct1.getInt(1) == 10)
+      val struct2 = columns(13).getStruct(1)
+      assert(struct2.getInt(0) == 20)
+      assert(struct2.isNullAt(1))
+      assert(columns(13).isNullAt(2))
+
+      assert(columns(14).dataType() == MapType(IntegerType, IntegerType))
+      val map1 = columns(14).getMap(0)
+      assert(map1.numElements() == 2)
+      assert(map1.keyArray().getInt(0) == 1)
+      assert(map1.valueArray().getInt(0) == 10)
+      assert(map1.keyArray().getInt(1) == 20)
+      assert(map1.valueArray().isNullAt(1))
+
+      val map2 = columns(14).getMap(1)
+      assert(map2.numElements() == 2)
+      assert(map2.keyArray().getInt(0) == 30)
+      assert(map2.valueArray().isNullAt(0))
+      assert(map2.keyArray().getInt(1) == 40)
+      assert(map2.valueArray().getInt(1) == 50)
+
+      assert(columns(14).isNullAt(2))
+    } finally {
+      batch.close()
+    }
   }
 
   testVector("Decimal API", 4, DecimalType.IntDecimal) {

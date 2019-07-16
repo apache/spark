@@ -111,13 +111,15 @@ private[spark] class Benchmark(
     // The results are going to be processor specific so it is useful to include that.
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
-    out.printf("%-40s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+    out.printf("%-40s %14s %14s %11s %12s %13s %10s\n", name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative")
-    out.println("-" * 96)
+    out.println("-" * 120)
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      out.printf("%-40s %16s %12s %13s %10s\n",
+      out.printf("%-40s %14s %14s %11s %12s %13s %10s\n",
         benchmark.name,
-        "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
+        "%5.0f" format result.bestMs,
+        "%4.0f" format result.avgMs,
+        "%5.0f" format result.stdevMs,
         "%10.1f" format result.bestRate,
         "%6.1f" format (1000 / result.bestRate),
         "%3.1fX" format (firstBest / result.bestMs))
@@ -148,17 +150,21 @@ private[spark] class Benchmark(
 
       if (outputPerIteration) {
         // scalastyle:off
-        println(s"Iteration $i took ${runTime / 1000} microseconds")
+        println(s"Iteration $i took ${NANOSECONDS.toMicros(runTime)} microseconds")
         // scalastyle:on
       }
       i += 1
     }
     // scalastyle:off
-    println(s"  Stopped after $i iterations, ${runTimes.sum / 1000000} ms")
+    println(s"  Stopped after $i iterations, ${NANOSECONDS.toMillis(runTimes.sum)} ms")
     // scalastyle:on
+    assert(runTimes.nonEmpty)
     val best = runTimes.min
     val avg = runTimes.sum / runTimes.size
-    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
+    val stdev = if (runTimes.size > 1) {
+      math.sqrt(runTimes.map(time => (time - avg) * (time - avg)).sum / (runTimes.size - 1))
+    } else 0
+    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0, stdev / 1000000.0)
   }
 }
 
@@ -191,7 +197,7 @@ private[spark] object Benchmark {
   }
 
   case class Case(name: String, fn: Timer => Unit, numIters: Int)
-  case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
+  case class Result(avgMs: Double, bestRate: Double, bestMs: Double, stdevMs: Double)
 
   /**
    * This should return a user helpful processor information. Getting at this depends on the OS.
@@ -200,11 +206,12 @@ private[spark] object Benchmark {
   def getProcessorName(): String = {
     val cpu = if (SystemUtils.IS_OS_MAC_OSX) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
+        .stripLineEnd
     } else if (SystemUtils.IS_OS_LINUX) {
       Try {
         val grepPath = Utils.executeAndGetOutput(Seq("which", "grep")).stripLineEnd
         Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
-        .stripLineEnd.replaceFirst("model name[\\s*]:[\\s*]", "")
+          .stripLineEnd.replaceFirst("model name[\\s*]:[\\s*]", "")
       }.getOrElse("Unknown processor")
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")

@@ -159,7 +159,25 @@ class DataSourceWithHiveMetastoreCatalogSuite
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
     )),
 
+    "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat" -> ((
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+    )),
+
     "orc" -> ((
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )),
+
+    "org.apache.spark.sql.hive.orc" -> ((
+      "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+    )),
+
+    "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat" -> ((
       "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
@@ -188,7 +206,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
         checkAnswer(table("t"), testDF)
-        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        if (HiveUtils.isHive23) {
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+            Seq("1.100\t1", "2.100\t2"))
+        } else {
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+            Seq("1.1\t1", "2.1\t2"))
+        }
       }
     }
 
@@ -220,8 +244,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
           checkAnswer(table("t"), testDF)
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-            Seq("1.1\t1", "2.1\t2"))
+          if (HiveUtils.isHive23) {
+            assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+              Seq("1.100\t1", "2.100\t2"))
+          } else {
+            assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+              Seq("1.1\t1", "2.1\t2"))
+          }
         }
       }
     }

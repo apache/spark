@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -77,15 +77,35 @@ abstract class Classifier[
    * @note Throws `SparkException` if any label is a non-integer or is negative
    */
   protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
-    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
-      s" $numClasses, but requires numClasses > 0.")
+    validateNumClasses(numClasses)
     dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) =>
-        require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
-          s" dataset with invalid label $label.  Labels must be integers in range" +
-          s" [0, $numClasses).")
+        validateLabel(label, numClasses)
         LabeledPoint(label, features)
     }
+  }
+
+  /**
+   * Validates that number of classes is greater than zero.
+   *
+   * @param numClasses Number of classes label can take.
+   */
+  protected def validateNumClasses(numClasses: Int): Unit = {
+    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
+      s" $numClasses, but requires numClasses > 0.")
+  }
+
+  /**
+   * Validates the label on the classifier is a valid integer in the range [0, numClasses).
+   *
+   * @param label The label to validate.
+   * @param numClasses Number of classes label can take.  Labels must be integers in the range
+   *                  [0, numClasses).
+   */
+  protected def validateLabel(label: Double, numClasses: Int): Unit = {
+    require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
+      s" dataset with invalid label $label.  Labels must be integers in range" +
+      s" [0, $numClasses).")
   }
 
   /**
@@ -184,8 +204,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     }
 
     if (numColsOutput == 0) {
-      logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      logWarning(s"$uid: ClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
     }
     outputData.toDF
   }

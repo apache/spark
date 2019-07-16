@@ -20,13 +20,13 @@ package org.apache.spark
 import java.util.{Properties, Timer, TimerTask}
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
@@ -41,13 +41,13 @@ import org.apache.spark.util._
 class BarrierTaskContext private[spark] (
     taskContext: TaskContext) extends TaskContext with Logging {
 
+  import BarrierTaskContext._
+
   // Find the driver side RPCEndpointRef of the coordinator that handles all the barrier() calls.
   private val barrierCoordinator: RpcEndpointRef = {
     val env = SparkEnv.get
     RpcUtils.makeDriverRef("barrierSync", env.conf, env.rpcEnv)
   }
-
-  private val timer = new Timer("Barrier task timer for barrier() calls.")
 
   // Local barrierEpoch that identify a barrier() call from current task, it shall be identical
   // with the driver side epoch.
@@ -109,8 +109,8 @@ class BarrierTaskContext private[spark] (
       override def run(): Unit = {
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) waiting " +
           s"under the global sync since $startTime, has been waiting for " +
-          s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
-          s"is $barrierEpoch.")
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"current barrier epoch is $barrierEpoch.")
       }
     }
     // Log the update of global sync every 60 seconds.
@@ -122,18 +122,18 @@ class BarrierTaskContext private[spark] (
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
-        timeout = new RpcTimeout(31536000 /* = 3600 * 24 * 365 */ seconds, "barrierTimeout"))
+        timeout = new RpcTimeout(365.days, "barrierTimeout"))
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +
-        s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch is " +
-        s"$barrierEpoch.")
+        s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+        s"current barrier epoch is $barrierEpoch.")
     } catch {
       case e: SparkException =>
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
           "to perform global sync, waited for " +
-          s"${(System.currentTimeMillis() - startTime) / 1000} seconds, current barrier epoch " +
-          s"is $barrierEpoch.")
+          s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
+          s"current barrier epoch is $barrierEpoch.")
         throw e
     } finally {
       timerTask.cancel()
@@ -157,8 +157,6 @@ class BarrierTaskContext private[spark] (
   override def isCompleted(): Boolean = taskContext.isCompleted()
 
   override def isInterrupted(): Boolean = taskContext.isInterrupted()
-
-  override def isRunningLocally(): Boolean = taskContext.isRunningLocally()
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     taskContext.addTaskCompletionListener(listener)
@@ -187,6 +185,8 @@ class BarrierTaskContext private[spark] (
   override def getMetricsSources(sourceName: String): Seq[Source] = {
     taskContext.getMetricsSources(sourceName)
   }
+
+  override def resources(): Map[String, ResourceInformation] = taskContext.resources()
 
   override private[spark] def killTaskIfInterrupted(): Unit = taskContext.killTaskIfInterrupted()
 
@@ -234,4 +234,7 @@ object BarrierTaskContext {
   @Experimental
   @Since("2.4.0")
   def get(): BarrierTaskContext = TaskContext.get().asInstanceOf[BarrierTaskContext]
+
+  private val timer = new Timer("Barrier task timer for barrier() calls.")
+
 }
