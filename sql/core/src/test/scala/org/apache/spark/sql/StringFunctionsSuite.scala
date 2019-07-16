@@ -142,15 +142,13 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("binary overlay function") {
-    // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    val df = Seq(("Spark SQL".getBytes, "Spark的SQL".getBytes)).toDF("a", "b")
+    val df = Seq(("Spark SQL".getBytes)).toDF("a")
     checkAnswer(df.select(overlay($"a", "_".getBytes, 6)), Row("Spark_SQL".getBytes))
     checkAnswer(df.select(overlay($"a", "CORE".getBytes, 7)), Row("Spark CORE".getBytes))
     checkAnswer(df.select(overlay($"a", "ANSI ".getBytes, 7, 0)), Row("Spark ANSI SQL".getBytes))
-    checkAnswer(df.select(overlay($"a", "tructured".getBytes, 2, 4)), Row("Structured SQL".getBytes))
-    checkAnswer(df.select(overlay($"b", "_".getBytes, 6)), Row("Spark_SQL".getBytes))
-    // scalastyle:on
+    checkAnswer(
+      df.select(overlay($"a", "tructured".getBytes, 2, 4)), Row("Structured SQL".getBytes))
   }
 
   test("string / binary substring function") {
