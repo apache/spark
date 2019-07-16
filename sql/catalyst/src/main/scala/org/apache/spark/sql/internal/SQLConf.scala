@@ -1524,6 +1524,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .doc("When true, will perform integral division with the / operator " +
+      "if both sides are integral types.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
@@ -2293,6 +2299,8 @@ class SQLConf extends Serializable with Logging {
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+
+  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
 
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
