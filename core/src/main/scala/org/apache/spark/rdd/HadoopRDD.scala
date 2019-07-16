@@ -197,8 +197,6 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
-  private val UNSPLITTABLE_FILE_SIZE_LOG_THRESHOLD = 1024 * 1024 * 1024
-
   @transient private lazy val codecFactory = new CompressionCodecFactory(getJobConf())
 
   override def getPartitions: Array[Partition] = {
