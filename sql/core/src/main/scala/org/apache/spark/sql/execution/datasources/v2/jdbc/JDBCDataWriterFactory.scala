@@ -37,5 +37,4 @@ class JDBCDataWriterFactory(options: JdbcOptionsInWrite, schema: StructType) ext
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     new JDBCDataWriter(options, conn, schema)
   }
-
 }

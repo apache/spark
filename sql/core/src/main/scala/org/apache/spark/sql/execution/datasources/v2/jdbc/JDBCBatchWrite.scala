@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.internal.Logging
+
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcOptionsInWrite
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType

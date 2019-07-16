@@ -48,7 +48,6 @@ class JDBCDataWriter(options: JdbcOptionsInWrite,
   def abort(): Unit = {
     logInfo("***dsv2-flows*** abort called " )
   }
-
 }
 
 object JDBCWriterCommitMessage extends WriterCommitMessage {
