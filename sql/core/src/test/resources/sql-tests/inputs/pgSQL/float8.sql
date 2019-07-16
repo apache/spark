@@ -52,6 +52,7 @@ SELECT double('Infinity') + 100.0;
 -- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
 SELECT double('Infinity') / double('Infinity');
 SELECT double('NaN') / double('NaN');
+-- [SPARK-28315] Decimal can not accept NaN as input
 SELECT double(decimal('nan'));
 
 SELECT '' AS five, * FROM FLOAT8_TBL;
