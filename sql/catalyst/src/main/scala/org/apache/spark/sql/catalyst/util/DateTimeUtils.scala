@@ -520,9 +520,9 @@ object DateTimeUtils {
       start: SQLTimestamp,
       months: Int,
       microseconds: Long,
-      timeZone: TimeZone): SQLTimestamp = {
+      zoneId: ZoneId): SQLTimestamp = {
     val resultTimestamp = microsToInstant(start)
-      .atZone(timeZone.toZoneId)
+      .atZone(zoneId)
       .plusMonths(months)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
