@@ -9,7 +9,6 @@ struct<>
 -- !query 0 output
 
 
-
 -- !query 1
 select cast(1 as tinyint) + interval 2 day
 -- !query 1 schema
@@ -347,3 +346,21 @@ select cast('2017-12-11 09:30:00' as date) - interval 2 day
 struct<CAST(CAST(CAST(2017-12-11 09:30:00 AS DATE) AS TIMESTAMP) - interval 2 days AS DATE):date>
 -- !query 39 output
 2017-12-09
+
+
+-- !query 40
+create temporary view intervals as select * from values (interval 1 day 2 hours, 33, date '2018-05-14', timestamp '2018-05-14 18:31:00'), (interval 3 months 1 second, 2, date '2017-05-30', timestamp '2017-05-30 10:22:40'), (null, 2, date '2015-04-30', timestamp '2015-04-30 13:30:31'), (interval 1 year 3 weeks, null, date '2019-01-23', timestamp '2019-01-23 19:24:13') as hav(i, m, d, t)
+-- !query 40 schema
+struct<>
+-- !query 40 output
+
+
+-- !query 41
+select i, m, d, t, i * m as im, m * i as mi, d + i as di, d + i * m as dim, t + m * i as tmi from intervals
+-- !query 41 schema
+struct<i: calendarinterval, m: integer, d: date, t: timestamp, im: calendarinterval, mi: calendarinterval, di: date, dim: date, tmi: timestamp>
+-- !query 41 output
+interval 1 days 2 hours  33  2018-05-14  2018-05-14 18:31:00.0  interval 5 weeks 18 hours  interval 5 weeks 18 hours  2018-05-15,2018-06-18  2018-06-19 12:31:00.0
+interval 3 months 1 seconds  2  2017-05-30  2017-05-30 10:22:40.0  interval 6 months 2 seconds  interval 6 months 2 seconds  2017-08-30  2017-11-30  2017-11-30 10:22:42.0
+null  2  2015-04-30  2015-04-30 13:30:31.0  null  null  null  null  null
+interval 1 years 3 weeks  null  2019-01-23  2019-01-23 19:24:13.0  null  null  2020-02-13  null  null

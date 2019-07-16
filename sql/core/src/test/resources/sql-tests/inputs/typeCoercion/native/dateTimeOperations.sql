@@ -58,3 +58,7 @@ select cast('1' as binary) - interval 2 day;
 select cast(1 as boolean) - interval 2 day;
 select cast('2017-12-11 09:30:00.0' as timestamp) - interval 2 day;
 select cast('2017-12-11 09:30:00' as date) - interval 2 day;
+
+create temporary view intervals as select * from values (interval 1 day 2 hours, 33, date '2018-05-14', timestamp '2018-05-14 18:31:00'), (interval 3 months 1 second, 2, date '2017-05-30', timestamp '2017-05-30 10:22:40'), (null, 2, date '2015-04-30', timestamp '2015-04-30 13:30:31'), (interval 1 year 3 weeks, null, date '2019-01-23', timestamp '2019-01-23 19:24:13') as hav(i, m, d, t);
+
+select i, m, d, t, i * m as im, m * i as mi, d + i as di, d + i * m as dim, t + m * i as tmi from intervals;
