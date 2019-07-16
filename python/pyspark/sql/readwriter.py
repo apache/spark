@@ -765,7 +765,9 @@ class DataFrameWriter(OptionUtils):
 
         Optionally overwriting any existing data.
         """
-        self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
+        if (overwrite):
+            self._jwrite.mode("overwrite")
+        self._jwrite.insertInto(tableName)
 
     @since(1.4)
     def saveAsTable(self, name, format=None, mode=None, partitionBy=None, **options):

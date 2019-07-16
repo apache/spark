@@ -141,6 +141,25 @@ class ReadwriterTests(ReusedSQLTestCase):
                 .mode("overwrite").saveAsTable("pyspark_bucket"))
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+    def test_insert_into(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2)], ["C1", "C2"])
+        df.write.saveAsTable("test_table")
+        self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+        df.write.insertInto("test_table")
+        self.assertEqual(4, self.spark.sql("select * from test_table").count())
+
+        df.write.mode("overwrite").insertInto("test_table")
+        self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+        df.write.insertInto("test_table", True)
+        self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+        df.write.insertInto("test_table", False)
+        self.assertEqual(4, self.spark.sql("select * from test_table").count())
+
+        self.spark.sql("drop table test_table")
+
 
 if __name__ == "__main__":
     import unittest
