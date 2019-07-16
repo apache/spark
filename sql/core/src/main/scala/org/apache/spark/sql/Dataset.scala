@@ -30,7 +30,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
-import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.python.{PythonEvalType, PythonRDD, SerDeUtil}
 import org.apache.spark.api.r.RRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -2321,7 +2321,7 @@ class Dataset[T] private[sql](
     }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
+      !attr.semanticEquals(expression)
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
@@ -2640,6 +2640,23 @@ class Dataset[T] private[sql](
     Dataset.ofRows(
       sparkSession,
       MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, logicalPlan))
+  }
+
+  /**
+   * Applies a Scalar iterator Pandas UDF to each partition. The user-defined function
+   * defines a transformation: `iter(pandas.DataFrame)` -> `iter(pandas.DataFrame)`.
+   * Each partition is each iterator consisting of DataFrames as batches.
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def mapInPandas(func: PythonUDF): DataFrame = {
+    Dataset.ofRows(
+      sparkSession,
+      MapInPandas(
+        func,
+        func.dataType.asInstanceOf[StructType].toAttributes,
+        logicalPlan))
   }
 
   /**

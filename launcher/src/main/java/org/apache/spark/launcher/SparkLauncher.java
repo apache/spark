@@ -48,6 +48,8 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   public static final String DRIVER_MEMORY = "spark.driver.memory";
   /** Configuration key for the driver class path. */
   public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";
+  /** Configuration key for the default driver VM options. */
+  public static final String DRIVER_DEFAULT_JAVA_OPTIONS = "spark.driver.defaultJavaOptions";
   /** Configuration key for the driver VM options. */
   public static final String DRIVER_EXTRA_JAVA_OPTIONS = "spark.driver.extraJavaOptions";
   /** Configuration key for the driver native library path. */
@@ -57,6 +59,8 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   public static final String EXECUTOR_MEMORY = "spark.executor.memory";
   /** Configuration key for the executor class path. */
   public static final String EXECUTOR_EXTRA_CLASSPATH = "spark.executor.extraClassPath";
+  /** Configuration key for the default executor VM options. */
+  public static final String EXECUTOR_DEFAULT_JAVA_OPTIONS = "spark.executor.defaultJavaOptions";
   /** Configuration key for the executor VM options. */
   public static final String EXECUTOR_EXTRA_JAVA_OPTIONS = "spark.executor.extraJavaOptions";
   /** Configuration key for the executor native library path. */

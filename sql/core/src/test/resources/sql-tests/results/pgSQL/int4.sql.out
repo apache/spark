@@ -417,7 +417,7 @@ true
 
 
 -- !query 42
-SELECT int('1000') < int('999') AS false
+SELECT int('1000') < int('999') AS `false`
 -- !query 42 schema
 struct<false:boolean>
 -- !query 42 output

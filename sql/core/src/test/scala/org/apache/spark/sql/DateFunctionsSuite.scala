@@ -301,11 +301,11 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
       df.selectExpr(s"d - $i"),
-      Seq(Row(Date.valueOf("2015-07-30")), Row(Date.valueOf("2015-12-30"))))
+      Seq(Row(Date.valueOf("2015-07-29")), Row(Date.valueOf("2015-12-28"))))
     checkAnswer(
       df.selectExpr(s"t - $i"),
       Seq(Row(Timestamp.valueOf("2015-07-31 23:59:59")),
-        Row(Timestamp.valueOf("2015-12-31 00:00:00"))))
+        Row(Timestamp.valueOf("2015-12-29 00:00:00"))))
   }
 
   test("function add_months") {
@@ -314,10 +314,10 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, d1), (2, d2)).toDF("n", "d")
     checkAnswer(
       df.select(add_months(col("d"), 1)),
-      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-31"))))
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-28"))))
     checkAnswer(
       df.selectExpr("add_months(d, -1)"),
-      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-31"))))
+      Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-28"))))
   }
 
   test("function months_between") {

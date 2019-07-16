@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.spark.sql.internal.SQLConf
+
 /**
  * Benchmark to measure built-in data sources write performance.
  * To run this benchmark:
@@ -45,8 +47,8 @@ object BuiltInDataSourceWriteBenchmark extends DataSourceWriteBenchmark {
       mainArgs
     }
 
-    spark.conf.set("spark.sql.parquet.compression.codec", "snappy")
-    spark.conf.set("spark.sql.orc.compression.codec", "snappy")
+    spark.conf.set(SQLConf.PARQUET_COMPRESSION.key, "snappy")
+    spark.conf.set(SQLConf.ORC_COMPRESSION.key, "snappy")
 
     formats.foreach { format =>
       runBenchmark(s"$format writer benchmark") {

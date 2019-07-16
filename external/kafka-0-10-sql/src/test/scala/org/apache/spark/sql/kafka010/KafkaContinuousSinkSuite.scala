@@ -364,7 +364,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     options.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[ByteArraySerializer].getName)
     val inputSchema = Seq(AttributeReference("value", BinaryType)())
     val data = new Array[Byte](15000) // large value
-    val writeTask = new KafkaStreamDataWriter(Some(topic), options, inputSchema)
+    val writeTask = new KafkaDataWriter(Some(topic), options, inputSchema)
     try {
       val fieldTypes: Array[DataType] = Array(BinaryType)
       val converter = UnsafeProjection.create(fieldTypes)

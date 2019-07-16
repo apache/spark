@@ -20,10 +20,11 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
@@ -93,11 +94,16 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
-    // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
-    val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
-    val metadata = outputSchema($(outputCol)).metadata
-    dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
+
+    val hashingTF = new OldHashingTF($(numFeatures)).setBinary($(binary))
+    val func = (terms: Seq[_]) => {
+      val seq = hashingTF.transformImpl(terms)
+      Vectors.sparse(hashingTF.numFeatures, seq)
+    }
+
+    val transformer = udf(func)
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
