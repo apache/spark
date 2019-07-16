@@ -135,7 +135,6 @@ SELECT int('1000') < int('999') AS `false`;
 
 SELECT 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 AS ten;
 
--- [SPARK-2659] HiveQL: Division operator should always perform fractional division
 SELECT 2 + 2 / 2 AS three;
 
 SELECT (2 + 2) / 2 AS two;
