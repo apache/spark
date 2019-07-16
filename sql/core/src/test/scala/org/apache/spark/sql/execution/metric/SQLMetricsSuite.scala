@@ -277,9 +277,9 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
   }
 
   test("ShuffledHashJoin metrics") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "40",
-        "spark.sql.shuffle.partitions" -> "2",
-        "spark.sql.join.preferSortMergeJoin" -> "false") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "40",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
       val df2 = (1 to 10).map(i => (i, i.toString)).toSeq.toDF("key", "value")
       // Assume the execution plan is
@@ -584,19 +584,19 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
       sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
       sql("CACHE TABLE inMemoryTable")
       testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
-        Map(0L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
+        Map(1L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
       )
 
       sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
       sql("CACHE TABLE ```a``b```")
       testSparkPlanMetrics(spark.table("```a``b```"), 1,
-        Map(0L -> (("Scan In-memory table ```a``b```", Map.empty)))
+        Map(1L -> (("Scan In-memory table ```a``b```", Map.empty)))
       )
     }
 
     // Show InMemoryTableScan on UI
     testSparkPlanMetrics(spark.range(1).cache().select("id"), 1,
-      Map(0L -> (("InMemoryTableScan", Map.empty)))
+      Map(1L -> (("InMemoryTableScan", Map.empty)))
     )
   }
 }

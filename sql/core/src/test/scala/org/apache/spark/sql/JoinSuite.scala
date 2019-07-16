@@ -26,8 +26,10 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.execution.{BinaryExecNode, SortExec}
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, SortExec}
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
@@ -71,7 +73,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("join operator selection") {
     spark.sharedState.cacheManager.clearCache()
 
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0",
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
       SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
@@ -650,7 +652,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   test("test SortMergeJoin (without spill)") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
-      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> Int.MaxValue.toString) {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> Int.MaxValue.toString) {
 
       assertNotSpilled(sparkContext, "inner join") {
         checkAnswer(
@@ -707,8 +709,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
   test("test SortMergeJoin (with spill)") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
-      "spark.sql.sortMergeJoinExec.buffer.in.memory.threshold" -> "0",
-      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> "1") {
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "0",
+      SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
 
       assertSpilled(sparkContext, "inner join") {
         checkAnswer(
@@ -968,5 +970,51 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(0.0d, 0.0/0.0),
           Seq(Row(0.0d, 0.0/0.0)))))
     }
+  }
+
+  test("SPARK-28323: PythonUDF should be able to use in join condition") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+
+    val left = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val right = Seq((1, 2), (3, 4)).toDF("c", "d")
+    val df = left.join(right, pythonTestUDF($"a") === pythonTestUDF($"c"))
+
+    val joinNode = df.queryExecution.executedPlan.find(_.isInstanceOf[BroadcastHashJoinExec])
+    assert(joinNode.isDefined)
+
+    // There are two PythonUDFs which use attribute from left and right of join, individually.
+    // So two PythonUDFs should be evaluated before the join operator, at left and right side.
+    val pythonEvals = joinNode.get.collect {
+      case p: BatchEvalPythonExec => p
+    }
+    assert(pythonEvals.size == 2)
+
+    checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
+  }
+
+  test("SPARK-28345: PythonUDF predicate should be able to pushdown to join") {
+    import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
+
+    val pythonTestUDF = TestPythonUDF(name = "udf")
+
+    val left = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val right = Seq((1, 2), (3, 4)).toDF("c", "d")
+    val df = left.crossJoin(right).where(pythonTestUDF($"a") === pythonTestUDF($"c"))
+
+    // Before optimization, there is a logical Filter operator.
+    val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
+    assert(filterInAnalysis.isDefined)
+
+    // Filter predicate was pushdown as join condition. So there is no Filter exec operator.
+    val filterExec = df.queryExecution.executedPlan.find(_.isInstanceOf[FilterExec])
+    assert(filterExec.isEmpty)
+
+    checkAnswer(df, Row(1, 2, 1, 2) :: Nil)
   }
 }

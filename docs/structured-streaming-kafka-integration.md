@@ -355,11 +355,10 @@ The following configurations are optional:
   <td>failOnDataLoss</td>
   <td>true or false</td>
   <td>true</td>
-  <td>streaming query</td>
+  <td>streaming and batch</td>
   <td>Whether to fail the query when it's possible that data is lost (e.g., topics are deleted, or
   offsets are out of range). This may be a false alarm. You can disable it when it doesn't work
-  as you expected. Batch queries will always fail if it fails to read any data from the provided
-  offsets due to lost data.</td>
+  as you expected.</td>
 </tr>
 <tr>
   <td>kafkaConsumer.pollTimeoutMs</td>
@@ -818,6 +817,11 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     </td>
   </tr>
 </table>
+
+#### Kafka Specific Configurations
+
+Kafka's own configurations can be set with `kafka.` prefix, e.g, `--conf spark.kafka.clusters.${cluster}.kafka.retries=1`.
+For possible Kafka parameters, see [Kafka adminclient config docs](http://kafka.apache.org/documentation.html#adminclientconfigs).
 
 #### Caveats
 

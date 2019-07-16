@@ -107,7 +107,8 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
 
   protected def createClusterConf(
       identifier: String,
-      securityProtocol: String): KafkaTokenClusterConf = {
+      securityProtocol: String,
+      specifiedKafkaParams: Map[String, String] = Map.empty): KafkaTokenClusterConf = {
     KafkaTokenClusterConf(
       identifier,
       bootStrapServers,
@@ -119,6 +120,7 @@ trait KafkaDelegationTokenTest extends BeforeAndAfterEach {
       Some(keyStoreLocation),
       Some(keyStorePassword),
       Some(keyPassword),
-      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM)
+      KafkaTokenSparkConf.DEFAULT_SASL_TOKEN_MECHANISM,
+      specifiedKafkaParams)
   }
 }
