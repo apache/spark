@@ -209,9 +209,9 @@ object TestInMemoryTableCatalog {
   }
 
   def maybeSimulateFailedTableWrite(tableOptions: CaseInsensitiveStringMap): Unit = {
-    if (tableOptions.containsKey(TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION)
-      && tableOptions.get(TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION)
-      .equalsIgnoreCase("true")) {
+    val shouldSimulateFailedWrite = tableOptions
+      .getBoolean(TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION, false)
+    if (shouldSimulateFailedWrite) {
       throw new IllegalStateException("Manual write to table failure.")
     }
   }
