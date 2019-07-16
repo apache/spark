@@ -56,7 +56,7 @@ private object ResourceRequestHelper extends Logging {
       val resourceName = key.substring(0, splitIndex)
       val resourceSuffix = key.substring(splitIndex + 1)
       if (!AMOUNT.equals(resourceSuffix)) {
-        val errorMessage = s"Unsupported suffix: $resourceSuffix in: ${componentName}${key}," +
+        val errorMessage = s"Unsupported suffix: $resourceSuffix in: ${componentName}${key}, " +
           s"only .$AMOUNT is supported."
         throw new IllegalArgumentException(errorMessage.toString())
       }

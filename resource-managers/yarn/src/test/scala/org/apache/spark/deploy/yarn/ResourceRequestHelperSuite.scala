@@ -67,20 +67,11 @@ class ResourceRequestHelperSuite extends SparkFunSuite with Matchers {
       sparkConf.set(s"${YARN_AM_RESOURCE_TYPES_PREFIX}${name}.${AMOUNT}", value)
     }
     var parsedResources = getYarnResourcesAndAmounts(sparkConf, YARN_EXECUTOR_RESOURCE_TYPES_PREFIX)
-    assert(resources.size === 3)
-    resources.foreach { case (key, value) =>
-        assert(parsedResources(key) === value)
-    }
+    assert(parsedResources === resources)
     parsedResources = getYarnResourcesAndAmounts(sparkConf, YARN_DRIVER_RESOURCE_TYPES_PREFIX)
-    assert(resources.size === 3)
-    resources.foreach { case (key, value) =>
-      assert(parsedResources(key) === value)
-    }
+    assert(parsedResources === resources)
     parsedResources = getYarnResourcesAndAmounts(sparkConf, YARN_AM_RESOURCE_TYPES_PREFIX)
-    assert(resources.size === 3)
-    resources.foreach { case (key, value) =>
-      assert(parsedResources(key) === value)
-    }
+    assert(parsedResources === resources)
   }
 
   test("get invalid yarn resources from configs") {
