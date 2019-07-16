@@ -131,29 +131,15 @@ private[spark] class TaskSetManager(
   // same time for a barrier stage.
   private[scheduler] def isBarrier = taskSet.tasks.nonEmpty && taskSet.tasks(0).isBarrier
 
-  // Set of pending tasks for various levels of locality: executor, host, rack,
-  // noPrefs and anyPrefs. These collections are actually
-  // treated as stacks, in which new tasks are added to the end of the
-  // ArrayBuffer and removed from the end. This makes it faster to detect
-  // tasks that repeatedly fail because whenever a task failed, it is put
-  // back at the head of the stack. These collections may contain duplicates
-  // for two reasons:
-  // (1): Tasks are only removed lazily; when a task is launched, it remains
-  // in all the pending lists except the one that it was launched from.
-  // (2): Tasks may be re-added to these lists multiple times as a result
-  // of failures.
-  // Duplicates are handled in dequeueTaskFromList, which ensures that a
-  // task hasn't already started running before launching it.
-
+  // Store tasks waiting to be scheduled by locality preferences
   private[scheduler] val pendingTasks = new PendingTasksByLocality()
 
   // Tasks that can be speculated. Since these will be a small fraction of total
   // tasks, we'll just hold them in a HashSet. The HashSet here ensures that we do not add
-  // duplicate speculative tasks.
+  // duplicate speculatable tasks.
   private[scheduler] val speculatableTasks = new HashSet[Int]
 
-  // Set of pending tasks marked as speculative for various levels of locality: executor, host,
-  // rack, noPrefs and anyPrefs
+  // Store speculatable tasks by locality preferences
   private[scheduler] val pendingSpeculatableTasks = new PendingTasksByLocality()
 
   // Task index, start and finish time for each task attempt (indexed by task ID)
@@ -229,8 +215,8 @@ private[spark] class TaskSetManager(
   private[spark] def addPendingTask(
       index: Int,
       resolveRacks: Boolean = true,
-      speculative: Boolean = false): Unit = {
-    val pendingTaskSetToAddTo = if (speculative) pendingSpeculatableTasks else pendingTasks
+      speculatable: Boolean = false): Unit = {
+    val pendingTaskSetToAddTo = if (speculatable) pendingSpeculatableTasks else pendingTasks
     for (loc <- tasks(index).preferredLocations) {
       loc match {
         case e: ExecutorCacheTaskLocation =>
@@ -281,7 +267,7 @@ private[spark] class TaskSetManager(
       indexOffset -= 1
       val index = list(indexOffset)
       if (!isTaskBlacklistedOnExecOrNode(index, execId, host) &&
-        !(speculative && hasAttemptOnHost(index, host))) {
+          !(speculative && hasAttemptOnHost(index, host))) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (!successful(index)) {
@@ -314,8 +300,10 @@ private[spark] class TaskSetManager(
    *
    * @return An option containing (task index within the task set, locality, is speculative?)
    */
-  private def dequeueTask(execId: String, host: String, maxLocality: TaskLocality.Value)
-  : Option[(Int, TaskLocality.Value, Boolean)] = {
+  private def dequeueTask(
+      execId: String,
+      host: String,
+      maxLocality: TaskLocality.Value): Option[(Int, TaskLocality.Value, Boolean)] = {
     // Tries to schedule a regular task first; if it returns None, then schedules
     // a speculative task
     dequeueTaskHelper(execId, host, maxLocality, false).orElse(
@@ -980,10 +968,11 @@ private[spark] class TaskSetManager(
         val index = info.index
         if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
             !speculatableTasks.contains(index)) {
-          addPendingTask(index, speculative = true)
+          addPendingTask(index, speculatable = true)
           logInfo(
-            "Marking task %d in stage %s (on %s) as speculatable because it ran more than %.0f ms"
-              .format(index, taskSet.id, info.host, threshold))
+            ("Marking task %d in stage %s (on %s) as speculatable because it ran more" +
+            " than %.0f ms(%d speculatable tasks in this taskset now)")
+            .format(index, taskSet.id, info.host, threshold, speculatableTasks.size + 1))
           speculatableTasks += index
           sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
           foundTasks = true
@@ -1054,6 +1043,19 @@ private[spark] object TaskSetManager {
   val TASK_SIZE_TO_WARN_KIB = 1000
 }
 
+// Set of pending tasks for various levels of locality: executor, host, rack,
+// noPrefs and anyPrefs. These collections are actually
+// treated as stacks, in which new tasks are added to the end of the
+// ArrayBuffer and removed from the end. This makes it faster to detect
+// tasks that repeatedly fail because whenever a task failed, it is put
+// back at the head of the stack. These collections may contain duplicates
+// for two reasons:
+// (1): Tasks are only removed lazily; when a task is launched, it remains
+// in all the pending lists except the one that it was launched from.
+// (2): Tasks may be re-added to these lists multiple times as a result
+// of failures.
+// Duplicates are handled in dequeueTaskFromList, which ensures that a
+// task hasn't already started running before launching it.
 private[scheduler] class PendingTasksByLocality {
 
   // Set of pending tasks for each executor.

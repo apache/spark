@@ -740,7 +740,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Mark the task as available for speculation, and then offer another resource,
     // which should be used to launch a speculative copy of the task.
     manager.speculatableTasks += singleTask.partitionId
-    manager.addPendingTask(singleTask.partitionId, speculative = true)
+    manager.addPendingTask(singleTask.partitionId, speculatable = true)
     val task2 = manager.resourceOffer("execB", "host2", TaskLocality.ANY).get
 
     assert(manager.runningTasks === 2)
@@ -886,7 +886,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index == 1)
 
     manager.speculatableTasks += 1
-    manager.addPendingTask(1, speculative = true)
+    manager.addPendingTask(1, speculatable = true)
     clock.advance(LOCALITY_WAIT_MS)
     // schedule the nonPref task
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 2)
@@ -1671,16 +1671,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
     }
-    // Offer resources for 4 tasks to start
-    for ((k, v) <- List(
-      "exec1" -> "host1",
-      "exec1" -> "host1",
-      "exec2" -> "host2",
-      "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(k, v, NO_PREF)
-      assert(taskOption.isDefined)
-      val task = taskOption.get
-      assert(task.executorId === k)
+    // Offer resources for 4 tasks to start, 2 on each exec
+    Seq("exec1" -> "host1", "exec2" -> "host2").foreach { case (exec, host) =>
+      (0 until 2).foreach { _ =>
+        val taskOption = manager.resourceOffer(exec, host, NO_PREF)
+        assert(taskOption.isDefined)
+        assert(taskOption.get.executorId === exec)
+      }
     }
     assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
     clock.advance(1)
@@ -1698,21 +1695,23 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.copiesRunning(2) === 1)
     assert(manager.copiesRunning(3) === 1)
 
-    // Offer resource to start the speculative attempt for the running task
-    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
-    val taskOption6 = manager.resourceOffer("exec1", "host1", NO_PREF)
-    assert(taskOption5.isDefined)
-    val task5 = taskOption5.get
-    assert(task5.index === 3)
-    assert(task5.taskId === 4)
-    assert(task5.executorId === "exec1")
-    assert(task5.attemptNumber === 1)
-    assert(taskOption6.isDefined)
-    val task6 = taskOption6.get
-    assert(task6.index === 2)
-    assert(task6.taskId === 5)
-    assert(task6.executorId === "exec1")
-    assert(task6.attemptNumber === 1)
+    // Offer resource to start the speculative attempt for the running task. We offer more
+    // resources, and ensure that speculative tasks get scheduled appropriately -- only one extra
+    // copy per speculatable task
+    val taskOption2 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    val taskOption3 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption2.isDefined)
+    val task2 = taskOption2.get
+    assert(task2.index === 3)
+    assert(task2.taskId === 4)
+    assert(task2.executorId === "exec1")
+    assert(task2.attemptNumber === 1)
+    assert(taskOption3.isDefined)
+    val task3 = taskOption3.get
+    assert(task3.index === 2)
+    assert(task3.taskId === 5)
+    assert(task3.executorId === "exec1")
+    assert(task3.attemptNumber === 1)
     clock.advance(1)
     // Running checkSpeculatableTasks again should return false
     assert(!manager.checkSpeculatableTasks(0))
@@ -1722,5 +1721,49 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
     assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
     assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
+  }
+
+  test("SPARK-26755 Ensure that a speculative task obeys the original locality preferences") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+      ("exec2", "host2"), ("exec3", "host3"), ("exec4", "host4"))
+    // Create 3 tasks with locality preferences
+    val taskSet = FakeTask.createTaskSet(3,
+      Seq(TaskLocation("host1"), TaskLocation("host3")),
+      Seq(TaskLocation("host2")),
+      Seq(TaskLocation("host3")))
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
+    sc.conf.set(config.SPECULATION_ENABLED, true)
+    sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+    // Offer resources for 3 tasks to start
+    Seq("exec1" -> "host1", "exec2" -> "host2", "exec3" -> "host3").foreach { case (exec, host) =>
+      val taskOption = manager.resourceOffer(exec, host, NO_PREF)
+      assert(taskOption.isDefined)
+      assert(taskOption.get.executorId === exec)
+    }
+    assert(sched.startedTasks.toSet === Set(0, 1, 2))
+    clock.advance(1)
+    // Finish one task and mark the others as speculatable
+    manager.handleSuccessfulTask(2, createTaskResult(2, accumUpdatesByTask(2)))
+    assert(sched.endedTasks(2) === Success)
+    clock.advance(1)
+    assert(manager.checkSpeculatableTasks(0))
+    assert(sched.speculativeTasks.toSet === Set(0, 1))
+    // Ensure that the speculatable tasks obey the original locality preferences
+    assert(manager.resourceOffer("exec4", "host4", NODE_LOCAL).isEmpty)
+    assert(manager.resourceOffer("exec2", "host2", NODE_LOCAL).isEmpty)
+    assert(manager.resourceOffer("exec3", "host3", NODE_LOCAL).isDefined)
+    assert(manager.resourceOffer("exec4", "host4", ANY).isDefined)
+    // Since, all speculatable tasks have been launched, making another offer
+    // should not schedule any more tasks
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+    assert(!manager.checkSpeculatableTasks(0))
+    assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
   }
 }
