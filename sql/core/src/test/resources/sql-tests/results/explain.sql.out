@@ -53,40 +53,44 @@ EXPLAIN
 struct<plan:string>
 -- !query 5 output
 == Physical Plan ==
-Sort (8)
-+- Exchange (7)
-   +- HashAggregate (6)
-      +- Exchange (5)
-         +- HashAggregate (4)
-            +- Project (3)
-               +- Filter (2)
-                  +- Scan parquet default.explain_temp1 (1)
+Sort (9)
++- Exchange (8)
+   +- HashAggregate (7)
+      +- Exchange (6)
+         +- HashAggregate (5)
+            +- Project (4)
+               +- Filter (3)
+                  +- ColumnarToRow (2)
+                     +- Scan parquet default.explain_temp1 (1)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 1]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 1]
+(2) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(KEY#x) AND (KEY#x > 0))
      
-(3) Project [codegen id : 1]
+(4) Project [codegen id : 1]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
-(4) HashAggregate [codegen id : 1]
+(5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
      
-(5) Exchange 
+(6) Exchange 
 Input: [KEY#x, max#x]
      
-(6) HashAggregate [codegen id : 2]
+(7) HashAggregate [codegen id : 2]
 Input: [KEY#x, max#x]
      
-(7) Exchange 
+(8) Exchange 
 Input: [KEY#x, max(val)#x]
      
-(8) Sort [codegen id : 3]
+(9) Sort [codegen id : 3]
 Input: [KEY#x, max(val)#x]
 
 
@@ -101,41 +105,45 @@ EXPLAIN
 struct<plan:string>
 -- !query 6 output
 == Physical Plan ==
-Project (8)
-+- Filter (7)
-   +- HashAggregate (6)
-      +- Exchange (5)
-         +- HashAggregate (4)
-            +- Project (3)
-               +- Filter (2)
-                  +- Scan parquet default.explain_temp1 (1)
+Project (9)
++- Filter (8)
+   +- HashAggregate (7)
+      +- Exchange (6)
+         +- HashAggregate (5)
+            +- Project (4)
+               +- Filter (3)
+                  +- ColumnarToRow (2)
+                     +- Scan parquet default.explain_temp1 (1)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 1]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 1]
+(2) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
      
-(3) Project [codegen id : 1]
+(4) Project [codegen id : 1]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
-(4) HashAggregate [codegen id : 1]
+(5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
      
-(5) Exchange 
+(6) Exchange 
 Input: [key#x, max#x]
      
-(6) HashAggregate [codegen id : 2]
+(7) HashAggregate [codegen id : 2]
 Input: [key#x, max#x]
      
-(7) Filter [codegen id : 2]
+(8) Filter [codegen id : 2]
 Input     : [key#x, max(val)#x, max(val#x)#x]
 Condition : (isnotnull(max(val#x)#x) AND (max(val#x)#x > 0))
      
-(8) Project [codegen id : 2]
+(9) Project [codegen id : 2]
 Output    : [key#x, max(val)#x]
 Input     : [key#x, max(val)#x, max(val#x)#x]
 
@@ -149,38 +157,43 @@ EXPLAIN
 struct<plan:string>
 -- !query 7 output
 == Physical Plan ==
-HashAggregate (7)
-+- Exchange (6)
-   +- HashAggregate (5)
-      +- Union (4)
-         :- Project (3)
-         :  +- Filter (2)
-         :     +- Scan parquet default.explain_temp1 (1)
-         +- Project (3)
-            +- Filter (2)
-               +- Scan parquet default.explain_temp1 (1)
+HashAggregate (8)
++- Exchange (7)
+   +- HashAggregate (6)
+      +- Union (5)
+         :- Project (4)
+         :  +- Filter (3)
+         :     +- ColumnarToRow (2)
+         :        +- Scan parquet default.explain_temp1 (1)
+         +- Project (4)
+            +- Filter (3)
+               +- ColumnarToRow (2)
+                  +- Scan parquet default.explain_temp1 (1)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 2]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 2]
+(2) ColumnarToRow [codegen id : 2]
+Input: [key#x, val#x]
+     
+(3) Filter [codegen id : 2]
 Input     : [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
      
-(3) Project [codegen id : 2]
+(4) Project [codegen id : 2]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
-(4) Union 
+(5) Union 
      
-(5) HashAggregate [codegen id : 3]
+(6) HashAggregate [codegen id : 3]
 Input: [key#x, val#x]
      
-(6) Exchange 
+(7) Exchange 
 Input: [key#x, val#x]
      
-(7) HashAggregate [codegen id : 4]
+(8) HashAggregate [codegen id : 4]
 Input: [key#x, val#x]
 
 
@@ -194,42 +207,50 @@ EXPLAIN
 struct<plan:string>
 -- !query 8 output
 == Physical Plan ==
-BroadcastHashJoin Inner BuildRight (8)
-:- Project (3)
-:  +- Filter (2)
-:     +- Scan parquet default.explain_temp1 (1)
-+- BroadcastExchange (7)
-   +- Project (6)
-      +- Filter (5)
-         +- Scan parquet default.explain_temp2 (4)
+BroadcastHashJoin Inner BuildRight (10)
+:- Project (4)
+:  +- Filter (3)
+:     +- ColumnarToRow (2)
+:        +- Scan parquet default.explain_temp1 (1)
++- BroadcastExchange (9)
+   +- Project (8)
+      +- Filter (7)
+         +- ColumnarToRow (6)
+            +- Scan parquet default.explain_temp2 (5)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 2]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 2]
-Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
-     
-(3) Project [codegen id : 2]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
-     
-(4) Scan parquet default.explain_temp2 [codegen id : 1]
-Output: [key#x, val#x]
-     
-(5) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
-     
-(6) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
-     
-(7) BroadcastExchange 
+(2) ColumnarToRow [codegen id : 2]
 Input: [key#x, val#x]
      
-(8) BroadcastHashJoin [codegen id : 2]
+(3) Filter [codegen id : 2]
+Input     : [key#x, val#x]
+Condition : isnotnull(KEY#x)
+     
+(4) Project [codegen id : 2]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(5) Scan parquet default.explain_temp2 
+Output: [key#x, val#x]
+     
+(6) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(7) Filter [codegen id : 1]
+Input     : [key#x, val#x]
+Condition : isnotnull(KEY#x)
+     
+(8) Project [codegen id : 1]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(9) BroadcastExchange 
+Input: [key#x, val#x]
+     
+(10) BroadcastHashJoin [codegen id : 2]
 Left keys: List(KEY#x)
 Right keys: List(KEY#x)
 Join condition: None
@@ -245,42 +266,50 @@ EXPLAIN
 struct<plan:string>
 -- !query 9 output
 == Physical Plan ==
-BroadcastHashJoin Inner BuildRight (8)
-:- Project (3)
-:  +- Filter (2)
-:     +- Scan parquet default.explain_temp1 (1)
-+- BroadcastExchange (7)
-   +- Project (6)
-      +- Filter (5)
-         +- Scan parquet default.explain_temp2 (4)
+BroadcastHashJoin Inner BuildRight (10)
+:- Project (4)
+:  +- Filter (3)
+:     +- ColumnarToRow (2)
+:        +- Scan parquet default.explain_temp1 (1)
++- BroadcastExchange (9)
+   +- Project (8)
+      +- Filter (7)
+         +- ColumnarToRow (6)
+            +- Scan parquet default.explain_temp2 (5)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 2]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 2]
-Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
-     
-(3) Project [codegen id : 2]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
-     
-(4) Scan parquet default.explain_temp2 [codegen id : 1]
-Output: [key#x, val#x]
-     
-(5) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
-     
-(6) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
-     
-(7) BroadcastExchange 
+(2) ColumnarToRow [codegen id : 2]
 Input: [key#x, val#x]
      
-(8) BroadcastHashJoin [codegen id : 2]
+(3) Filter [codegen id : 2]
+Input     : [key#x, val#x]
+Condition : isnotnull(KEY#x)
+     
+(4) Project [codegen id : 2]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(5) Scan parquet default.explain_temp2 
+Output: [key#x, val#x]
+     
+(6) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(7) Filter [codegen id : 1]
+Input     : [key#x, val#x]
+Condition : isnotnull(KEY#x)
+     
+(8) Project [codegen id : 1]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(9) BroadcastExchange 
+Input: [key#x, val#x]
+     
+(10) BroadcastHashJoin [codegen id : 2]
 Left keys: List(KEY#x)
 Right keys: List(KEY#x)
 Join condition: None
@@ -296,32 +325,40 @@ EXPLAIN
 struct<plan:string>
 -- !query 10 output
 == Physical Plan ==
-BroadcastHashJoin LeftOuter BuildRight (6)
-:- Scan parquet default.explain_temp1 (1)
-+- BroadcastExchange (5)
-   +- Project (4)
-      +- Filter (3)
-         +- Scan parquet default.explain_temp2 (2)
+BroadcastHashJoin LeftOuter BuildRight (8)
+:- ColumnarToRow (2)
+:  +- Scan parquet default.explain_temp1 (1)
++- BroadcastExchange (7)
+   +- Project (6)
+      +- Filter (5)
+         +- ColumnarToRow (4)
+            +- Scan parquet default.explain_temp2 (3)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 2]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Scan parquet default.explain_temp2 [codegen id : 1]
+(2) ColumnarToRow [codegen id : 2]
+Input: [key#x, val#x]
+     
+(3) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
      
-(3) Filter [codegen id : 1]
+(4) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(5) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : isnotnull(KEY#x)
      
-(4) Project [codegen id : 1]
+(6) Project [codegen id : 1]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
-(5) BroadcastExchange 
+(7) BroadcastExchange 
 Input: [key#x, val#x]
      
-(6) BroadcastHashJoin [codegen id : 2]
+(8) BroadcastHashJoin [codegen id : 2]
 Left keys: List(KEY#x)
 Right keys: List(KEY#x)
 Join condition: None
@@ -342,80 +379,92 @@ EXPLAIN
 struct<plan:string>
 -- !query 11 output
 == Physical Plan ==
-Project (3)
-+- Filter (2)
-   +- Scan parquet default.explain_temp1 (1)
+Project (4)
++- Filter (3)
+   +- ColumnarToRow (2)
+      +- Scan parquet default.explain_temp1 (1)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 1]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 1]
+(2) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (((isnotnull(KEY#x) AND isnotnull(val#x)) AND (KEY#x = Subquery scalar-subquery#x)) AND (val#x > 3))
      
-(3) Project [codegen id : 1]
+(4) Project [codegen id : 1]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#x
-HashAggregate (9)
-+- Exchange (8)
-   +- HashAggregate (7)
-      +- Project (6)
-         +- Filter (5)
-            +- Scan parquet default.explain_temp2 (4)
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+HashAggregate (11)
++- Exchange (10)
+   +- HashAggregate (9)
+      +- Project (8)
+         +- Filter (7)
+            +- ColumnarToRow (6)
+               +- Scan parquet default.explain_temp2 (5)
 
 
-(4) Scan parquet default.explain_temp2 [codegen id : 1]
+(5) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
      
-(5) Filter [codegen id : 1]
+(6) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(7) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (((isnotnull(KEY#x) AND isnotnull(val#x)) AND (KEY#x = Subquery scalar-subquery#x)) AND (val#x = 2))
      
-(6) Project [codegen id : 1]
+(8) Project [codegen id : 1]
 Output    : [key#x]
 Input     : [key#x, val#x]
      
-(7) HashAggregate [codegen id : 1]
+(9) HashAggregate [codegen id : 1]
 Input: [key#x]
      
-(8) Exchange 
+(10) Exchange 
 Input: [max#x]
      
-(9) HashAggregate [codegen id : 2]
+(11) HashAggregate [codegen id : 2]
 Input: [max#x]
      
-Subquery:2 Hosting operator id = 5 Hosting Expression = Subquery scalar-subquery#x
-HashAggregate (15)
-+- Exchange (14)
-   +- HashAggregate (13)
-      +- Project (12)
-         +- Filter (11)
-            +- Scan parquet default.explain_temp3 (10)
+Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x
+HashAggregate (18)
++- Exchange (17)
+   +- HashAggregate (16)
+      +- Project (15)
+         +- Filter (14)
+            +- ColumnarToRow (13)
+               +- Scan parquet default.explain_temp3 (12)
 
 
-(10) Scan parquet default.explain_temp3 [codegen id : 1]
+(12) Scan parquet default.explain_temp3 
 Output: [key#x, val#x]
      
-(11) Filter [codegen id : 1]
+(13) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(14) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
      
-(12) Project [codegen id : 1]
+(15) Project [codegen id : 1]
 Output    : [key#x]
 Input     : [key#x, val#x]
      
-(13) HashAggregate [codegen id : 1]
+(16) HashAggregate [codegen id : 1]
 Input: [key#x]
      
-(14) Exchange 
+(17) Exchange 
 Input: [max#x]
      
-(15) HashAggregate [codegen id : 2]
+(18) HashAggregate [codegen id : 2]
 Input: [max#x]
 
 
@@ -434,75 +483,87 @@ EXPLAIN
 struct<plan:string>
 -- !query 12 output
 == Physical Plan ==
-Filter (2)
-+- Scan parquet default.explain_temp1 (1)
+Filter (3)
++- ColumnarToRow (2)
+   +- Scan parquet default.explain_temp1 (1)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 1]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 1]
+(2) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : ((KEY#x = Subquery scalar-subquery#x) OR (KEY#x = Subquery scalar-subquery#x))
      
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#x
-HashAggregate (8)
-+- Exchange (7)
-   +- HashAggregate (6)
-      +- Project (5)
-         +- Filter (4)
-            +- Scan parquet default.explain_temp2 (3)
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+HashAggregate (10)
++- Exchange (9)
+   +- HashAggregate (8)
+      +- Project (7)
+         +- Filter (6)
+            +- ColumnarToRow (5)
+               +- Scan parquet default.explain_temp2 (4)
 
 
-(3) Scan parquet default.explain_temp2 [codegen id : 1]
+(4) Scan parquet default.explain_temp2 
 Output: [key#x, val#x]
      
-(4) Filter [codegen id : 1]
+(5) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(6) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
      
-(5) Project [codegen id : 1]
+(7) Project [codegen id : 1]
 Output    : [key#x]
 Input     : [key#x, val#x]
      
-(6) HashAggregate [codegen id : 1]
+(8) HashAggregate [codegen id : 1]
 Input: [key#x]
      
-(7) Exchange 
+(9) Exchange 
 Input: [max#x]
      
-(8) HashAggregate [codegen id : 2]
+(10) HashAggregate [codegen id : 2]
 Input: [max#x]
      
-Subquery:2 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#x
-HashAggregate (14)
-+- Exchange (13)
-   +- HashAggregate (12)
-      +- Project (11)
-         +- Filter (10)
-            +- Scan parquet default.explain_temp3 (9)
+Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+HashAggregate (17)
++- Exchange (16)
+   +- HashAggregate (15)
+      +- Project (14)
+         +- Filter (13)
+            +- ColumnarToRow (12)
+               +- Scan parquet default.explain_temp3 (11)
 
 
-(9) Scan parquet default.explain_temp3 [codegen id : 1]
+(11) Scan parquet default.explain_temp3 
 Output: [key#x, val#x]
      
-(10) Filter [codegen id : 1]
+(12) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(13) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(val#x) AND (val#x > 0))
      
-(11) Project [codegen id : 1]
+(14) Project [codegen id : 1]
 Output    : [key#x]
 Input     : [key#x, val#x]
      
-(12) HashAggregate [codegen id : 1]
+(15) HashAggregate [codegen id : 1]
 Input: [key#x]
      
-(13) Exchange 
+(16) Exchange 
 Input: [max#x]
      
-(14) HashAggregate [codegen id : 2]
+(17) HashAggregate [codegen id : 2]
 Input: [max#x]
 
 
@@ -514,39 +575,47 @@ EXPLAIN
 struct<plan:string>
 -- !query 13 output
 == Physical Plan ==
-Project (2)
-+- Scan parquet default.explain_temp1 (1)
+Project (3)
++- ColumnarToRow (2)
+   +- Scan parquet default.explain_temp1 (1)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 1]
+(1) Scan parquet default.explain_temp1 
 Output: []
      
-(2) Project [codegen id : 1]
+(2) ColumnarToRow [codegen id : 1]
+Input: []
+     
+(3) Project [codegen id : 1]
 Output    : [(Subquery scalar-subquery#x + ReusedSubquery Subquery scalar-subquery#x) AS (scalarsubquery() + scalarsubquery())#x]
 Input     : []
      
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery scalar-subquery#x
-HashAggregate (6)
-+- Exchange (5)
-   +- HashAggregate (4)
-      +- Scan parquet default.explain_temp1 (3)
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+HashAggregate (8)
++- Exchange (7)
+   +- HashAggregate (6)
+      +- ColumnarToRow (5)
+         +- Scan parquet default.explain_temp1 (4)
 
 
-(3) Scan parquet default.explain_temp1 [codegen id : 1]
+(4) Scan parquet default.explain_temp1 
 Output: [key#x]
      
-(4) HashAggregate [codegen id : 1]
+(5) ColumnarToRow [codegen id : 1]
 Input: [key#x]
      
-(5) Exchange 
+(6) HashAggregate [codegen id : 1]
+Input: [key#x]
+     
+(7) Exchange 
 Input: [sum#x, count#xL]
      
-(6) HashAggregate [codegen id : 2]
+(8) HashAggregate [codegen id : 2]
 Input: [sum#x, count#xL]
      
-Subquery:2 Hosting operator id = 2 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x
+Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x
 
 
 -- !query 14
@@ -561,42 +630,50 @@ EXPLAIN
 struct<plan:string>
 -- !query 14 output
 == Physical Plan ==
-BroadcastHashJoin Inner BuildRight (8)
-:- Project (3)
-:  +- Filter (2)
-:     +- Scan parquet default.explain_temp1 (1)
-+- BroadcastExchange (7)
-   +- Project (6)
-      +- Filter (5)
-         +- Scan parquet default.explain_temp1 (4)
+BroadcastHashJoin Inner BuildRight (10)
+:- Project (4)
+:  +- Filter (3)
+:     +- ColumnarToRow (2)
+:        +- Scan parquet default.explain_temp1 (1)
++- BroadcastExchange (9)
+   +- Project (8)
+      +- Filter (7)
+         +- ColumnarToRow (6)
+            +- Scan parquet default.explain_temp1 (5)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 2]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 2]
-Input     : [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 10))
-     
-(3) Project [codegen id : 2]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
-     
-(4) Scan parquet default.explain_temp1 [codegen id : 1]
-Output: [key#x, val#x]
-     
-(5) Filter [codegen id : 1]
-Input     : [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 10))
-     
-(6) Project [codegen id : 1]
-Output    : [key#x, val#x]
-Input     : [key#x, val#x]
-     
-(7) BroadcastExchange 
+(2) ColumnarToRow [codegen id : 2]
 Input: [key#x, val#x]
      
-(8) BroadcastHashJoin [codegen id : 2]
+(3) Filter [codegen id : 2]
+Input     : [key#x, val#x]
+Condition : (isnotnull(key#x) AND (key#x > 10))
+     
+(4) Project [codegen id : 2]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(5) Scan parquet default.explain_temp1 
+Output: [key#x, val#x]
+     
+(6) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(7) Filter [codegen id : 1]
+Input     : [key#x, val#x]
+Condition : (isnotnull(key#x) AND (key#x > 10))
+     
+(8) Project [codegen id : 1]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(9) BroadcastExchange 
+Input: [key#x, val#x]
+     
+(10) BroadcastHashJoin [codegen id : 2]
 Left keys: List(key#x)
 Right keys: List(key#x)
 Join condition: None
@@ -615,48 +692,52 @@ EXPLAIN
 struct<plan:string>
 -- !query 15 output
 == Physical Plan ==
-BroadcastHashJoin Inner BuildRight (10)
-:- HashAggregate (6)
-:  +- Exchange (5)
-:     +- HashAggregate (4)
-:        +- Project (3)
-:           +- Filter (2)
-:              +- Scan parquet default.explain_temp1 (1)
-+- BroadcastExchange (9)
-   +- HashAggregate (8)
-      +- ReusedExchange (7)
+BroadcastHashJoin Inner BuildRight (11)
+:- HashAggregate (7)
+:  +- Exchange (6)
+:     +- HashAggregate (5)
+:        +- Project (4)
+:           +- Filter (3)
+:              +- ColumnarToRow (2)
+:                 +- Scan parquet default.explain_temp1 (1)
++- BroadcastExchange (10)
+   +- HashAggregate (9)
+      +- ReusedExchange (8)
 
 
-(1) Scan parquet default.explain_temp1 [codegen id : 1]
+(1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) Filter [codegen id : 1]
+(2) ColumnarToRow [codegen id : 1]
+Input: [key#x, val#x]
+     
+(3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 10))
      
-(3) Project [codegen id : 1]
+(4) Project [codegen id : 1]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
-(4) HashAggregate [codegen id : 1]
+(5) HashAggregate [codegen id : 1]
 Input: [key#x, val#x]
      
-(5) Exchange 
+(6) Exchange 
 Input: [key#x, max#x]
      
-(6) HashAggregate [codegen id : 4]
+(7) HashAggregate [codegen id : 4]
 Input: [key#x, max#x]
      
-(7) ReusedExchange  [Reuses operator id: 5]
+(8) ReusedExchange  [Reuses operator id: 6]
 Output : ArrayBuffer(key#x, max#x)
      
-(8) HashAggregate [codegen id : 3]
+(9) HashAggregate [codegen id : 3]
 Input: [key#x, max#x]
      
-(9) BroadcastExchange 
+(10) BroadcastExchange 
 Input: [key#x, max(val)#x]
      
-(10) BroadcastHashJoin [codegen id : 4]
+(11) BroadcastHashJoin [codegen id : 4]
 Left keys: List(key#x)
 Right keys: List(key#x)
 Join condition: None

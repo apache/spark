@@ -226,10 +226,25 @@ case class AdaptiveSparkPlanExec(
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
-    super.generateTreeString(depth, lastChildren, append, verbose, prefix, addSuffix, maxFields)
+      maxFields: Int,
+      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): Unit = {
+    super.generateTreeString(depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix,
+      addSuffix,
+      maxFields,
+      planToOperatorID)
     currentPhysicalPlan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", addSuffix = false, maxFields)
+      depth + 1,
+      lastChildren :+ true,
+      append,
+      verbose,
+      "",
+      addSuffix = false,
+      maxFields,
+      planToOperatorID)
   }
 
   override def hashCode(): Int = initialPlan.hashCode()
