@@ -261,6 +261,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(convertedBack.getSeq(2) == Seq(Seq(Seq(0L, null), null), null))
   }
 
+  test("RowEncoder should support CalendarInterval as the external type for CalendarIntervalType") {
+    val schema = new StructType()
+      .add("calendarInterval", CalendarIntervalType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val input = Row("interval '1' day")
+    val row = encoder.toRow(input)
+    val convertedBack = encoder.fromRow(row)
+    assert(convertedBack.getCalendarInterval(0) == CalendarInterval.fromString("interval '1' day"))
+  }
+
   test("RowEncoder should throw RuntimeException if input row object is null") {
     val schema = new StructType().add("int", IntegerType)
     val encoder = RowEncoder(schema)
