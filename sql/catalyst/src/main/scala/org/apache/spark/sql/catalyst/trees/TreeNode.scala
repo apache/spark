@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.trees
 
 import java.util.UUID
 
-import scala.collection.Map
+import scala.collection.{mutable, Map}
 import scala.reflect.ClassTag
 
 import org.apache.commons.lang3.ClassUtils
@@ -88,18 +88,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * A mutable map for holding auxiliary information of this tree node. It will be carried over
    * when this node is copied via `makeCopy`, or transformed via `transformUp`/`transformDown`.
    */
-  private val tags = new java.util.concurrent.ConcurrentHashMap[TreeNodeTag[_], Any]()
+  private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
   protected def copyTagsFrom(other: BaseType): Unit = {
-    tags.putAll(other.tags)
+    tags ++= other.tags
   }
 
   def setTagValue[T](tag: TreeNodeTag[T], value: T): Unit = {
-    tags.put(tag, value)
+    tags(tag) = value
   }
 
   def getTagValue[T](tag: TreeNodeTag[T]): Option[T] = {
-    Option(tags.get(tag)).map(_.asInstanceOf[T])
+    tags.get(tag).map(_.asInstanceOf[T])
   }
 
   /**
