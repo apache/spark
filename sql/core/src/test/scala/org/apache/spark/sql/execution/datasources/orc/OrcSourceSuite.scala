@@ -18,20 +18,25 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.Timestamp
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.OrcFile
+import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.Row
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
+import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -113,6 +118,119 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         }
       }
     }
+  }
+
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHive23: Boolean = false) {
+    val tableName = "orcTable"
+
+    withTempDir { dir =>
+      withTable(tableName) {
+        val sqlStatement = orcImp match {
+          case "native" =>
+            s"""
+               |CREATE TABLE $tableName (zipcode STRING, uniqColumn STRING, value DOUBLE)
+               |USING ORC
+               |OPTIONS (
+               |  path '${dir.toURI}',
+               |  orc.dictionary.key.threshold '1.0',
+               |  orc.column.encoding.direct 'uniqColumn'
+               |)
+            """.stripMargin
+          case "hive" =>
+            s"""
+               |CREATE TABLE $tableName (zipcode STRING, uniqColumn STRING, value DOUBLE)
+               |STORED AS ORC
+               |LOCATION '${dir.toURI}'
+               |TBLPROPERTIES (
+               |  orc.dictionary.key.threshold '1.0',
+               |  hive.exec.orc.dictionary.key.size.threshold '1.0',
+               |  orc.column.encoding.direct 'uniqColumn'
+               |)
+            """.stripMargin
+          case impl =>
+            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
+        }
+
+        sql(sqlStatement)
+        sql(s"INSERT INTO $tableName VALUES ('94086', 'random-uuid-string', 0.0)")
+
+        val partFiles = dir.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        val orcFilePath = new Path(partFiles.head.getAbsolutePath)
+        val readerOptions = OrcFile.readerOptions(new Configuration())
+        val reader = OrcFile.createReader(orcFilePath, readerOptions)
+        var recordReader: RecordReaderImpl = null
+        try {
+          recordReader = reader.rows.asInstanceOf[RecordReaderImpl]
+
+          // Check the kind
+          val stripe = recordReader.readStripeFooter(reader.getStripes.get(0))
+
+          // The encodings are divided into direct or dictionary-based categories and
+          // further refined as to whether they use RLE v1 or v2. RLE v1 is used by
+          // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
+          // For more details, see https://orc.apache.org/specification/
+          assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
+          if (isSelective || isHive23) {
+            assert(stripe.getColumns(2).getKind === DIRECT_V2)
+          } else {
+            assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
+          }
+          // Floating point types are stored with DIRECT encoding in IEEE 754 floating
+          // point bit layout.
+          assert(stripe.getColumns(3).getKind === DIRECT)
+        } finally {
+          if (recordReader != null) {
+            recordReader.close()
+          }
+        }
+      }
+    }
+  }
+
+  protected def testMergeSchemasInParallel(
+      ignoreCorruptFiles: Boolean,
+      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+    withSQLConf(
+      SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorruptFiles.toString,
+      SQLConf.ORC_IMPLEMENTATION.key -> orcImp) {
+      withTempDir { dir =>
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val basePath = dir.getCanonicalPath
+
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        val path3 = new Path(basePath, "third")
+
+        spark.range(1).toDF("a").coalesce(1).write.orc(path1.toString)
+        spark.range(1, 2).toDF("b").coalesce(1).write.orc(path2.toString)
+        spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
+
+        val fileStatuses =
+          Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten
+
+        val schema = SchemaMergeUtils.mergeSchemasInParallel(
+          spark,
+          fileStatuses,
+          schemaReader)
+
+        assert(schema.isDefined)
+        assert(schema.get == StructType(Seq(
+          StructField("a", LongType, true),
+          StructField("b", LongType, true))))
+      }
+    }
+  }
+
+  protected def testMergeSchemasInParallel(
+      schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType]): Unit = {
+    testMergeSchemasInParallel(true, schemaReader)
+    val exception = intercept[SparkException] {
+      testMergeSchemasInParallel(false, schemaReader)
+    }.getCause
+    assert(exception.getCause.getMessage.contains("Could not read footer for file"))
   }
 
   test("create temporary orc table") {
@@ -243,6 +361,123 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }
+
+  test("Write Spark version into ORC file metadata") {
+    withTempPath { path =>
+      spark.range(1).repartition(1).write.orc(path.getCanonicalPath)
+
+      val partFiles = path.listFiles()
+        .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+      assert(partFiles.length === 1)
+
+      val orcFilePath = new Path(partFiles.head.getAbsolutePath)
+      val readerOptions = OrcFile.readerOptions(new Configuration())
+      val reader = OrcFile.createReader(orcFilePath, readerOptions)
+      val version = UTF_8.decode(reader.getMetadataValue(SPARK_VERSION_METADATA_KEY)).toString
+      assert(version === SPARK_VERSION_SHORT)
+    }
+  }
+
+  test("SPARK-11412 test orc merge schema option") {
+    val conf = spark.sessionState.conf
+    // Test if the default of spark.sql.orc.mergeSchema is false
+    assert(new OrcOptions(Map.empty[String, String], conf).mergeSchema == false)
+
+    // OrcOptions's parameters have a higher priority than SQL configuration.
+    // `mergeSchema` -> `spark.sql.orc.mergeSchema`
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
+      val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
+      assert(new OrcOptions(map1, conf).mergeSchema == true)
+      assert(new OrcOptions(map2, conf).mergeSchema == false)
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
+      val map1 = Map(OrcOptions.MERGE_SCHEMA -> "true")
+      val map2 = Map(OrcOptions.MERGE_SCHEMA -> "false")
+      assert(new OrcOptions(map1, conf).mergeSchema == true)
+      assert(new OrcOptions(map2, conf).mergeSchema == false)
+    }
+  }
+
+  test("SPARK-11412 test enabling/disabling schema merging") {
+    def testSchemaMerging(expectedColumnNumber: Int): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+        spark.range(0, 10).toDF("b").write.orc(new Path(basePath, "foo=2").toString)
+        assert(spark.read.orc(basePath).columns.length === expectedColumnNumber)
+
+        // OrcOptions.MERGE_SCHEMA has higher priority
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, true)
+          .orc(basePath).columns.length === 3)
+        assert(spark.read.option(OrcOptions.MERGE_SCHEMA, false)
+          .orc(basePath).columns.length === 2)
+      }
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      testSchemaMerging(3)
+    }
+
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
+      testSchemaMerging(2)
+    }
+  }
+
+  test("SPARK-11412 test enabling/disabling schema merging with data type conflicts") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+      spark.range(0, 10).map(s => s"value_$s").toDF("a")
+        .write.orc(new Path(basePath, "foo=2").toString)
+
+      // with schema merging, there should throw exception
+      withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+        val exception = intercept[SparkException] {
+          spark.read.orc(basePath).columns.length
+        }.getCause
+
+        val innerMessage = orcImp match {
+          case "native" => exception.getMessage
+          case "hive" => exception.getCause.getMessage
+          case impl =>
+            throw new UnsupportedOperationException(s"Unknown ORC implementation: $impl")
+        }
+
+        assert(innerMessage.contains("Failed to merge incompatible data types"))
+      }
+
+      // it is ok if no schema merging
+      withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "false") {
+        assert(spark.read.orc(basePath).columns.length === 2)
+      }
+    }
+  }
+
+  test("SPARK-11412 test schema merging with corrupt files") {
+    withSQLConf(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key -> "true") {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+        spark.range(0, 10).toDF("b").write.orc(new Path(basePath, "foo=2").toString)
+        spark.range(0, 10).toDF("c").write.json(new Path(basePath, "foo=3").toString)
+
+        // ignore corrupt files
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          assert(spark.read.orc(basePath).columns.length === 3)
+        }
+
+        // don't ignore corrupt files
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+          val exception = intercept[SparkException] {
+            spark.read.orc(basePath).columns.length
+          }.getCause
+          assert(exception.getCause.getMessage.contains("Could not read footer for file"))
+        }
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
@@ -283,5 +518,13 @@ class OrcSourceSuite extends OrcSuite with SharedSQLContext {
 
   test("Check BloomFilter creation") {
     testBloomFilterCreation(Kind.BLOOM_FILTER_UTF8) // After ORC-101
+  }
+
+  test("Enforce direct encoding column-wise selectively") {
+    testSelectiveDictionaryEncoding(isSelective = true)
+  }
+
+  test("SPARK-11412 read and merge orc schemas in parallel") {
+    testMergeSchemasInParallel(OrcUtils.readOrcSchemasInParallel)
   }
 }

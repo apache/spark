@@ -87,7 +87,7 @@ class JDBCOptions(
       if (subquery.isEmpty) {
         throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
       } else {
-        s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
+        s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
   }
 
@@ -137,9 +137,13 @@ class JDBCOptions(
        |the partition columns using the supplied subquery alias to resolve any ambiguity.
        |Example :
        |spark.read.format("jdbc")
-       |        .option("dbtable", "(select c1, c2 from t1) as subq")
-       |        .option("partitionColumn", "subq.c1"
-       |        .load()
+       |  .option("url", jdbcUrl)
+       |  .option("dbtable", "(select c1, c2 from t1) as subq")
+       |  .option("partitionColumn", "c1")
+       |  .option("lowerBound", "1")
+       |  .option("upperBound", "100")
+       |  .option("numPartitions", "3")
+       |  .load()
      """.stripMargin
   )
 

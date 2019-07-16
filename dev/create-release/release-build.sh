@@ -84,7 +84,7 @@ GIT_REF=${GIT_REF:-master}
 
 RELEASE_STAGING_LOCATION="https://dist.apache.org/repos/dist/dev/spark"
 
-GPG="gpg -u $GPG_KEY --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch --pinentry-mode loopback"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
@@ -110,18 +110,27 @@ fi
 # Depending on the version being built, certain extra profiles need to be activated, and
 # different versions of Scala are supported.
 BASE_PROFILES="-Pmesos -Pyarn"
-PUBLISH_SCALA_2_10=0
-SCALA_2_10_PROFILES="-Pscala-2.10"
-SCALA_2_11_PROFILES=
 if [[ $SPARK_VERSION > "2.3" ]]; then
-  BASE_PROFILES="$BASE_PROFILES -Pkubernetes -Pflume"
-  SCALA_2_11_PROFILES="-Pkafka-0-8"
-else
-  PUBLISH_SCALA_2_10=1
+  BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
+fi
+
+# TODO: revisit for Scala 2.13
+
+PUBLISH_SCALA_2_11=1
+SCALA_2_11_PROFILES="-Pscala-2.11"
+if [[ $SPARK_VERSION > "2.3" ]]; then
+  if [[ $SPARK_VERSION < "3.0." ]]; then
+    SCALA_2_11_PROFILES="-Pkafka-0-8 -Pflume $SCALA_2_11_PROFILES"
+  else
+    PUBLISH_SCALA_2_11=0
+  fi
 fi
 
 PUBLISH_SCALA_2_12=0
 SCALA_2_12_PROFILES="-Pscala-2.12"
+if [[ $SPARK_VERSION < "3.0." ]]; then
+  SCALA_2_12_PROFILES="-Pscala-2.12 -Pflume"
+fi
 if [[ $SPARK_VERSION > "2.4" ]]; then
   PUBLISH_SCALA_2_12=1
 fi
@@ -133,22 +142,10 @@ PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Pspark-ganglia-lgpl -Pkinesis-a
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
-if [[ ! $SPARK_VERSION < "2.2." ]]; then
-  if [[ $JAVA_VERSION < "1.8." ]]; then
-    echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
-    echo "Please set JAVA_HOME correctly."
-    exit 1
-  fi
-else
-  if ! [[ $JAVA_VERSION =~ 1\.7\..* ]]; then
-    if [ -z "$JAVA_7_HOME" ]; then
-      echo "Java version $JAVA_VERSION is higher than required 1.7 for pre-2.2"
-      echo "Please set JAVA_HOME correctly."
-      exit 1
-    else
-      export JAVA_HOME="$JAVA_7_HOME"
-    fi
-  fi
+if [[ $JAVA_VERSION < "1.8." ]]; then
+  echo "Java version $JAVA_VERSION is less than required 1.8 for 2.2+"
+  echo "Please set JAVA_HOME correctly."
+  exit 1
 fi
 
 # This is a band-aid fix to avoid the failure of Maven nightly snapshot in some Jenkins
@@ -174,10 +171,14 @@ if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
-  # For source release, exclude copy of binary license/notice
-  rm spark-$SPARK_VERSION/LICENSE-binary
-  rm spark-$SPARK_VERSION/NOTICE-binary
-  rm -r spark-$SPARK_VERSION/licenses-binary
+
+  # For source release in v2.4+, exclude copy of binary license/notice
+  if [[ $SPARK_VERSION > "2.4" ]]; then
+    rm spark-$SPARK_VERSION/LICENSE-binary
+    rm spark-$SPARK_VERSION/NOTICE-binary
+    rm -r spark-$SPARK_VERSION/licenses-binary
+  fi
+
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
@@ -191,8 +192,18 @@ if [[ "$1" == "package" ]]; then
   make_binary_release() {
     NAME=$1
     FLAGS="$MVN_EXTRA_OPTS -B $BASE_RELEASE_PROFILES $2"
+    # BUILD_PACKAGE can be "withpip", "withr", or both as "withpip,withr"
     BUILD_PACKAGE=$3
     SCALA_VERSION=$4
+
+    PIP_FLAG=""
+    if [[ $BUILD_PACKAGE == *"withpip"* ]]; then
+      PIP_FLAG="--pip"
+    fi
+    R_FLAG=""
+    if [[ $BUILD_PACKAGE == *"withr"* ]]; then
+      R_FLAG="--r"
+    fi
 
     # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
     # share the same Zinc server.
@@ -202,9 +213,7 @@ if [[ "$1" == "package" ]]; then
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
     cd spark-$SPARK_VERSION-bin-$NAME
 
-    if [[ "$SCALA_VERSION" != "2.11" ]]; then
-      ./dev/change-scala-version.sh $SCALA_VERSION
-    fi
+    ./dev/change-scala-version.sh $SCALA_VERSION
 
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
@@ -217,18 +226,13 @@ if [[ "$1" == "package" ]]; then
     # Get maven home set by MVN
     MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
 
+    echo "Creating distribution"
+    ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz \
+      $PIP_FLAG $R_FLAG $FLAGS \
+      -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+    cd ..
 
-    if [ -z "$BUILD_PACKAGE" ]; then
-      echo "Creating distribution without PIP/R package"
-      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
-        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
-      cd ..
-    elif [[ "$BUILD_PACKAGE" == "withr" ]]; then
-      echo "Creating distribution with R package"
-      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --r $FLAGS \
-        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
-      cd ..
-
+    if [[ -n $R_FLAG ]]; then
       echo "Copying and signing R source package"
       R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
@@ -239,12 +243,9 @@ if [[ "$1" == "package" ]]; then
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
         SHA512 $R_DIST_NAME > \
         $R_DIST_NAME.sha512
-    else
-      echo "Creating distribution with PIP package"
-      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --pip $FLAGS \
-        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
-      cd ..
+    fi
 
+    if [[ -n $PIP_FLAG ]]; then
       echo "Copying and signing python distribution"
       PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
       cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
@@ -277,36 +278,33 @@ if [[ "$1" == "package" ]]; then
   declare -A BINARY_PKGS_ARGS
   BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   if ! is_dry_run; then
-    BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    if [[ $SPARK_VERSION < "2.2." ]]; then
-      BINARY_PKGS_ARGS["hadoop2.4"]="-Phadoop-2.4 $HIVE_PROFILES"
-      BINARY_PKGS_ARGS["hadoop2.3"]="-Phadoop-2.3 $HIVE_PROFILES"
+    if [[ $SPARK_VERSION < "3.0." ]]; then
+      BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     fi
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip"
-  if ! is_dry_run; then
-    BINARY_PKGS_EXTRA["hadoop2.6"]="withr"
-  fi
+  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip,withr"
 
-  echo "Packages to build: ${!BINARY_PKGS_ARGS[@]}"
-  for key in ${!BINARY_PKGS_ARGS[@]}; do
-    args=${BINARY_PKGS_ARGS[$key]}
-    extra=${BINARY_PKGS_EXTRA[$key]}
+  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
+    key="without-hadoop-scala-2.11"
+    args="-Phadoop-provided"
+    extra=""
     if ! make_binary_release "$key" "$SCALA_2_11_PROFILES $args" "$extra" "2.11"; then
       error "Failed to build $key package. Check logs for details."
     fi
-  done
+  fi
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
-    key="without-hadoop-scala-2.12"
-    args="-Phadoop-provided"
-    extra=""
-    if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
-      error "Failed to build $key package. Check logs for details."
-    fi
+    echo "Packages to build: ${!BINARY_PKGS_ARGS[@]}"
+    for key in ${!BINARY_PKGS_ARGS[@]}; do
+      args=${BINARY_PKGS_ARGS[$key]}
+      extra=${BINARY_PKGS_EXTRA[$key]}
+      if ! make_binary_release "$key" "$SCALA_2_12_PROFILES $args" "$extra" "2.12"; then
+        error "Failed to build $key package. Check logs for details."
+      fi
+    done
   fi
 
   rm -rf spark-$SPARK_VERSION-bin-*/
@@ -323,7 +321,7 @@ if [[ "$1" == "package" ]]; then
     svn add "svn-spark/${DEST_DIR_NAME}-bin"
 
     cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION"
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION" --no-auth-cache
     cd ..
     rm -rf svn-spark
   fi
@@ -351,7 +349,7 @@ if [[ "$1" == "docs" ]]; then
     svn add "svn-spark/${DEST_DIR_NAME}-docs"
 
     cd svn-spark
-    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs"
+    svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Apache Spark $SPARK_PACKAGE_VERSION docs" --no-auth-cache
     cd ..
     rm -rf svn-spark
   fi
@@ -381,13 +379,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES deploy
-  #./dev/change-scala-version.sh 2.12
-  #$MVN -DzincPort=$ZINC_PORT --settings $tmp_settings \
-  #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
-
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
 
   rm $tmp_settings
   cd ..
@@ -419,24 +411,19 @@ if [[ "$1" == "publish-release" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+  # TODO: revisit for Scala 2.13 support
 
-  if ! is_dry_run && [[ $PUBLISH_SCALA_2_10 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.10
-    $MVN -DzincPort=$((ZINC_PORT + 1)) -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
-      -DskipTests $PUBLISH_PROFILES $SCALA_2_10_PROFILES clean install
+  if ! is_dry_run && [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.11
+    $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests \
+      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   if ! is_dry_run && [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
-    $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -Dscala-2.12 \
-      -DskipTests $PUBLISH_PROFILES $SCALA_2_12_PROFILES clean install
+    $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
+      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
   fi
-
-  # Clean-up Zinc nailgun process
-  $LSOF -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
-
-  ./dev/change-scala-version.sh 2.11
 
   pushd $tmp_repo/org/apache/spark
 

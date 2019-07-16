@@ -17,6 +17,20 @@
 package org.apache.spark.deploy.k8s.integrationtest
 
 object TestConstants {
-  val MINIKUBE_TEST_BACKEND = "minikube"
-  val GCE_TEST_BACKEND = "gce"
+  val BACKEND_MINIKUBE = "minikube"
+  val BACKEND_DOCKER_FOR_DESKTOP = "docker-for-desktop"
+  val BACKEND_CLOUD = "cloud"
+
+  val CONFIG_KEY_DEPLOY_MODE = "spark.kubernetes.test.deployMode"
+  val CONFIG_KEY_KUBE_CONFIG_CONTEXT = "spark.kubernetes.test.kubeConfigContext"
+  val CONFIG_KEY_KUBE_MASTER_URL = "spark.kubernetes.test.master"
+  val CONFIG_KEY_KUBE_NAMESPACE = "spark.kubernetes.test.namespace"
+  val CONFIG_KEY_KUBE_SVC_ACCOUNT = "spark.kubernetes.test.serviceAccountName"
+  val CONFIG_KEY_IMAGE_JVM = "spark.kubernetes.test.jvmImage"
+  val CONFIG_KEY_IMAGE_PYTHON = "spark.kubernetes.test.pythonImage"
+  val CONFIG_KEY_IMAGE_R = "spark.kubernetes.test.rImage"
+  val CONFIG_KEY_IMAGE_TAG = "spark.kubernetes.test.imageTag"
+  val CONFIG_KEY_IMAGE_TAG_FILE = "spark.kubernetes.test.imageTagFile"
+  val CONFIG_KEY_IMAGE_REPO = "spark.kubernetes.test.imageRepo"
+  val CONFIG_KEY_UNPACK_DIR = "spark.kubernetes.test.unpackSparkDir"
 }

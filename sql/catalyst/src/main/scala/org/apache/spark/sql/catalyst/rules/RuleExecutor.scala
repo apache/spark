@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -67,6 +68,17 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected def isPlanIntegral(plan: TreeType): Boolean = true
 
   /**
+   * Executes the batches of rules defined by the subclass, and also tracks timing info for each
+   * rule using the provided tracker.
+   * @see [[execute]]
+   */
+  def executeAndTrack(plan: TreeType, tracker: QueryPlanningTracker): TreeType = {
+    QueryPlanningTracker.withTracker(tracker) {
+      execute(plan)
+    }
+  }
+
+  /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
    */
@@ -74,6 +86,14 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     var curPlan = plan
     val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
     val planChangeLogger = new PlanChangeLogger()
+    val tracker: Option[QueryPlanningTracker] = QueryPlanningTracker.get
+
+    // Run the structural integrity checker against the initial input
+    if (!isPlanIntegral(plan)) {
+      val message = "The structural integrity of the input plan is broken in " +
+        s"${this.getClass.getName.stripSuffix("$")}."
+      throw new TreeNodeException(plan, message, null)
+    }
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
@@ -88,14 +108,18 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val startTime = System.nanoTime()
             val result = rule(plan)
             val runTime = System.nanoTime() - startTime
+            val effective = !result.fastEquals(plan)
 
-            if (!result.fastEquals(plan)) {
+            if (effective) {
               queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
               queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
-              planChangeLogger.log(rule.ruleName, plan, result)
+              planChangeLogger.logRule(rule.ruleName, plan, result)
             }
             queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
             queryExecutionMetrics.incNumExecution(rule.ruleName)
+
+            // Record timing information using QueryPlanningTracker
+            tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
 
             // Run the structural integrity checker against the plan after each rule.
             if (!isPlanIntegral(result)) {
@@ -128,15 +152,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         lastPlan = curPlan
       }
 
-      if (!batchStartPlan.fastEquals(curPlan)) {
-        logDebug(
-          s"""
-            |=== Result of Batch ${batch.name} ===
-            |${sideBySide(batchStartPlan.treeString, curPlan.treeString).mkString("\n")}
-          """.stripMargin)
-      } else {
-        logTrace(s"Batch ${batch.name} has no effect.")
-      }
+      planChangeLogger.logBatch(batch.name, batchStartPlan, curPlan)
     }
 
     curPlan
@@ -148,21 +164,46 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
     private val logRules = SQLConf.get.optimizerPlanChangeRules.map(Utils.stringToSeq)
 
-    def log(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
+    private val logBatches = SQLConf.get.optimizerPlanChangeBatches.map(Utils.stringToSeq)
+
+    def logRule(ruleName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
       if (logRules.isEmpty || logRules.get.contains(ruleName)) {
-        lazy val message =
+        def message(): String = {
           s"""
              |=== Applying Rule ${ruleName} ===
              |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
            """.stripMargin
-        logLevel match {
-          case "TRACE" => logTrace(message)
-          case "DEBUG" => logDebug(message)
-          case "INFO" => logInfo(message)
-          case "WARN" => logWarning(message)
-          case "ERROR" => logError(message)
-          case _ => logTrace(message)
         }
+
+        logBasedOnLevel(message)
+      }
+    }
+
+    def logBatch(batchName: String, oldPlan: TreeType, newPlan: TreeType): Unit = {
+      if (logBatches.isEmpty || logBatches.get.contains(batchName)) {
+        def message(): String = {
+          if (!oldPlan.fastEquals(newPlan)) {
+            s"""
+               |=== Result of Batch ${batchName} ===
+               |${sideBySide(oldPlan.treeString, newPlan.treeString).mkString("\n")}
+          """.stripMargin
+          } else {
+            s"Batch ${batchName} has no effect."
+          }
+        }
+
+        logBasedOnLevel(message)
+      }
+    }
+
+    private def logBasedOnLevel(f: => String): Unit = {
+      logLevel match {
+        case "TRACE" => logTrace(f)
+        case "DEBUG" => logDebug(f)
+        case "INFO" => logInfo(f)
+        case "WARN" => logWarning(f)
+        case "ERROR" => logError(f)
+        case _ => logTrace(f)
       }
     }
   }

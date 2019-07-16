@@ -26,10 +26,10 @@ import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{AccumulableInfo => UIAccumulableInfo, StageData, StageStatus}
-import org.apache.spark.status.config._
 import org.apache.spark.ui.jobs.{ApiHelper, StagePage, StagesTab, TaskPagedTable}
 
 class StagePageSuite extends SparkFunSuite with LocalSparkContext {
@@ -51,23 +51,36 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         numKilledTasks = 1,
         numCompletedIndices = 1,
 
-        executorRunTime = 1L,
-        executorCpuTime = 1L,
         submissionTime = None,
         firstTaskLaunchedTime = None,
         completionTime = None,
         failureReason = None,
 
+        executorDeserializeTime = 1L,
+        executorDeserializeCpuTime = 1L,
+        executorRunTime = 1L,
+        executorCpuTime = 1L,
+        resultSize = 1L,
+        jvmGcTime = 1L,
+        resultSerializationTime = 1L,
+        memoryBytesSpilled = 1L,
+        diskBytesSpilled = 1L,
+        peakExecutionMemory = 1L,
         inputBytes = 1L,
         inputRecords = 1L,
         outputBytes = 1L,
         outputRecords = 1L,
+        shuffleRemoteBlocksFetched = 1L,
+        shuffleLocalBlocksFetched = 1L,
+        shuffleFetchWaitTime = 1L,
+        shuffleRemoteBytesRead = 1L,
+        shuffleRemoteBytesReadToDisk = 1L,
+        shuffleLocalBytesRead = 1L,
         shuffleReadBytes = 1L,
         shuffleReadRecords = 1L,
         shuffleWriteBytes = 1L,
+        shuffleWriteTime = 1L,
         shuffleWriteRecords = 1L,
-        memoryBytesSpilled = 1L,
-        diskBytesSpilled = 1L,
 
         name = "stage1",
         description = Some("description"),
@@ -94,18 +107,6 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
     } finally {
       statusStore.close()
     }
-  }
-
-  test("peak execution memory should displayed") {
-    val html = renderStagePage().toString().toLowerCase(Locale.ROOT)
-    val targetString = "peak execution memory"
-    assert(html.contains(targetString))
-  }
-
-  test("SPARK-10543: peak execution memory should be per-task rather than cumulative") {
-    val html = renderStagePage().toString().toLowerCase(Locale.ROOT)
-    // verify min/25/50/75/max show task value not cumulative values
-    assert(html.contains(s"<td>$peakExecutionMemory.0 b</td>" * 5))
   }
 
   /**

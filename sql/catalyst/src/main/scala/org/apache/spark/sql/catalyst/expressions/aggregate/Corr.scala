@@ -93,7 +93,13 @@ abstract class PearsonCorrelation(x: Expression, y: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.")
+  usage = "_FUNC_(expr1, expr2) - Returns Pearson coefficient of correlation between a set of number pairs.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(c1, c2) FROM VALUES (3, 2), (3, 3), (6, 4) as tab(c1, c2);
+       0.8660254037844387
+  """,
+  since = "1.6.0")
 // scalastyle:on line.size.limit
 case class Corr(x: Expression, y: Expression)
   extends PearsonCorrelation(x, y) {

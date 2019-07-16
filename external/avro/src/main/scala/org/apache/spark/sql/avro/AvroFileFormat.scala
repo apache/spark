@@ -23,11 +23,9 @@ import java.net.URI
 import scala.util.control.NonFatal
 
 import org.apache.avro.Schema
-import org.apache.avro.file.DataFileConstants._
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
-import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
-import org.apache.avro.mapreduce.AvroJob
+import org.apache.avro.mapred.FsInput
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
@@ -38,10 +36,10 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-private[avro] class AvroFileFormat extends FileFormat
+private[sql] class AvroFileFormat extends FileFormat
   with DataSourceRegister with Logging with Serializable {
 
   override def equals(other: Any): Boolean = other match {
@@ -56,51 +54,12 @@ private[avro] class AvroFileFormat extends FileFormat
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val conf = spark.sessionState.newHadoopConf()
-    val parsedOptions = new AvroOptions(options, conf)
-
-    // Schema evolution is not supported yet. Here we only pick a single random sample file to
-    // figure out the schema of the whole dataset.
-    val sampleFile =
-      if (parsedOptions.ignoreExtension) {
-        files.headOption.getOrElse {
-          throw new FileNotFoundException("Files for schema inferring have been not found.")
-        }
-      } else {
-        files.find(_.getPath.getName.endsWith(".avro")).getOrElse {
-          throw new FileNotFoundException(
-            "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
-        }
-      }
-
-    // User can specify an optional avro json schema.
-    val avroSchema = parsedOptions.schema
-      .map(new Schema.Parser().parse)
-      .getOrElse {
-        val in = new FsInput(sampleFile.getPath, conf)
-        try {
-          val reader = DataFileReader.openReader(in, new GenericDatumReader[GenericRecord]())
-          try {
-            reader.getSchema
-          } finally {
-            reader.close()
-          }
-        } finally {
-          in.close()
-        }
-      }
-
-    SchemaConverters.toSqlType(avroSchema).dataType match {
-      case t: StructType => Some(t)
-      case _ => throw new RuntimeException(
-        s"""Avro schema cannot be converted to a Spark SQL StructType:
-           |
-           |${avroSchema.toString(true)}
-           |""".stripMargin)
-    }
+    AvroUtils.inferSchema(spark, options, files)
   }
 
   override def shortName(): String = "avro"
+
+  override def toString(): String = "Avro"
 
   override def isSplitable(
       sparkSession: SparkSession,
@@ -112,32 +71,7 @@ private[avro] class AvroFileFormat extends FileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val parsedOptions = new AvroOptions(options, spark.sessionState.newHadoopConf())
-    val outputAvroSchema: Schema = parsedOptions.schema
-      .map(new Schema.Parser().parse)
-      .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
-        parsedOptions.recordName, parsedOptions.recordNamespace))
-
-    AvroJob.setOutputKeySchema(job, outputAvroSchema)
-
-    if (parsedOptions.compression == "uncompressed") {
-      job.getConfiguration.setBoolean("mapred.output.compress", false)
-    } else {
-      job.getConfiguration.setBoolean("mapred.output.compress", true)
-      logInfo(s"Compressing Avro output using the ${parsedOptions.compression} codec")
-      val codec = parsedOptions.compression match {
-        case DEFLATE_CODEC =>
-          val deflateLevel = spark.sessionState.conf.avroDeflateLevel
-          logInfo(s"Avro compression level $deflateLevel will be used for $DEFLATE_CODEC codec.")
-          job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
-          DEFLATE_CODEC
-        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => codec
-        case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
-      }
-      job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
-    }
-
-    new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
+    AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
   }
 
   override def buildReader(
@@ -221,6 +155,8 @@ private[avro] class AvroFileFormat extends FileFormat
       }
     }
   }
+
+  override def supportDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 }
 
 private[avro] object AvroFileFormat {

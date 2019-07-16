@@ -1,8 +1,8 @@
 Package: SparkR
 Type: Package
-Version: 2.5.0
-Title: R Frontend for Apache Spark
-Description: Provides an R Frontend for Apache Spark.
+Version: 3.0.0
+Title: R Front End for 'Apache Spark'
+Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
 Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "shivaram@cs.berkeley.edu"),
              person("Xiangrui", "Meng", role = "aut",
@@ -11,11 +11,11 @@ Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
                     email = "felixcheung@apache.org"),
              person(family = "The Apache Software Foundation", role = c("aut", "cph")))
 License: Apache License (== 2.0)
-URL: http://www.apache.org/ http://spark.apache.org/
-BugReports: http://spark.apache.org/contributing.html
+URL: https://www.apache.org/ https://spark.apache.org/
+BugReports: https://spark.apache.org/contributing.html
 SystemRequirements: Java (== 8)
 Depends:
-    R (>= 3.0),
+    R (>= 3.1),
     methods
 Suggests:
     knitr,

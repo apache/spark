@@ -36,6 +36,22 @@ import io.netty.util.internal.PlatformDependent;
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
  */
 public class NettyUtils {
+
+  /**
+   * Specifies an upper bound on the number of Netty threads that Spark requires by default.
+   * In practice, only 2-4 cores should be required to transfer roughly 10 Gb/s, and each core
+   * that we use will have an initial overhead of roughly 32 MB of off-heap memory, which comes
+   * at a premium.
+   *
+   * Thus, this value should still retain maximum throughput and reduce wasted off-heap memory
+   * allocation. It can be overridden by setting the number of serverThreads and clientThreads
+   * manually in Spark's configuration.
+   */
+  private static int MAX_DEFAULT_NETTY_THREADS = 8;
+
+  private static final PooledByteBufAllocator[] _sharedPooledByteBufAllocator =
+      new PooledByteBufAllocator[2];
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
@@ -93,6 +109,38 @@ public class NettyUtils {
       return channel.remoteAddress().toString();
     }
     return "<unknown remote>";
+  }
+
+  /**
+   * Returns the default number of threads for both the Netty client and server thread pools.
+   * If numUsableCores is 0, we will use Runtime get an approximate number of available cores.
+   */
+  public static int defaultNumThreads(int numUsableCores) {
+    final int availableCores;
+    if (numUsableCores > 0) {
+      availableCores = numUsableCores;
+    } else {
+      availableCores = Runtime.getRuntime().availableProcessors();
+    }
+    return Math.min(availableCores, MAX_DEFAULT_NETTY_THREADS);
+  }
+
+  /**
+   * Returns the lazily created shared pooled ByteBuf allocator for the specified allowCache
+   * parameter value.
+   */
+  public static synchronized PooledByteBufAllocator getSharedPooledByteBufAllocator(
+      boolean allowDirectBufs,
+      boolean allowCache) {
+    final int index = allowCache ? 0 : 1;
+    if (_sharedPooledByteBufAllocator[index] == null) {
+      _sharedPooledByteBufAllocator[index] =
+        createPooledByteBufAllocator(
+          allowDirectBufs,
+          allowCache,
+          defaultNumThreads(0));
+    }
+    return _sharedPooledByteBufAllocator[index];
   }
 
   /**

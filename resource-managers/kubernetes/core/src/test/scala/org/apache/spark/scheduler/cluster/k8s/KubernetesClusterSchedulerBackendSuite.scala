@@ -19,11 +19,11 @@ package org.apache.spark.scheduler.cluster.k8s
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.Matchers.{eq => mockitoEq}
+import org.mockito.ArgumentMatchers.{eq => mockitoEq}
 import org.mockito.Mockito.{never, verify, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
@@ -37,9 +37,13 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val requestExecutorsService = new DeterministicScheduler()
   private val sparkConf = new SparkConf(false)
     .set("spark.executor.instances", "3")
+    .set("spark.app.id", TEST_SPARK_APP_ID)
 
   @Mock
   private var sc: SparkContext = _
+
+  @Mock
+  private var env: SparkEnv = _
 
   @Mock
   private var rpcEnv: RpcEnv = _
@@ -81,23 +85,25 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     MockitoAnnotations.initMocks(this)
     when(taskScheduler.sc).thenReturn(sc)
     when(sc.conf).thenReturn(sparkConf)
+    when(sc.env).thenReturn(env)
+    when(env.rpcEnv).thenReturn(rpcEnv)
     driverEndpoint = ArgumentCaptor.forClass(classOf[RpcEndpoint])
-    when(rpcEnv.setupEndpoint(
-      mockitoEq(CoarseGrainedSchedulerBackend.ENDPOINT_NAME), driverEndpoint.capture()))
+    when(
+      rpcEnv.setupEndpoint(
+        mockitoEq(CoarseGrainedSchedulerBackend.ENDPOINT_NAME),
+        driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     schedulerBackendUnderTest = new KubernetesClusterSchedulerBackend(
       taskScheduler,
-      rpcEnv,
+      sc,
       kubernetesClient,
       requestExecutorsService,
       eventQueue,
       podAllocator,
       lifecycleEventHandler,
       watchEvents,
-      pollEvents) {
-      override def applicationId(): String = TEST_SPARK_APP_ID
-    }
+      pollEvents)
   }
 
   test("Start all components") {
@@ -122,8 +128,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   test("Remove executor") {
     schedulerBackendUnderTest.start()
-    schedulerBackendUnderTest.doRemoveExecutor(
-      "1", ExecutorKilled)
+    schedulerBackendUnderTest.doRemoveExecutor("1", ExecutorKilled)
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
   }
 

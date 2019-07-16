@@ -80,7 +80,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               logDebug("Fetching indirect task result for TID %s".format(tid))
               scheduler.handleTaskGettingResult(taskSetManager, tid)
               val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
-              if (!serializedTaskResult.isDefined) {
+              if (serializedTaskResult.isEmpty) {
                 /* We won't be able to get the task result if the machine that ran the task failed
                  * between when the task ended and when we tried to fetch the result, or if the
                  * block manager had to flush the result. */
@@ -128,33 +128,40 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     serializedData: ByteBuffer) {
     var reason : TaskFailedReason = UnknownReason
     try {
-      getTaskResultExecutor.execute(new Runnable {
-        override def run(): Unit = Utils.logUncaughtExceptions {
-          val loader = Utils.getContextOrSparkClassLoader
-          try {
-            if (serializedData != null && serializedData.limit() > 0) {
-              reason = serializer.get().deserialize[TaskFailedReason](
-                serializedData, loader)
-            }
-          } catch {
-            case cnd: ClassNotFoundException =>
-              // Log an error but keep going here -- the task failed, so not catastrophic
-              // if we can't deserialize the reason.
-              logError(
-                "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-            case ex: Exception => // No-op
-          } finally {
-            // If there's an error while deserializing the TaskEndReason, this Runnable
-            // will die. Still tell the scheduler about the task failure, to avoid a hang
-            // where the scheduler thinks the task is still running.
-            scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
+      getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
+        val loader = Utils.getContextOrSparkClassLoader
+        try {
+          if (serializedData != null && serializedData.limit() > 0) {
+            reason = serializer.get().deserialize[TaskFailedReason](
+              serializedData, loader)
           }
+        } catch {
+          case _: ClassNotFoundException =>
+            // Log an error but keep going here -- the task failed, so not catastrophic
+            // if we can't deserialize the reason.
+            logError(
+              "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
+          case _: Exception => // No-op
+        } finally {
+          // If there's an error while deserializing the TaskEndReason, this Runnable
+          // will die. Still tell the scheduler about the task failure, to avoid a hang
+          // where the scheduler thinks the task is still running.
+          scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
         }
       })
     } catch {
       case e: RejectedExecutionException if sparkEnv.isStopped =>
         // ignore it
     }
+  }
+
+  // This method calls `TaskSchedulerImpl.handlePartitionCompleted` asynchronously. We do not want
+  // DAGScheduler to call `TaskSchedulerImpl.handlePartitionCompleted` directly, as it's
+  // synchronized and may hurt the throughput of the scheduler.
+  def enqueuePartitionCompletionNotification(stageId: Int, partitionId: Int): Unit = {
+    getTaskResultExecutor.execute(() => Utils.logUncaughtExceptions {
+      scheduler.handlePartitionCompleted(stageId, partitionId)
+    })
   }
 
   def stop() {

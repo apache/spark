@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import scala.language.existentials
+import org.apache.spark.annotation.Evolving
 
-import org.apache.spark.annotation.InterfaceStability
-
-@InterfaceStability.Evolving
+@Evolving
 object ObjectType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType =
     throw new UnsupportedOperationException(
@@ -38,7 +36,7 @@ object ObjectType extends AbstractDataType {
 /**
  * Represents a JVM object that is passing through Spark SQL expression evaluation.
  */
-@InterfaceStability.Evolving
+@Evolving
 case class ObjectType(cls: Class[_]) extends DataType {
   override def defaultSize: Int = 4096
 

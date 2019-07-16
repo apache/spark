@@ -233,7 +233,7 @@ object CompressionSchemeBenchmark extends BenchmarkBase with AllCompressionSchem
     runDecodeBenchmark("STRING Decode", iters, count, STRING, testData)
   }
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Compression Scheme Benchmark") {
       bitEncodingBenchmark(1024)
       shortEncodingBenchmark(1024)

@@ -201,6 +201,7 @@ struct<>
 -- !query 20 output
 
 
+
 -- !query 21
 select transform_keys(ys, (k, v) -> k) as v from nested
 -- !query 21 schema

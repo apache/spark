@@ -65,8 +65,7 @@ class BlockManagerId private (
   def topologyInfo: Option[String] = topologyInfo_
 
   def isDriver: Boolean = {
-    executorId == SparkContext.DRIVER_IDENTIFIER ||
-      executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
+    executorId == SparkContext.DRIVER_IDENTIFIER
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {

@@ -18,51 +18,25 @@ package org.apache.spark.deploy.k8s.features
 
 import java.io.File
 
-import com.google.common.base.Charsets
-import com.google.common.io.{BaseEncoding, Files}
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder, Secret}
-import org.mockito.{Mock, MockitoAnnotations}
-import org.scalatest.BeforeAndAfter
 import scala.collection.JavaConverters._
 
+import com.google.common.base.Charsets
+import com.google.common.io.{BaseEncoding, Files}
+import io.fabric8.kubernetes.api.model.Secret
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
 
-class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
+class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite {
 
-  private val KUBERNETES_RESOURCE_NAME_PREFIX = "spark"
-  private val APP_ID = "k8s-app"
-  private var credentialsTempDirectory: File = _
+  private val credentialsTempDirectory = Utils.createTempDir()
   private val BASE_DRIVER_POD = SparkPod.initialPod()
 
-  @Mock
-  private var driverSpecificConf: KubernetesDriverSpecificConf = _
-
-  before {
-    MockitoAnnotations.initMocks(this)
-    credentialsTempDirectory = Utils.createTempDir()
-  }
-
-  after {
-    credentialsTempDirectory.delete()
-  }
-
   test("Don't set any credentials") {
-    val kubernetesConf = KubernetesConf(
-      new SparkConf(false),
-      driverSpecificConf,
-      KUBERNETES_RESOURCE_NAME_PREFIX,
-      APP_ID,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String])
+    val kubernetesConf = KubernetesTestConf.createDriverConf()
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
     assert(kubernetesCredentialsStep.getAdditionalPodSystemProperties().isEmpty)
@@ -83,19 +57,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       .set(
         s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
         "/mnt/secrets/my-ca.pem")
-    val kubernetesConf = KubernetesConf(
-      submissionSparkConf,
-      driverSpecificConf,
-      KUBERNETES_RESOURCE_NAME_PREFIX,
-      APP_ID,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String])
-
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     assert(kubernetesCredentialsStep.configurePod(BASE_DRIVER_POD) === BASE_DRIVER_POD)
     assert(kubernetesCredentialsStep.getAdditionalKubernetesResources().isEmpty)
@@ -122,18 +84,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       .set(
         s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
         caCertFile.getAbsolutePath)
-    val kubernetesConf = KubernetesConf(
-      submissionSparkConf,
-      driverSpecificConf,
-      KUBERNETES_RESOURCE_NAME_PREFIX,
-      APP_ID,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String])
+    val kubernetesConf = KubernetesTestConf.createDriverConf(sparkConf = submissionSparkConf)
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsFeatureStep(kubernetesConf)
     val resolvedProperties = kubernetesCredentialsStep.getAdditionalPodSystemProperties()
     val expectedSparkConf = Map(
@@ -153,7 +104,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       .head
       .asInstanceOf[Secret]
     assert(credentialsSecret.getMetadata.getName ===
-      s"$KUBERNETES_RESOURCE_NAME_PREFIX-kubernetes-credentials")
+      s"${kubernetesConf.resourceNamePrefix}-kubernetes-credentials")
     val decodedSecretData = credentialsSecret.getData.asScala.map { data =>
       (data._1, new String(BaseEncoding.base64().decode(data._2), Charsets.UTF_8))
     }

@@ -20,20 +20,18 @@ package org.apache.spark.sql.kafka010
 import java.io.{File, IOException}
 import java.lang.{Integer => JInt}
 import java.net.InetSocketAddress
-import java.util.{Map => JMap, Properties, UUID}
+import java.util.{Collections, Map => JMap, Properties, UUID}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
-import scala.language.postfixOps
 import scala.util.Random
 
-import kafka.admin.AdminUtils
 import kafka.api.Request
 import kafka.server.{KafkaConfig, KafkaServer}
 import kafka.server.checkpoints.OffsetCheckpointFile
 import kafka.utils.ZkUtils
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, NewPartitions}
+import org.apache.kafka.clients.admin.{AdminClient, CreatePartitionsOptions, ListConsumerGroupsResult, NewPartitions, NewTopic}
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
@@ -139,7 +137,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
 
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       assert(zkUtils.getAllBrokersInCluster().nonEmpty, "Broker was not up in 60 seconds")
     }
   }
@@ -195,7 +193,8 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     var created = false
     while (!created) {
       try {
-        AdminUtils.createTopic(zkUtils, topic, partitions, 1)
+        val newTopic = new NewTopic(topic, partitions, 1)
+        adminClient.createTopics(Collections.singleton(newTopic))
         created = true
       } catch {
         // Workaround fact that TopicExistsException is in kafka.common in 0.10.0 and
@@ -222,7 +221,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   /** Delete a Kafka topic and wait until it is propagated to the whole cluster */
   def deleteTopic(topic: String): Unit = {
     val partitions = zkUtils.getPartitionsForTopics(Seq(topic))(topic).size
-    AdminUtils.deleteTopic(zkUtils, topic)
+    adminClient.deleteTopics(Collections.singleton(topic))
     verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
   }
 
@@ -309,6 +308,10 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     kc.close()
     logInfo("Closed consumer to get latest offsets")
     offsets
+  }
+
+  def listConsumerGroups(): ListConsumerGroupsResult = {
+    adminClient.listConsumerGroups()
   }
 
   protected def brokerConfiguration: Properties = {
@@ -410,7 +413,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       topic: String,
       numPartitions: Int,
       servers: Seq[KafkaServer]) {
-    eventually(timeout(60.seconds), interval(200.millis)) {
+    eventually(timeout(1.minute), interval(200.milliseconds)) {
       try {
         verifyTopicDeletion(topic, numPartitions, servers)
       } catch {
@@ -418,14 +421,15 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
           // As pushing messages into Kafka updates Zookeeper asynchronously, there is a small
           // chance that a topic will be recreated after deletion due to the asynchronous update.
           // Hence, delete the topic and retry.
-          AdminUtils.deleteTopic(zkUtils, topic)
+          adminClient.deleteTopics(Collections.singleton(topic))
           throw e
       }
     }
   }
 
   private def waitUntilMetadataIsPropagated(topic: String, partition: Int): Unit = {
-    def isPropagated = server.apis.metadataCache.getPartitionInfo(topic, partition) match {
+    def isPropagated = server.dataPlaneRequestProcessor.metadataCache
+        .getPartitionInfo(topic, partition) match {
       case Some(partitionState) =>
         zkUtils.getLeaderForPartition(topic, partition).isDefined &&
           Request.isValidBrokerId(partitionState.basePartitionState.leader) &&
@@ -434,7 +438,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
       case _ =>
         false
     }
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       assert(isPropagated, s"Partition [$topic, $partition] metadata not propagated after timeout")
     }
   }
@@ -443,7 +447,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
    * Wait until the latest offset of the given `TopicPartition` is not less than `offset`.
    */
   def waitUntilOffsetAppears(topicPartition: TopicPartition, offset: Long): Unit = {
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       val currentOffset = getLatestOffsets(Set(topicPartition.topic)).get(topicPartition)
       assert(currentOffset.nonEmpty && currentOffset.get >= offset)
     }

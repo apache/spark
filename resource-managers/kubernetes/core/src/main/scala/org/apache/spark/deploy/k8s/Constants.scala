@@ -60,22 +60,55 @@ private[spark] object Constants {
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
+  val ENV_SPARK_USER = "SPARK_USER"
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
+  val ENV_HADOOP_TOKEN_FILE_LOCATION = "HADOOP_TOKEN_FILE_LOCATION"
 
   // BINDINGS
-  val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
-  val ENV_PYSPARK_FILES = "PYSPARK_FILES"
-  val ENV_PYSPARK_ARGS = "PYSPARK_APP_ARGS"
   val ENV_PYSPARK_MAJOR_PYTHON_VERSION = "PYSPARK_MAJOR_PYTHON_VERSION"
-  val ENV_R_PRIMARY = "R_PRIMARY"
-  val ENV_R_ARGS = "R_APP_ARGS"
+
+  // Pod spec templates
+  val EXECUTOR_POD_SPEC_TEMPLATE_FILE_NAME = "pod-spec-template.yml"
+  val EXECUTOR_POD_SPEC_TEMPLATE_MOUNTPATH = "/opt/spark/pod-template"
+  val POD_TEMPLATE_VOLUME = "pod-template-volume"
+  val POD_TEMPLATE_CONFIGMAP = "podspec-configmap"
+  val POD_TEMPLATE_KEY = "podspec-configmap-key"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"
-  val DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
+  val DEFAULT_DRIVER_CONTAINER_NAME = "spark-kubernetes-driver"
+  val DEFAULT_EXECUTOR_CONTAINER_NAME = "spark-kubernetes-executor"
   val MEMORY_OVERHEAD_MIN_MIB = 384L
+  val NON_JVM_MEMORY_OVERHEAD_FACTOR = 0.4d
+
+  // Hadoop Configuration
+  val HADOOP_CONF_VOLUME = "hadoop-properties"
+  val KRB_FILE_VOLUME = "krb5-file"
+  val HADOOP_CONF_DIR_PATH = "/opt/hadoop/conf"
+  val KRB_FILE_DIR_PATH = "/etc"
+  val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
+  val HADOOP_CONFIG_MAP_NAME =
+    "spark.kubernetes.executor.hadoopConfigMapName"
+
+  // Kerberos Configuration
+  val KERBEROS_DT_SECRET_NAME =
+    "spark.kubernetes.kerberos.dt-secret-name"
+  val KERBEROS_DT_SECRET_KEY =
+    "spark.kubernetes.kerberos.dt-secret-key"
+  val KERBEROS_SECRET_KEY = "hadoop-tokens"
+  val KERBEROS_KEYTAB_VOLUME = "kerberos-keytab"
+  val KERBEROS_KEYTAB_MOUNT_POINT = "/mnt/secrets/kerberos-keytab"
+
+  // Hadoop credentials secrets for the Spark app.
+  val SPARK_APP_HADOOP_CREDENTIALS_BASE_DIR = "/mnt/secrets/hadoop-credentials"
+  val SPARK_APP_HADOOP_SECRET_VOLUME_NAME = "hadoop-secret"
+
+  // Application resource types.
+  val APP_RESOURCE_TYPE_JAVA = "java"
+  val APP_RESOURCE_TYPE_PYTHON = "python"
+  val APP_RESOURCE_TYPE_R = "r"
 }

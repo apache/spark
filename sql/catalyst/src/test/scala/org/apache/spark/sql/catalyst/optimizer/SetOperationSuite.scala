@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, GreaterThan, GreaterThanOrEqual, If, Literal, ReplicateRows}
+import org.apache.spark.sql.catalyst.expressions.{And, GreaterThan, GreaterThanOrEqual, If, Literal, Rand, ReplicateRows}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -31,10 +31,10 @@ class SetOperationSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Union Pushdown", Once,
+      Batch("Union Pushdown", FixedPoint(5),
         CombineUnions,
         PushProjectionThroughUnion,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PruneFilters) :: Nil
   }
 
@@ -44,8 +44,8 @@ class SetOperationSuite extends PlanTest {
   val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
 
   test("union: combine unions into one unions") {
-    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation)
-    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation))
+    val unionQuery1 = Union(Union(testRelation, testRelation2), testRelation3)
+    val unionQuery2 = Union(testRelation, Union(testRelation2, testRelation3))
     val unionOptimized1 = Optimize.execute(unionQuery1.analyze)
     val unionOptimized2 = Optimize.execute(unionQuery2.analyze)
 
@@ -93,7 +93,7 @@ class SetOperationSuite extends PlanTest {
     val unionQuery1 = Distinct(Union(Distinct(Union(query1, query2)), query3)).analyze
     val optimized1 = Optimize.execute(unionQuery1)
     val distinctUnionCorrectAnswer1 =
-      Distinct(Union(query1 :: query2 :: query3 :: Nil)).analyze
+      Distinct(Union(query1 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer1, optimized1)
 
     //         query1
@@ -107,7 +107,7 @@ class SetOperationSuite extends PlanTest {
       Distinct(Union(query2, query3)))).analyze
     val optimized2 = Optimize.execute(unionQuery2)
     val distinctUnionCorrectAnswer2 =
-      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil)).analyze
+      Distinct(Union(query1 :: query2 :: query2 :: query3 :: Nil))
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 
@@ -195,5 +195,32 @@ class SetOperationSuite extends PlanTest {
         planFragment
       ))
     comparePlans(expectedPlan, rewrittenPlan)
+  }
+
+  test("SPARK-23356 union: expressions with literal in project list are pushed down") {
+    val unionQuery = testUnion.select(('a + 1).as("aa"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 1).as("aa")) ::
+        testRelation2.select(('d + 1).as("aa")) ::
+        testRelation3.select(('g + 1).as("aa")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: expressions in project list are pushed down") {
+    val unionQuery = testUnion.select(('a + 'b).as("ab"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 'b).as("ab")) ::
+        testRelation2.select(('d + 'e).as("ab")) ::
+        testRelation3.select(('g + 'h).as("ab")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: no pushdown for non-deterministic expression") {
+    val unionQuery = testUnion.select('a, Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer = unionQuery.analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.TaskContext
@@ -263,7 +265,7 @@ class SymmetricHashJoinStateManager(
   def metrics: StateStoreMetrics = {
     val keyToNumValuesMetrics = keyToNumValues.metrics
     val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
-    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase}: $desc"
+    def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase(Locale.ROOT)}: $desc"
 
     StateStoreMetrics(
       keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once

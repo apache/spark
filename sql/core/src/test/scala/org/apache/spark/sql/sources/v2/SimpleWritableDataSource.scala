@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import java.io.{BufferedReader, InputStreamReader, IOException}
-import java.util.Optional
+import java.util
 
 import scala.collection.JavaConverters._
 
@@ -26,32 +26,27 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A HDFS based transactional writable data source.
- * Each task writes data to `target/_temporary/queryId/$jobId-$partitionId-$attemptNumber`.
- * Each job moves files from `target/_temporary/queryId/` to `target`.
+ * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
+ * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
-class SimpleWritableDataSource extends DataSourceV2
-  with BatchReadSupportProvider
-  with BatchWriteSupportProvider
-  with SessionConfigSupport {
+class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
 
-  private val schema = new StructType().add("i", "long").add("j", "long")
+  private val tableSchema = new StructType().add("i", "long").add("j", "long")
 
   override def keyPrefix: String = "simpleWritableDataSource"
 
-  class ReadSupport(path: String, conf: Configuration) extends SimpleReadSupport {
-
-    override def fullSchema(): StructType = schema
-
-    override def planInputPartitions(config: ScanConfig): Array[InputPartition] = {
+  class MyScanBuilder(path: String, conf: Configuration) extends SimpleScanBuilder {
+    override def planInputPartitions(): Array[InputPartition] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
@@ -66,13 +61,43 @@ class SimpleWritableDataSource extends DataSourceV2
       }
     }
 
-    override def createReaderFactory(config: ScanConfig): PartitionReaderFactory = {
+    override def createReaderFactory(): PartitionReaderFactory = {
       val serializableConf = new SerializableConfiguration(conf)
       new CSVReaderFactory(serializableConf)
     }
+
+    override def readSchema(): StructType = tableSchema
   }
 
-  class WritSupport(queryId: String, path: String, conf: Configuration) extends BatchWriteSupport {
+  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsTruncate {
+    private var queryId: String = _
+    private var needTruncate = false
+
+    override def withQueryId(queryId: String): WriteBuilder = {
+      this.queryId = queryId
+      this
+    }
+
+    override def truncate(): WriteBuilder = {
+      this.needTruncate = true
+      this
+    }
+
+    override def buildForBatch(): BatchWrite = {
+      val hadoopPath = new Path(path)
+      val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+      val fs = hadoopPath.getFileSystem(hadoopConf)
+
+      if (needTruncate) {
+        fs.delete(hadoopPath, true)
+      }
+
+      val pathStr = hadoopPath.toUri.toString
+      new MyBatchWrite(queryId, pathStr, hadoopConf)
+    }
+  }
+
+  class MyBatchWrite(queryId: String, path: String, conf: Configuration) extends BatchWrite {
     override def createBatchWriterFactory(): DataWriterFactory = {
       SimpleCounter.resetCounter
       new CSVDataWriterFactory(path, queryId, new SerializableConfiguration(conf))
@@ -105,40 +130,28 @@ class SimpleWritableDataSource extends DataSourceV2
     }
   }
 
-  override def createBatchReadSupport(options: DataSourceOptions): BatchReadSupport = {
-    val path = new Path(options.get("path").get())
-    val conf = SparkContext.getActive.get.hadoopConfiguration
-    new ReadSupport(path.toUri.toString, conf)
+  class MyTable(options: CaseInsensitiveStringMap)
+    extends SimpleBatchTable with SupportsWrite {
+
+    private val path = options.get("path")
+    private val conf = SparkContext.getActive.get.hadoopConfiguration
+
+    override def schema(): StructType = tableSchema
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new MyScanBuilder(new Path(path).toUri.toString, conf)
+    }
+
+    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+      new MyWriteBuilder(path)
+    }
+
+    override def capabilities(): util.Set[TableCapability] =
+      Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
   }
 
-  override def createBatchWriteSupport(
-      queryId: String,
-      schema: StructType,
-      mode: SaveMode,
-      options: DataSourceOptions): Optional[BatchWriteSupport] = {
-    assert(DataType.equalsStructurally(schema.asNullable, this.schema.asNullable))
-    assert(!SparkContext.getActive.get.conf.getBoolean("spark.speculation", false))
-
-    val path = new Path(options.get("path").get())
-    val conf = SparkContext.getActive.get.hadoopConfiguration
-    val fs = path.getFileSystem(conf)
-
-    if (mode == SaveMode.ErrorIfExists) {
-      if (fs.exists(path)) {
-        throw new RuntimeException("data already exists.")
-      }
-    }
-    if (mode == SaveMode.Ignore) {
-      if (fs.exists(path)) {
-        return Optional.empty()
-      }
-    }
-    if (mode == SaveMode.Overwrite) {
-      fs.delete(path, true)
-    }
-
-    val pathStr = path.toUri.toString
-    Optional.of(new WritSupport(queryId, pathStr, conf))
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new MyTable(options)
   }
 }
 

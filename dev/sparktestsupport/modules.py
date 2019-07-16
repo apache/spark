@@ -252,24 +252,6 @@ streaming_kinesis_asl = Module(
 )
 
 
-streaming_kafka = Module(
-    name="streaming-kafka-0-8",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/kafka-0-8",
-        "external/kafka-0-8-assembly",
-    ],
-    build_profile_flags=[
-        "-Pkafka-0-8",
-    ],
-    environ={
-        "ENABLE_KAFKA_0_8_TESTS": "1"
-    },
-    sbt_test_goals=[
-        "streaming-kafka-0-8/test",
-    ]
-)
-
 streaming_kafka_0_10 = Module(
     name="streaming-kafka-0-10",
     dependencies=[streaming],
@@ -281,56 +263,6 @@ streaming_kafka_0_10 = Module(
     sbt_test_goals=[
         "streaming-kafka-0-10/test",
     ]
-)
-
-streaming_flume_sink = Module(
-    name="streaming-flume-sink",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume-sink",
-    ],
-    build_profile_flags=[
-        "-Pflume",
-    ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1"
-    },
-    sbt_test_goals=[
-        "streaming-flume-sink/test",
-    ]
-)
-
-
-streaming_flume = Module(
-    name="streaming-flume",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/flume",
-    ],
-    build_profile_flags=[
-        "-Pflume",
-    ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1"
-    },
-    sbt_test_goals=[
-        "streaming-flume/test",
-    ]
-)
-
-
-streaming_flume_assembly = Module(
-    name="streaming-flume-assembly",
-    dependencies=[streaming_flume, streaming_flume_sink],
-    source_file_regexes=[
-        "external/flume-assembly",
-    ],
-    build_profile_flags=[
-        "-Pflume",
-    ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1"
-    }
 )
 
 
@@ -378,6 +310,7 @@ pyspark_core = Module(
         "python/(?!pyspark/(ml|mllib|sql|streaming))"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.rdd",
         "pyspark.context",
         "pyspark.conf",
@@ -386,21 +319,34 @@ pyspark_core = Module(
         "pyspark.serializers",
         "pyspark.profiler",
         "pyspark.shuffle",
-        "pyspark.tests",
-        "pyspark.test_broadcast",
-        "pyspark.test_serializers",
         "pyspark.util",
+        # unittests
+        "pyspark.tests.test_appsubmit",
+        "pyspark.tests.test_broadcast",
+        "pyspark.tests.test_conf",
+        "pyspark.tests.test_context",
+        "pyspark.tests.test_daemon",
+        "pyspark.tests.test_join",
+        "pyspark.tests.test_profiler",
+        "pyspark.tests.test_rdd",
+        "pyspark.tests.test_readwrite",
+        "pyspark.tests.test_serializers",
+        "pyspark.tests.test_shuffle",
+        "pyspark.tests.test_taskcontext",
+        "pyspark.tests.test_util",
+        "pyspark.tests.test_worker",
     ]
 )
 
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, hive],
+    dependencies=[pyspark_core, hive, avro],
     source_file_regexes=[
         "python/pyspark/sql"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.sql.types",
         "pyspark.sql.context",
         "pyspark.sql.session",
@@ -414,7 +360,30 @@ pyspark_sql = Module(
         "pyspark.sql.streaming",
         "pyspark.sql.udf",
         "pyspark.sql.window",
-        "pyspark.sql.tests",
+        "pyspark.sql.avro.functions",
+        # unittests
+        "pyspark.sql.tests.test_appsubmit",
+        "pyspark.sql.tests.test_arrow",
+        "pyspark.sql.tests.test_catalog",
+        "pyspark.sql.tests.test_column",
+        "pyspark.sql.tests.test_conf",
+        "pyspark.sql.tests.test_context",
+        "pyspark.sql.tests.test_dataframe",
+        "pyspark.sql.tests.test_datasources",
+        "pyspark.sql.tests.test_functions",
+        "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_pandas_udf",
+        "pyspark.sql.tests.test_pandas_udf_grouped_agg",
+        "pyspark.sql.tests.test_pandas_udf_grouped_map",
+        "pyspark.sql.tests.test_pandas_udf_scalar",
+        "pyspark.sql.tests.test_pandas_udf_window",
+        "pyspark.sql.tests.test_readwriter",
+        "pyspark.sql.tests.test_serde",
+        "pyspark.sql.tests.test_session",
+        "pyspark.sql.tests.test_streaming",
+        "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_udf",
+        "pyspark.sql.tests.test_utils",
     ]
 )
 
@@ -424,20 +393,19 @@ pyspark_streaming = Module(
     dependencies=[
         pyspark_core,
         streaming,
-        streaming_kafka,
-        streaming_flume_assembly,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
         "python/pyspark/streaming"
     ],
-    environ={
-        "ENABLE_FLUME_TESTS": "1",
-        "ENABLE_KAFKA_0_8_TESTS": "1"
-    },
     python_test_goals=[
+        # doctests
         "pyspark.streaming.util",
-        "pyspark.streaming.tests",
+        # unittests
+        "pyspark.streaming.tests.test_context",
+        "pyspark.streaming.tests.test_dstream",
+        "pyspark.streaming.tests.test_kinesis",
+        "pyspark.streaming.tests.test_listener",
     ]
 )
 
@@ -449,6 +417,7 @@ pyspark_mllib = Module(
         "python/pyspark/mllib"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.mllib.classification",
         "pyspark.mllib.clustering",
         "pyspark.mllib.evaluation",
@@ -463,7 +432,13 @@ pyspark_mllib = Module(
         "pyspark.mllib.stat.KernelDensity",
         "pyspark.mllib.tree",
         "pyspark.mllib.util",
-        "pyspark.mllib.tests",
+        # unittests
+        "pyspark.mllib.tests.test_algorithms",
+        "pyspark.mllib.tests.test_feature",
+        "pyspark.mllib.tests.test_linalg",
+        "pyspark.mllib.tests.test_stat",
+        "pyspark.mllib.tests.test_streaming_algorithms",
+        "pyspark.mllib.tests.test_util",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -478,6 +453,7 @@ pyspark_ml = Module(
         "python/pyspark/ml/"
     ],
     python_test_goals=[
+        # doctests
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
         "pyspark.ml.evaluation",
@@ -489,7 +465,20 @@ pyspark_ml = Module(
         "pyspark.ml.regression",
         "pyspark.ml.stat",
         "pyspark.ml.tuning",
-        "pyspark.ml.tests",
+        # unittests
+        "pyspark.ml.tests.test_algorithms",
+        "pyspark.ml.tests.test_base",
+        "pyspark.ml.tests.test_evaluation",
+        "pyspark.ml.tests.test_feature",
+        "pyspark.ml.tests.test_image",
+        "pyspark.ml.tests.test_linalg",
+        "pyspark.ml.tests.test_param",
+        "pyspark.ml.tests.test_persistence",
+        "pyspark.ml.tests.test_pipeline",
+        "pyspark.ml.tests.test_stat",
+        "pyspark.ml.tests.test_training_summary",
+        "pyspark.ml.tests.test_tuning",
+        "pyspark.ml.tests.test_wrapper",
     ],
     blacklisted_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
@@ -555,6 +544,23 @@ kubernetes = Module(
     source_file_regexes=["resource-managers/kubernetes"],
     build_profile_flags=["-Pkubernetes"],
     sbt_test_goals=["kubernetes/test"]
+)
+
+hadoop_cloud = Module(
+    name="hadoop-cloud",
+    dependencies=[],
+    source_file_regexes=["hadoop-cloud"],
+    build_profile_flags=["-Phadoop-cloud"],
+    sbt_test_goals=["hadoop-cloud/test"]
+)
+
+spark_ganglia_lgpl = Module(
+    name="spark-ganglia-lgpl",
+    dependencies=[],
+    build_profile_flags=["-Pspark-ganglia-lgpl"],
+    source_file_regexes=[
+        "external/spark-ganglia-lgpl",
+    ]
 )
 
 # The root module is a dummy module which is used to run all of the tests.

@@ -18,13 +18,10 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import scala.collection.JavaConverters._
-
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
+import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 
-import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
@@ -50,9 +47,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   // start timer for periodic logging
   private val scheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("logging-pod-status-watcher")
-  private val logRunnable: Runnable = new Runnable {
-    override def run() = logShortStatus()
-  }
+  private val logRunnable: Runnable = () => logShortStatus()
 
   private var pod = Option.empty[Pod]
 

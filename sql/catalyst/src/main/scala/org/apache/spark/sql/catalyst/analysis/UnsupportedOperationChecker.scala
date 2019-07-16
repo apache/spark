@@ -229,16 +229,15 @@ object UnsupportedOperationChecker {
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case Join(left, right, joinType, condition) =>
+        case Join(left, right, joinType, condition, _) =>
+          if (left.isStreaming && right.isStreaming && outputMode != InternalOutputModes.Append) {
+            throwError("Join between two streaming DataFrames/Datasets is not supported" +
+              s" in ${outputMode} output mode, only in Append output mode")
+          }
 
           joinType match {
-
             case _: InnerLike =>
-              if (left.isStreaming && right.isStreaming &&
-                outputMode != InternalOutputModes.Append) {
-                throwError("Inner join between two streaming DataFrames/Datasets is not supported" +
-                  s" in ${outputMode} output mode, only in Append output mode")
-              }
+              // no further validations needed
 
             case FullOuter =>
               if (left.isStreaming || right.isStreaming) {

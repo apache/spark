@@ -255,4 +255,17 @@ class OpenHashSetSuite extends SparkFunSuite with Matchers {
     val set = new OpenHashSet[Long](0)
     assert(set.size === 0)
   }
+
+  test("support for more than 12M items") {
+    val cnt = 12000000 // 12M
+    val set = new OpenHashSet[Int](cnt)
+    for (i <- 0 until cnt) {
+      set.add(i)
+      assert(set.contains(i))
+
+      val pos1 = set.getPos(i)
+      val pos2 = set.addWithoutResize(i) & OpenHashSet.POSITION_MASK
+      assert(pos1 == pos2)
+    }
+  }
 }

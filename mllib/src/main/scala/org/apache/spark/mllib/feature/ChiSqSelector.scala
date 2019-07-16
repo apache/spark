@@ -75,46 +75,52 @@ class ChiSqSelectorModel @Since("1.3.0") (
   private def compress(features: Vector): Vector = {
     features match {
       case SparseVector(size, indices, values) =>
-        val newSize = filterIndices.length
-        val newValues = new ArrayBuilder.ofDouble
-        val newIndices = new ArrayBuilder.ofInt
-        var i = 0
-        var j = 0
-        var indicesIdx = 0
-        var filterIndicesIdx = 0
-        while (i < indices.length && j < filterIndices.length) {
-          indicesIdx = indices(i)
-          filterIndicesIdx = filterIndices(j)
-          if (indicesIdx == filterIndicesIdx) {
-            newIndices += j
-            newValues += values(i)
-            j += 1
-            i += 1
-          } else {
-            if (indicesIdx > filterIndicesIdx) {
-              j += 1
-            } else {
-              i += 1
-            }
-          }
-        }
-        // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
-        Vectors.sparse(newSize, newIndices.result(), newValues.result())
+        val (newIndices, newValues) = compressSparse(indices, values)
+        Vectors.sparse(filterIndices.length, newIndices, newValues)
       case DenseVector(values) =>
-        val values = features.toArray
-        Vectors.dense(filterIndices.map(i => values(i)))
+        Vectors.dense(compressDense(values))
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
     }
   }
 
+  private[spark] def compressSparse(indices: Array[Int],
+                                    values: Array[Double]): (Array[Int], Array[Double]) = {
+    val newValues = new ArrayBuilder.ofDouble
+    val newIndices = new ArrayBuilder.ofInt
+    var i = 0
+    var j = 0
+    var indicesIdx = 0
+    var filterIndicesIdx = 0
+    while (i < indices.length && j < filterIndices.length) {
+      indicesIdx = indices(i)
+      filterIndicesIdx = filterIndices(j)
+      if (indicesIdx == filterIndicesIdx) {
+        newIndices += j
+        newValues += values(i)
+        j += 1
+        i += 1
+      } else {
+        if (indicesIdx > filterIndicesIdx) {
+          j += 1
+        } else {
+          i += 1
+        }
+      }
+    }
+    // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
+    (newIndices.result(), newValues.result())
+  }
+
+  private[spark] def compressDense(values: Array[Double]): Array[Double] = {
+    filterIndices.map(i => values(i))
+  }
+
   @Since("1.6.0")
   override def save(sc: SparkContext, path: String): Unit = {
     ChiSqSelectorModel.SaveLoadV1_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {

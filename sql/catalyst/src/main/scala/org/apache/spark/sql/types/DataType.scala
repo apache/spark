@@ -26,7 +26,7 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 abstract class DataType extends AbstractDataType {
   /**
    * Enables matching against DataType for expressions:
@@ -111,7 +111,7 @@ abstract class DataType extends AbstractDataType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object DataType {
 
   private val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
@@ -180,7 +180,7 @@ object DataType {
     ("pyClass", _),
     ("sqlType", _),
     ("type", JString("udt"))) =>
-      Utils.classForName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
+      Utils.classForName[UserDefinedType[_]](udtClass).getConstructor().newInstance()
 
     // Python UDT
     case JSortedObject(
@@ -353,10 +353,9 @@ object DataType {
    *   compatible (read allows nulls or write does not contain nulls).
    * - Both types are maps and the map key and value types are compatible, and value nullability
    *   is compatible  (read allows nulls or write does not contain nulls).
-   * - Both types are structs and each field in the read struct is present in the write struct and
-   *   compatible (including nullability), or is nullable if the write struct does not contain the
-   *   field. Write-side structs are not compatible if they contain fields that are not present in
-   *   the read-side struct.
+   * - Both types are structs and have the same number of fields. The type and nullability of each
+   *   field from read/write is compatible. If byName is true, the name of each field from
+   *   read/write needs to be the same.
    * - Both types are atomic and the write type can be safely cast to the read type.
    *
    * Extra fields in write-side structs are not allowed to avoid accidentally writing data that
@@ -369,14 +368,15 @@ object DataType {
   def canWrite(
       write: DataType,
       read: DataType,
+      byName: Boolean,
       resolver: Resolver,
       context: String,
-      addError: String => Unit = (_: String) => {}): Boolean = {
+      addError: String => Unit): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
-        val typesCompatible =
-          canWrite(wArr.elementType, rArr.elementType, resolver, context + ".element", addError)
+        val typesCompatible = canWrite(
+          wArr.elementType, rArr.elementType, byName, resolver, context + ".element", addError)
 
         if (wArr.containsNull && !rArr.containsNull) {
           addError(s"Cannot write nullable elements to array of non-nulls: '$context'")
@@ -390,31 +390,30 @@ object DataType {
         // read. map keys can be missing fields as long as they are nullable in the read schema.
 
         // run compatibility check first to produce all error messages
-        val keyCompatible =
-          canWrite(wMap.keyType, rMap.keyType, resolver, context + ".key", addError)
-        val valueCompatible =
-          canWrite(wMap.valueType, rMap.valueType, resolver, context + ".value", addError)
-        val typesCompatible = keyCompatible && valueCompatible
+        val keyCompatible = canWrite(
+          wMap.keyType, rMap.keyType, byName, resolver, context + ".key", addError)
+        val valueCompatible = canWrite(
+          wMap.valueType, rMap.valueType, byName, resolver, context + ".value", addError)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
           addError(s"Cannot write nullable values to map of non-nulls: '$context'")
           false
         } else {
-          typesCompatible
+          keyCompatible && valueCompatible
         }
 
       case (StructType(writeFields), StructType(readFields)) =>
         var fieldCompatible = true
-        readFields.zip(writeFields).foreach {
-          case (rField, wField) =>
-            val namesMatch = resolver(wField.name, rField.name) || isSparkGeneratedName(wField.name)
+        readFields.zip(writeFields).zipWithIndex.foreach {
+          case ((rField, wField), i) =>
+            val nameMatch = resolver(wField.name, rField.name) || isSparkGeneratedName(wField.name)
             val fieldContext = s"$context.${rField.name}"
-            val typesCompatible =
-              canWrite(wField.dataType, rField.dataType, resolver, fieldContext, addError)
+            val typesCompatible = canWrite(
+              wField.dataType, rField.dataType, byName, resolver, fieldContext, addError)
 
-            if (!namesMatch) {
-              addError(s"Struct '$context' field name does not match (may be out of order): " +
-                  s"expected '${rField.name}', found '${wField.name}'")
+            if (byName && !nameMatch) {
+              addError(s"Struct '$context' $i-th field name does not match " +
+                s"(may be out of order): expected '${rField.name}', found '${wField.name}'")
               fieldCompatible = false
             } else if (!rField.nullable && wField.nullable) {
               addError(s"Cannot write nullable values to non-null field: '$fieldContext'")
@@ -427,7 +426,7 @@ object DataType {
 
         if (readFields.size > writeFields.size) {
           val missingFieldsStr = readFields.takeRight(readFields.size - writeFields.size)
-                  .map(f => s"'${f.name}'").mkString(", ")
+            .map(f => s"'${f.name}'").mkString(", ")
           if (missingFieldsStr.nonEmpty) {
             addError(s"Struct '$context' missing fields: $missingFieldsStr")
             fieldCompatible = false
@@ -435,7 +434,7 @@ object DataType {
 
         } else if (writeFields.size > readFields.size) {
           val extraFieldsStr = writeFields.takeRight(writeFields.size - readFields.size)
-              .map(f => s"'${f.name}'").mkString(", ")
+            .map(f => s"'${f.name}'").mkString(", ")
           addError(s"Cannot write extra fields to struct '$context': $extraFieldsStr")
           fieldCompatible = false
         }
@@ -443,7 +442,7 @@ object DataType {
         fieldCompatible
 
       case (w: AtomicType, r: AtomicType) =>
-        if (!Cast.canSafeCast(w, r)) {
+        if (!Cast.canUpCast(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")
           false
         } else {

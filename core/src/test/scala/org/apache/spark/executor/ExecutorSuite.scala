@@ -21,34 +21,40 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.Properties
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.immutable
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
-import org.mockito.Matchers.{any, eq => meq}
+import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.memory.MemoryManager
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
+import org.apache.spark.memory.TestMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcTimeout}
+import org.apache.spark.scheduler.{FakeTask, ResultTask, Task, TaskDescription}
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.UninterruptibleThread
+import org.apache.spark.storage.{BlockManager, BlockManagerId}
+import org.apache.spark.util.{LongAccumulator, UninterruptibleThread}
 
-class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
+class ExecutorSuite extends SparkFunSuite
+    with LocalSparkContext with MockitoSugar with Eventually with PrivateMethodTester {
 
   test("SPARK-15963: Catch `TaskKilledException` correctly in Executor.TaskRunner") {
     // mock some objects to make Executor.launchTask() happy
@@ -165,7 +171,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("executor thread test")
-      .set("spark.ui.enabled", "false")
+      .set(UI_ENABLED.key, "false")
     sc = new SparkContext(conf)
     val executorThread = sc.parallelize(Seq(1), 1).map { _ =>
       Thread.currentThread.getClass.getName
@@ -252,18 +258,104 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     }
   }
 
+  test("Heartbeat should drop zero accumulator updates") {
+    heartbeatZeroAccumulatorUpdateTest(true)
+  }
+
+  test("Heartbeat should not drop zero accumulator updates when the conf is disabled") {
+    heartbeatZeroAccumulatorUpdateTest(false)
+  }
+
+  private def withHeartbeatExecutor(confs: (String, String)*)
+      (f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
+    val conf = new SparkConf
+    confs.foreach { case (k, v) => conf.set(k, v) }
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val executor =
+      new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true)
+    val executorClass = classOf[Executor]
+
+    // Save all heartbeats sent into an ArrayBuffer for verification
+    val heartbeats = ArrayBuffer[Heartbeat]()
+    val mockReceiver = mock[RpcEndpointRef]
+    when(mockReceiver.askSync(any[Heartbeat], any[RpcTimeout])(any))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val args = invocation.getArguments()
+        heartbeats += args(0).asInstanceOf[Heartbeat]
+        HeartbeatResponse(false)
+      })
+    val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
+    receiverRef.setAccessible(true)
+    receiverRef.set(executor, mockReceiver)
+
+    f(executor, heartbeats)
+  }
+
+  private def heartbeatZeroAccumulatorUpdateTest(dropZeroMetrics: Boolean): Unit = {
+    val c = EXECUTOR_HEARTBEAT_DROP_ZERO_ACCUMULATOR_UPDATES.key -> dropZeroMetrics.toString
+    withHeartbeatExecutor(c) { (executor, heartbeats) =>
+      val reportHeartbeat = PrivateMethod[Unit]('reportHeartBeat)
+
+      // When no tasks are running, there should be no accumulators sent in heartbeat
+      executor.invokePrivate(reportHeartbeat())
+      // invokeReportHeartbeat(executor)
+      assert(heartbeats.length == 1)
+      assert(heartbeats(0).accumUpdates.length == 0,
+        "No updates should be sent when no tasks are running")
+
+      // When we start a task with a nonzero accumulator, that should end up in the heartbeat
+      val metrics = new TaskMetrics()
+      val nonZeroAccumulator = new LongAccumulator()
+      nonZeroAccumulator.add(1)
+      metrics.registerAccumulator(nonZeroAccumulator)
+
+      val executorClass = classOf[Executor]
+      val tasksMap = {
+        val field =
+          executorClass.getDeclaredField("org$apache$spark$executor$Executor$$runningTasks")
+        field.setAccessible(true)
+        field.get(executor).asInstanceOf[ConcurrentHashMap[Long, executor.TaskRunner]]
+      }
+      val mockTaskRunner = mock[executor.TaskRunner]
+      val mockTask = mock[Task[Any]]
+      when(mockTask.metrics).thenReturn(metrics)
+      when(mockTaskRunner.taskId).thenReturn(6)
+      when(mockTaskRunner.task).thenReturn(mockTask)
+      when(mockTaskRunner.startGCTime).thenReturn(1)
+      tasksMap.put(6, mockTaskRunner)
+
+      executor.invokePrivate(reportHeartbeat())
+      assert(heartbeats.length == 2)
+      val updates = heartbeats(1).accumUpdates
+      assert(updates.length == 1 && updates(0)._1 == 6,
+        "Heartbeat should only send update for the one task running")
+      val accumsSent = updates(0)._2.length
+      assert(accumsSent > 0, "The nonzero accumulator we added should be sent")
+      if (dropZeroMetrics) {
+        assert(accumsSent == metrics.accumulators().count(!_.isZero),
+          "The number of accumulators sent should match the number of nonzero accumulators")
+      } else {
+        assert(accumsSent == metrics.accumulators().length,
+          "The number of accumulators sent should match the number of total accumulators")
+      }
+    }
+  }
+
   private def createMockEnv(conf: SparkConf, serializer: JavaSerializer): SparkEnv = {
     val mockEnv = mock[SparkEnv]
     val mockRpcEnv = mock[RpcEnv]
     val mockMetricsSystem = mock[MetricsSystem]
-    val mockMemoryManager = mock[MemoryManager]
+    val mockBlockManager = mock[BlockManager]
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
     when(mockEnv.serializerManager).thenReturn(mock[SerializerManager])
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
-    when(mockEnv.memoryManager).thenReturn(mockMemoryManager)
+    when(mockEnv.memoryManager).thenReturn(new TestMemoryManager(conf))
     when(mockEnv.closureSerializer).thenReturn(serializer)
+    when(mockBlockManager.blockManagerId).thenReturn(BlockManagerId("1", "hostA", 1234))
+    when(mockEnv.blockManager).thenReturn(mockBlockManager)
     SparkEnv.set(mockEnv)
     mockEnv
   }
@@ -279,6 +371,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       addedFiles = Map[String, Long](),
       addedJars = Map[String, Long](),
       properties = new Properties,
+      resources = immutable.Map[String, ResourceInformation](),
       serializedTask)
   }
 
@@ -374,7 +467,9 @@ class FetchFailureHidingRDD(
     } catch {
       case t: Throwable =>
         if (throwOOM) {
+          // scalastyle:off throwerror
           throw new OutOfMemoryError("OOM while handling another exception")
+          // scalastyle:on throwerror
         } else if (interrupt) {
           // make sure our test is setup correctly
           assert(TaskContext.get().asInstanceOf[TaskContextImpl].fetchFailed.isDefined)

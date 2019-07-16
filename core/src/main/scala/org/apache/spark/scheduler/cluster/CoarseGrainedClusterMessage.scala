@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
 import org.apache.spark.util.SerializableBuffer
@@ -63,17 +64,24 @@ private[spark] object CoarseGrainedClusterMessages {
       executorRef: RpcEndpointRef,
       hostname: String,
       cores: Int,
-      logUrls: Map[String, String])
+      logUrls: Map[String, String],
+      attributes: Map[String, String],
+      resources: Map[String, ResourceInformation])
     extends CoarseGrainedClusterMessage
 
-  case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
-    data: SerializableBuffer) extends CoarseGrainedClusterMessage
+  case class StatusUpdate(
+      executorId: String,
+      taskId: Long,
+      state: TaskState,
+      data: SerializableBuffer,
+      resources: Map[String, ResourceInformation] = Map.empty)
+    extends CoarseGrainedClusterMessage
 
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
-    def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer)
-      : StatusUpdate = {
-      StatusUpdate(executorId, taskId, state, new SerializableBuffer(data))
+    def apply(executorId: String, taskId: Long, state: TaskState, data: ByteBuffer,
+        resources: Map[String, ResourceInformation]): StatusUpdate = {
+      StatusUpdate(executorId, taskId, state, new SerializableBuffer(data), resources)
     }
   }
 
@@ -103,6 +111,9 @@ private[spark] object CoarseGrainedClusterMessages {
   // In Yarn mode, these are exchanged between the driver and the AM
 
   case class RegisterClusterManager(am: RpcEndpointRef) extends CoarseGrainedClusterMessage
+
+  // Used by YARN's client mode AM to retrieve the current set of delegation tokens.
+  object RetrieveDelegationTokens extends CoarseGrainedClusterMessage
 
   // Request executors by specifying the new total number of executors desired
   // This includes executors already pending or running

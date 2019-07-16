@@ -229,6 +229,18 @@ gapplyInternal <- function(x, func, schema) {
   if (is.character(schema)) {
     schema <- structType(schema)
   }
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
+  if (arrowEnabled) {
+    if (inherits(schema, "structType")) {
+      checkSchemaInArrow(schema)
+    } else if (is.null(schema)) {
+      stop(paste0("Arrow optimization does not support 'gapplyCollect' yet. Please disable ",
+                  "Arrow optimization or use 'collect' and 'gapply' APIs instead."))
+    } else {
+      stop("'schema' should be DDL-formatted string or structType.")
+    }
+  }
+
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),

@@ -18,41 +18,45 @@
 package org.apache.spark.repl
 
 import java.io._
-import java.net.URLClassLoader
 
-import scala.collection.mutable.ArrayBuffer
 import scala.tools.nsc.interpreter.SimpleReader
 
 import org.apache.log4j.{Level, LogManager}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class ReplSuite extends SparkFunSuite {
+class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
+
+  private var originalClassLoader: ClassLoader = null
+
+  override def beforeAll(): Unit = {
+    originalClassLoader = Thread.currentThread().getContextClassLoader
+  }
+
+  override def afterAll(): Unit = {
+    if (originalClassLoader != null) {
+      // Reset the class loader to not affect other suites. REPL will set its own class loader but
+      // doesn't reset it.
+      Thread.currentThread().setContextClassLoader(originalClassLoader)
+    }
+  }
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
 
-    val in = new BufferedReader(new StringReader(input + "\n"))
-    val out = new StringWriter()
-    val cl = getClass.getClassLoader
-    var paths = new ArrayBuffer[String]
-    if (cl.isInstanceOf[URLClassLoader]) {
-      val urlLoader = cl.asInstanceOf[URLClassLoader]
-      for (url <- urlLoader.getURLs) {
-        if (url.getProtocol == "file") {
-          paths += url.getFile
-        }
-      }
-    }
-    val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
-
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
+    val classpath = System.getProperty("java.class.path")
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+
     Main.sparkContext = null
     Main.sparkSession = null // causes recreation of SparkContext for each test.
     Main.conf.set("spark.master", master)
+
+    val in = new BufferedReader(new StringReader(input + "\n"))
+    val out = new StringWriter()
     Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
     if (oldExecutorClasspath != null) {
@@ -60,7 +64,8 @@ class ReplSuite extends SparkFunSuite {
     } else {
       System.clearProperty(CONF_EXECUTOR_CLASSPATH)
     }
-    return out.toString
+
+    out.toString
   }
 
   // Simulate the paste mode in Scala REPL.
@@ -258,6 +263,38 @@ class ReplSuite extends SparkFunSuite {
         |s"!!$b!!"
       """.stripMargin)
     assertContains("!!2!!", output2)
+  }
+
+  test("SPARK-26633: ExecutorClassLoader.getResourceAsStream find REPL classes") {
+    val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
+      """
+        |case class TestClass(value: Int)
+        |
+        |sc.parallelize(1 to 1).map { _ =>
+        |  val clz = classOf[TestClass]
+        |  val name = clz.getName.replace('.', '/') + ".class";
+        |  val stream = clz.getClassLoader.getResourceAsStream(name)
+        |  if (stream == null) {
+        |    "failed: stream is null"
+        |  } else {
+        |    val magic = new Array[Byte](4)
+        |    try {
+        |      stream.read(magic)
+        |      // the magic number of a Java Class file
+        |      val expected = Array[Byte](0xCA.toByte, 0xFE.toByte, 0xBA.toByte, 0xBE.toByte)
+        |      if (magic sameElements expected) {
+        |        "successful"
+        |      } else {
+        |        "failed: unexpected contents from stream"
+        |      }
+        |    } finally {
+        |      stream.close()
+        |    }
+        |  }
+        |}.collect()
+      """.stripMargin)
+    assertDoesNotContain("failed", output)
+    assertContains("successful", output)
   }
 
 }

@@ -18,18 +18,20 @@ package org.apache.spark.deploy.k8s.submit
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
+import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{doReturn, verify, when}
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mockito.MockitoSugar._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, SparkPod}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   private val DRIVER_POD_UID = "pod-id"
   private val DRIVER_POD_API_VERSION = "v1"
@@ -37,10 +39,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val KUBERNETES_RESOURCE_PREFIX = "resource-example"
   private val POD_NAME = "driver"
   private val CONTAINER_NAME = "container"
-  private val APP_ID = "app-id"
-  private val APP_NAME = "app"
-  private val MAIN_CLASS = "main"
-  private val APP_ARGS = Seq("arg1", "arg2")
   private val RESOLVED_JAVA_OPTIONS = Map(
     "conf1key" -> "conf1value",
     "conf2key" -> "conf2value")
@@ -122,28 +120,15 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var resourceList: RESOURCE_LIST = _
 
-  private var kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf] = _
-
-  private var sparkConf: SparkConf = _
+  private var kconf: KubernetesDriverConf = _
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
 
   before {
     MockitoAnnotations.initMocks(this)
-    sparkConf = new SparkConf(false)
-    kubernetesConf = KubernetesConf[KubernetesDriverSpecificConf](
-      sparkConf,
-      KubernetesDriverSpecificConf(None, MAIN_CLASS, APP_NAME, APP_ARGS),
-      KUBERNETES_RESOURCE_PREFIX,
-      APP_ID,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String])
-    when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
+    kconf = KubernetesTestConf.createDriverConf(
+      resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(POD_NAME)).thenReturn(namedPods)
 
@@ -158,26 +143,22 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("The client should configure the pod using the builder.") {
     val submissionClient = new Client(
+      kconf,
       driverBuilder,
-      kubernetesConf,
       kubernetesClient,
       false,
-      "spark",
-      loggingPodStatusWatcher,
-      KUBERNETES_RESOURCE_PREFIX)
+      loggingPodStatusWatcher)
     submissionClient.run()
     verify(podOperations).create(FULL_EXPECTED_POD)
   }
 
   test("The client should create Kubernetes resources") {
     val submissionClient = new Client(
+      kconf,
       driverBuilder,
-      kubernetesConf,
       kubernetesClient,
       false,
-      "spark",
-      loggingPodStatusWatcher,
-      KUBERNETES_RESOURCE_PREFIX)
+      loggingPodStatusWatcher)
     submissionClient.run()
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
     assert(otherCreatedResources.size === 2)
@@ -197,13 +178,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Waiting for app completion should stall on the watcher") {
     val submissionClient = new Client(
+      kconf,
       driverBuilder,
-      kubernetesConf,
       kubernetesClient,
       true,
-      "spark",
-      loggingPodStatusWatcher,
-      KUBERNETES_RESOURCE_PREFIX)
+      loggingPodStatusWatcher)
     submissionClient.run()
     verify(loggingPodStatusWatcher).awaitCompletion()
   }

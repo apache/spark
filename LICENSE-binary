@@ -209,10 +209,10 @@ org.apache.zookeeper:zookeeper
 oro:oro
 commons-configuration:commons-configuration
 commons-digester:commons-digester
-com.chuusai:shapeless_2.11
+com.chuusai:shapeless_2.12
 com.googlecode.javaewah:JavaEWAH
 com.twitter:chill-java
-com.twitter:chill_2.11
+com.twitter:chill_2.12
 com.univocity:univocity-parsers
 javax.jdo:jdo-api
 joda-time:joda-time
@@ -220,23 +220,23 @@ net.sf.opencsv:opencsv
 org.apache.derby:derby
 org.objenesis:objenesis
 org.roaringbitmap:RoaringBitmap
-org.scalanlp:breeze-macros_2.11
-org.scalanlp:breeze_2.11
-org.typelevel:macro-compat_2.11
+org.scalanlp:breeze-macros_2.12
+org.scalanlp:breeze_2.12
+org.typelevel:macro-compat_2.12
 org.yaml:snakeyaml
 org.apache.xbean:xbean-asm5-shaded
 com.squareup.okhttp3:logging-interceptor
 com.squareup.okhttp3:okhttp
 com.squareup.okio:okio
-org.apache.spark:spark-catalyst_2.11
-org.apache.spark:spark-kvstore_2.11
-org.apache.spark:spark-launcher_2.11
-org.apache.spark:spark-mllib-local_2.11
-org.apache.spark:spark-network-common_2.11
-org.apache.spark:spark-network-shuffle_2.11
-org.apache.spark:spark-sketch_2.11
-org.apache.spark:spark-tags_2.11
-org.apache.spark:spark-unsafe_2.11
+org.apache.spark:spark-catalyst_2.12
+org.apache.spark:spark-kvstore_2.12
+org.apache.spark:spark-launcher_2.12
+org.apache.spark:spark-mllib-local_2.12
+org.apache.spark:spark-network-common_2.12
+org.apache.spark:spark-network-shuffle_2.12
+org.apache.spark:spark-sketch_2.12
+org.apache.spark:spark-tags_2.12
+org.apache.spark:spark-unsafe_2.12
 commons-httpclient:commons-httpclient
 com.vlkan:flatbuffers
 com.ning:compress-lzf
@@ -260,9 +260,6 @@ net.sf.supercsv:super-csv
 org.apache.arrow:arrow-format
 org.apache.arrow:arrow-memory
 org.apache.arrow:arrow-vector
-org.apache.calcite:calcite-avatica
-org.apache.calcite:calcite-core
-org.apache.calcite:calcite-linq4j
 org.apache.commons:commons-crypto
 org.apache.commons:commons-lang3
 org.apache.hadoop:hadoop-annotations
@@ -287,10 +284,10 @@ org.apache.orc:orc-mapreduce
 org.mortbay.jetty:jetty
 org.mortbay.jetty:jetty-util
 com.jolbox:bonecp
-org.json4s:json4s-ast_2.11
-org.json4s:json4s-core_2.11
-org.json4s:json4s-jackson_2.11
-org.json4s:json4s-scalap_2.11
+org.json4s:json4s-ast_2.12
+org.json4s:json4s-core_2.12
+org.json4s:json4s-jackson_2.12
+org.json4s:json4s-scalap_2.12
 com.carrotsearch:hppc
 com.fasterxml.jackson.core:jackson-annotations
 com.fasterxml.jackson.core:jackson-core
@@ -298,14 +295,13 @@ com.fasterxml.jackson.core:jackson-databind
 com.fasterxml.jackson.dataformat:jackson-dataformat-yaml
 com.fasterxml.jackson.module:jackson-module-jaxb-annotations
 com.fasterxml.jackson.module:jackson-module-paranamer
-com.fasterxml.jackson.module:jackson-module-scala_2.11
+com.fasterxml.jackson.module:jackson-module-scala_2.12
 com.github.mifmif:generex
 com.google.code.findbugs:jsr305
 com.google.code.gson:gson
 com.google.inject:guice
 com.google.inject.extensions:guice-servlet
 com.twitter:parquet-hadoop-bundle
-commons-beanutils:commons-beanutils-core
 commons-cli:commons-cli
 commons-dbcp:commons-dbcp
 commons-io:commons-io
@@ -372,6 +368,8 @@ org.eclipse.jetty:jetty-servlets
 org.eclipse.jetty:jetty-util
 org.eclipse.jetty:jetty-webapp
 org.eclipse.jetty:jetty-xml
+org.scala-lang.modules:scala-xml_2.12
+org.opencypher:okapi-shade
 
 core/src/main/java/org/apache/spark/util/collection/TimSort.java
 core/src/main/resources/org/apache/spark/ui/static/bootstrap*
@@ -415,8 +413,7 @@ com.thoughtworks.paranamer:paranamer
 org.scala-lang:scala-compiler
 org.scala-lang:scala-library
 org.scala-lang:scala-reflect
-org.scala-lang.modules:scala-parser-combinators_2.11
-org.scala-lang.modules:scala-xml_2.11
+org.scala-lang.modules:scala-parser-combinators_2.12
 org.fusesource.leveldbjni:leveldbjni-all
 net.sourceforge.f2j:arpack_combined_all
 xmlenc:xmlenc
@@ -437,15 +434,15 @@ is distributed under the 3-Clause BSD license.
 MIT License
 -----------
 
-org.spire-math:spire-macros_2.11
-org.spire-math:spire_2.11
-org.typelevel:machinist_2.11
+org.spire-math:spire-macros_2.12
+org.spire-math:spire_2.12
+org.typelevel:machinist_2.12
 net.razorvine:pyrolite
 org.slf4j:jcl-over-slf4j
 org.slf4j:jul-to-slf4j
 org.slf4j:slf4j-api
 org.slf4j:slf4j-log4j12
-com.github.scopt:scopt_2.11
+com.github.scopt:scopt_2.12
 
 core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
 core/src/main/resources/org/apache/spark/ui/static/*dataTables*
@@ -485,6 +482,14 @@ org.glassfish.jersey.core:jersey-client
 org.glassfish.jersey.core:jersey-common
 org.glassfish.jersey.core:jersey-server
 org.glassfish.jersey.media:jersey-media-jaxb
+
+
+Eclipse Distribution License (EDL) 1.0
+--------------------------------------
+
+org.glassfish.jaxb:jaxb-runtime
+jakarta.xml.bind:jakarta.xml.bind-api
+com.sun.istack:istack-commons-runtime
 
 
 Mozilla Public License (MPL) 1.1

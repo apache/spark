@@ -25,6 +25,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -108,101 +109,64 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Map Concat") {
-    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType,
+    val m0 = Literal.create(create_map("a" -> "1", "b" -> "2"), MapType(StringType, StringType,
       valueContainsNull = false))
-    val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType,
+    val m1 = Literal.create(create_map("c" -> "3", "a" -> "4"), MapType(StringType, StringType,
       valueContainsNull = false))
-    val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
-    val m3 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
-    val m4 = Literal.create(Map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
-    val m5 = Literal.create(Map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
-    val m6 = Literal.create(Map("a" -> null, "c" -> 3), MapType(StringType, IntegerType))
-    val m7 = Literal.create(Map(List(1, 2) -> 1, List(3, 4) -> 2),
+    val m2 = Literal.create(create_map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
+    val m3 = Literal.create(create_map("f" -> "1", "g" -> "2"), MapType(StringType, StringType))
+    val m4 = Literal.create(create_map("a" -> null, "c" -> "3"), MapType(StringType, StringType))
+    val m5 = Literal.create(create_map("a" -> 1, "b" -> 2), MapType(StringType, IntegerType))
+    val m6 = Literal.create(create_map("c" -> null, "d" -> 3), MapType(StringType, IntegerType))
+    val m7 = Literal.create(create_map(List(1, 2) -> 1, List(3, 4) -> 2),
       MapType(ArrayType(IntegerType), IntegerType))
-    val m8 = Literal.create(Map(List(5, 6) -> 3, List(1, 2) -> 4),
+    val m8 = Literal.create(create_map(List(5, 6) -> 3, List(7, 8) -> 4),
       MapType(ArrayType(IntegerType), IntegerType))
-    val m9 = Literal.create(Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
-      MapType(MapType(IntegerType, IntegerType), IntegerType))
-    val m10 = Literal.create(Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
-      MapType(MapType(IntegerType, IntegerType), IntegerType))
-    val m11 = Literal.create(Map(1 -> "1", 2 -> "2"), MapType(IntegerType, StringType,
+    val m9 = Literal.create(create_map(1 -> "1", 2 -> "2"), MapType(IntegerType, StringType,
       valueContainsNull = false))
-    val m12 = Literal.create(Map(3 -> "3", 4 -> "4"), MapType(IntegerType, StringType,
+    val m10 = Literal.create(create_map(3 -> "3", 4 -> "4"), MapType(IntegerType, StringType,
       valueContainsNull = false))
-    val m13 = Literal.create(Map(1 -> 2, 3 -> 4),
+    val m11 = Literal.create(create_map(1 -> 2, 3 -> 4),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val m14 = Literal.create(Map(5 -> 6),
+    val m12 = Literal.create(create_map(5 -> 6),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val m15 = Literal.create(Map(7 -> null),
+    val m13 = Literal.create(create_map(7 -> null),
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
-    // overlapping maps
-    checkEvaluation(MapConcat(Seq(m0, m1)),
-      (
-        Array("a", "b", "c", "a"), // keys
-        Array("1", "2", "3", "4") // values
-      )
-    )
+    // overlapping maps should remove duplicated map keys w.r.t. last win policy.
+    checkEvaluation(MapConcat(Seq(m0, m1)), create_map("a" -> "4", "b" -> "2", "c" -> "3"))
 
     // maps with no overlap
     checkEvaluation(MapConcat(Seq(m0, m2)),
-      Map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
+      create_map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
 
     // 3 maps
-    checkEvaluation(MapConcat(Seq(m0, m1, m2)),
-      (
-        Array("a", "b", "c", "a", "d", "e"), // keys
-        Array("1", "2", "3", "4", "4", "5") // values
-      )
-    )
+    checkEvaluation(MapConcat(Seq(m0, m2, m3)),
+      create_map("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5", "f" -> "1", "g" -> "2"))
 
     // null reference values
-    checkEvaluation(MapConcat(Seq(m3, m4)),
-      (
-        Array("a", "b", "a", "c"), // keys
-        Array("1", "2", null, "3") // values
-      )
-    )
+    checkEvaluation(MapConcat(Seq(m2, m4)),
+      create_map("d" -> "4", "e" -> "5", "a" -> null, "c" -> "3"))
 
     // null primitive values
     checkEvaluation(MapConcat(Seq(m5, m6)),
-      (
-        Array("a", "b", "a", "c"), // keys
-        Array(1, 2, null, 3) // values
-      )
-    )
+      create_map("a" -> 1, "b" -> 2, "c" -> null, "d" -> 3))
 
     // keys that are primitive
-    checkEvaluation(MapConcat(Seq(m11, m12)),
-      (
-        Array(1, 2, 3, 4), // keys
-        Array("1", "2", "3", "4") // values
-      )
-    )
-
-    // keys that are arrays, with overlap
-    checkEvaluation(MapConcat(Seq(m7, m8)),
-      (
-        Array(List(1, 2), List(3, 4), List(5, 6), List(1, 2)), // keys
-        Array(1, 2, 3, 4) // values
-      )
-    )
-
-    // keys that are maps, with overlap
     checkEvaluation(MapConcat(Seq(m9, m10)),
-      (
-        Array(Map(1 -> 2, 3 -> 4), Map(5 -> 6, 7 -> 8), Map(9 -> 10, 11 -> 12),
-          Map(1 -> 2, 3 -> 4)), // keys
-        Array(1, 2, 3, 4) // values
-      )
-    )
+      create_map(1 -> "1", 2 -> "2", 3 -> "3", 4 -> "4"))
+
+    // keys that are arrays
+    checkEvaluation(MapConcat(Seq(m7, m8)),
+      create_map(List(1, 2) -> 1, List(3, 4) -> 2, List(5, 6) -> 3, List(7, 8) -> 4))
+
 
     // both keys and value are primitive and valueContainsNull = false
-    checkEvaluation(MapConcat(Seq(m13, m14)), Map(1 -> 2, 3 -> 4, 5 -> 6))
+    checkEvaluation(MapConcat(Seq(m11, m12)), create_map(1 -> 2, 3 -> 4, 5 -> 6))
 
     // both keys and value are primitive and valueContainsNull = true
-    checkEvaluation(MapConcat(Seq(m13, m15)), Map(1 -> 2, 3 -> 4, 7 -> null))
+    checkEvaluation(MapConcat(Seq(m11, m13)), create_map(1 -> 2, 3 -> 4, 7 -> null))
 
     // null map
     checkEvaluation(MapConcat(Seq(m0, mNull)), null)
@@ -211,21 +175,20 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapConcat(Seq(mNull)), null)
 
     // single map
-    checkEvaluation(MapConcat(Seq(m0)), Map("a" -> "1", "b" -> "2"))
+    checkEvaluation(MapConcat(Seq(m0)), create_map("a" -> "1", "b" -> "2"))
 
     // no map
     checkEvaluation(MapConcat(Seq.empty), Map.empty)
 
     // force split expressions for input in generated code
-    val expectedKeys = Array.fill(65)(Seq("a", "b")).flatten ++ Array("d", "e")
-    val expectedValues = Array.fill(65)(Seq("1", "2")).flatten ++ Array("4", "5")
-    checkEvaluation(MapConcat(
-      Seq(
-        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
-        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0,
-        m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m0, m2
-      )),
-      (expectedKeys, expectedValues))
+    val expectedKeys = (1 to 65).map(_.toString)
+    val expectedValues = (1 to 65).map(_.toString)
+    checkEvaluation(
+      MapConcat(
+        expectedKeys.zip(expectedValues).map {
+          case (k, v) => Literal.create(create_map(k -> v), MapType(StringType, StringType))
+        }),
+      create_map(expectedKeys.zip(expectedValues): _*))
 
     // argument checking
     assert(MapConcat(Seq(m0, m1)).checkInputDataTypes().isSuccess)
@@ -245,12 +208,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(MapConcat(Seq(m1, mNull)).nullable)
 
     val mapConcat = MapConcat(Seq(
-      Literal.create(Map(Seq(1, 2) -> Seq("a", "b")),
+      Literal.create(create_map(Seq(1, 2) -> Seq("a", "b")),
         MapType(
           ArrayType(IntegerType, containsNull = false),
           ArrayType(StringType, containsNull = false),
           valueContainsNull = false)),
-      Literal.create(Map(Seq(3, 4, null) -> Seq("c", "d", null), Seq(6) -> null),
+      Literal.create(create_map(Seq(3, 4, null) -> Seq("c", "d", null), Seq(6) -> null),
         MapType(
           ArrayType(IntegerType, containsNull = true),
           ArrayType(StringType, containsNull = true),
@@ -260,10 +223,22 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
         ArrayType(IntegerType, containsNull = true),
         ArrayType(StringType, containsNull = true),
         valueContainsNull = true))
-    checkEvaluation(mapConcat, Map(
+    checkEvaluation(mapConcat, create_map(
       Seq(1, 2) -> Seq("a", "b"),
       Seq(3, 4, null) -> Seq("c", "d", null),
       Seq(6) -> null))
+
+    // map key can't be map
+    val mapOfMap = Literal.create(Map(Map(1 -> 2, 3 -> 4) -> 1, Map(5 -> 6, 7 -> 8) -> 2),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val mapOfMap2 = Literal.create(Map(Map(9 -> 10, 11 -> 12) -> 3, Map(1 -> 2, 3 -> 4) -> 4),
+      MapType(MapType(IntegerType, IntegerType), IntegerType))
+    val map = MapConcat(Seq(mapOfMap, mapOfMap2))
+    map.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("The key of map cannot be/contain map"))
+    }
   }
 
   test("MapFromEntries") {
@@ -274,47 +249,64 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           StructField("b", valueType))),
         true)
     }
-    def r(values: Any*): InternalRow = create_row(values: _*)
+    def row(values: Any*): InternalRow = create_row(values: _*)
 
     // Primitive-type keys and values
     val aiType = arrayType(IntegerType, IntegerType)
-    val ai0 = Literal.create(Seq(r(1, 10), r(2, 20), r(3, 20)), aiType)
-    val ai1 = Literal.create(Seq(r(1, null), r(2, 20), r(3, null)), aiType)
+    val ai0 = Literal.create(Seq(row(1, 10), row(2, 20), row(3, 20)), aiType)
+    val ai1 = Literal.create(Seq(row(1, null), row(2, 20), row(3, null)), aiType)
     val ai2 = Literal.create(Seq.empty, aiType)
     val ai3 = Literal.create(null, aiType)
-    val ai4 = Literal.create(Seq(r(1, 10), r(1, 20)), aiType)
-    val ai5 = Literal.create(Seq(r(1, 10), r(null, 20)), aiType)
-    val ai6 = Literal.create(Seq(null, r(2, 20), null), aiType)
+    // The map key is duplicated
+    val ai4 = Literal.create(Seq(row(1, 10), row(1, 20)), aiType)
+    // The map key is null
+    val ai5 = Literal.create(Seq(row(1, 10), row(null, 20)), aiType)
+    val ai6 = Literal.create(Seq(null, row(2, 20), null), aiType)
 
-    checkEvaluation(MapFromEntries(ai0), Map(1 -> 10, 2 -> 20, 3 -> 20))
-    checkEvaluation(MapFromEntries(ai1), Map(1 -> null, 2 -> 20, 3 -> null))
+    checkEvaluation(MapFromEntries(ai0), create_map(1 -> 10, 2 -> 20, 3 -> 20))
+    checkEvaluation(MapFromEntries(ai1), create_map(1 -> null, 2 -> 20, 3 -> null))
     checkEvaluation(MapFromEntries(ai2), Map.empty)
     checkEvaluation(MapFromEntries(ai3), null)
-    checkEvaluation(MapKeys(MapFromEntries(ai4)), Seq(1, 1))
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(MapFromEntries(ai4), create_map(1 -> 20))
+    // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(ai5),
-      "The first field from a struct (key) can't be null.")
+      "Cannot use null as map key")
     checkEvaluation(MapFromEntries(ai6), null)
 
     // Non-primitive-type keys and values
     val asType = arrayType(StringType, StringType)
-    val as0 = Literal.create(Seq(r("a", "aa"), r("b", "bb"), r("c", "bb")), asType)
-    val as1 = Literal.create(Seq(r("a", null), r("b", "bb"), r("c", null)), asType)
+    val as0 = Literal.create(Seq(row("a", "aa"), row("b", "bb"), row("c", "bb")), asType)
+    val as1 = Literal.create(Seq(row("a", null), row("b", "bb"), row("c", null)), asType)
     val as2 = Literal.create(Seq.empty, asType)
     val as3 = Literal.create(null, asType)
-    val as4 = Literal.create(Seq(r("a", "aa"), r("a", "bb")), asType)
-    val as5 = Literal.create(Seq(r("a", "aa"), r(null, "bb")), asType)
-    val as6 = Literal.create(Seq(null, r("b", "bb"), null), asType)
+    val as4 = Literal.create(Seq(row("a", "aa"), row("a", "bb")), asType)
+    val as5 = Literal.create(Seq(row("a", "aa"), row(null, "bb")), asType)
+    val as6 = Literal.create(Seq(null, row("b", "bb"), null), asType)
 
-    checkEvaluation(MapFromEntries(as0), Map("a" -> "aa", "b" -> "bb", "c" -> "bb"))
-    checkEvaluation(MapFromEntries(as1), Map("a" -> null, "b" -> "bb", "c" -> null))
+    checkEvaluation(MapFromEntries(as0), create_map("a" -> "aa", "b" -> "bb", "c" -> "bb"))
+    checkEvaluation(MapFromEntries(as1), create_map("a" -> null, "b" -> "bb", "c" -> null))
     checkEvaluation(MapFromEntries(as2), Map.empty)
     checkEvaluation(MapFromEntries(as3), null)
-    checkEvaluation(MapKeys(MapFromEntries(as4)), Seq("a", "a"))
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(MapFromEntries(as4), create_map("a" -> "bb"))
+    // Map key can't be null
     checkExceptionInExpression[RuntimeException](
       MapFromEntries(as5),
-      "The first field from a struct (key) can't be null.")
+      "Cannot use null as map key")
     checkEvaluation(MapFromEntries(as6), null)
+
+    // map key can't be map
+    val structOfMap = row(create_map(1 -> 1), 1)
+    val map = MapFromEntries(Literal.create(
+      Seq(structOfMap),
+      arrayType(keyType = MapType(IntegerType, IntegerType), valueType = IntegerType)))
+    map.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("The key of map cannot be/contain map"))
+    }
   }
 
   test("Sort Array") {
@@ -1100,6 +1092,39 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ElementAt(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
+  test("correctly handles ElementAt nullability for arrays") {
+    // CreateArray case
+    val a = AttributeReference("a", IntegerType, nullable = false)()
+    val b = AttributeReference("b", IntegerType, nullable = true)()
+    val array = CreateArray(a :: b :: Nil)
+    assert(!ElementAt(array, Literal(0)).nullable)
+    assert(ElementAt(array, Literal(1)).nullable)
+    assert(!ElementAt(array, Subtract(Literal(2), Literal(2))).nullable)
+    assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+
+    // GetArrayStructFields case
+    val f1 = StructField("a", IntegerType, nullable = false)
+    val f2 = StructField("b", IntegerType, nullable = true)
+    val structType = StructType(f1 :: f2 :: Nil)
+    val c = AttributeReference("c", structType, nullable = false)()
+    val inputArray1 = CreateArray(c :: Nil)
+    val inputArray1ContainsNull = c.nullable
+    val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
+    assert(!ElementAt(stArray1, Literal(0)).nullable)
+    val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
+    assert(ElementAt(stArray2, Literal(0)).nullable)
+
+    val d = AttributeReference("d", structType, nullable = true)()
+    val inputArray2 = CreateArray(c :: d :: Nil)
+    val inputArray2ContainsNull = c.nullable || d.nullable
+    val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
+    assert(!ElementAt(stArray3, Literal(0)).nullable)
+    assert(ElementAt(stArray3, Literal(1)).nullable)
+    val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
+    assert(ElementAt(stArray4, Literal(0)).nullable)
+    assert(ElementAt(stArray4, Literal(1)).nullable)
+  }
+
   test("Concat") {
     // Primitive-type elements
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
@@ -1145,9 +1170,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
 
     assert(Concat(Seq(ai0, ai1)).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(ai0, ai2)).dataType.asInstanceOf[ArrayType].containsNull)
     assert(Concat(Seq(as0, as1)).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(Concat(Seq(as0, as2)).dataType.asInstanceOf[ArrayType].containsNull)
     assert(Concat(Seq(aa0, aa1)).dataType ===
       ArrayType(ArrayType(StringType, containsNull = false), containsNull = false))
     assert(Concat(Seq(aa0, aa2)).dataType ===
@@ -1339,6 +1364,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(DoubleType))
     val a7 = Literal.create(Seq(1.123f, 0.1234f, 1.121f, 1.123f, 1.1230f, 1.121f, 0.1234f),
       ArrayType(FloatType))
+    val a8 =
+      Literal.create(Seq(2, 1, 2, 3, 4, 4, 5).map(_.toString.getBytes), ArrayType(BinaryType))
 
     checkEvaluation(new ArrayDistinct(a0), Seq(2, 1, 3, 4, 5))
     checkEvaluation(new ArrayDistinct(a1), Seq.empty[Integer])
@@ -1348,6 +1375,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new ArrayDistinct(a5), Seq(true, false))
     checkEvaluation(new ArrayDistinct(a6), Seq(1.123, 0.1234, 1.121))
     checkEvaluation(new ArrayDistinct(a7), Seq(1.123f, 0.1234f, 1.121f))
+    checkEvaluation(new ArrayDistinct(a8), Seq(2, 1, 3, 4, 5).map(_.toString.getBytes))
 
     // complex data types
     val b0 = Literal.create(Seq[Array[Byte]](Array[Byte](5, 6), Array[Byte](1, 2),
@@ -1368,9 +1396,17 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       ArrayType(ArrayType(IntegerType)))
     val c2 = Literal.create(Seq[Seq[Int]](null, Seq[Int](2, 1), null, null, Seq[Int](2, 1), null),
       ArrayType(ArrayType(IntegerType)))
+    val c3 = Literal.create(Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](1, 2), Seq[Int](1, 2),
+      Seq[Int](3, 4), Seq[Int](4, 5)), ArrayType(ArrayType(IntegerType)))
+    val c4 = Literal.create(Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](1, 2),
+      Seq[Int](3, 4), Seq[Int](4, 5), null), ArrayType(ArrayType(IntegerType)))
     checkEvaluation(ArrayDistinct(c0), Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4)))
     checkEvaluation(ArrayDistinct(c1), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
     checkEvaluation(ArrayDistinct(c2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
+    checkEvaluation(ArrayDistinct(c3), Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4),
+      Seq[Int](4, 5)))
+    checkEvaluation(ArrayDistinct(c4), Seq[Seq[Int]](null, Seq[Int](1, 2), Seq[Int](3, 4),
+      Seq[Int](4, 5)))
   }
 
   test("Array Union") {
@@ -1458,9 +1494,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Seq[Seq[Int]](Seq[Int](1, 2), Seq[Int](3, 4), Seq[Int](5, 6), Seq[Int](2, 1)))
 
     assert(ArrayUnion(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayUnion(a00, a02).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayUnion(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayUnion(a20, a22).dataType.asInstanceOf[ArrayType].containsNull)
   }
 
   test("Shuffle") {
@@ -1639,10 +1675,23 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(aa1, aa0), Seq[Seq[Int]](Seq[Int](2, 1)))
 
     assert(ArrayExcept(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull === true)
-    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a04, a02).dataType.asInstanceOf[ArrayType].containsNull)
+    assert(ArrayExcept(a04, a05).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull)
+  }
+
+  test("Array Except - null handling") {
+    val empty = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val oneNull = Literal.create(Seq(null), ArrayType(IntegerType))
+    val twoNulls = Literal.create(Seq(null, null), ArrayType(IntegerType))
+
+    checkEvaluation(ArrayExcept(oneNull, oneNull), Seq.empty)
+    checkEvaluation(ArrayExcept(twoNulls, twoNulls), Seq.empty)
+    checkEvaluation(ArrayExcept(twoNulls, oneNull), Seq.empty)
+    checkEvaluation(ArrayExcept(empty, oneNull), Seq.empty)
+    checkEvaluation(ArrayExcept(oneNull, empty), Seq(null))
+    checkEvaluation(ArrayExcept(twoNulls, empty), Seq(null))
   }
 
   test("Array Intersect") {
@@ -1752,8 +1801,21 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     assert(ArrayIntersect(a00, a01).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayIntersect(a00, a04).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a04, a05).dataType.asInstanceOf[ArrayType].containsNull)
     assert(ArrayIntersect(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
-    assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull === true)
+    assert(ArrayIntersect(a23, a24).dataType.asInstanceOf[ArrayType].containsNull)
+  }
+
+  test("Array Intersect - null handling") {
+    val empty = Literal.create(Seq.empty[Int], ArrayType(IntegerType, containsNull = false))
+    val oneNull = Literal.create(Seq(null), ArrayType(IntegerType))
+    val twoNulls = Literal.create(Seq(null, null), ArrayType(IntegerType))
+
+    checkEvaluation(ArrayIntersect(oneNull, oneNull), Seq(null))
+    checkEvaluation(ArrayIntersect(twoNulls, twoNulls), Seq(null))
+    checkEvaluation(ArrayIntersect(twoNulls, oneNull), Seq(null))
+    checkEvaluation(ArrayIntersect(oneNull, twoNulls), Seq(null))
+    checkEvaluation(ArrayIntersect(empty, oneNull), Seq.empty)
+    checkEvaluation(ArrayIntersect(oneNull, empty), Seq.empty)
   }
 }

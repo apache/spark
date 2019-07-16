@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import java.util.{Arrays, Comparator}
+import java.util.Arrays
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.unsafe.array.LongArray
@@ -40,14 +40,9 @@ object SortBenchmark extends BenchmarkBase {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
     val sortBuffer = new LongArray(MemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
-    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
-      buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
-        override def compare(
-          r1: RecordPointerAndKeyPrefix,
-          r2: RecordPointerAndKeyPrefix): Int = {
-          refCmp.compare(r1.keyPrefix, r2.keyPrefix)
-        }
-      })
+    new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(buf, lo, hi,
+      (r1: RecordPointerAndKeyPrefix, r2: RecordPointerAndKeyPrefix) =>
+        refCmp.compare(r1.keyPrefix, r2.keyPrefix))
   }
 
   private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
@@ -119,7 +114,7 @@ object SortBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  override def benchmark(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("radix sort") {
       sortBenchmark()
     }

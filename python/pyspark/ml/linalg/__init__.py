@@ -17,9 +17,9 @@
 
 """
 MLlib utilities for linear algebra. For dense vectors, MLlib
-uses the NumPy C{array} type, so you can simply pass NumPy arrays
-around. For sparse vectors, users can construct a L{SparseVector}
-object from MLlib or pass SciPy C{scipy.sparse} column vectors if
+uses the NumPy `array` type, so you can simply pass NumPy arrays
+around. For sparse vectors, users can construct a :class:`SparseVector`
+object from MLlib or pass SciPy `scipy.sparse` column vectors if
 SciPy is available in their environment.
 """
 
@@ -270,6 +270,8 @@ class DenseVector(Vector):
     DenseVector([3.0, 2.0])
     >>> u % 2
     DenseVector([1.0, 0.0])
+    >>> -v
+    DenseVector([-1.0, -2.0])
     """
     def __init__(self, ar):
         if isinstance(ar, bytes):
@@ -384,14 +386,14 @@ class DenseVector(Vector):
 
     def toArray(self):
         """
-        Returns an numpy.ndarray
+        Returns the underlying numpy.ndarray
         """
         return self.array
 
     @property
     def values(self):
         """
-        Returns a list of values
+        Returns the underlying numpy.ndarray
         """
         return self.array
 
@@ -436,6 +438,9 @@ class DenseVector(Vector):
     def __getattr__(self, item):
         return getattr(self.array, item)
 
+    def __neg__(self):
+        return DenseVector(-self.array)
+
     def _delegate(op):
         def func(self, other):
             if isinstance(other, DenseVector):
@@ -443,7 +448,6 @@ class DenseVector(Vector):
             return DenseVector(getattr(self.array, op)(other))
         return func
 
-    __neg__ = _delegate("__neg__")
     __add__ = _delegate("__add__")
     __sub__ = _delegate("__sub__")
     __mul__ = _delegate("__mul__")
@@ -677,7 +681,7 @@ class SparseVector(Vector):
 
     def toArray(self):
         """
-        Returns a copy of this SparseVector as a 1-dimensional NumPy array.
+        Returns a copy of this SparseVector as a 1-dimensional numpy.ndarray.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
         arr[self.indices] = self.values
@@ -754,7 +758,7 @@ class Vectors(object):
     .. note:: Dense vectors are simply represented as NumPy array objects,
         so there is no need to covert them for use in MLlib. For sparse vectors,
         the factory methods in this class create an MLlib-compatible type, or users
-        can pass in SciPy's C{scipy.sparse} column vectors.
+        can pass in SciPy's `scipy.sparse` column vectors.
     """
 
     @staticmethod
@@ -858,7 +862,7 @@ class Matrix(object):
 
     def toArray(self):
         """
-        Returns its elements in a NumPy ndarray.
+        Returns its elements in a numpy.ndarray.
         """
         raise NotImplementedError
 
@@ -933,7 +937,7 @@ class DenseMatrix(Matrix):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Return a numpy.ndarray
 
         >>> m = DenseMatrix(2, 2, range(4))
         >>> m.toArray()
@@ -976,14 +980,14 @@ class DenseMatrix(Matrix):
             return self.values[i + j * self.numRows]
 
     def __eq__(self, other):
-        if (not isinstance(other, DenseMatrix) or
-                self.numRows != other.numRows or
-                self.numCols != other.numCols):
+        if (self.numRows != other.numRows or self.numCols != other.numCols):
             return False
+        if isinstance(other, SparseMatrix):
+            return np.all(self.toArray() == other.toArray())
 
         self_values = np.ravel(self.toArray(), order='F')
         other_values = np.ravel(other.toArray(), order='F')
-        return all(self_values == other_values)
+        return np.all(self_values == other_values)
 
 
 class SparseMatrix(Matrix):
@@ -1117,7 +1121,7 @@ class SparseMatrix(Matrix):
 
     def toArray(self):
         """
-        Return an numpy.ndarray
+        Return a numpy.ndarray
         """
         A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
         for k in xrange(self.colPtrs.size - 1):

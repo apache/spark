@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.5.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-hive-thriftserver_2.11</artifactId>
+  <artifactId>spark-hive-thriftserver_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive Thrift Server</name>
   <url>http://spark.apache.org/</url>
@@ -48,6 +48,13 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-hive_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
@@ -62,6 +69,15 @@
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-beeline</artifactId>
+    </dependency>
+    <!-- Explicit listing hive-contrib and hive-hcatalog-core. Otherwise the maven test fails. -->
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-contrib</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}.hcatalog</groupId>
+      <artifactId>hive-hcatalog-core</artifactId>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -121,18 +137,6 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>add-default-sources</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>v${hive.version.short}/src/main/scala</source>
-              </sources>
-            </configuration>
-          </execution>
-          <execution>
             <id>add-source</id>
             <phase>generate-sources</phase>
             <goals>
@@ -140,7 +144,9 @@
             </goals>
             <configuration>
               <sources>
-                <source>src/gen/</source>
+                <source>v${hive.version.short}/src/gen/java</source>
+                <source>v${hive.version.short}/src/main/java</source>
+                <source>v${hive.version.short}/src/main/scala</source>
               </sources>
             </configuration>
           </execution>
