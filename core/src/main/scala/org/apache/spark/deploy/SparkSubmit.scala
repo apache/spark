@@ -378,10 +378,24 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     // Resolve glob path for different resources.
-    args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
-    args.files = Option(args.files).map(resolveGlobPaths(_, hadoopConf)).orNull
-    args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
-    args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
+    val proxyUser = if (args.proxyUser != null) {
+      UserGroupInformation.createProxyUser(args.proxyUser, UserGroupInformation.getCurrentUser)
+    } else {
+      UserGroupInformation.getCurrentUser
+    }
+    try {
+      proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
+          args.files = Option(args.files).map(resolveGlobPaths(_, hadoopConf)).orNull
+          args.pyFiles = Option(args.pyFiles).map(resolveGlobPaths(_, hadoopConf)).orNull
+          args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
+        }
+      })
+    } catch {
+      case e: UndeclaredThrowableException =>
+        throw e.getCause // Throw "cause" as doAs wraps the original exception.
+    }
 
     lazy val secMgr = new SecurityManager(sparkConf)
 
