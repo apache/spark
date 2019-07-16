@@ -116,23 +116,17 @@ struct<>
 -- !query 11
 select * from ((A join B on (udf(a) = udf(b))) cross join C) join D on (udf(a) = udf(d))
 -- !query 11 schema
-struct<>
+struct<a:string,va:int,b:string,vb:int,c:string,vc:int,d:string,vd:int>
 -- !query 11 output
-org.apache.spark.sql.AnalysisException
-Detected implicit cartesian product for INNER join between logical plans
-Filter (udf(a#x) = udf(b#x))
-+- Join Inner
-   :- Project [k#x AS a#x, v1#x AS va#x]
-   :  +- LocalRelation [k#x, v1#x]
-   +- Project [k#x AS b#x, v1#x AS vb#x]
-      +- LocalRelation [k#x, v1#x]
-and
-Project [k#x AS d#x, v1#x AS vd#x]
-+- LocalRelation [k#x, v1#x]
-Join condition is missing or trivial.
-Either: use the CROSS JOIN syntax to allow cartesian products between these
-relations, or: enable implicit cartesian products by setting the configuration
-variable spark.sql.crossJoin.enabled=true;
+one	1	one	1	one	1	one	1
+one	1	one	1	three	3	one	1
+one	1	one	1	two	2	one	1
+three	3	three	3	one	1	three	3
+three	3	three	3	three	3	three	3
+three	3	three	3	two	2	three	3
+two	2	two	2	one	1	two	2
+two	2	two	2	three	3	two	2
+two	2	two	2	two	2	two	2
 
 
 -- !query 12
