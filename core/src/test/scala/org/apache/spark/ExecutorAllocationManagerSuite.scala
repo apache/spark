@@ -1008,7 +1008,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def createManager(
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
-    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock)
+    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock)
     managers += manager
     manager.start()
     manager
