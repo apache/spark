@@ -292,10 +292,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
         sql("SELECT * FROM non_part_table").collect())
 
-      // check for case insensitive of partition columns while querying.
+      // check for case insensitive property of partition column name in load command.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        withInputFile { f =>
+          sql(s"""$loadQuery INPATH "${f.toURI}" INTO TABLE part_table PARTITION(C="1", D="2")""")
+        }
         checkAnswer(
-          sql("SELECT employeeID, employeeName FROM part_table WHERE C = '2' AND D = '1'"),
+          sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
           sql("SELECT * FROM non_part_table").collect())
       }
     }
