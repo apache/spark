@@ -199,6 +199,18 @@ class RFormulaParserSuite extends SparkFunSuite {
       schema)
   }
 
+  test("parse skip whitespace") {
+    val schema = (new StructType)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
+    checkParse(" ~a+  b :  c  ", "", Seq("a", "b:c"))
+    checkParse(" ~ a  *     b", "", Seq("a", "b", "a:b"))
+    checkParse("~ (  a +b  )^  2", "", Seq("a", "b", "a:b"))
+    checkParse("~  .  ^ 2  - a-b  -  c", "", Seq("a:b", "a:c", "b:c"), schema)
+    checkParse("~ ( a) *  ( (  (b ) : c )  )", "", Seq("a", "b:c", "a:b:c"))
+  }
+
   test("parse functions") {
     checkParse("y ~ I(a+b) + c", "y", Seq("a+b", "c"))
     checkParse("y ~ I(a+b)*c", "y", Seq("a+b", "c", "a+b:c"))

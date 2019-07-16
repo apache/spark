@@ -383,15 +383,7 @@ class RFormulaModel private[feature](
       }
       StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
     } else if (resolvedFormula.evalExprs.contains(resolvedFormula.label)) {
-      val spark = SparkSession.builder().getOrCreate()
-      val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
-      val dummyDF = spark.createDataFrame(dummyRDD, schema)
-        .withColumn(resolvedFormula.label, expr(resolvedFormula.label))
-      val nullable = dummyDF.schema(resolvedFormula.label).dataType match {
-        case _: NumericType | BooleanType => false
-        case _ => true
-      }
-      StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
+      StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, false))
     } else {
       // Ignore the label field. This is a hack so that this transformer can also work on test
       // datasets in a Pipeline.
@@ -709,7 +701,7 @@ private object ExprSelector extends MLReadable[ExprSelector] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: exprsToSelect
       val data = Data(instance.exprsToSelect.toSeq)
-      val dataPath = new Path(path, "data").toString
+      val dataPath = new Path(path, "exprSelector").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
@@ -722,7 +714,7 @@ private object ExprSelector extends MLReadable[ExprSelector] {
     override def load(path: String): ExprSelector = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
-      val dataPath = new Path(path, "data").toString
+      val dataPath = new Path(path, "exprSelector").toString
       val data = sparkSession.read.parquet(dataPath).select("exprsToSelect").head()
       val exprsToSelect = data.getAs[Seq[String]](0).toSet
       val selector = new ExprSelector(metadata.uid, exprsToSelect)

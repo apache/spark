@@ -321,7 +321,7 @@ private[ml] object RFormulaParser extends RegexParsers with EvalExprParser {
 
   private val dot: Parser[Term] = skipSpace("\\.".r) ^^ { case _ => Dot }
 
-  private val parens: Parser[Term] = "(" ~> expr <~ ")"
+  private val parens: Parser[Term] = skipSpace("\\(".r) ~> expr <~ skipSpace("\\)".r)
 
   private val term: Parser[Term] = evalExpr | parens | intercept | columnRef | dot
 
