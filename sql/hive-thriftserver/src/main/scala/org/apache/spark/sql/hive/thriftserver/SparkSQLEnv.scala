@@ -21,7 +21,7 @@ import java.io.PrintStream
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{SQLContext, SparkSession, SparkSessionExtensions}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.util.Utils
 
@@ -31,6 +31,8 @@ private[hive] object SparkSQLEnv extends Logging {
 
   var sqlContext: SQLContext = _
   var sparkContext: SparkContext = _
+  var extension: SparkSessionExtensions = _
+
 
   def init() {
     if (sqlContext == null) {
@@ -48,6 +50,7 @@ private[hive] object SparkSQLEnv extends Logging {
       val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
+      extension = sparkSession.extensions
 
       val metadataHive = sparkSession
         .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client

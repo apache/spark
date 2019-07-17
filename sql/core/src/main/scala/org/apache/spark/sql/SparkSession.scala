@@ -88,6 +88,10 @@ class SparkSession private(
     this(sc, None, None, new SparkSessionExtensions)
   }
 
+  private[sql] def this(sc:SparkContext, extensions: SparkSessionExtensions) {
+    this(sc, None, None, extensions)
+  }
+
   sparkContext.assertNotStopped()
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
