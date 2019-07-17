@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.security.PrivilegedExceptionAction
 import java.util.{Date, UUID}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.shuffle.FetchFailedException
@@ -179,6 +182,29 @@ object FileFormatWriter extends Logging {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
         })
+
+      val currentUser = SparkHadoopUtil.get.createSparkUser().getShortUserName
+      logInfo(s"SparkUser ${sparkSession.sparkContext.sparkUser}")
+      UserGroupInformation
+        .createProxyUser(sparkSession.sparkContext.sparkUser,
+          UserGroupInformation.getLoginUser)
+        .doAs[Unit](new PrivilegedExceptionAction[Unit] {
+        def run: Unit = {
+          def changeOwnRecursive(fs: FileSystem, path: Path, owner: String): Unit = {
+            if (fs.isDirectory(path)) {
+              fs.setOwner(path, owner, owner)
+              fs.listStatus(path).map(_.getPath).foreach(changeOwnRecursive(fs, _, owner))
+            } else {
+              logInfo(s"Change path[${path}] owner to current user ${owner}")
+              fs.setOwner(path, owner, owner)
+            }
+          }
+
+          val outputPath = new Path(outputSpec.outputPath)
+          val fs = FileSystem.get(outputPath.toUri, sparkSession.sparkContext.hadoopConfiguration)
+          changeOwnRecursive(fs, outputPath, currentUser)
+        }
+      })
 
       val commitMsgs = ret.map(_.commitMsg)
 
