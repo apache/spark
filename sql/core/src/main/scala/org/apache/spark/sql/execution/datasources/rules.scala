@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expres
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.FileCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -239,7 +239,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   }
 
   private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
-    case f: FileDataSourceV2 => f.fallbackFileFormat
+    case f: FileCatalog => f.getTableProvider.fallbackFileFormat
     case _ => cls
   }
 

@@ -40,8 +40,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{FileCatalog, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcCatalog
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -102,6 +102,7 @@ case class DataSource(
     // instead of `providingClass`.
     cls.newInstance() match {
       case f: FileDataSourceV2 => f.fallbackFileFormat
+      case f: FileCatalog => f.getTableProvider.fallbackFileFormat
       case _ => cls
     }
   }
@@ -619,7 +620,7 @@ object DataSource extends Logging {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
-        classOf[OrcDataSourceV2].getCanonicalName
+        classOf[OrcCatalog].getCanonicalName
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"

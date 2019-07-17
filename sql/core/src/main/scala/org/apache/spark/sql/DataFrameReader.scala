@@ -28,12 +28,13 @@ import org.apache.spark.annotation.Stable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalog.v2.{IdentifierImpl, PathCatalog}
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.catalyst.util.FailureSafeParser
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
@@ -73,6 +74,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   def schema(schema: StructType): DataFrameReader = {
     this.userSpecifiedSchema = Option(schema)
+    extraOptions += (DataSourceUtils.USER_SPECIFIED_SCHEMA_KEY -> schema.json)
     this
   }
 
@@ -88,7 +90,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.3.0
    */
   def schema(schemaString: String): DataFrameReader = {
-    this.userSpecifiedSchema = Option(StructType.fromDDL(schemaString))
+    val schema = StructType.fromDDL(schemaString)
+    this.userSpecifiedSchema = Option(schema)
+    extraOptions += (DataSourceUtils.USER_SPECIFIED_SCHEMA_KEY -> schema.json)
     this
   }
 
@@ -212,33 +216,57 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
     }
 
-    if (!shouldUseV1Source && classOf[TableProvider].isAssignableFrom(cls)) {
-      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        source = provider, conf = sparkSession.sessionState.conf)
-      val pathsOption = if (paths.isEmpty) {
-        None
-      } else {
-        val objectMapper = new ObjectMapper()
-        Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
-      }
+    var sessionOptions: Map[String, String] = Map.empty
+    val pathsOption = if (paths.isEmpty) {
+      None
+    } else {
+      val objectMapper = new ObjectMapper()
+      Some("paths" -> objectMapper.writeValueAsString(paths.toArray))
+    }
+    lazy val finalOptions =
+      new CaseInsensitiveStringMap((sessionOptions ++ extraOptions ++ pathsOption).asJava)
 
-      val finalOptions = sessionOptions ++ extraOptions.toMap ++ pathsOption
-      val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-      val table = userSpecifiedSchema match {
-        case Some(schema) => provider.getTable(dsOptions, schema)
-        case _ => provider.getTable(dsOptions)
+    val tableOptional = if (!shouldUseV1Source) {
+      if (classOf[PathCatalog].isAssignableFrom(cls)) {
+        loadTableFromPathCatalog(cls, paths.toSeq, pathsOption)
+      } else if (classOf[TableProvider].isAssignableFrom(cls)) {
+        val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
+        sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          provider, sparkSession.sessionState.conf)
+        val table = userSpecifiedSchema match {
+          case Some(schema) => provider.getTable(finalOptions, schema)
+          case _ => provider.getTable(finalOptions)
+        }
+        Some(table)
+      } else {
+        None
       }
+    } else {
+      None
+    }
+    if (tableOptional.isDefined) {
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      val table = tableOptional.get
       table match {
         case _: SupportsRead if table.supports(BATCH_READ) =>
-          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, dsOptions))
+          Dataset.ofRows(sparkSession, DataSourceV2Relation.create(table, finalOptions))
 
         case _ => loadV1Source(paths: _*)
       }
     } else {
       loadV1Source(paths: _*)
     }
+  }
+
+  private def loadTableFromPathCatalog(
+      cls: Class[_],
+      paths: Seq[String],
+      pathsOption: Option[(String, String)]): Option[Table] = {
+    val catalog = cls.getConstructor().newInstance().asInstanceOf[PathCatalog]
+    catalog.initialize(source, new CaseInsensitiveStringMap((extraOptions ++ pathsOption).asJava))
+    val ident = catalog.getTableIdentifier(
+      paths.toArray ++ extraOptions.get("path").map(Array(_)).getOrElse(Array.empty))
+    Some(catalog.loadTable(ident))
   }
 
   private def loadV1Source(paths: String*) = {

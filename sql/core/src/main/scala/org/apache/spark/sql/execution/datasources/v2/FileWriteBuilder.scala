@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.io.IOException
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -33,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, WriteBuilder}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
@@ -43,10 +42,11 @@ abstract class FileWriteBuilder(
     options: CaseInsensitiveStringMap,
     paths: Seq[String],
     formatName: String,
-    supportsDataType: DataType => Boolean) extends WriteBuilder {
+    supportsDataType: DataType => Boolean) extends WriteBuilder with SupportsTruncate {
   private var schema: StructType = _
   private var queryId: String = _
-  private var mode: SaveMode = _
+
+  override def truncate(): WriteBuilder = this
 
   override def withInputDataSchema(schema: StructType): WriteBuilder = {
     this.schema = schema
@@ -55,11 +55,6 @@ abstract class FileWriteBuilder(
 
   override def withQueryId(queryId: String): WriteBuilder = {
     this.queryId = queryId
-    this
-  }
-
-  def mode(mode: SaveMode): WriteBuilder = {
-    this.mode = mode
     this
   }
 
@@ -75,29 +70,11 @@ abstract class FileWriteBuilder(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = paths.head)
-    lazy val description =
+    val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
-    val fs = path.getFileSystem(hadoopConf)
-    mode match {
-      case SaveMode.ErrorIfExists if fs.exists(path) =>
-        val qualifiedOutputPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-
-      case SaveMode.Ignore if fs.exists(path) =>
-        null
-
-      case SaveMode.Overwrite =>
-        if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
-          throw new IOException(s"Unable to clear directory $path prior to writing to it")
-        }
-        committer.setupJob(job)
-        new FileBatchWrite(job, description, committer)
-
-      case _ =>
-        committer.setupJob(job)
-        new FileBatchWrite(job, description, committer)
-    }
+    committer.setupJob(job)
+    new FileBatchWrite(job, description, committer)
   }
 
   /**
@@ -114,7 +91,6 @@ abstract class FileWriteBuilder(
   private def validateInputs(caseSensitiveAnalysis: Boolean): Unit = {
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
-    assert(mode != null, "Missing save mode")
 
     if (paths.length != 1) {
       throw new IllegalArgumentException("Expected exactly one path to be specified, but " +

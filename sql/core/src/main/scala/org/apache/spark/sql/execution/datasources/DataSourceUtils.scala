@@ -32,6 +32,15 @@ object DataSourceUtils {
   val PARTITIONING_COLUMNS_KEY = "__partition_columns"
 
   /**
+   * The key to use for storing output schema as options.
+   */
+  val OUTPUT_SCHEMA_KEY = "__output_schema"
+
+  /**
+   * The key to use for storing user-specified schema as options.
+   */
+  val USER_SPECIFIED_SCHEMA_KEY = "__user_specified_schema"
+  /**
    * Utility methods for converting partitionBy columns to options and back.
    */
   private implicit val formats = Serialization.formats(NoTypeHints)

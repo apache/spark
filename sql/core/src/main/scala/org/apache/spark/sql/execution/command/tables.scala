@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.net.{URI, URISyntaxException}
-import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -29,7 +27,7 @@ import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -40,10 +38,10 @@ import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.csv.CSVCatalog
+import org.apache.spark.sql.execution.datasources.v2.json.JsonCatalog
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcCatalog
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -241,8 +239,7 @@ case class AlterTableAddColumnsCommand(
         // Hive type is already considered as hive serde table, so the logic will not
         // come in here.
         case _: CSVFileFormat | _: JsonFileFormat | _: ParquetFileFormat =>
-        case _: JsonDataSourceV2 | _: CSVDataSourceV2 |
-             _: OrcDataSourceV2 | _: ParquetDataSourceV2 =>
+        case _: JsonCatalog | _: CSVCatalog | _: OrcCatalog | _: ParquetCatalog =>
         case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
         case s =>
           throw new AnalysisException(

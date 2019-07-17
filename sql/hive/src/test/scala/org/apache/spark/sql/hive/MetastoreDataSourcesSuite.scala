@@ -975,7 +975,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDF(0, 9)
         .write
         .mode(SaveMode.Append)
-        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2")
+        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVCatalog")
         .saveAsTable("appendCSV")
       createDF(10, 19)
         .write
@@ -1014,7 +1014,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       createDF(10, 19)
         .write
         .mode(SaveMode.Append)
-        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2")
+        .format("org.apache.spark.sql.execution.datasources.v2.csv.CSVCatalog")
         .saveAsTable("appendCSV")
       checkAnswer(
         sql("SELECT p.c1, p.c2 FROM appendCSV p WHERE p.c1 > 5"),

@@ -23,12 +23,12 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -60,46 +60,63 @@ abstract class FileTable(
     }
   }
 
-  lazy val dataSchema: StructType = {
-    val schema = userSpecifiedSchema.map { schema =>
-      val partitionSchema = fileIndex.partitionSchema
-      val resolver = sparkSession.sessionState.conf.resolver
-      StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
-    }.orElse {
-      inferSchema(fileIndex.allFiles())
-    }.getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for $formatName. It must be specified manually.")
+  private val outputSchema: Option[StructType] = {
+    if (options.containsKey(DataSourceUtils.OUTPUT_SCHEMA_KEY)) {
+      Some(StructType.fromString(options.get(DataSourceUtils.OUTPUT_SCHEMA_KEY)))
+    } else {
+      None
     }
-    fileIndex match {
-      case _: MetadataLogFileIndex => schema
-      case _ => schema.asNullable
+  }
+
+  lazy val dataSchema: StructType = {
+    outputSchema.getOrElse {
+      val resolver = sparkSession.sessionState.conf.resolver
+      val schema = userSpecifiedSchema.map { schema =>
+        val partitionSchema = fileIndex.partitionSchema
+        StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+      }.orElse {
+        inferSchema(fileIndex.allFiles())
+      }.getOrElse {
+        throw new AnalysisException(
+          s"Unable to infer schema for $formatName. It must be specified manually.")
+      }
+      fileIndex match {
+        case _: MetadataLogFileIndex => schema
+        case _ => schema.asNullable
+      }
     }
   }
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
-    SchemaUtils.checkColumnNameDuplication(dataSchema.fieldNames,
+    validateSchema(dataSchema, caseSensitive)
+    outputSchema.getOrElse {
+      validateSchema(dataSchema, caseSensitive)
+      val partitionSchema = fileIndex.partitionSchema
+      SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
+        "in the partition schema", caseSensitive)
+      val partitionNameSet: Set[String] =
+        partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
+
+      // When data and partition schemas have overlapping columns,
+      // tableSchema = dataSchema - overlapSchema + partitionSchema
+      val fields = dataSchema.fields.filterNot { field =>
+        val colName = PartitioningUtils.getColName(field, caseSensitive)
+        partitionNameSet.contains(colName)
+      } ++ partitionSchema.fields
+      StructType(fields)
+    }
+  }
+
+  private def validateSchema(schema: StructType, caseSensitive: Boolean): Unit = {
+    SchemaUtils.checkColumnNameDuplication(schema.fieldNames,
       "in the data schema", caseSensitive)
-    dataSchema.foreach { field =>
+    schema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw new AnalysisException(
           s"$formatName data source does not support ${field.dataType.catalogString} data type.")
       }
     }
-    val partitionSchema = fileIndex.partitionSchema
-    SchemaUtils.checkColumnNameDuplication(partitionSchema.fieldNames,
-      "in the partition schema", caseSensitive)
-    val partitionNameSet: Set[String] =
-      partitionSchema.fields.map(PartitioningUtils.getColName(_, caseSensitive)).toSet
-
-    // When data and partition schemas have overlapping columns,
-    // tableSchema = dataSchema - overlapSchema + partitionSchema
-    val fields = dataSchema.fields.filterNot { field =>
-      val colName = PartitioningUtils.getColName(field, caseSensitive)
-      partitionNameSet.contains(colName)
-    } ++ partitionSchema.fields
-    StructType(fields)
   }
 
   override def partitioning: Array[Transform] = fileIndex.partitionSchema.asTransforms
@@ -142,5 +159,5 @@ abstract class FileTable(
 }
 
 object FileTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE, ACCEPT_ANY_SCHEMA).asJava
 }
