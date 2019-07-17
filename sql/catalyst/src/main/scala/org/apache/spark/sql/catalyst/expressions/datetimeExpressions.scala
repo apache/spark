@@ -863,7 +863,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
       nullSafeCodeGen(ctx, ev, (seconds, f) => {
         s"""
         try {
-          ${ev.value} = UTF8String.fromString($tf.apply($f.toString(), $zid, $locale).
+          ${ev.value} = UTF8String.fromString($tf$$.MODULE$$.apply($f.toString(), $zid, $locale).
             format($seconds * 1000000L));
         } catch (java.lang.IllegalArgumentException e) {
           ${ev.isNull} = true;

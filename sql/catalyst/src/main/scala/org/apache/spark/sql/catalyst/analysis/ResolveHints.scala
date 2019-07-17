@@ -53,6 +53,8 @@ object ResolveHints {
   class ResolveJoinStrategyHints(conf: SQLConf) extends Rule[LogicalPlan] {
     private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
+    private val hintErrorHandler = conf.hintErrorHandler
+
     def resolver: Resolver = conf.resolver
 
     private def createHintInfo(hintName: String): HintInfo = {
@@ -74,12 +76,12 @@ object ResolveHints {
           case ResolvedHint(u @ UnresolvedRelation(ident), hint)
               if relations.exists(resolver(_, ident.last)) =>
             relations.remove(ident.last)
-            ResolvedHint(u, createHintInfo(hintName).merge(hint, handleOverriddenHintInfo))
+            ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case ResolvedHint(r: SubqueryAlias, hint)
               if relations.exists(resolver(_, r.alias)) =>
             relations.remove(r.alias)
-            ResolvedHint(r, createHintInfo(hintName).merge(hint, handleOverriddenHintInfo))
+            ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
           case u @ UnresolvedRelation(ident) if relations.exists(resolver(_, ident.last)) =>
             relations.remove(ident.last)
@@ -111,10 +113,6 @@ object ResolveHints {
       }
     }
 
-    private def handleOverriddenHintInfo(hint: HintInfo): Unit = {
-      logWarning(s"Join hint $hint is overridden by another hint and will not take effect.")
-    }
-
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint if STRATEGY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         if (h.parameters.isEmpty) {
@@ -132,10 +130,7 @@ object ResolveHints {
           relationNames.foreach(relationNameSet.add)
 
           val applied = applyJoinStrategyHint(h.child, relationNameSet, h.name)
-          relationNameSet.foreach { n =>
-            logWarning(s"Count not find relation '$n' for join strategy hint " +
-              s"'${h.name}${relationNames.mkString("(", ", ", ")")}'.")
-          }
+          hintErrorHandler.hintRelationsNotFound(h.name, h.parameters, relationNameSet.toSet)
           applied
         }
     }
@@ -171,10 +166,13 @@ object ResolveHints {
    * Removes all the hints, used to remove invalid hints provided by the user.
    * This must be executed after all the other hint rules are executed.
    */
-  object RemoveAllHints extends Rule[LogicalPlan] {
+  class RemoveAllHints(conf: SQLConf) extends Rule[LogicalPlan] {
+
+    private val hintErrorHandler = conf.hintErrorHandler
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
-        logWarning(s"Unrecognized hint: ${h.name}${h.parameters.mkString("(", ", ", ")")}")
+        hintErrorHandler.hintNotRecognized(h.name, h.parameters)
         h.child
     }
   }

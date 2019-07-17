@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{File, FilenameFilter, FileNotFoundException}
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -333,7 +334,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "csv,json,orc"
+          "csv,json,orc,parquet"
         } else {
           ""
         }
@@ -378,7 +379,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     // TODO: test file source V2 after write path is fixed.
     Seq(true).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "csv,orc"
+        "csv,orc,parquet"
       } else {
         ""
       }
@@ -572,6 +573,75 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("Option recursiveFileLookup: recursive loading correctly") {
+
+    val expectedFileList = mutable.ListBuffer[String]()
+
+    def createFile(dir: File, fileName: String, format: String): Unit = {
+      val path = new File(dir, s"${fileName}.${format}")
+      Files.write(
+        path.toPath,
+        s"content of ${path.toString}".getBytes,
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE
+      )
+      val fsPath = new Path(path.getAbsoluteFile.toURI).toString
+      expectedFileList.append(fsPath)
+    }
+
+    def createDir(path: File, dirName: String, level: Int): Unit = {
+      val dir = new File(path, s"dir${dirName}-${level}")
+      dir.mkdir()
+      createFile(dir, s"file${level}", "bin")
+      createFile(dir, s"file${level}", "text")
+
+      if (level < 4) {
+        // create sub-dir
+        createDir(dir, "sub0", level + 1)
+        createDir(dir, "sub1", level + 1)
+      }
+    }
+
+    withTempPath { path =>
+      path.mkdir()
+      createDir(path, "root", 0)
+
+      val dataPath = new File(path, "dirroot-0").getAbsolutePath
+      val fileList = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList.toSet === expectedFileList.toSet)
+
+      val fileList2 = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .option("pathGlobFilter", "*.bin")
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+    }
+  }
+
+  test("Option recursiveFileLookup: disable partition inferring") {
+    val dataPath = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/text-partitioned").toString
+
+    val df = spark.read.format("binaryFile")
+      .option("recursiveFileLookup", true)
+      .load(dataPath)
+
+    assert(!df.columns.contains("year"), "Expect partition inferring disabled")
+    val fileList = df.select("path").collect().map(_.getString(0))
+
+    val expectedFileList = Array(
+      dataPath + "/year=2014/data.txt",
+      dataPath + "/year=2015/data.txt"
+    ).map(path => new Path(path).toString)
+
+    assert(fileList.toSet === expectedFileList.toSet)
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
@@ -592,15 +662,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         withTempDir { dir =>
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
-          // ignore hidden files
-          val allFiles = dir.listFiles(new FilenameFilter {
-            override def accept(dir: File, name: String): Boolean = {
-              !name.startsWith(".") && !name.startsWith("_")
-            }
-          })
-          val totalSize = allFiles.map(_.length()).sum
           val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(totalSize))
+          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }
@@ -608,8 +671,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
 
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
-      withSQLConf("spark.sql.sources.fileCompressionFactor" -> compressionFactor.toString,
-        "spark.sql.autoBroadcastJoinThreshold" -> "250") {
+      withSQLConf(SQLConf.FILE_COMRESSION_FACTOR.key -> compressionFactor.toString,
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
         withTempPath { workDir =>
           // the file size is 486 bytes
           val workDirPath = workDir.getAbsolutePath

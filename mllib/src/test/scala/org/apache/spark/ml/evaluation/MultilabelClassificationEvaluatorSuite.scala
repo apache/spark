@@ -47,7 +47,7 @@ class MultilabelClassificationEvaluatorSuite
     assert(evaluator.evaluate(scoreAndLabels) ~== 2.0 / 7 absTol 1e-5)
 
     evaluator.setMetricName("recallByLabel")
-      .setMetricClass(0.0)
+      .setMetricLabel(0.0)
     assert(evaluator.evaluate(scoreAndLabels) ~== 0.8 absTol 1e-5)
   }
 
@@ -55,7 +55,7 @@ class MultilabelClassificationEvaluatorSuite
     val evaluator = new MultilabelClassificationEvaluator()
       .setPredictionCol("myPrediction")
       .setLabelCol("myLabel")
-      .setMetricClass(1.0)
+      .setMetricLabel(1.0)
       .setMetricName("precisionByLabel")
     testDefaultReadWrite(evaluator)
   }

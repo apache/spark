@@ -230,9 +230,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    * Returns weighted averaged f1-measure
    */
   @Since("1.1.0")
-  lazy val weightedFMeasure: Double = labelCountByClass.map { case (category, count) =>
-    fMeasure(category, 1.0) * count.toDouble / labelCount
-  }.sum
+  lazy val weightedFMeasure: Double = weightedFMeasure(1.0)
 
   /**
    * Returns the sequence of labels in ascending order

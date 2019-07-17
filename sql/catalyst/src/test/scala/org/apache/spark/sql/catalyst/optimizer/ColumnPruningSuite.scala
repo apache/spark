@@ -33,7 +33,7 @@ class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Column pruning", FixedPoint(100),
-      PushDownPredicate,
+      PushPredicateThroughNonJoin,
       ColumnPruning,
       RemoveNoopOperators,
       CollapseProject) :: Nil

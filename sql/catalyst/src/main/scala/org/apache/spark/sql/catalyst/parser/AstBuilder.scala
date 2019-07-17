@@ -111,7 +111,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a top-level plan with Common Table Expressions.
    */
   override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
-    val query = plan(ctx.queryNoWith)
+    val query = plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
 
     // Apply CTEs
     query.optionalMap(ctx.ctes)(withCTE)
@@ -129,7 +129,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       (namedQuery.alias, namedQuery)
     }
     // Check for duplicate names.
-    checkDuplicateKeys(ctes, ctx)
+    val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
+    if (duplicates.nonEmpty) {
+      throw new ParseException(
+        s"CTE definition can't have duplicate names: ${duplicates.mkString("'", "', '", "'")}.",
+        ctx)
+    }
     With(plan, ctes)
   }
 
@@ -175,17 +180,17 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
-  override def visitQueryNoWith(ctx: QueryNoWithContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryTerm).optionalMap(ctx.queryOrganization)(withQueryResultClauses)
-  }
-
   /**
    * Create a named logical plan.
    *
    * This is only used for Common Table Expressions.
    */
   override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
-    SubqueryAlias(ctx.name.getText, plan(ctx.query))
+    val subQuery: LogicalPlan = plan(ctx.query).optionalMap(ctx.columnAliases)(
+      (columnAliases, plan) =>
+        UnresolvedSubqueryColumnAliases(visitIdentifierList(columnAliases), plan)
+    )
+    SubqueryAlias(ctx.name.getText, subQuery)
   }
 
   /**
@@ -661,7 +666,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     // Collect all window specifications defined in the WINDOW clause.
     val baseWindowMap = ctx.namedWindow.asScala.map {
       wCtx =>
-        (wCtx.identifier.getText, typedVisit[WindowSpec](wCtx.windowSpec))
+        (wCtx.name.getText, typedVisit[WindowSpec](wCtx.windowSpec))
     }.toMap
 
     // Handle cases like
@@ -886,7 +891,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a logical plan for a sub-query.
    */
   override def visitSubquery(ctx: SubqueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith)
+    plan(ctx.query)
   }
 
   /**
@@ -923,7 +928,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     val tvf = UnresolvedTableValuedFunction(
-      func.identifier.getText, func.expression.asScala.map(expression), aliases)
+      func.funcName.getText, func.expression.asScala.map(expression), aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
@@ -974,7 +979,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * }}}
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    val relation = plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample)
+    val relation = plan(ctx.query).optionalMap(ctx.sample)(withSample)
     if (ctx.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
@@ -1022,7 +1027,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Sequence of Strings for an identifier list.
    */
   override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.identifier.asScala.map(_.getText)
+    ctx.ident.asScala.map(_.getText)
   }
 
   /* ********************************************************************************************
@@ -1082,8 +1087,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitNamedExpression(ctx: NamedExpressionContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
-    if (ctx.identifier != null) {
-      Alias(e, ctx.identifier.getText)()
+    if (ctx.name != null) {
+      Alias(e, ctx.name.getText)()
     } else if (ctx.identifierList != null) {
       MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
@@ -1399,29 +1404,42 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a Trim expression.
+   */
+  override def visitTrim(ctx: TrimContext): Expression = withOrigin(ctx) {
+    val srcStr = expression(ctx.srcStr)
+    val trimStr = Option(ctx.trimStr).map(expression)
+    Option(ctx.trimOption).map(_.getType).getOrElse(SqlBaseParser.BOTH) match {
+      case SqlBaseParser.BOTH =>
+        StringTrim(srcStr, trimStr)
+      case SqlBaseParser.LEADING =>
+        StringTrimLeft(srcStr, trimStr)
+      case SqlBaseParser.TRAILING =>
+        StringTrimRight(srcStr, trimStr)
+      case other =>
+        throw new ParseException("Function trim doesn't support with " +
+          s"type $other. Please use BOTH, LEADING or TRAILING as trim type", ctx)
+    }
+  }
+
+  /**
+   * Create a Overlay expression.
+   */
+  override def visitOverlay(ctx: OverlayContext): Expression = withOrigin(ctx) {
+    val input = expression(ctx.input)
+    val replace = expression(ctx.replace)
+    val position = expression(ctx.position)
+    val lengthOpt = Option(ctx.length).map(expression)
+    lengthOpt match {
+      case Some(length) => Overlay(input, replace, position, length)
+      case None => new Overlay(input, replace, position)
+    }
+  }
+
+  /**
    * Create a (windowed) Function expression.
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
-    def replaceFunctions(
-        funcID: FunctionIdentifier,
-        ctx: FunctionCallContext): FunctionIdentifier = {
-      val opt = ctx.trimOption
-      if (opt != null) {
-        if (ctx.qualifiedName.getText.toLowerCase(Locale.ROOT) != "trim") {
-          throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
-            s"doesn't support with option ${opt.getText}.", ctx)
-        }
-        opt.getType match {
-          case SqlBaseParser.BOTH => funcID
-          case SqlBaseParser.LEADING => funcID.copy(funcName = "ltrim")
-          case SqlBaseParser.TRAILING => funcID.copy(funcName = "rtrim")
-          case _ => throw new ParseException("Function trim doesn't support with " +
-            s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
-        }
-      } else {
-        funcID
-      }
-    }
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
@@ -1433,9 +1451,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case expressions =>
         expressions
     }
-    val funcId = replaceFunctions(visitFunctionName(ctx.qualifiedName), ctx)
-    val function = UnresolvedFunction(funcId, arguments, isDistinct)
-
+    val function = UnresolvedFunction(visitFunctionName(ctx.qualifiedName), arguments, isDistinct)
 
     // Check if the function is evaluated in a windowed context.
     ctx.windowSpec match {
@@ -1475,7 +1491,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a reference to a window frame, i.e. [[WindowSpecReference]].
    */
   override def visitWindowRef(ctx: WindowRefContext): WindowSpecReference = withOrigin(ctx) {
-    WindowSpecReference(ctx.identifier.getText)
+    WindowSpecReference(ctx.name.getText)
   }
 
   /**
@@ -1835,7 +1851,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[CalendarInterval]] for a unit value pair. Two unit configuration types are
    * supported:
    * - Single unit.
-   * - From-To unit (only 'YEAR TO MONTH' and 'DAY TO SECOND' and 'HOUR to SECOND' are supported).
+   * - From-To unit ('YEAR TO MONTH', 'DAY TO HOUR', 'DAY TO MINUTE', 'DAY TO SECOND',
+   * 'HOUR TO MINUTE', 'HOUR TO SECOND' and 'MINUTE TO SECOND' are supported).
    */
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
     import ctx._
@@ -1850,10 +1867,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           CalendarInterval.fromSingleUnitString(u, s)
         case ("year", Some("month")) =>
           CalendarInterval.fromYearMonthString(s)
+        case ("day", Some("hour")) =>
+          CalendarInterval.fromDayTimeString(s, "day", "hour")
+        case ("day", Some("minute")) =>
+          CalendarInterval.fromDayTimeString(s, "day", "minute")
         case ("day", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s)
+          CalendarInterval.fromDayTimeString(s, "day", "second")
+        case ("hour", Some("minute")) =>
+          CalendarInterval.fromDayTimeString(s, "hour", "minute")
         case ("hour", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s)
+          CalendarInterval.fromDayTimeString(s, "hour", "second")
+        case ("minute", Some("second")) =>
+          CalendarInterval.fromDayTimeString(s, "minute", "second")
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
@@ -1954,7 +1979,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
 
     StructField(
-      identifier.getText,
+      colName.getText,
       cleanedDataType,
       nullable = true,
       builder.build())
@@ -2008,7 +2033,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
               }
             }
 
-            orderedIdCtx.identifier.getText
+            orderedIdCtx.ident.getText
           })
   }
 
