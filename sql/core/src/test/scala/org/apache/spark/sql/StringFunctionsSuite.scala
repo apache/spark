@@ -143,12 +143,15 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("binary overlay function") {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    val df = Seq(("Spark SQL".getBytes)).toDF("a")
-    checkAnswer(df.select(overlay($"a", "_".getBytes, 6)), Row("Spark_SQL".getBytes))
-    checkAnswer(df.select(overlay($"a", "CORE".getBytes, 7)), Row("Spark CORE".getBytes))
-    checkAnswer(df.select(overlay($"a", "ANSI ".getBytes, 7, 0)), Row("Spark ANSI SQL".getBytes))
-    checkAnswer(
-      df.select(overlay($"a", "tructured".getBytes, 2, 4)), Row("Structured SQL".getBytes))
+    val df = Seq((Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9))).toDF("a")
+    checkAnswer(df.select(overlay(
+      $"a", Array[Byte](-1), 6)), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay(
+      $"a", Array[Byte](-1, -1, -1, -1), 7)), Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1)))
+    checkAnswer(df.select(overlay(
+      $"a", Array[Byte](-1, -1), 7, 0)), Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", Array[Byte](-1, -1, -1, -1, -1), 2, 4)),
+      Row(Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9)))
   }
 
   test("string / binary substring function") {

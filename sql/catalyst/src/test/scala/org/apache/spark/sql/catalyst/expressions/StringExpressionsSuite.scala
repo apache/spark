@@ -453,27 +453,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("overlay for byte array") {
-    checkEvaluation(new Overlay(Literal("Spark SQL".getBytes), Literal("_".getBytes),
-      Literal.create(6, IntegerType)), "Spark_SQL".getBytes)
-    checkEvaluation(new Overlay(Literal("Spark SQL".getBytes), Literal("CORE".getBytes),
-      Literal.create(7, IntegerType)), "Spark CORE".getBytes)
-    checkEvaluation(Overlay(Literal("Spark SQL".getBytes), Literal("ANSI ".getBytes),
-      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), "Spark ANSI SQL".getBytes)
-    checkEvaluation(Overlay(Literal("Spark SQL".getBytes), Literal("tructured".getBytes),
-      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), "Structured SQL".getBytes)
-    checkEvaluation(new Overlay(Literal.create(null, BinaryType), Literal("_".getBytes),
+    val input = Literal(Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(6, IntegerType)), Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1, -1, -1, -1)),
+      Literal.create(7, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(7, IntegerType),
+      Literal.create(0, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1, -1, -1, -1)),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)),
+      Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9))
+
+    val nullInput = Literal.create(null, BinaryType)
+    checkEvaluation(new Overlay(nullInput, Literal(Array[Byte](-1)),
       Literal.create(6, IntegerType)), null)
-    checkEvaluation(new Overlay(Literal.create(null, BinaryType), Literal("CORE".getBytes),
+    checkEvaluation(new Overlay(nullInput, Literal(Array[Byte](-1, -1, -1, -1)),
       Literal.create(7, IntegerType)), null)
-    checkEvaluation(Overlay(Literal.create(null, BinaryType), Literal("ANSI ".getBytes),
+    checkEvaluation(Overlay(nullInput, Literal(Array[Byte](-1, -1)),
       Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
-    checkEvaluation(Overlay(Literal.create(null, BinaryType), Literal("tructured".getBytes),
+    checkEvaluation(Overlay(nullInput, Literal(Array[Byte](-1, -1, -1, -1, -1)),
       Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
-    // scalastyle:off
-    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(new Overlay(Literal("Spark的SQL".getBytes), Literal("_".getBytes),
-      Literal.create(6, IntegerType)), "Spark_SQL".getBytes)
-    // scalastyle:on
   }
 
   test("translate") {
