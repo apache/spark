@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -103,31 +104,53 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Nested column pruning for Generate") {
-    withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
-      val strcutType = StructType.fromDDL("d string, e array<string>, f double")
-      val input = LocalRelation('a.int, 'b.int, 'c.struct(strcutType))
+    def runTest(
+        origGenerator: Generator,
+        replacedGenerator: Seq[String] => Generator,
+        aliasedExprs: Seq[String] => Seq[Expression],
+        unrequiredChildIndex: Seq[Int]) {
+      withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
+        val structType = StructType.fromDDL("d double, e array<string>, f double, g double")
+        val input = LocalRelation('a.int, 'b.int, 'c.struct(structType))
 
-      val query =
-        input
-          .generate(Explode('c.getField("e")), outputNames = "explode" :: Nil)
-          .select('a, 'c.getField("d"), 'explode)
-          .analyze
+        val query =
+          input
+            .generate(origGenerator, outputNames = "generator" :: Nil)
+            .select('a, 'c.getField("d"), 'generator)
+            .analyze
 
-      val optimized = Optimize.execute(query)
+        val optimized = Optimize.execute(query)
 
-      val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
+        val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
 
-      val correctAnswer =
-        input
-          .select('a, 'c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1)))
-          .generate(Explode($"${aliases(1)}".as("c.e")),
-            unrequiredChildIndex = Seq(2),
-            outputNames = "explode" :: Nil)
-          .select('a, $"${aliases(0)}".as("c.d"), 'explode)
-          .analyze
+        val selectedFields = UnresolvedAttribute("a") +: aliasedExprs(aliases)
+        val correctAnswer =
+          input
+            .select(selectedFields: _*)
+            .generate(replacedGenerator(aliases),
+              unrequiredChildIndex = unrequiredChildIndex,
+              outputNames = "generator" :: Nil)
+            .select('a, $"${aliases(0)}".as("c.d"), 'generator)
+            .analyze
 
-      comparePlans(optimized, correctAnswer)
+        comparePlans(optimized, correctAnswer)
+      }
     }
+
+    runTest(
+      Explode('c.getField("e")),
+      aliases => Explode($"${aliases(1)}".as("c.e")),
+      aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1))),
+      Seq(2)
+    )
+    runTest(Stack(2 :: 'c.getField("f") :: 'c.getField("g") :: Nil),
+      aliases => Stack(2 :: $"${aliases(1)}".as("c.f") :: $"${aliases(2)}".as("c.g") :: Nil),
+      aliases => Seq(
+        'c.getField("d").as(aliases(0)),
+        'c.getField("f").as(aliases(1)),
+        'c.getField("g").as(aliases(2))),
+      Seq(2, 3)
+    )
   }
 
   test("Column pruning for Project on Sort") {
