@@ -1025,7 +1025,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
     val left = Seq((1, 2), (2, 3)).toDF("a", "b")
     val right = Seq((1, 2), (3, 4)).toDF("c", "d")
-    val df = left.crossJoin(right).where(pythonTestUDF($"a") === pythonTestUDF($"c"))
+    val df = left.crossJoin(right).where(pythonTestUDF(left("a")) === right.col("c"))
 
     // Before optimization, there is a logical Filter operator.
     val filterInAnalysis = df.queryExecution.analyzed.find(_.isInstanceOf[Filter])
