@@ -316,7 +316,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val dynamicPartitionKeys: Map[String, Option[String]] = partitionKeys.filter(_._2.isEmpty)
     if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
       operationNotAllowed("IF NOT EXISTS with dynamic partitions: " +
-        dynamicPartitionKeys.keys.mkString(","), ctx)
+        dynamicPartitionKeys.keys.mkString(", "), ctx)
     }
 
     (tableIdent, partitionKeys, ctx.EXISTS() != null)
