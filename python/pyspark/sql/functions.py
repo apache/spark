@@ -2775,6 +2775,11 @@ def from_csv(col, schema, options={}):
     >>> value = data[0][0]
     >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
     [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
+    >>> data = [("   abc",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> options = {'ignoreLeadingWhiteSpace': True}
+    >>> df.select(from_csv(df.value, "s string", options).alias("csv")).collect()
+    [Row(csv=Row(s=u'abc'))]
     """
 
     sc = SparkContext._active_spark_context
