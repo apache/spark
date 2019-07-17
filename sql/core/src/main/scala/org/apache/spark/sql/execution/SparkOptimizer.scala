@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, Optimizer, PushDownPredicate, RemoveNoopOperators}
+import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, Optimizer, PushPredicateThroughNonJoin, RemoveNoopOperators}
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
 import org.apache.spark.sql.execution.python.{ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
@@ -37,7 +37,7 @@ class SparkOptimizer(
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
       ColumnPruning,
-      PushDownPredicate,
+      PushPredicateThroughNonJoin,
       RemoveNoopOperators) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
     Batch("Schema Pruning", Once, SchemaPruning)) ++

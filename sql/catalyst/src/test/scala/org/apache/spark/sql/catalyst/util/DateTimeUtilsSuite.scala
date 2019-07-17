@@ -138,6 +138,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     assert(stringToDate(UTF8String.fromString("015-03-18")).isEmpty)
     assert(stringToDate(UTF8String.fromString("015")).isEmpty)
     assert(stringToDate(UTF8String.fromString("02015")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999 08 01")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999-08 01")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("1999 08")).isEmpty)
   }
 
   test("string to timestamp") {
@@ -242,6 +245,9 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
       checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
+      checkStringToTimestamp("1999 08 01", None)
+      checkStringToTimestamp("1999-08 01", None)
+      checkStringToTimestamp("1999 08", None)
 
       // Truncating the fractional seconds
       timeZone = TimeZone.getTimeZone("GMT+00:00")
@@ -353,18 +359,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
 
   test("date add months") {
     val input = days(1997, 2, 28, 10, 30)
-    assert(dateAddMonths(input, 36) === days(2000, 2, 29))
-    assert(dateAddMonths(input, -13) === days(1996, 1, 31))
+    assert(dateAddMonths(input, 36) === days(2000, 2, 28))
+    assert(dateAddMonths(input, -13) === days(1996, 1, 28))
   }
 
   test("timestamp add months") {
     val ts1 = date(1997, 2, 28, 10, 30, 0)
-    val ts2 = date(2000, 2, 29, 10, 30, 0, 123000)
+    val ts2 = date(2000, 2, 28, 10, 30, 0, 123000)
     assert(timestampAddInterval(ts1, 36, 123000, defaultTz) === ts2)
 
     val ts3 = date(1997, 2, 27, 16, 0, 0, 0, TimeZonePST)
     val ts4 = date(2000, 2, 27, 16, 0, 0, 123000, TimeZonePST)
-    val ts5 = date(2000, 2, 29, 0, 0, 0, 123000, TimeZoneGMT)
+    val ts5 = date(2000, 2, 28, 0, 0, 0, 123000, TimeZoneGMT)
     assert(timestampAddInterval(ts3, 36, 123000, TimeZonePST) === ts4)
     assert(timestampAddInterval(ts3, 36, 123000, TimeZoneGMT) === ts5)
   }
