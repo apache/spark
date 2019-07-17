@@ -697,6 +697,32 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("SPARK-27485: EnsureRequirements.reorder should handle duplicate expressions") {
+    val plan1 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprA :: exprB :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan()
+    val smjExec = SortMergeJoinExec(
+      leftKeys = exprA :: exprB :: exprB :: Nil,
+      rightKeys = exprA :: exprC :: exprC :: Nil,
+      joinType = Inner,
+      condition = None,
+      left = plan1,
+      right = plan2)
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+             SortExec(_, _,
+               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+             SortExec(_, _,
+               ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _), _, _), _)) =>
+        assert(leftKeys === smjExec.leftKeys)
+        assert(rightKeys === smjExec.rightKeys)
+        assert(leftKeys === leftPartitioningExpressions)
+        assert(rightKeys === rightPartitioningExpressions)
+      case _ => fail(outputPlan.toString)
+    }
+  }
+
   test("SPARK-24500: create union with stream of children") {
     val df = Union(Stream(
       Range(1, 1, 1, 1),

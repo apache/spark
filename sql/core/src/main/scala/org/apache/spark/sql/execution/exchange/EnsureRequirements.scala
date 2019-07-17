@@ -24,8 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec,
-  SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -221,25 +220,41 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   private def reorder(
-      leftKeys: Seq[Expression],
-      rightKeys: Seq[Expression],
+      leftKeys: IndexedSeq[Expression],
+      rightKeys: IndexedSeq[Expression],
       expectedOrderOfKeys: Seq[Expression],
       currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
-    val leftKeysBuffer = ArrayBuffer[Expression]()
-    val rightKeysBuffer = ArrayBuffer[Expression]()
-    val pickedIndexes = mutable.Set[Int]()
-    val keysAndIndexes = currentOrderOfKeys.zipWithIndex
+    if (expectedOrderOfKeys.size != currentOrderOfKeys.size) {
+      return (leftKeys, rightKeys)
+    }
 
-    expectedOrderOfKeys.foreach(expression => {
-      val index = keysAndIndexes.find { case (e, idx) =>
-        // As we may have the same key used many times, we need to filter out its occurrence we
-        // have already used.
-        e.semanticEquals(expression) && !pickedIndexes.contains(idx)
-      }.map(_._2).get
-      pickedIndexes += index
-      leftKeysBuffer.append(leftKeys(index))
-      rightKeysBuffer.append(rightKeys(index))
-    })
+    // Build a lookup between an expression and the positions its holds in the current key seq.
+    val keyToIndexMap = mutable.Map.empty[Expression, mutable.BitSet]
+    currentOrderOfKeys.zipWithIndex.foreach {
+      case (key, index) =>
+        keyToIndexMap.getOrElseUpdate(key.canonicalized, mutable.BitSet.empty).add(index)
+    }
+
+    // Reorder the keys.
+    val leftKeysBuffer = new ArrayBuffer[Expression](leftKeys.size)
+    val rightKeysBuffer = new ArrayBuffer[Expression](rightKeys.size)
+    val iterator = expectedOrderOfKeys.iterator
+    while (iterator.hasNext) {
+      // Lookup the current index of this key.
+      keyToIndexMap.get(iterator.next().canonicalized) match {
+        case Some(indices) if indices.nonEmpty =>
+          // Take the first available index from the map.
+          val index = indices.firstKey
+          indices.remove(index)
+
+          // Add the keys for that index to the reordered keys.
+          leftKeysBuffer += leftKeys(index)
+          rightKeysBuffer += rightKeys(index)
+        case _ =>
+          // The expression cannot be found, or we have exhausted all indices for that expression.
+          return (leftKeys, rightKeys)
+      }
+    }
     (leftKeysBuffer, rightKeysBuffer)
   }
 
@@ -249,20 +264,13 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       leftPartitioning: Partitioning,
       rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
     if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
-      leftPartitioning match {
-        case HashPartitioning(leftExpressions, _)
-          if leftExpressions.length == leftKeys.length &&
-            leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
-          reorder(leftKeys, rightKeys, leftExpressions, leftKeys)
-
-        case _ => rightPartitioning match {
-          case HashPartitioning(rightExpressions, _)
-            if rightExpressions.length == rightKeys.length &&
-              rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
-            reorder(leftKeys, rightKeys, rightExpressions, rightKeys)
-
-          case _ => (leftKeys, rightKeys)
-        }
+      (leftPartitioning, rightPartitioning) match {
+        case (HashPartitioning(leftExpressions, _), _) =>
+          reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leftExpressions, leftKeys)
+        case (_, HashPartitioning(rightExpressions, _)) =>
+          reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
+        case _ =>
+          (leftKeys, rightKeys)
       }
     } else {
       (leftKeys, rightKeys)
