@@ -299,8 +299,7 @@ case class LoadDataCommand(
       }
       val resolver = sparkSession.sessionState.conf.resolver
       partition.get.keys.foreach { colName =>
-        if (!targetTable
-          .partitionColumnNames.exists(fieldName => resolver(fieldName, colName))) {
+        if (!targetTable.partitionColumnNames.exists(resolver(_, colName))) {
           throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
             s"but the specified partition spec refers to a column that is not partitioned: " +
             s"'$colName'")
