@@ -603,6 +603,19 @@ class SparseVector @Since("2.0.0") (
 
   private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
+  override def apply(i: Int): Double = {
+    if (i < 0 || i >= size) {
+      throw new IndexOutOfBoundsException(s"Index $i out of bounds [0, $size)")
+    }
+
+    if (indices.isEmpty || i < indices(0) || i > indices(indices.length - 1)) {
+      0.0
+    } else {
+      val j = util.Arrays.binarySearch(indices, i)
+      if (j < 0) 0.0 else values(j)
+    }
+  }
+
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
     val localValuesSize = values.length
