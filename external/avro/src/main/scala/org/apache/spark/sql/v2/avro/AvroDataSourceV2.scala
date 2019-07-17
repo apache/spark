@@ -27,8 +27,6 @@ class AvroDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[AvroFileFormat]
 
-  override def shortName(): String = "avro"
-
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)

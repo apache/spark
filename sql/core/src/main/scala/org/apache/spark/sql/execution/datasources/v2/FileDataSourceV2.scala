@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 /**
  * A base interface for data source v2 implementations of the built-in file-based data sources.
  */
-trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
+trait FileDataSourceV2 extends TableProvider {
   /**
    * Returns a V1 [[FileFormat]] class of the same file data source.
    * This is a solution for the following cases:
@@ -51,7 +51,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   }
 
   protected def getTableName(paths: Seq[String]): String = {
-    val name = shortName() + " " + paths.map(qualifiedPathName).mkString(",")
+    val name = paths.map(qualifiedPathName).mkString(";")
     Utils.redact(sparkSession.sessionState.conf.stringRedactionPattern, name)
   }
 

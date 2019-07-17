@@ -27,8 +27,6 @@ class JsonDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[JsonFileFormat]
 
-  override def shortName(): String = "json"
-
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)

@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, QueryExecution}
 import org.apache.spark.sql.execution.datasources.{FileFormat, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{FileCatalog, FileDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
@@ -33,11 +33,15 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 
+class DummyReadOnlyFileCatalog extends FileCatalog {
+  override def getTableProvider: FileDataSourceV2 = new DummyReadOnlyFileDataSourceV2
+
+  override def shortName(): String = "parquet"
+}
+
 class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
-
-  override def shortName(): String = "parquet"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new DummyReadOnlyFileTable
@@ -57,11 +61,15 @@ class DummyReadOnlyFileTable extends Table with SupportsRead {
     Set(TableCapability.BATCH_READ, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
+class DummyWriteOnlyFileCatalog extends FileCatalog {
+  override def getTableProvider: FileDataSourceV2 = new DummyWriteOnlyFileDataSourceV2
+
+  override def shortName(): String = "parquet"
+}
+
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
-
-  override def shortName(): String = "parquet"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     new DummyWriteOnlyFileTable
@@ -82,8 +90,8 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
 
 class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
 
-  private val dummyParquetReaderV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
-  private val dummyParquetWriterV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
+  private val dummyParquetReaderV2 = classOf[DummyReadOnlyFileCatalog].getName
+  private val dummyParquetWriterV2 = classOf[DummyWriteOnlyFileCatalog].getName
 
   test("Fall back to v1 when writing to file with read only FileDataSourceV2") {
     val df = spark.range(10).toDF()
@@ -176,7 +184,7 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Fallback Parquet V2 to V1") {
-    Seq("parquet", classOf[ParquetDataSourceV2].getCanonicalName).foreach { format =>
+    Seq("parquet", classOf[ParquetCatalog].getCanonicalName).foreach { format =>
       withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> format,
         SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> format) {
         val commands = ArrayBuffer.empty[(String, LogicalPlan)]

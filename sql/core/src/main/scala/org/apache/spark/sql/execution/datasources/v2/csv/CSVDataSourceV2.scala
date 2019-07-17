@@ -27,8 +27,6 @@ class CSVDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
 
-  override def shortName(): String = "csv"
-
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)

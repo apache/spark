@@ -27,8 +27,6 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
 
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
-  override def shortName(): String = "parquet"
-
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
     val tableName = getTableName(paths)
