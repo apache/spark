@@ -46,6 +46,10 @@ abstract class FileScan(
     false
   }
 
+  def getFileUnSplittableReason(path: Path): String = {
+    "Unknown"
+  }
+
   override def description(): String = {
     val locationDesc =
       fileIndex.getClass.getSimpleName + fileIndex.rootPaths.mkString("[", ", ", "]")
@@ -98,8 +102,8 @@ abstract class FileScan(
       val path = new Path(splitFiles(0).filePath)
       if (isSplitable(path) && splitFiles(0).length >
         sparkSession.sparkContext.getConf.get(IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD)) {
-        logWarning(s"File ${path.toString} is large and unsplittable so the corresponding " +
-          s"rdd partition have to deal with the whole file and consume large time.")
+        logWarning(s"Loading one large unsplittable File ${path.toString} with only one " +
+          s"partition, the reason is: ${getFileUnSplittableReason(path)}")
       }
     }
 

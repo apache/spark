@@ -44,6 +44,18 @@ case class TextScan(
     super.isSplitable(path) && !textOptions.wholeText
   }
 
+  override def getFileUnSplittableReason(path: Path): String = {
+    if (!isSplitable(path)) {
+      super.getFileUnSplittableReason(path)
+    } else {
+      if (textOptions.wholeText) {
+        "the text datasource is set wholetext mode"
+      } else {
+        null
+      }
+    }
+  }
+
   override def createReaderFactory(): PartitionReaderFactory = {
     assert(
       readDataSchema.length <= 1,

@@ -210,13 +210,13 @@ class HadoopRDD[K, V](
       } else {
         allInputSplits
       }
-      if (inputSplits.length == 1) {
+      if (inputSplits.length == 1 && inputSplits(0).isInstanceOf[FileSplit]) {
         val fileSplit = inputSplits(0).asInstanceOf[FileSplit]
         val path = fileSplit.getPath
         if (Utils.isFileSplittable(path, codecFactory)
           && fileSplit.getLength > conf.get(IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD)) {
-          logWarning(s"File ${path.toString} is large and unsplittable so the corresponding " +
-            s"rdd partition have to deal with the whole file and consume large time.")
+          logWarning(s"Loading one large unsplittable File ${path.toString} with only one " +
+            s"partition, because the file is compressed by unsplittable compression codec.")
         }
       }
       val array = new Array[Partition](inputSplits.size)
