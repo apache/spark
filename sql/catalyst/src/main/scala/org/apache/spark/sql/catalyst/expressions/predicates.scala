@@ -840,3 +840,46 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
+
+/**
+ * Test the value of an expression is true, false, or unknown.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, booleanValue) - Returns true if `expr` equals booleanValue, " +
+    "or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr - a boolean expression
+      * booleanValue - a boolean value represented by a string. booleanValue must be one
+          of TRUE, FALSE and UNKNOWN.
+  """,
+  examples = """
+    Examples:
+    > SELECT _FUNC_(1 > 2, true);
+       false
+    > SELECT _FUNC_(2 > 1, true);
+       true
+  """,
+  since = "3.0.0")
+case class BooleanTest(child: Expression, booleanOpt: Option[Boolean])
+  extends UnaryExpression with Predicate {
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = booleanOpt match {
+    case Some(true) => child.eval(input) == true
+    case Some(false) => child.eval(input) == false
+    case None => child.eval(input) == null
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, input => booleanOpt match {
+      case Some(true) => s"java.lang.Boolean.TRUE.equals($input)"
+      case Some(false) => s"java.lang.Boolean.FALSE.equals($input)"
+      case None => s"$input == null"
+    )
+  }
+
+  override def sql: String = s"""(${child.sql} IS ${booleanOpt.getOrElse("UNKNOWN")})"""
+}
+
