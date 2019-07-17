@@ -314,9 +314,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         .setHandleInvalid($(handleInvalid))
     }
 
-    encoderStages += new ColumnPruner(resolvedFormula.evalExprs.toSet)
-
-    val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)
+    val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(datasetWithExprs)
     copyValues(new RFormulaModel(uid, resolvedFormula, pipelineModel).setParent(this))
   }
 
@@ -367,28 +365,19 @@ class RFormulaModel private[feature](
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
-    transformLabel(pipelineModel.transform(dataset))
+    val withExprs = transformSelectExprs(dataset.toDF)
+    val withFeatures = pipelineModel.transform(withExprs)
+    val withLabel = transformLabel(withFeatures)
+    transformDropExprs(withLabel)
   }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     checkCanTransform(schema)
-    val withFeatures = pipelineModel.transformSchema(schema)
-    if (resolvedFormula.label.isEmpty || hasLabelCol(withFeatures)) {
-      withFeatures
-    } else if (schema.exists(_.name == resolvedFormula.label)) {
-      val nullable = schema(resolvedFormula.label).dataType match {
-        case _: NumericType | BooleanType => false
-        case _ => true
-      }
-      StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, nullable))
-    } else if (resolvedFormula.evalExprs.contains(resolvedFormula.label)) {
-      StructType(withFeatures.fields :+ StructField($(labelCol), DoubleType, false))
-    } else {
-      // Ignore the label field. This is a hack so that this transformer can also work on test
-      // datasets in a Pipeline.
-      withFeatures
-    }
+    val withExprs = transformSelectExprsSchema(schema)
+    val withFeatures = pipelineModel.transformSchema(withExprs)
+    val withLabel = transformLabelSchema(withFeatures)
+    transformDropExprsSchema(withLabel)
   }
 
   @Since("1.5.0")
@@ -409,14 +398,7 @@ class RFormulaModel private[feature](
     } else if (dataset.schema.exists(_.name == labelName)) {
       dataset.schema(labelName).dataType match {
         case _: NumericType | BooleanType =>
-          dataset.withColumn($(labelCol), dataset(labelName).cast(DoubleType))
-        case other =>
-          throw new IllegalArgumentException("Unsupported type for label: " + other)
-      }
-    } else if (resolvedFormula.evalExprs.contains(labelName)) {
-      dataset.withColumn(labelName, expr(labelName)).schema(labelName).dataType match {
-        case _: NumericType | BooleanType =>
-          dataset.withColumn($(labelCol), expr(labelName).cast(DoubleType))
+          dataset.withColumn($(labelCol), col(s"`$labelName`").cast(DoubleType))
         case other =>
           throw new IllegalArgumentException("Unsupported type for label: " + other)
       }
@@ -427,12 +409,52 @@ class RFormulaModel private[feature](
     }
   }
 
+  private def transformLabelSchema(schema: StructType): StructType = {
+    if (resolvedFormula.label.isEmpty || hasLabelCol(schema)) {
+      schema
+    } else if (schema.exists(_.name == resolvedFormula.label)) {
+      val nullable = schema(resolvedFormula.label).dataType match {
+        case _: NumericType | BooleanType => false
+        case _ => true
+      }
+      StructType(schema.fields :+ StructField($(labelCol), DoubleType, nullable))
+    } else {
+      // Ignore the label field. This is a hack so that this transformer can also work on test
+      // datasets in a Pipeline.
+      schema
+    }
+  }
+
   private def checkCanTransform(schema: StructType): Unit = {
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
       !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType.isInstanceOf[NumericType],
       s"Label column already exists and is not of type ${NumericType.simpleString}.")
+  }
+
+  private def foldExprs(dataframe: DataFrame)(f: (DataFrame, String) => DataFrame): DataFrame =
+    resolvedFormula.evalExprs.foldLeft(dataframe)(f)
+
+  private def transformSelectExprs(dataframe: DataFrame): DataFrame = foldExprs(dataframe) {
+    case(df, colname) => df.withColumn(colname, expr(colname))
+  }
+
+  private def transformDropExprs(dataframe: DataFrame): DataFrame = foldExprs(dataframe) {
+    case(df, colname) => df.drop(col(s"`$colname`"))
+  }
+
+  private def transformSelectExprsSchema(schema: StructType): StructType = {
+    val spark = SparkSession.builder().getOrCreate()
+    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+    val dummyDF = spark.createDataFrame(dummyRDD, schema)
+    transformSelectExprs(dummyDF).schema
+  }
+
+  private def transformDropExprsSchema(schema: StructType): StructType = {
+    val remainingFields = schema.fields
+      .filter(field => !resolvedFormula.evalExprs.contains(field.name))
+    StructType(remainingFields)
   }
 
   @Since("2.0.0")
@@ -644,83 +666,6 @@ private object VectorAttributeRewriter extends MLReadable[VectorAttributeRewrite
 
       metadata.getAndSetParams(rewriter)
       rewriter
-    }
-  }
-}
-
-/**
- * Utility transformer for adding expressions to dataframe using `expr` spark function
- *
- * @param exprsToSelect set of string expressions to be added as a column to the dataframe.
- *                      The name of the columns will be identical to the expression
- */
-private class ExprSelector(
-    override val uid: String,
-    val exprsToSelect: Set[String])
-  extends Transformer with MLWritable {
-
-  def this(exprsToSelect: Set[String]) =
-    this(Identifiable.randomUID("exprSelector"), exprsToSelect)
-
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    selectExprs(dataset.toDF)
-  }
-
-  private def selectExprs(dataframe: DataFrame): DataFrame = {
-    exprsToSelect.foldLeft(dataframe) { case (ds, col) =>
-        ds.withColumn(col, expr(col))
-    }
-  }
-
-  override def transformSchema(schema: StructType): StructType = {
-    val spark = SparkSession.builder().getOrCreate()
-    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
-    val dummyDF = spark.createDataFrame(dummyRDD, schema)
-    selectExprs(dummyDF).schema
-  }
-
-  override def copy(extra: ParamMap): ExprSelector = defaultCopy(extra)
-
-  override def write: MLWriter = new ExprSelector.ExprSelectorWriter(this)
-}
-
-private object ExprSelector extends MLReadable[ExprSelector] {
-
-  override def read: MLReader[ExprSelector] = new ExprSelectorReader
-
-  override def load(path: String): ExprSelector = super.load(path)
-
-  /** [[MLWriter]] instance for [[ExprSelector]] */
-  private[ExprSelector] class ExprSelectorWriter(instance: ExprSelector) extends MLWriter {
-
-    private case class Data(exprsToSelect: Seq[String])
-
-    override protected def saveImpl(path: String): Unit = {
-      // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: exprsToSelect
-      val data = Data(instance.exprsToSelect.toSeq)
-      val dataPath = new Path(path, "exprSelector").toString
-      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
-    }
-  }
-
-  private class ExprSelectorReader extends MLReader[ExprSelector] {
-
-    /** Checked against metadata when loading model */
-    private val className = classOf[ExprSelector].getName
-
-    override def load(path: String): ExprSelector = {
-      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-      val dataPath = new Path(path, "exprSelector").toString
-      val data = sparkSession.read.parquet(dataPath).select("exprsToSelect").head()
-      val exprsToSelect = data.getAs[Seq[String]](0).toSet
-      val selector = new ExprSelector(metadata.uid, exprsToSelect)
-
-      metadata.getAndSetParams(selector)
-      selector
     }
   }
 }
