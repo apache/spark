@@ -184,7 +184,6 @@ object FileFormatWriter extends Logging {
         })
 
       val currentUser = SparkHadoopUtil.get.createSparkUser().getShortUserName
-      logInfo(s"SparkUser ${sparkSession.sparkContext.sparkUser}")
       UserGroupInformation
         .createProxyUser(sparkSession.sparkContext.sparkUser,
           UserGroupInformation.getLoginUser)
@@ -195,7 +194,6 @@ object FileFormatWriter extends Logging {
               fs.setOwner(path, owner, owner)
               fs.listStatus(path).map(_.getPath).foreach(changeOwnRecursive(fs, _, owner))
             } else {
-              logInfo(s"Change path[${path}] owner to current user ${owner}")
               fs.setOwner(path, owner, owner)
             }
           }

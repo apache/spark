@@ -79,12 +79,9 @@ class SparkSessionManager extends Logging {
         UserGroupInformation.getLoginUser
       }
 
-      logInfo(s"Current Username => ${session.getUserName}")
-      logInfo(s"Create SparkSession with UGI => ${ugi}")
       sparkContext.conf.set("hive.metastore.token.signature", STS_TOKEN)
       try {
         val delegationToken = getDelegationToken(session.getUserName)
-        logInfo(s"Get DelegationToken => ${delegationToken}")
         Utils.setTokenStr(ugi, delegationToken, STS_TOKEN)
       } catch {
         case e: IOException =>
