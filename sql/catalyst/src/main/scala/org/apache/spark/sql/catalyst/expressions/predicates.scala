@@ -877,7 +877,7 @@ case class BooleanTest(child: Expression, booleanOpt: Option[Boolean])
       case Some(true) => s"java.lang.Boolean.TRUE.equals($input)"
       case Some(false) => s"java.lang.Boolean.FALSE.equals($input)"
       case None => s"$input == null"
-    )
+    })
   }
 
   override def sql: String = s"""(${child.sql} IS ${booleanOpt.getOrElse("UNKNOWN")})"""
