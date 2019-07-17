@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.util.Random
 
-import scala.collection.{Map, mutable}
+import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Codec
 import scala.language.implicitConversions
