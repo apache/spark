@@ -485,7 +485,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       .load(testFile("test-data/postgresql/tenk.data"))
       .createOrReplaceTempView("tenk1")
 
-      session.sql("""select * from tenk1 where stringu1 like stringu2 escape '"'""")
+      session.sql("select * from tenk1 where stringu1 like stringu2 escape '\"'")
   }
 
   private val originalTimeZone = TimeZone.getDefault
