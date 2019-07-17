@@ -159,8 +159,6 @@ class ReadwriterTests(ReusedSQLTestCase):
             df.write.insertInto("test_table", False)
             self.assertEqual(4, self.spark.sql("select * from test_table").count())
 
-            # self.spark.sql("drop table test_table")
-
 
 if __name__ == "__main__":
     import unittest
