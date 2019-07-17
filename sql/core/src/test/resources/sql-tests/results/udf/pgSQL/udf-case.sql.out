@@ -107,7 +107,7 @@ struct<>
 -- !query 12
 SELECT '3' AS `One`,
   CASE
-    WHEN CAST(udf(1 < 2) AS boolean) THEN 3
+    WHEN udf(1 < 2) THEN 3
   END AS `Simple WHEN`
 -- !query 12 schema
 struct<One:string,Simple WHEN:int>
@@ -121,7 +121,7 @@ SELECT '<NULL>' AS `One`,
     WHEN 1 > 2 THEN udf(3)
   END AS `Simple default`
 -- !query 13 schema
-struct<One:string,Simple default:string>
+struct<One:string,Simple default:int>
 -- !query 13 output
 <NULL>	NULL
 
@@ -133,7 +133,7 @@ SELECT '3' AS `One`,
     ELSE udf(4)
   END AS `Simple ELSE`
 -- !query 14 schema
-struct<One:string,Simple ELSE:string>
+struct<One:string,Simple ELSE:int>
 -- !query 14 output
 3	3
 
@@ -153,7 +153,7 @@ struct<One:string,ELSE default:int>
 -- !query 16
 SELECT udf('6') AS `One`,
   CASE
-    WHEN CAST(udf(1 > 2) AS boolean) THEN 3
+    WHEN udf(1 > 2) THEN 3
     WHEN udf(4) < 5 THEN 6
     ELSE 7
   END AS `Two WHEN with default`
@@ -174,9 +174,9 @@ struct<None:string,NULL on no matches:int>
 
 
 -- !query 18
-SELECT CASE WHEN CAST(udf(1=0) AS boolean) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
+SELECT CASE WHEN udf(1=0) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query 18 schema
-struct<CASE WHEN CAST(udf((1 = 0)) AS BOOLEAN) THEN (1 div 0) WHEN (1 = 1) THEN 1 ELSE (2 div 0) END:int>
+struct<CASE WHEN CAST(udf(cast((1 = 0) as string)) AS BOOLEAN) THEN (1 div 0) WHEN (1 = 1) THEN 1 ELSE (2 div 0) END:int>
 -- !query 18 output
 1
 
@@ -184,15 +184,15 @@ struct<CASE WHEN CAST(udf((1 = 0)) AS BOOLEAN) THEN (1 div 0) WHEN (1 = 1) THEN 
 -- !query 19
 SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END
 -- !query 19 schema
-struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(CAST(udf(0) AS DOUBLE) AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE CAST((2 div 0) AS DOUBLE) END:double>
+struct<CASE WHEN (1 = 0) THEN (1 div CAST(udf(cast(0 as string)) AS INT)) WHEN (1 = 1) THEN 1 ELSE (2 div 0) END:int>
 -- !query 19 output
-1.0
+1
 
 
 -- !query 20
 SELECT CASE WHEN i > 100 THEN udf(1/0) ELSE udf(0) END FROM case_tbl
 -- !query 20 schema
-struct<CASE WHEN (i > 100) THEN udf((1 div 0)) ELSE udf(0) END:string>
+struct<CASE WHEN (i > 100) THEN CAST(udf(cast((1 div 0) as string)) AS INT) ELSE CAST(udf(cast(0 as string)) AS INT) END:int>
 -- !query 20 output
 0
 0
@@ -203,7 +203,7 @@ struct<CASE WHEN (i > 100) THEN udf((1 div 0)) ELSE udf(0) END:string>
 -- !query 21
 SELECT CASE 'a' WHEN 'a' THEN udf(1) ELSE udf(2) END
 -- !query 21 schema
-struct<CASE WHEN (a = a) THEN udf(1) ELSE udf(2) END:string>
+struct<CASE WHEN (a = a) THEN CAST(udf(cast(1 as string)) AS INT) ELSE CAST(udf(cast(2 as string)) AS INT) END:int>
 -- !query 21 output
 1
 
@@ -294,7 +294,7 @@ struct<i:int,f:double>
 SELECT udf(COALESCE(a.f, b.i, b.j))
   FROM CASE_TBL a, CASE2_TBL b
 -- !query 28 schema
-struct<udf(coalesce(f, cast(i as double), cast(j as double))):string>
+struct<CAST(udf(cast(coalesce(f, cast(i as double), cast(j as double)) as string)) AS DOUBLE):double>
 -- !query 28 output
 -30.3
 -30.3
@@ -369,7 +369,7 @@ struct<Five:string,NULLIF(a.i,b.i):int,NULLIF(b.i,4):int>
 -- !query 31
 SELECT '' AS `Two`, *
   FROM CASE_TBL a, CASE2_TBL b
-  WHERE CAST(udf(COALESCE(f,b.i) = 2) AS boolean)
+  WHERE udf(COALESCE(f,b.i) = 2)
 -- !query 31 schema
 struct<Two:string,i:int,f:double,i:int,j:int>
 -- !query 31 output
