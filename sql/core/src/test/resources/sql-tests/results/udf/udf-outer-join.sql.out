@@ -24,22 +24,22 @@ struct<>
 
 -- !query 2
 SELECT
-  (udf(SUM(COALESCE(t1.int_col1, t2.int_col0)))),
+  (udf(SUM(udf(COALESCE(t1.int_col1, t2.int_col0))))),
      (udf(COALESCE(t1.int_col1, t2.int_col0)) * 2)
 FROM t1
 RIGHT JOIN t2
-  ON (t2.int_col0) = (t1.int_col1)
-GROUP BY udf(GREATEST(COALESCE(t2.int_col1, 109), COALESCE(t1.int_col1, -449))),
+  ON udf(t2.int_col0) = udf(t1.int_col1)
+GROUP BY udf(GREATEST(COALESCE(udf(t2.int_col1), 109), COALESCE(t1.int_col1, udf(-449)))),
          COALESCE(t1.int_col1, t2.int_col0)
-HAVING (udf(SUM(COALESCE(t1.int_col1, t2.int_col0))))
+HAVING (udf(SUM(COALESCE(udf(t1.int_col1), udf(t2.int_col0)))))
             > (udf(COALESCE(t1.int_col1, t2.int_col0)) * 2)
 -- !query 2 schema
-struct<udf(sum(cast(coalesce(int_col1, int_col0) as bigint))):string,(CAST(udf(coalesce(int_col1, int_col0)) AS DOUBLE) * CAST(2 AS DOUBLE)):double>
+struct<CAST(udf(cast(sum(cast(cast(udf(cast(coalesce(int_col1, int_col0) as string)) as int) as bigint)) as string)) AS BIGINT):bigint,(CAST(udf(cast(coalesce(int_col1, int_col0) as string)) AS INT) * 2):int>
 -- !query 2 output
--367	-734.0
--507	-1014.0
--769	-1538.0
--800	-1600.0
+-367	-734
+-507	-1014
+-769	-1538
+-800	-1600
 
 
 -- !query 3
@@ -70,12 +70,12 @@ spark.sql.crossJoin.enabled	true
 SELECT *
 FROM (
 SELECT
-    udf(COALESCE(t2.int_col1, udf(t1.int_col1))) AS int_col
+    udf(COALESCE(udf(t2.int_col1), udf(t1.int_col1))) AS int_col
     FROM t1
     LEFT JOIN t2 ON false
 ) t where (udf(t.int_col)) is not null
 -- !query 6 schema
-struct<int_col:string>
+struct<int_col:int>
 -- !query 6 output
 97
 

@@ -14,14 +14,14 @@ CREATE OR REPLACE TEMPORARY VIEW t2 AS SELECT * FROM VALUES
 as t2(int_col0, int_col1);
 
 SELECT
-  (udf(SUM(COALESCE(t1.int_col1, t2.int_col0)))),
+  (udf(SUM(udf(COALESCE(t1.int_col1, t2.int_col0))))),
      (udf(COALESCE(t1.int_col1, t2.int_col0)) * 2)
 FROM t1
 RIGHT JOIN t2
-  ON (t2.int_col0) = (t1.int_col1)
-GROUP BY udf(GREATEST(COALESCE(t2.int_col1, 109), COALESCE(t1.int_col1, -449))),
+  ON udf(t2.int_col0) = udf(t1.int_col1)
+GROUP BY udf(GREATEST(COALESCE(udf(t2.int_col1), 109), COALESCE(t1.int_col1, udf(-449)))),
          COALESCE(t1.int_col1, t2.int_col0)
-HAVING (udf(SUM(COALESCE(t1.int_col1, t2.int_col0))))
+HAVING (udf(SUM(COALESCE(udf(t1.int_col1), udf(t2.int_col0)))))
             > (udf(COALESCE(t1.int_col1, t2.int_col0)) * 2);
 
 
@@ -36,7 +36,7 @@ set spark.sql.crossJoin.enabled = true;
 SELECT *
 FROM (
 SELECT
-    udf(COALESCE(t2.int_col1, udf(t1.int_col1))) AS int_col
+    udf(COALESCE(udf(t2.int_col1), udf(t1.int_col1))) AS int_col
     FROM t1
     LEFT JOIN t2 ON false
 ) t where (udf(t.int_col)) is not null;
