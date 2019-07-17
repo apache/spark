@@ -29,7 +29,8 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("PullupCorrelatedPredicates", Once,
-        PullupCorrelatedPredicates) :: Nil
+        PullupCorrelatedPredicates,
+        RewritePredicateSubquery) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.double)
@@ -64,8 +65,6 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     val optimized = Optimize.execute(outerQuery)
     val doubleOptimized = Optimize.execute(optimized)
 
-    val listQuery = doubleOptimized.collect { case x: Filter => x }.head.condition
-      .asInstanceOf[InSubquery].query
-    assert(listQuery.children.nonEmpty)
+    comparePlans(optimized, doubleOptimized)
   }
 }
