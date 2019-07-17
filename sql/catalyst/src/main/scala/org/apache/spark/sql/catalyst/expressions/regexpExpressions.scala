@@ -70,8 +70,8 @@ abstract class StringRegexExpression extends BinaryExpression
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern[ escape] - Returns true if str matches `pattern` with `escape`" +
-    ", null if any arguments are null, false otherwise.",
+  usage = "str _FUNC_ pattern[ ESCAPE escape] - Returns true if str matches `pattern` with " +
+    "`escape`, null if any arguments are null, false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -89,10 +89,9 @@ abstract class StringRegexExpression extends BinaryExpression
           When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
           to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
           enabled, the pattern to match "\abc" should be "\abc".
-      * escape - a optional string. The default escape character is the '\' but a different one
-          can be selected by using the ESCAPE clause. If an escape character precedes a special
-          symbol or another escape character, the following character is matched literally. It is
-          invalid to escape any other character.
+      * escape - a optional string. The default escape character is the '\' . If an escape character
+          precedes a special symbol or another escape character, the following character is matched
+          literally. It is invalid to escape any other character.
   """,
   examples = """
     Examples:
@@ -113,8 +112,7 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Strin
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  override def toString: String = s"$left LIKE $right" +
-    escapeCharOpt.map(str => s" ESCAPE $str")
+  override def toString: String = s"$left LIKE $right" + escapeCharOpt.map(str => s" ESCAPE $str")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
