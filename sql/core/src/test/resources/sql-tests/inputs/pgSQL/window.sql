@@ -1,7 +1,9 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- Window Functions Testing
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/window.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/window.sql
+
+CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
 CREATE TABLE empsalary (
     depname string,
