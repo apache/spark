@@ -251,17 +251,17 @@ FROM tenk1 WHERE unique1 < 10;
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- mismatched input '(' e
+-- mismatched input '('
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- mismatched input '(' e
+-- mismatched input '('
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- mismatched input '(' e
+-- mismatched input '('
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
