@@ -183,26 +183,29 @@ object FileFormatWriter extends Logging {
           ret(index) = res
         })
 
-      val currentUser = SparkHadoopUtil.get.createSparkUser().getShortUserName
-      UserGroupInformation
-        .createProxyUser(sparkSession.sparkContext.sparkUser,
-          UserGroupInformation.getLoginUser)
-        .doAs[Unit](new PrivilegedExceptionAction[Unit] {
-        def run: Unit = {
-          def changeOwnRecursive(fs: FileSystem, path: Path, owner: String): Unit = {
-            if (fs.isDirectory(path)) {
-              fs.setOwner(path, owner, owner)
-              fs.listStatus(path).map(_.getPath).foreach(changeOwnRecursive(fs, _, owner))
-            } else {
-              fs.setOwner(path, owner, owner)
+      // when enable Spark ThriftServer doAs, change staging dir and data's owner
+      if(sparkSession.sqlContext.conf.hiveThriftServerEnableDoAs){
+        val currentUser = SparkHadoopUtil.get.createSparkUser().getShortUserName
+        UserGroupInformation
+          .createProxyUser(sparkSession.sparkContext.sparkUser,
+            UserGroupInformation.getLoginUser)
+          .doAs[Unit](new PrivilegedExceptionAction[Unit] {
+          def run: Unit = {
+            def changeOwnRecursive(fs: FileSystem, path: Path, owner: String): Unit = {
+              if (fs.isDirectory(path)) {
+                fs.setOwner(path, owner, owner)
+                fs.listStatus(path).map(_.getPath).foreach(changeOwnRecursive(fs, _, owner))
+              } else {
+                fs.setOwner(path, owner, owner)
+              }
             }
-          }
 
-          val outputPath = new Path(outputSpec.outputPath)
-          val fs = FileSystem.get(outputPath.toUri, sparkSession.sparkContext.hadoopConfiguration)
-          changeOwnRecursive(fs, outputPath, currentUser)
-        }
-      })
+            val outputPath = new Path(outputSpec.outputPath)
+            val fs = FileSystem.get(outputPath.toUri, sparkSession.sparkContext.hadoopConfiguration)
+            changeOwnRecursive(fs, outputPath, currentUser)
+          }
+        })
+      }
 
       val commitMsgs = ret.map(_.commitMsg)
 

@@ -90,6 +90,12 @@ object StaticSQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val HIVE_THRIFT_SERVER_ENABLE_DOAS =
+    buildStaticConf("spark.sql.hive.thriftServer.enable.doAs")
+      .doc("When set to true, Hive Thrift server will run with proxy client user.")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_THRIFT_SERVER_SINGLESESSION =
     buildStaticConf("spark.sql.hive.thriftServer.singleSession")
       .doc("When set to true, Hive Thrift server is running in a single session mode. " +
