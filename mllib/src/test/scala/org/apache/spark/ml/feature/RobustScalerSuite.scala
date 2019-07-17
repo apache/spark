@@ -115,7 +115,7 @@ class RobustScalerSuite extends MLTest with DefaultReadWriteTest {
   }
 
 
-  def assertResult: Row => Unit = {
+  private def assertResult: Row => Unit = {
     case Row(vector1: Vector, vector2: Vector) =>
       assert(vector1 ~== vector2 absTol 1E-5,
         "The vector value is not correct after transformation.")

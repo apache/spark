@@ -79,12 +79,12 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   setDefault(withCentering -> false)
 
   /**
-   * Whether to scale the data to interquartile range.
+   * Whether to scale the data to quantile range.
    * Default: true
    * @group param
    */
   val withScaling: BooleanParam = new BooleanParam(this, "withScaling",
-    "Whether to scale the data to interquartile range")
+    "Whether to scale the data to quantile range")
 
   /** @group getParam */
   def getWithScaling: Boolean = $(withScaling)
@@ -107,15 +107,15 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
 /**
  * Scale features using statistics that are robust to outliers.
  * This Scaler removes the median and scales the data according to the quantile range
- * (defaults to IQR: Interquartile Range). The IQR is the range between the 1st quartile
- * (25th quantile) and the 3rd quartile (75th quantile).
+ * (defaults to IQR: Interquartile Range, the range between the 1st quartile
+ * (25th quantile) and the 3rd quartile (75th quantile)).
  * Centering and scaling happen independently on each feature by computing the relevant
- * statistics on the samples in the training set. Median and interquartile range are then
+ * statistics on the samples in the training set. Median and quantile range are then
  * stored to be used on later data using the transform method.
  * Standardization of a dataset is a common requirement for many machine learning estimators.
  * Typically this is done by removing the mean and scaling to unit variance. However,
  * outliers can often influence the sample mean / variance in a negative way.
- * In such cases, the median and the interquartile range often give better results.
+ * In such cases, the median and the quantile range often give better results.
  */
 @Since("3.0.0")
 class RobustScaler (override val uid: String)
@@ -147,29 +147,31 @@ class RobustScaler (override val uid: String)
     val summaries = dataset.select($(inputCol)).rdd.map {
       case Row(vec: Vector) => vec
     }.mapPartitions { iter =>
-      var localAgg: Array[QuantileSummaries] = null
+      var agg: Array[QuantileSummaries] = null
       while (iter.hasNext) {
         val vec = iter.next()
-        if (localAgg == null) {
-          localAgg = Array.fill(vec.size)(
+        if (agg == null) {
+          agg = Array.fill(vec.size)(
             new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, 0.001))
         }
-        require(vec.size == localAgg.length)
+        require(vec.size == agg.length)
         var i = 0
         while (i < vec.size) {
-          localAgg(i) = localAgg(i).insert(vec(i))
+          agg(i) = agg(i).insert(vec(i))
           i += 1
         }
       }
 
-      if (localAgg != null) {
+      if (agg == null) {
+        Iterator.empty
+      } else {
         var i = 0
-        while (i < localAgg.length) {
-          localAgg(i) = localAgg(i).compress()
+        while (i < agg.length) {
+          agg(i) = agg(i).compress()
           i += 1
         }
-        Iterator.single(localAgg)
-      } else Iterator.empty
+        Iterator.single(agg)
+      }
     }.treeReduce { (agg1, agg2) =>
       require(agg1.length == agg2.length)
       var i = 0

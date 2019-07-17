@@ -249,7 +249,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
   private[spark] def transformDenseWithScale(scale: Array[Double],
                                              values: Array[Double]): Array[Double] = {
     var i = 0
-    while(i < values.length) {
+    while (i < values.length) {
       values(i) *= scale(i)
       i += 1
     }
