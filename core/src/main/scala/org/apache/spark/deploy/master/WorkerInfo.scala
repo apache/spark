@@ -157,7 +157,7 @@ private[spark] class WorkerInfo(
   /**
    * used during master recovery
    */
-  def notifyResources(expected: Map[String, ResourceInformation]): Unit = {
+  def recoverResources(expected: Map[String, ResourceInformation]): Unit = {
     expected.foreach { case (rName, rInfo) =>
       resources(rName).acquire(rInfo.addresses)
     }

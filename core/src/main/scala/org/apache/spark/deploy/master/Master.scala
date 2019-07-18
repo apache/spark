@@ -379,7 +379,7 @@ private[deploy] class Master(
             val execInfo = app.addExecutor(
               worker, execDesc.cores, execResources, Some(execDesc.execId))
             worker.addExecutor(execInfo)
-            worker.notifyResources(execResources)
+            worker.recoverResources(execResources)
             execInfo.copyState(execDesc)
           }
 
@@ -389,7 +389,7 @@ private[deploy] class Master(
               driver.worker = Some(worker)
               driver.state = DriverState.RUNNING
               driver.withResources(driverResource)
-              worker.notifyResources(driverResource)
+              worker.recoverResources(driverResource)
               worker.addDriver(driver)
             }
           }
