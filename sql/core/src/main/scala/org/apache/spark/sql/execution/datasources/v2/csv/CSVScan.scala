@@ -57,7 +57,7 @@ case class CSVScan(
       if (!CSVDataSource(parsedOptions).isSplitable) {
         "the csv datasource is set multiLine mode"
       } else {
-        ""
+        null
       }
     }
   }

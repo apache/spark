@@ -57,7 +57,7 @@ case class JsonScan(
       if (!JsonDataSource(parsedOptions).isSplitable) {
         "the json datasource is set multiLine mode"
       } else {
-        ""
+        null
       }
     }
   }
