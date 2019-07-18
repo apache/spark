@@ -3,14 +3,12 @@
 --
 --
 -- AGGREGATES [Part 1]
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L1-L143
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L1-L143
 
 -- avoid bit-exact output here because operations may not be bit-exact.
 -- SET extra_float_digits = 0;
 
 -- This test file was converted from pgSQL/aggregates_part1.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
 SELECT avg(udf(four)) AS avg_1 FROM onek;
 
@@ -31,13 +29,13 @@ SELECT udf(udf(sum(b))) AS avg_431_773 FROM aggtest;
 
 SELECT udf(max(four)) AS max_3 FROM onek;
 SELECT max(udf(a)) AS max_100 FROM aggtest;
-SELECT CAST(udf(udf(max(aggtest.b))) AS int) AS max_324_78 FROM aggtest;
+SELECT udf(udf(max(aggtest.b))) AS max_324_78 FROM aggtest;
 -- `student` has a column with data type POINT, which is not supported by Spark [SPARK-27766]
 -- SELECT max(student.gpa) AS max_3_7 FROM student;
 
-SELECT CAST(stddev_pop(udf(b)) AS int) FROM aggtest;
+SELECT stddev_pop(udf(b)) FROM aggtest;
 SELECT udf(stddev_samp(b)) FROM aggtest;
-SELECT CAST(var_pop(udf(b)) as int) FROM aggtest;
+SELECT var_pop(udf(b)) FROM aggtest;
 SELECT udf(var_samp(b)) FROM aggtest;
 
 SELECT udf(stddev_pop(CAST(b AS Decimal(38,0)))) FROM aggtest;
@@ -89,7 +87,7 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
 -- SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
 -- SELECT regr_r2(b, a) FROM aggtest;
 -- SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
-SELECT CAST(udf(covar_pop(b, udf(a))) AS int), CAST(covar_samp(udf(b), a) as int) FROM aggtest;
+SELECT udf(covar_pop(b, udf(a))), covar_samp(udf(b), a) FROM aggtest;
 SELECT corr(b, udf(a)) FROM aggtest;
 
 
