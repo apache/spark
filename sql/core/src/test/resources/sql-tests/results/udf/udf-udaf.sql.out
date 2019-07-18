@@ -21,11 +21,11 @@ struct<>
 
 
 -- !query 2
-SELECT default.myDoubleAvg(udf(int_col1)) as my_avg from t1
+SELECT default.myDoubleAvg(udf(int_col1)) as my_avg, udf(default.myDoubleAvg(udf(int_col1))) as my_avg2, udf(default.myDoubleAvg(int_col1)) as my_avg3 from t1
 -- !query 2 schema
-struct<my_avg:double>
+struct<my_avg:double,my_avg2:double,my_avg3:double>
 -- !query 2 output
-102.5
+102.5	102.5	102.5
 
 
 -- !query 3
