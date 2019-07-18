@@ -106,9 +106,9 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
 
 /**
  * Scale features using statistics that are robust to outliers.
- * This Scaler removes the median and scales the data according to the quantile range
- * (defaults to IQR: Interquartile Range, the range between the 1st quartile
- * (25th quantile) and the 3rd quartile (75th quantile)).
+ * This Scaler removes the median and scales the data according to the quantile range.
+ * The quantile range is by default IQR (Interquartile Range, quantile range between the
+ * 1st quartile = 25th quantile and the 3rd quartile = 75th quantile) but can be configured.
  * Centering and scaling happen independently on each feature by computing the relevant
  * statistics on the samples in the training set. Median and quantile range are then
  * stored to be used on later data using the transform method.
