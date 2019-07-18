@@ -305,7 +305,7 @@ trait CheckAnalysis extends PredicateHelper {
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
           // throw an AnalysisException, too.
-          case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
+          case v @ View(desc, output, child) if child.resolved && output != child.output =>
             val queryColumnNames = desc.viewQueryColumnNames
             val queryOutput = if (queryColumnNames.nonEmpty) {
               if (output.length != queryColumnNames.length) {
@@ -332,8 +332,10 @@ trait CheckAnalysis extends PredicateHelper {
               case (attr, originAttr) if !attr.dataType.sameType(originAttr.dataType) =>
                 // The dataType of the output attributes may be not the same with that of the view
                 // output, so we should cast the attribute to the dataType of the view output
-                // attribute. Will throw an AnalysisException if the cast is not a up-cast.
-                if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
+                // attribute. Will throw an AnalysisException if the cast can't be performed or
+                // might truncate.
+                if (Cast.mayTruncate(originAttr.dataType, attr.dataType) ||
+                  !Cast.canCast(originAttr.dataType, attr.dataType)) {
                   throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
                     s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} " +
                     "as it may truncate\n")
