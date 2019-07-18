@@ -204,7 +204,7 @@ PIVOT (
   FOR year IN (course, 2013)
 );
 
--- todo complex type fix
+-- Complex type is not supported in the current UDF. Skipped for now.
 -- pivot on join query with columns of complex data types
 -- SELECT * FROM (
 --  SELECT course, year, a
@@ -216,7 +216,7 @@ PIVOT (
 --  FOR course IN ('dotNET', 'Java')
 --);
 
--- todo complex type fix
+-- Complex type is not supported in the current UDF. Skipped for now.
 -- pivot on multiple pivot columns with agg columns of complex data types
 -- SELECT * FROM (
 --  SELECT course, year, y, a
