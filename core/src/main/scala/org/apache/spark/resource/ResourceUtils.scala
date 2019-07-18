@@ -70,7 +70,14 @@ private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[Stri
  * worker/driver(client only) pid.
  */
 private[spark]
-case class StandaloneResourceAllocation(pid: Int, allocations: Seq[ResourceAllocation])
+case class StandaloneResourceAllocation(pid: Int, allocations: Seq[ResourceAllocation]) {
+  // convert allocations to a resource information map
+  def toResourceInformationMap: Map[String, ResourceInformation] = {
+    allocations.map { allocation =>
+      allocation.id.resourceName -> allocation.toResourceInformation
+    }.toMap
+  }
+}
 
 private[spark] object ResourceUtils extends Logging {
   // These directory/files are used to coordinate the resources between
@@ -120,6 +127,8 @@ private[spark] object ResourceUtils extends Logging {
     }
     val lock = acquireLock(conf)
     val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
+    // all allocated resources in ALLOCATED_RESOURCES_FILE, can be updated if any allocations'
+    // related processes detected to be terminated while checking pids below.
     var origAllocation = Seq.empty[StandaloneResourceAllocation]
     var allocated = {
       if (resourcesFile.exists()) {
@@ -138,20 +147,27 @@ private[spark] object ResourceUtils extends Logging {
       }
     }
 
+    // new allocated resources for worker or driver,
+    // map from resource name to its allocated addresses.
     var newAssignments: Map[String, Array[String]] = null
     // Whether we've checked process status and we'll only do the check at most once.
+    // Do the check iff the available resources can't meet the requirements at the first time.
     var checked = false
     // Whether we need to keep allocating for the worker/driver and we'll only go through
     // the loop at most twice.
     var keepAllocating = true
     while (keepAllocating) {
       keepAllocating = false
+      // store the pid whose related allocated resources conflict with
+      // discovered resources passed in.
       val pidsToCheck = mutable.Set[Int]()
       newAssignments = resourceRequirements.map { req =>
         val rName = req.resourceName
         val amount = req.amount
         // initially, we must have available.length >= amount as we've done pre-check previously
         var available = resources(rName).addresses
+        // gets available resource addresses by excluding all
+        // allocated resource addresses from discovered resources
         allocated.foreach { a =>
           val thePid = a._1
           val resourceMap = a._2
@@ -172,7 +188,8 @@ private[spark] object ResourceUtils extends Logging {
           }
         }
         val assigned = {
-          if (keepAllocating) {
+          if (keepAllocating) { // can't meet the requirement
+            // excludes the allocation whose related process has already been terminated.
             val (invalid, valid) = allocated.partition { a =>
               pidsToCheck(a._1) && !(Utils.isTesting || Utils.isProcessRunning(a._1))}
             allocated = valid
@@ -195,11 +212,7 @@ private[spark] object ResourceUtils extends Logging {
       StandaloneResourceAllocation(pid, allocations)
     }
     writeResourceAllocationJson(componentName, origAllocation ++ Seq(newAllocation), resourcesFile)
-    val acquired = {
-      newAllocation.allocations.map { allocation =>
-        allocation.id.resourceName -> allocation.toResourceInformation
-      }.toMap
-    }
+    val acquired = newAllocation.toResourceInformationMap
     logInfo("==============================================================")
     logInfo(s"Acquired isolated resources for $componentName:\n${acquired.mkString("\n")}")
     logInfo("==============================================================")
@@ -209,7 +222,7 @@ private[spark] object ResourceUtils extends Logging {
 
   /**
    * Free the indicated resources to make those resources be available for other
-   * workers on the same host.
+   * workers/drivers on the same host.
    * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
    * @param toRelease the resources expected to release
