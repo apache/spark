@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
@@ -2640,8 +2641,8 @@ object Sequence {
 
         while (t < exclusiveItem ^ stepSign < 0) {
           arr(i) = fromLong(t / scale)
-          t = timestampAddInterval(t, stepMonths, stepMicros, timeZone)
           i += 1
+          t = timestampAddInterval(startMicros, i * stepMonths, i * stepMicros, timeZone)
         }
 
         // truncate array to the correct length
@@ -2675,12 +2676,6 @@ object Sequence {
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
           """.stripMargin
 
-      val timestampAddIntervalCode =
-        s"""
-           |$t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
-           |  $t, $stepMonths, $stepMicros, $genTimeZone);
-          """.stripMargin
-
       s"""
          |final int $stepMonths = $step.months;
          |final long $stepMicros = $step.microseconds;
@@ -2704,8 +2699,9 @@ object Sequence {
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
          |    $arr[$i] = ($elemType) ($t / ${scale}L);
-         |    $timestampAddIntervalCode
          |    $i += 1;
+         |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+         |       $startMicros, $i * $stepMonths, $i * $stepMicros, $genTimeZone);
          |  }
          |
          |  if ($arr.length > $i) {

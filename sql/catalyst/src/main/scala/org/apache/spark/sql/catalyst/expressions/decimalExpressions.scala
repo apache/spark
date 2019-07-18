@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -46,19 +47,38 @@ case class UnscaledValue(child: Expression) extends UnaryExpression {
  */
 case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends UnaryExpression {
 
+  private val nullOnOverflow = SQLConf.get.decimalOperationsNullOnOverflow
+
   override def dataType: DataType = DecimalType(precision, scale)
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable || nullOnOverflow
   override def toString: String = s"MakeDecimal($child,$precision,$scale)"
 
-  protected override def nullSafeEval(input: Any): Any =
-    Decimal(input.asInstanceOf[Long], precision, scale)
+  protected override def nullSafeEval(input: Any): Any = {
+    val longInput = input.asInstanceOf[Long]
+    val result = new Decimal()
+    if (nullOnOverflow) {
+      result.setOrNull(longInput, precision, scale)
+    } else {
+      result.set(longInput, precision, scale)
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
+      val setMethod = if (nullOnOverflow) {
+        "setOrNull"
+      } else {
+        "set"
+      }
+      val setNull = if (nullable) {
+        s"${ev.isNull} = ${ev.value} == null;"
+      } else {
+        ""
+      }
       s"""
-        ${ev.value} = (new Decimal()).setOrNull($eval, $precision, $scale);
-        ${ev.isNull} = ${ev.value} == null;
-      """
+         |${ev.value} = (new Decimal()).$setMethod($eval, $precision, $scale);
+         |$setNull
+         |""".stripMargin
     })
   }
 }
@@ -81,30 +101,34 @@ case class PromotePrecision(child: Expression) extends UnaryExpression {
 
 /**
  * Rounds the decimal to given scale and check whether the decimal can fit in provided precision
- * or not, returns null if not.
+ * or not. If not, if `nullOnOverflow` is `true`, it returns `null`; otherwise an
+ * `ArithmeticException` is thrown.
  */
-case class CheckOverflow(child: Expression, dataType: DecimalType) extends UnaryExpression {
+case class CheckOverflow(
+    child: Expression,
+    dataType: DecimalType,
+    nullOnOverflow: Boolean) extends UnaryExpression {
 
   override def nullable: Boolean = true
 
   override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[Decimal].toPrecision(dataType.precision, dataType.scale)
+    input.asInstanceOf[Decimal].toPrecision(
+      dataType.precision,
+      dataType.scale,
+      Decimal.ROUND_HALF_UP,
+      nullOnOverflow)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      val tmp = ctx.freshName("tmp")
       s"""
-         | Decimal $tmp = $eval.clone();
-         | if ($tmp.changePrecision(${dataType.precision}, ${dataType.scale})) {
-         |   ${ev.value} = $tmp;
-         | } else {
-         |   ${ev.isNull} = true;
-         | }
+         |${ev.value} = $eval.toPrecision(
+         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow);
+         |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
     })
   }
 
-  override def toString: String = s"CheckOverflow($child, $dataType)"
+  override def toString: String = s"CheckOverflow($child, $dataType, $nullOnOverflow)"
 
   override def sql: String = child.sql
 }

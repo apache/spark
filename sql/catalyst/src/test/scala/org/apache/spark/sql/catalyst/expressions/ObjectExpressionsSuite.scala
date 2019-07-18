@@ -448,7 +448,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val row = RandomDataGenerator.randomRow(random, schema)
         val rowConverter = RowEncoder(schema)
         val internalRow = rowConverter.toRow(row)
-        val lambda = LambdaVariable("dummy", "dummuIsNull", schema(0).dataType, schema(0).nullable)
+        val lambda = LambdaVariable("dummy", schema(0).dataType, schema(0).nullable, id = 0)
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
       }
     }

@@ -62,7 +62,7 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
-  override def references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
   private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
     udf.children match {

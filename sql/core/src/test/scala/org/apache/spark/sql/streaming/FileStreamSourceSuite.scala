@@ -1310,7 +1310,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               val start = startId.map(new FileStreamSourceOffset(_))
               val end = FileStreamSourceOffset(endId)
 
-              withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+              withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
                 assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
               }
             }

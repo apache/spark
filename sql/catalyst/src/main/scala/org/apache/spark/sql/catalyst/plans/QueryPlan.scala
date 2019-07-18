@@ -37,13 +37,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: AttributeSet = AttributeSet(output)
-
-  /**
-   * All Attributes that appear in expressions from this operator.  Note that this set does not
-   * include attributes that are implicitly referenced by being passed through to the output tuple.
-   */
-  def references: AttributeSet = AttributeSet.fromAttributeSets(expressions.map(_.references))
+  @transient
+  lazy val outputSet: AttributeSet = AttributeSet(output)
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -57,11 +52,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
-   * Attributes that are referenced by expressions but not provided by this node's children.
-   * Subclasses should override this method if they produce attributes internally as it is used by
-   * assertions designed to prevent the construction of invalid plans.
+   * All Attributes that appear in expressions from this operator.  Note that this set does not
+   * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def missingInput: AttributeSet = references -- inputSet -- producedAttributes
+  @transient
+  lazy val references: AttributeSet = {
+    AttributeSet.fromAttributeSets(expressions.map(_.references)) -- producedAttributes
+  }
+
+  /**
+   * Attributes that are referenced by expressions but not provided by this node's children.
+   */
+  final def missingInput: AttributeSet = references -- inputSet
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present

@@ -648,6 +648,18 @@ class ExpressionParserSuite extends AnalysisTest {
       checkIntervals(s"'$value' day to second", result)
     }
 
+    // Hour-Time intervals.
+    val hourTimeValues = Seq(
+      "11:22:33.123456789",
+      "9:8:7.123456789",
+      "-19:18:17.123456789",
+      "0:0:0",
+      "0:0:1")
+    hourTimeValues.foreach { value =>
+      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      checkIntervals(s"'$value' hour to second", result)
+    }
+
     // Unknown FROM TO intervals
     intercept("interval 10 month to second",
       "Intervals FROM month TO second are not supported.")
@@ -723,6 +735,15 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
+  test("Support respect nulls keywords for first_value and last_value") {
+    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
   test("timestamp literals") {

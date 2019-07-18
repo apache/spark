@@ -268,6 +268,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DateFormatClass(Cast(Literal(d), TimestampType, jstId),
       Literal("H"), jstId), "0")
     checkEvaluation(DateFormatClass(Literal(ts), Literal("H"), jstId), "22")
+
+    // SPARK-28072 The codegen path should work
+    checkEvaluation(
+      expression = DateFormatClass(
+        BoundReference(ordinal = 0, dataType = TimestampType, nullable = true),
+        BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+        jstId),
+      expected = "22",
+      inputRow = InternalRow(DateTimeUtils.fromJavaTimestamp(ts), UTF8String.fromString("H")))
   }
 
   test("Hour") {
@@ -453,13 +462,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal(1)), null)
     checkEvaluation(AddMonths(Literal.create(null, DateType), Literal.create(null, IntegerType)),
       null)
+    // Valid range of DateType is [0001-01-01, 9999-12-31]
+    val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2015-01-30")), Literal(Int.MinValue)), -7293498)
+      AddMonths(Literal(Date.valueOf("0001-01-01")), Literal(maxMonthInterval)), 2933261)
     checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2016-02-28")), positiveIntLit), 1014213)
-    checkEvaluation(
-      AddMonths(Literal(Date.valueOf("2016-02-28")), negativeIntLit), -980528)
-    checkConsistencyBetweenInterpretedAndCodegen(AddMonths, DateType, IntegerType)
+      AddMonths(Literal(Date.valueOf("9999-12-31")), Literal(-1 * maxMonthInterval)), -719529)
+    // Test evaluation results between Interpreted mode and Codegen mode
+    forAll (
+      LiteralGenerator.randomGen(DateType),
+      LiteralGenerator.monthIntervalLiterGen
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, AddMonths(l1, l2))
+    }
   }
 
   test("months_between") {
@@ -683,14 +698,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         FromUnixTime(Literal(0L), Literal("not a valid format"), timeZoneId), null)
 
-        // The codegen path for non-literal input should also work
-        checkEvaluation(
-          expression = FromUnixTime(
-            BoundReference(ordinal = 0, dataType = LongType, nullable = true),
-            BoundReference(ordinal = 1, dataType = StringType, nullable = true),
-            timeZoneId),
-          expected = UTF8String.fromString(sdf1.format(new Timestamp(0))),
-          inputRow = InternalRow(0L, UTF8String.fromString(fmt1)))
+      // SPARK-28072 The codegen path for non-literal input should also work
+      checkEvaluation(
+        expression = FromUnixTime(
+          BoundReference(ordinal = 0, dataType = LongType, nullable = true),
+          BoundReference(ordinal = 1, dataType = StringType, nullable = true),
+          timeZoneId),
+        expected = UTF8String.fromString(sdf1.format(new Timestamp(0))),
+        inputRow = InternalRow(0L, UTF8String.fromString(fmt1)))
     }
   }
 
@@ -800,7 +815,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(
           ToUnixTimestamp(Literal("2015-07-24"), Literal("not a valid format"), timeZoneId), null)
 
-        // The codegen path for non-literal input should also work
+        // SPARK-28072 The codegen path for non-literal input should also work
         checkEvaluation(
           expression = ToUnixTimestamp(
             BoundReference(ordinal = 0, dataType = StringType, nullable = true),
