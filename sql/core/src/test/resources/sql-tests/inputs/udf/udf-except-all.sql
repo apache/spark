@@ -1,6 +1,4 @@
 -- This test file was converted from except-all.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
 CREATE TEMPORARY VIEW tab1 AS SELECT * FROM VALUES
     (0), (1), (2), (2), (2), (2), (3), (null), (null) AS tab1(c1);
@@ -22,74 +20,72 @@ CREATE TEMPORARY VIEW tab4 AS SELECT * FROM VALUES
     AS tab4(k, v);
 
 -- Basic EXCEPT ALL
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
-SELECT * FROM tab2;
+SELECT udf(c1) FROM tab2;
 
 -- MINUS ALL (synonym for EXCEPT)
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 MINUS ALL
-SELECT * FROM tab2;
+SELECT udf(c1) FROM tab2;
 
 -- EXCEPT ALL same table in both branches
--- Note that there will one less NULL in the result compared to the non-udf result
--- because udf converts null to a string "null".
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
-SELECT * FROM tab2 WHERE udf(c1) IS NOT NULL;
+SELECT udf(c1) FROM tab2 WHERE udf(c1) IS NOT NULL;
 
 -- Empty left relation
-SELECT * FROM tab1 WHERE udf(c1) > 5
+SELECT udf(c1) FROM tab1 WHERE udf(c1) > 5
 EXCEPT ALL
-SELECT * FROM tab2;
+SELECT udf(c1) FROM tab2;
 
 -- Empty right relation
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
-SELECT * FROM tab2 WHERE c1 > udf(6);
+SELECT udf(c1) FROM tab2 WHERE udf(c1 > udf(6));
 
 -- Type Coerced ExceptAll
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
 SELECT CAST(udf(1) AS BIGINT);
 
 -- Error as types of two side are not compatible
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
 SELECT array(1);
 
 -- Basic
-SELECT * FROM tab3
+SELECT udf(k), v FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4;
+SELECT k, udf(v) FROM tab4;
 
 -- Basic
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 EXCEPT ALL
-SELECT * FROM tab3;
+SELECT udf(k), v FROM tab3;
 
 -- EXCEPT ALL + INTERSECT
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 EXCEPT ALL
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 INTERSECT DISTINCT
-SELECT * FROM tab4;
+SELECT udf(k), udf(v) FROM tab4;
 
 -- EXCEPT ALL + EXCEPT
-SELECT * FROM tab4
+SELECT udf(k), v FROM tab4
 EXCEPT ALL
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4;
+SELECT udf(k), udf(v) FROM tab4;
 
 -- Chain of set operations
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 UNION ALL
-SELECT * FROM tab3
+SELECT udf(k), v FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4;
+SELECT k, udf(v) FROM tab4;
 
 -- Mismatch on number of columns across both branches
 SELECT k FROM tab3
@@ -97,59 +93,59 @@ EXCEPT ALL
 SELECT k, v FROM tab4;
 
 -- Chain of set operations
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 UNION
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4;
+SELECT udf(k), udf(v) FROM tab4;
 
 -- Using MINUS ALL
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 MINUS ALL
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 UNION
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 MINUS DISTINCT
-SELECT * FROM tab4;
+SELECT k, udf(v) FROM tab4;
 
 -- Chain of set operations
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT udf(k), v FROM tab4
 EXCEPT DISTINCT
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4;
+SELECT udf(k), v FROM tab4;
 
 -- Join under except all. Should produce empty resultset since both left and right sets 
 -- are same.
 SELECT * 
-FROM   (SELECT udf(tab3.k),
+FROM   (SELECT tab3.k,
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON udf(tab3.k) = udf(tab4.k))
+                 ON udf(tab3.k) = tab4.k)
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab3.k),
-               udf(tab4.v)
+               tab4.v
         FROM   tab3 
                JOIN tab4 
-                 ON udf(tab3.k) = udf(tab4.k));
+                 ON tab3.k = udf(tab4.k));
 
 -- Join under except all (2)
 SELECT * 
-FROM   (SELECT udf(tab3.k),
+FROM   (SELECT udf(udf(tab3.k)),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON udf(tab3.k) = udf(tab4.k))
+                 ON udf(udf(tab3.k)) = udf(tab4.k))
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab4.v) AS k,
-               udf(tab3.k) AS v
+               udf(udf(tab3.k)) AS v
         FROM   tab3 
                JOIN tab4 
                  ON udf(tab3.k) = udf(tab4.k));

@@ -49,11 +49,11 @@ struct<>
 
 
 -- !query 4
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
-SELECT * FROM tab2
+SELECT udf(c1) FROM tab2
 -- !query 4 schema
-struct<c1:int>
+struct<CAST(udf(cast(c1 as string)) AS INT):int>
 -- !query 4 output
 0
 2
@@ -62,11 +62,11 @@ NULL
 
 
 -- !query 5
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 MINUS ALL
-SELECT * FROM tab2
+SELECT udf(c1) FROM tab2
 -- !query 5 schema
-struct<c1:int>
+struct<CAST(udf(cast(c1 as string)) AS INT):int>
 -- !query 5 output
 0
 2
@@ -75,34 +75,35 @@ NULL
 
 
 -- !query 6
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
-SELECT * FROM tab2 WHERE udf(c1) IS NOT NULL
+SELECT udf(c1) FROM tab2 WHERE udf(c1) IS NOT NULL
 -- !query 6 schema
-struct<c1:int>
+struct<CAST(udf(cast(c1 as string)) AS INT):int>
 -- !query 6 output
 0
 2
 2
 NULL
+NULL
 
 
 -- !query 7
-SELECT * FROM tab1 WHERE udf(c1) > 5
+SELECT udf(c1) FROM tab1 WHERE udf(c1) > 5
 EXCEPT ALL
-SELECT * FROM tab2
+SELECT udf(c1) FROM tab2
 -- !query 7 schema
-struct<c1:int>
+struct<CAST(udf(cast(c1 as string)) AS INT):int>
 -- !query 7 output
 
 
 
 -- !query 8
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
-SELECT * FROM tab2 WHERE c1 > udf(6)
+SELECT udf(c1) FROM tab2 WHERE udf(c1 > udf(6))
 -- !query 8 schema
-struct<c1:int>
+struct<CAST(udf(cast(c1 as string)) AS INT):int>
 -- !query 8 output
 0
 1
@@ -116,11 +117,11 @@ NULL
 
 
 -- !query 9
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
 SELECT CAST(udf(1) AS BIGINT)
 -- !query 9 schema
-struct<c1:bigint>
+struct<CAST(udf(cast(c1 as string)) AS INT):bigint>
 -- !query 9 output
 0
 2
@@ -133,7 +134,7 @@ NULL
 
 
 -- !query 10
-SELECT * FROM tab1
+SELECT udf(c1) FROM tab1
 EXCEPT ALL
 SELECT array(1)
 -- !query 10 schema
@@ -144,62 +145,62 @@ ExceptAll can only be performed on tables with the compatible column types. arra
 
 
 -- !query 11
-SELECT * FROM tab3
+SELECT udf(k), v FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 -- !query 11 schema
-struct<k:int,v:int>
+struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
 -- !query 11 output
 1	2
 1	3
 
 
 -- !query 12
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 EXCEPT ALL
-SELECT * FROM tab3
+SELECT udf(k), v FROM tab3
 -- !query 12 schema
-struct<k:int,v:int>
+struct<k:int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 12 output
 2	2
 2	20
 
 
 -- !query 13
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 EXCEPT ALL
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 INTERSECT DISTINCT
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 -- !query 13 schema
-struct<k:int,v:int>
+struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 13 output
 2	2
 2	20
 
 
 -- !query 14
-SELECT * FROM tab4
+SELECT udf(k), v FROM tab4
 EXCEPT ALL
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 -- !query 14 schema
-struct<k:int,v:int>
+struct<CAST(udf(cast(k as string)) AS INT):int,v:int>
 -- !query 14 output
 
 
 
 -- !query 15
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 UNION ALL
-SELECT * FROM tab3
+SELECT udf(k), v FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 -- !query 15 schema
-struct<k:int,v:int>
+struct<k:int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 15 output
 1	3
 
@@ -216,83 +217,83 @@ ExceptAll can only be performed on tables with the same number of columns, but t
 
 
 -- !query 17
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 UNION
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4
+SELECT udf(k), udf(v) FROM tab4
 -- !query 17 schema
-struct<k:int,v:int>
+struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 17 output
 1	3
 
 
 -- !query 18
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 MINUS ALL
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 UNION
-SELECT * FROM tab3
+SELECT udf(k), udf(v) FROM tab3
 MINUS DISTINCT
-SELECT * FROM tab4
+SELECT k, udf(v) FROM tab4
 -- !query 18 schema
-struct<k:int,v:int>
+struct<CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 18 output
 1	3
 
 
 -- !query 19
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT ALL
-SELECT * FROM tab4
+SELECT udf(k), v FROM tab4
 EXCEPT DISTINCT
-SELECT * FROM tab3
+SELECT k, udf(v) FROM tab3
 EXCEPT DISTINCT
-SELECT * FROM tab4
+SELECT udf(k), v FROM tab4
 -- !query 19 schema
-struct<k:int,v:int>
+struct<k:int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 19 output
 
 
 
 -- !query 20
 SELECT * 
-FROM   (SELECT udf(tab3.k),
+FROM   (SELECT tab3.k,
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON udf(tab3.k) = udf(tab4.k))
+                 ON udf(tab3.k) = tab4.k)
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab3.k),
-               udf(tab4.v)
+               tab4.v
         FROM   tab3 
                JOIN tab4 
-                 ON udf(tab3.k) = udf(tab4.k))
+                 ON tab3.k = udf(tab4.k))
 -- !query 20 schema
-struct<udf(k):string,udf(v):string>
+struct<k:int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 20 output
 
 
 
 -- !query 21
 SELECT * 
-FROM   (SELECT udf(tab3.k),
+FROM   (SELECT udf(udf(tab3.k)),
                udf(tab4.v)
         FROM   tab3 
                JOIN tab4 
-                 ON udf(tab3.k) = udf(tab4.k))
+                 ON udf(udf(tab3.k)) = udf(tab4.k))
 EXCEPT ALL 
 SELECT * 
 FROM   (SELECT udf(tab4.v) AS k,
-               udf(tab3.k) AS v
+               udf(udf(tab3.k)) AS v
         FROM   tab3 
                JOIN tab4 
                  ON udf(tab3.k) = udf(tab4.k))
 -- !query 21 schema
-struct<udf(k):string,udf(v):string>
+struct<CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 21 output
 1	2
 1	2
@@ -308,7 +309,7 @@ SELECT udf(v) FROM tab3 GROUP BY v
 EXCEPT ALL
 SELECT udf(k) FROM tab4 GROUP BY k
 -- !query 22 schema
-struct<udf(v):string>
+struct<CAST(udf(cast(v as string)) AS INT):int>
 -- !query 22 output
 3
 
