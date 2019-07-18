@@ -257,11 +257,11 @@ class MasterSuite extends SparkFunSuite
         // Application state should be WAITING when "MasterChangeAcknowledged" event executed.
         fakeAppInfo.state should be(ApplicationState.WAITING)
       }
-      val execWithResources = fakeExecutors.map(exec =>
-        (exec, Map.empty[String, ResourceInformation]))
-      val driverWithResources = (fakeDriverInfo.id, Map.empty[String, ResourceInformation])
+      val execResponse = fakeExecutors.map(exec =>
+        ExecutorResponse(exec, Map.empty[String, ResourceInformation]))
+      val driverResponse = DriverResponse(fakeDriverInfo.id, Map.empty[String, ResourceInformation])
       master.self.send(WorkerSchedulerStateResponse(
-        fakeWorkerInfo.id, execWithResources, Seq(driverWithResources)))
+        fakeWorkerInfo.id, execResponse, Seq(driverResponse)))
 
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
         getState(master) should be(RecoveryState.ALIVE)
