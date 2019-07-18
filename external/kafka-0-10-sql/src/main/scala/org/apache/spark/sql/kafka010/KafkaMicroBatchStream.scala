@@ -56,7 +56,7 @@ import org.apache.spark.util.UninterruptibleThread
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaMicroBatchStream(
-    private val kafkaOffsetReader: KafkaOffsetReader,
+    private[kafka010] val kafkaOffsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,

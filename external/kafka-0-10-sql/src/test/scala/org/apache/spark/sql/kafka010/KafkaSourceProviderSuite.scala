@@ -49,8 +49,6 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("micro-batch mode - options should be handled as case-insensitive") {
-    val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('kafkaOffsetReader)
-
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
       assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
     })
@@ -58,30 +56,25 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
       assert(Some(expected.toLong) === getField(stream, maxOffsetsPerTriggerMethod))
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
-      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toInt === getField(kafkaOffsetReader, maxOffsetFetchAttemptsMethod))
+      assert(expected.toInt === getField(stream.kafkaOffsetReader, maxOffsetFetchAttemptsMethod))
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
-      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toLong === getField(kafkaOffsetReader, offsetFetchAttemptIntervalMsMethod))
+      assert(expected.toLong === getField(stream.kafkaOffsetReader,
+        offsetFetchAttemptIntervalMsMethod))
     })
   }
 
   test("continuous mode - options should be handled as case-insensitive") {
-    val offsetReaderMethod = PrivateMethod[KafkaOffsetReader]('offsetReader)
-
     verifyFieldsInContinuousStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
       assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
     })
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
-      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toInt === getField(kafkaOffsetReader, maxOffsetFetchAttemptsMethod))
+      assert(expected.toInt === getField(stream.offsetReader, maxOffsetFetchAttemptsMethod))
     })
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
-      val kafkaOffsetReader = getField(stream, offsetReaderMethod)
-      assert(expected.toLong === getField(kafkaOffsetReader, offsetFetchAttemptIntervalMsMethod))
+      assert(expected.toLong === getField(stream.offsetReader, offsetFetchAttemptIntervalMsMethod))
     })
   }
 
