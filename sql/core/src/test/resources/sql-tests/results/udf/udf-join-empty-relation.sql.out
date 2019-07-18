@@ -27,25 +27,25 @@ struct<>
 
 
 -- !query 3
-SELECT udf(t1.a), udf(empty_table.a) FROM t1 INNER JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
+SELECT udf(t1.a), udf(empty_table.a) FROM t1 INNER JOIN empty_table ON (udf(t1.a) = udf(udf(empty_table.a)))
 -- !query 3 schema
-struct<udf(a):string,udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(a as string)) AS INT):int>
 -- !query 3 output
 
 
 
 -- !query 4
-SELECT udf(t1.a), udf(empty_table.a) FROM t1 CROSS JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
+SELECT udf(t1.a), udf(udf(empty_table.a)) FROM t1 CROSS JOIN empty_table ON (udf(udf(t1.a)) = udf(empty_table.a))
 -- !query 4 schema
-struct<udf(a):string,udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 4 output
 
 
 
 -- !query 5
-SELECT udf(t1.a), empty_table.a FROM t1 LEFT OUTER JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
+SELECT udf(udf(t1.a)), empty_table.a FROM t1 LEFT OUTER JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
 -- !query 5 schema
-struct<udf(a):string,a:int>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int,a:int>
 -- !query 5 output
 1	NULL
 
@@ -53,7 +53,7 @@ struct<udf(a):string,a:int>
 -- !query 6
 SELECT udf(t1.a), udf(empty_table.a) FROM t1 RIGHT OUTER JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
 -- !query 6 schema
-struct<udf(a):string,udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(a as string)) AS INT):int>
 -- !query 6 output
 
 
@@ -61,15 +61,15 @@ struct<udf(a):string,udf(a):string>
 -- !query 7
 SELECT udf(t1.a), empty_table.a FROM t1 FULL OUTER JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
 -- !query 7 schema
-struct<udf(a):string,a:int>
+struct<CAST(udf(cast(a as string)) AS INT):int,a:int>
 -- !query 7 output
 1	NULL
 
 
 -- !query 8
-SELECT udf(t1.a) FROM t1 LEFT SEMI JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
+SELECT udf(udf(t1.a)) FROM t1 LEFT SEMI JOIN empty_table ON (udf(t1.a) = udf(udf(empty_table.a)))
 -- !query 8 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 8 output
 
 
@@ -77,31 +77,31 @@ struct<udf(a):string>
 -- !query 9
 SELECT udf(t1.a) FROM t1 LEFT ANTI JOIN empty_table ON (udf(t1.a) = udf(empty_table.a))
 -- !query 9 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int>
 -- !query 9 output
 1
 
 
 -- !query 10
-SELECT udf(empty_table.a), udf(t1.a) FROM empty_table INNER JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
+SELECT udf(empty_table.a), udf(t1.a) FROM empty_table INNER JOIN t1 ON (udf(udf(empty_table.a)) = udf(t1.a))
 -- !query 10 schema
-struct<udf(a):string,udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(a as string)) AS INT):int>
 -- !query 10 output
 
 
 
 -- !query 11
-SELECT udf(empty_table.a), udf(t1.a) FROM empty_table CROSS JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
+SELECT udf(empty_table.a), udf(udf(t1.a)) FROM empty_table CROSS JOIN t1 ON (udf(empty_table.a) = udf(udf(t1.a)))
 -- !query 11 schema
-struct<udf(a):string,udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 11 output
 
 
 
 -- !query 12
-SELECT udf(empty_table.a), udf(t1.a) FROM empty_table LEFT OUTER JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
+SELECT udf(udf(empty_table.a)), udf(t1.a) FROM empty_table LEFT OUTER JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
 -- !query 12 schema
-struct<udf(a):string,udf(a):string>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int,CAST(udf(cast(a as string)) AS INT):int>
 -- !query 12 output
 
 
@@ -109,23 +109,23 @@ struct<udf(a):string,udf(a):string>
 -- !query 13
 SELECT empty_table.a, udf(t1.a) FROM empty_table RIGHT OUTER JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
 -- !query 13 schema
-struct<a:int,udf(a):string>
+struct<a:int,CAST(udf(cast(a as string)) AS INT):int>
 -- !query 13 output
 NULL	1
 
 
 -- !query 14
-SELECT empty_table.a, udf(t1.a) FROM empty_table FULL OUTER JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
+SELECT empty_table.a, udf(udf(t1.a)) FROM empty_table FULL OUTER JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
 -- !query 14 schema
-struct<a:int,udf(a):string>
+struct<a:int,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 14 output
 NULL	1
 
 
 -- !query 15
-SELECT empty_table.a FROM empty_table LEFT SEMI JOIN t1 ON (udf(empty_table.a) = udf(t1.a))
+SELECT udf(udf(empty_table.a)) FROM empty_table LEFT SEMI JOIN t1 ON (udf(empty_table.a) = udf(udf(t1.a)))
 -- !query 15 schema
-struct<a:int>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 15 output
 
 
@@ -139,17 +139,17 @@ struct<a:int>
 
 
 -- !query 17
-SELECT udf(empty_table.a) FROM empty_table INNER JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
+SELECT udf(empty_table.a) FROM empty_table INNER JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(udf(empty_table2.a)))
 -- !query 17 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int>
 -- !query 17 output
 
 
 
 -- !query 18
-SELECT udf(empty_table.a) FROM empty_table CROSS JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
+SELECT udf(udf(empty_table.a)) FROM empty_table CROSS JOIN empty_table AS empty_table2 ON (udf(udf(empty_table.a)) = udf(empty_table2.a))
 -- !query 18 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 18 output
 
 
@@ -157,15 +157,15 @@ struct<udf(a):string>
 -- !query 19
 SELECT udf(empty_table.a) FROM empty_table LEFT OUTER JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
 -- !query 19 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int>
 -- !query 19 output
 
 
 
 -- !query 20
-SELECT udf(empty_table.a) FROM empty_table RIGHT OUTER JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
+SELECT udf(udf(empty_table.a)) FROM empty_table RIGHT OUTER JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(udf(empty_table2.a)))
 -- !query 20 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 20 output
 
 
@@ -173,15 +173,15 @@ struct<udf(a):string>
 -- !query 21
 SELECT udf(empty_table.a) FROM empty_table FULL OUTER JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
 -- !query 21 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int>
 -- !query 21 output
 
 
 
 -- !query 22
-SELECT udf(empty_table.a) FROM empty_table LEFT SEMI JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
+SELECT udf(udf(empty_table.a)) FROM empty_table LEFT SEMI JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
 -- !query 22 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int>
 -- !query 22 output
 
 
@@ -189,6 +189,6 @@ struct<udf(a):string>
 -- !query 23
 SELECT udf(empty_table.a) FROM empty_table LEFT ANTI JOIN empty_table AS empty_table2 ON (udf(empty_table.a) = udf(empty_table2.a))
 -- !query 23 schema
-struct<udf(a):string>
+struct<CAST(udf(cast(a as string)) AS INT):int>
 -- !query 23 output
 
