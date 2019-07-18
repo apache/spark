@@ -153,6 +153,14 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
     }
   }
 
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    if (Option(loadTable(newIdent)).isDefined) throw new TableAlreadyExistsException(newIdent)
+
+    // Load table to make sure the table exists
+    loadTable(oldIdent)
+    catalog.renameTable(oldIdent.asTableIdentifier, newIdent.asTableIdentifier)
+  }
+
   implicit class TableIdentifierHelper(ident: Identifier) {
     def asTableIdentifier: TableIdentifier = {
       ident.namespace match {

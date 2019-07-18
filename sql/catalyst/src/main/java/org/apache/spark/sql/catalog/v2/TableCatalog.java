@@ -134,4 +134,24 @@ public interface TableCatalog extends CatalogPlugin {
    * @return true if a table was deleted, false if no table exists for the identifier
    */
   boolean dropTable(Identifier ident);
+
+  /**
+   * Renames a table in the catalog.
+   * <p>
+   * If the catalog supports views and contains a view for the old identifier and not a table, this
+   * throws {@link NoSuchTableException}. Additionally, if the new identifier is a table or a view,
+   * this throws {@link TableAlreadyExistsException}.
+   * <p>
+   * If the catalog does not support table renames between namespaces, it throws
+   * {@link UnsupportedOperationException}.
+   *
+   * @param oldIdent the table identifier of the existing table to rename
+   * @param newIdent the new table identifier of the table
+   * @throws NoSuchTableException If the table to rename doesn't exist or is a view
+   * @throws TableAlreadyExistsException If the new table name already exists or is a view
+   * @throws UnsupportedOperationException If the namespaces of old and new identiers do not
+   *                                       match (optional)
+   */
+  void renameTable(Identifier oldIdent, Identifier newIdent)
+      throws NoSuchTableException, TableAlreadyExistsException;
 }

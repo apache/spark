@@ -104,6 +104,20 @@ class TestInMemoryTableCatalog extends TableCatalog {
     Option(tables.remove(ident)).isDefined
   }
 
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    if (tables.containsKey(newIdent)) {
+      throw new TableAlreadyExistsException(newIdent)
+    }
+
+    Option(tables.remove(oldIdent)) match {
+      case Some(table) =>
+        tables.put(newIdent,
+          new InMemoryTable(table.name, table.schema, table.partitioning, table.properties))
+      case _ =>
+        throw new NoSuchTableException(oldIdent)
+    }
+  }
+
   def clearTables(): Unit = {
     tables.clear()
   }
