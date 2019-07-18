@@ -25,12 +25,12 @@ private[master] class ExecutorDesc(
     val application: ApplicationInfo,
     val worker: WorkerInfo,
     val cores: Int,
-    val memory: Int) {
+    val memory: Int,
+    // resources(e.f. gpu/fpga) allocated to this executor
+    // map from resource name to ResourceInformation
+    val resources: Map[String, ResourceInformation]) {
 
   var state = ExecutorState.LAUNCHING
-  // resources(e.f. gpu/fpga) allocated to this executor
-  // map from resource name to ResourceInformation
-  private var _resources: Map[String, ResourceInformation] = _
 
   /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
   def copyState(execDesc: ExecutorDescription) {
@@ -53,8 +53,4 @@ private[master] class ExecutorDesc(
   override def toString: String = fullId
 
   override def hashCode: Int = toString.hashCode()
-
-  def withResources(r: Map[String, ResourceInformation]): Unit = _resources = r
-
-  def resources: Map[String, ResourceInformation] = _resources
 }
