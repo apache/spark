@@ -47,7 +47,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 3 schema
-struct<udf(year):string,dotNET:string,Java:string>
+struct<CAST(udf(cast(year as string)) AS INT):int,dotNET:bigint,Java:bigint>
 -- !query 3 output
 2012	15000	20000
 2013	48000	30000
@@ -60,7 +60,7 @@ PIVOT (
   FOR year IN (2012, 2013)
 )
 -- !query 4 schema
-struct<course:string,2012:string,2013:string>
+struct<course:string,2012:bigint,2013:bigint>
 -- !query 4 output
 Java	20000	30000
 dotNET	15000	48000
@@ -75,7 +75,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 5 schema
-struct<year:int,dotNET_udf(sum(cast(earnings as bigint))):string,dotNET_udf(avg(cast(earnings as bigint))):string,Java_udf(sum(cast(earnings as bigint))):string,Java_udf(avg(cast(earnings as bigint))):string>
+struct<year:int,dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(avg(cast(earnings as bigint)) as string)) AS DOUBLE):double,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(avg(cast(earnings as bigint)) as string)) AS DOUBLE):double>
 -- !query 5 output
 2012	15000	7500.0	20000	20000.0
 2013	48000	48000.0	30000	30000.0
@@ -90,7 +90,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 6 schema
-struct<dotNET:string,Java:string>
+struct<dotNET:bigint,Java:bigint>
 -- !query 6 output
 63000	50000
 
@@ -104,7 +104,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 7 schema
-struct<dotNET_udf(sum(cast(earnings as bigint))):string,dotNET_udf(min(year)):string,Java_udf(sum(cast(earnings as bigint))):string,Java_udf(min(year)):string>
+struct<dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(year) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(year) as string)) AS INT):int>
 -- !query 7 output
 63000	2012	50000	2012
 
@@ -120,12 +120,12 @@ PIVOT (
   FOR s IN (1, 2)
 )
 -- !query 8 schema
-struct<course:string,year:int,1:string,2:string>
+struct<course:string,year:int,1:bigint,2:bigint>
 -- !query 8 output
-Java	2012	20000	nan
-Java	2013	nan	30000
-dotNET	2012	15000	nan
-dotNET	2013	nan	48000
+Java	2012	20000	NULL
+Java	2013	NULL	30000
+dotNET	2012	15000	NULL
+dotNET	2013	NULL	48000
 
 
 -- !query 9
@@ -139,7 +139,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 9 schema
-struct<year:int,dotNET_udf(sum(cast(earnings as bigint))):string,dotNET_udf(min(s)):string,Java_udf(sum(cast(earnings as bigint))):string,Java_udf(min(s)):string>
+struct<year:int,dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(s) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(s) as string)) AS INT):int>
 -- !query 9 output
 2012	15000	1	20000	1
 2013	48000	2	30000	2
@@ -156,7 +156,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 10 schema
-struct<year:int,dotNET:string,Java:string>
+struct<year:int,dotNET:bigint,Java:bigint>
 -- !query 10 output
 2012	15000	20000
 2013	96000	60000
@@ -171,7 +171,7 @@ PIVOT (
   FOR y IN (2012, 2013)
 )
 -- !query 11 schema
-struct<2012_s:string,2013_s:string,2012_a:string,2013_a:string,c:string>
+struct<2012_s:bigint,2013_s:bigint,2012_a:double,2013_a:double,c:string>
 -- !query 11 output
 15000	48000	7500.0	48000.0	dotNET
 20000	30000	20000.0	30000.0	Java
@@ -186,7 +186,7 @@ PIVOT (
   FOR y IN (2012 as firstYear, 2013 secondYear)
 )
 -- !query 12 schema
-struct<firstYear_s:string,secondYear_s:string,firstYear_a:string,secondYear_a:string,c:string>
+struct<firstYear_s:bigint,secondYear_s:bigint,firstYear_a:double,secondYear_a:double,c:string>
 -- !query 12 output
 15000	48000	7500.0	48000.0	dotNET
 20000	30000	20000.0	30000.0	Java
@@ -244,7 +244,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 16 schema
-struct<year:int,dotNET_udf(CEIL(cast(udf(sum(cast(earnings as bigint))) as double))):string,dotNET_a1:double,Java_udf(CEIL(cast(udf(sum(cast(earnings as bigint))) as double))):string,Java_a1:double>
+struct<year:int,dotNET_CAST(udf(cast(CEIL(cast(udf(cast(sum(cast(earnings as bigint)) as string)) as bigint)) as string)) AS BIGINT):bigint,dotNET_a1:double,Java_CAST(udf(cast(CEIL(cast(udf(cast(sum(cast(earnings as bigint)) as string)) as bigint)) as string)) AS BIGINT):bigint,Java_a1:double>
 -- !query 16 output
 2012	15000	7501.0	20000	20001.0
 2013	48000	48001.0	30000	30001.0
@@ -276,10 +276,10 @@ PIVOT (
   FOR (course, year) IN (('dotNET', 2012), ('Java', 2013))
 )
 -- !query 18 schema
-struct<s:int,[dotNET, 2012]:string,[Java, 2013]:string>
+struct<s:int,[dotNET, 2012]:bigint,[Java, 2013]:bigint>
 -- !query 18 output
-1	15000	nan
-2	nan	30000
+1	15000	NULL
+2	NULL	30000
 
 
 -- !query 19
@@ -293,10 +293,10 @@ PIVOT (
   FOR (course, s) IN (('dotNET', 2) as c1, ('Java', 1) as c2)
 )
 -- !query 19 schema
-struct<year:int,c1:string,c2:string>
+struct<year:int,c1:bigint,c2:bigint>
 -- !query 19 output
-2012	nan	20000
-2013	48000	nan
+2012	NULL	20000
+2013	48000	NULL
 
 
 -- !query 20
@@ -353,10 +353,10 @@ PIVOT (
   FOR a IN (array(1, 1), array(2, 2))
 )
 -- !query 23 schema
-struct<year:int,[1, 1]:string,[2, 2]:string>
+struct<year:int,[1, 1]:bigint,[2, 2]:bigint>
 -- !query 23 output
-2012	35000	nan
-2013	nan	78000
+2012	35000	NULL
+2013	NULL	78000
 
 
 -- !query 24
@@ -370,10 +370,10 @@ PIVOT (
   FOR (course, a) IN (('dotNET', array(1, 1)), ('Java', array(2, 2)))
 )
 -- !query 24 schema
-struct<year:int,[dotNET, [1, 1]]:string,[Java, [2, 2]]:string>
+struct<year:int,[dotNET, [1, 1]]:bigint,[Java, [2, 2]]:bigint>
 -- !query 24 output
-2012	15000	nan
-2013	nan	30000
+2012	15000	NULL
+2013	NULL	30000
 
 
 -- !query 25
@@ -387,10 +387,10 @@ PIVOT (
   FOR s IN ((1, 'a'), (2, 'b'))
 )
 -- !query 25 schema
-struct<year:int,[1, a]:string,[2, b]:string>
+struct<year:int,[1, a]:bigint,[2, b]:bigint>
 -- !query 25 output
-2012	35000	nan
-2013	nan	78000
+2012	35000	NULL
+2013	NULL	78000
 
 
 -- !query 26
@@ -404,10 +404,10 @@ PIVOT (
   FOR (course, s) IN (('dotNET', (1, 'a')), ('Java', (2, 'b')))
 )
 -- !query 26 schema
-struct<year:int,[dotNET, [1, a]]:string,[Java, [2, b]]:string>
+struct<year:int,[dotNET, [1, a]]:bigint,[Java, [2, b]]:bigint>
 -- !query 26 output
-2012	15000	nan
-2013	nan	30000
+2012	15000	NULL
+2013	NULL	30000
 
 
 -- !query 27
@@ -455,6 +455,6 @@ PIVOT (
   FOR Course IN ('dotNET', 'Java')
 )
 -- !query 29 schema
-struct<a:string,z:string,b:string,y:string,c:string,x:string,d:string,w:string,dotNET:string,Java:string>
+struct<a:string,z:string,b:string,y:string,c:string,x:string,d:string,w:string,dotNET:bigint,Java:bigint>
 -- !query 29 output
 a	z	b	y	c	x	d	w	63000	50000
