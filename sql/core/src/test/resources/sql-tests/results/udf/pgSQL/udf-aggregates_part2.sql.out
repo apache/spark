@@ -59,7 +59,7 @@ true	false	true	false	true	true	true	true	true
 -- !query 3
 select min(udf(unique1)) from tenk1
 -- !query 3 schema
-struct<min(udf(unique1)):string>
+struct<min(CAST(udf(cast(unique1 as string)) AS INT)):int>
 -- !query 3 output
 0
 
@@ -67,7 +67,7 @@ struct<min(udf(unique1)):string>
 -- !query 4
 select udf(max(unique1)) from tenk1
 -- !query 4 schema
-struct<udf(max(unique1)):string>
+struct<CAST(udf(cast(max(unique1) as string)) AS INT):int>
 -- !query 4 output
 9999
 
@@ -115,7 +115,7 @@ struct<min(tenthous):int>
 -- !query 10
 select distinct max(udf(unique2)) from tenk1
 -- !query 10 schema
-struct<max(udf(unique2)):string>
+struct<max(CAST(udf(cast(unique2 as string)) AS INT)):int>
 -- !query 10 output
 9999
 
@@ -139,7 +139,7 @@ struct<max(unique2):int>
 -- !query 13
 select udf(max(udf(unique2))) from tenk1 order by udf(max(unique2))+1
 -- !query 13 schema
-struct<udf(max(udf(unique2))):string>
+struct<CAST(udf(cast(max(cast(udf(cast(unique2 as string)) as int)) as string)) AS INT):int>
 -- !query 13 output
 9999
 
@@ -147,7 +147,7 @@ struct<udf(max(udf(unique2))):string>
 -- !query 14
 select t1.max_unique2, udf(g) from (select max(udf(unique2)) as max_unique2 FROM tenk1) t1 LATERAL VIEW explode(array(1,2,3)) t2 AS g order by g desc
 -- !query 14 schema
-struct<max_unique2:string,udf(g):string>
+struct<max_unique2:int,CAST(udf(cast(g as string)) AS INT):int>
 -- !query 14 output
 9999	3
 9999	2
@@ -157,6 +157,6 @@ struct<max_unique2:string,udf(g):string>
 -- !query 15
 select udf(max(100)) from tenk1
 -- !query 15 schema
-struct<udf(max(100)):string>
+struct<CAST(udf(cast(max(100) as string)) AS INT):int>
 -- !query 15 output
 100
