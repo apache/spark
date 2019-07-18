@@ -67,10 +67,11 @@ SELECT * FROM INT8_TBL WHERE smallint('123') <= q1;
 SELECT * FROM INT8_TBL WHERE smallint('123') >= q1;
 
 
-SELECT '' AS five, q1 AS plus, -q1 AS minus FROM INT8_TBL;
+-- [SPARK-28349] We do not need to follow PostgreSQL to support reserved words in column alias
+SELECT '' AS five, q1 AS plus, -q1 AS `minus` FROM INT8_TBL;
 
 SELECT '' AS five, q1, q2, q1 + q2 AS plus FROM INT8_TBL;
-SELECT '' AS five, q1, q2, q1 - q2 AS minus FROM INT8_TBL;
+SELECT '' AS five, q1, q2, q1 - q2 AS `minus` FROM INT8_TBL;
 SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL;
 SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
  WHERE q1 < 1000 or (q2 > 0 and q2 < 1000);
@@ -84,7 +85,6 @@ SELECT 37 - q1 AS minus4 FROM INT8_TBL;
 SELECT '' AS five, 2 * q1 AS `twice int4` FROM INT8_TBL;
 SELECT '' AS five, q1 * 2 AS `twice int4` FROM INT8_TBL;
 
--- [SPARK-2659] HiveQL: Division operator should always perform fractional division
 -- int8 op int4
 SELECT q1 + int(42) AS `8plus4`, q1 - int(42) AS `8minus4`, q1 * int(42) AS `8mul4`, q1 / int(42) AS `8div4` FROM INT8_TBL;
 -- int4 op int8

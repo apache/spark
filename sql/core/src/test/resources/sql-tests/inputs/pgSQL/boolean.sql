@@ -17,19 +17,20 @@ SELECT 1 AS one;
 
 SELECT true AS true;
 
-SELECT false AS false;
+-- [SPARK-28349] We do not need to follow PostgreSQL to support reserved words in column alias
+SELECT false AS `false`;
 
 SELECT boolean('t') AS true;
 
 -- [SPARK-27931] Trim the string when cast string type to boolean type
-SELECT boolean('   f           ') AS false;
+SELECT boolean('   f           ') AS `false`;
 
 SELECT boolean('true') AS true;
 
 -- [SPARK-27923] PostgreSQL does not accept 'test' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('test') AS error;
 
-SELECT boolean('false') AS false;
+SELECT boolean('false') AS `false`;
 
 -- [SPARK-27923] PostgreSQL does not accept 'foo' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('foo') AS error;
@@ -41,9 +42,9 @@ SELECT boolean('yes') AS true;
 -- [SPARK-27923] PostgreSQL does not accept 'yeah' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('yeah') AS error;
 
-SELECT boolean('n') AS false;
+SELECT boolean('n') AS `false`;
 
-SELECT boolean('no') AS false;
+SELECT boolean('no') AS `false`;
 
 -- [SPARK-27923] PostgreSQL does not accept 'nay' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('nay') AS error;
@@ -51,10 +52,10 @@ SELECT boolean('nay') AS error;
 -- [SPARK-27931] Accept 'on' and 'off' as input for boolean data type
 SELECT boolean('on') AS true;
 
-SELECT boolean('off') AS false;
+SELECT boolean('off') AS `false`;
 
 -- [SPARK-27931] Accept unique prefixes thereof
-SELECT boolean('of') AS false;
+SELECT boolean('of') AS `false`;
 
 -- [SPARK-27923] PostgreSQL does not accept 'o' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('o') AS error;
@@ -70,7 +71,7 @@ SELECT boolean('1') AS true;
 -- [SPARK-27923] PostgreSQL does not accept '11' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('11') AS error;
 
-SELECT boolean('0') AS false;
+SELECT boolean('0') AS `false`;
 
 -- [SPARK-27923] PostgreSQL does not accept '000' but Spark SQL accepts it and sets it to NULL
 SELECT boolean('000') AS error;
@@ -82,11 +83,11 @@ SELECT boolean('') AS error;
 
 SELECT boolean('t') or boolean('f') AS true;
 
-SELECT boolean('t') and boolean('f') AS false;
+SELECT boolean('t') and boolean('f') AS `false`;
 
 SELECT not boolean('f') AS true;
 
-SELECT boolean('t') = boolean('f') AS false;
+SELECT boolean('t') = boolean('f') AS `false`;
 
 SELECT boolean('t') <> boolean('f') AS true;
 
@@ -99,11 +100,11 @@ SELECT boolean('f') < boolean('t') AS true;
 SELECT boolean('f') <= boolean('t') AS true;
 
 -- explicit casts to/from text
-SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS false;
+SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS `false`;
 -- [SPARK-27931] Trim the string when cast to boolean type
 SELECT boolean(string('    true   ')) AS true,
-       boolean(string('     FALSE')) AS false;
-SELECT string(boolean(true)) AS true, string(boolean(false)) AS false;
+       boolean(string('     FALSE')) AS `false`;
+SELECT string(boolean(true)) AS true, string(boolean(false)) AS `false`;
 
 -- [SPARK-27923] PostgreSQL does not accept '  tru e ' but Spark SQL accepts it and sets it to NULL
 SELECT boolean(string('  tru e ')) AS invalid;    -- error

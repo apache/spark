@@ -141,7 +141,7 @@ class StandardScalerModel @Since("1.3.0") (
         case d: DenseVector => d.values.clone()
         case v: Vector => v.toArray
       }
-      val newValues = transfromWithMean(values)
+      val newValues = transformWithMean(values)
       Vectors.dense(newValues)
     } else if (withStd) {
       vector match {
@@ -161,7 +161,7 @@ class StandardScalerModel @Since("1.3.0") (
     }
   }
 
-  private[spark] def transfromWithMean(values: Array[Double]): Array[Double] = {
+  private[spark] def transformWithMean(values: Array[Double]): Array[Double] = {
     // By default, Scala generates Java methods for member variables. So every time when
     // the member variables are accessed, `invokespecial` will be called which is expensive.
     // This can be avoid by having a local reference of `shift`.

@@ -437,7 +437,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-20356: pruned InMemoryTableScanExec should have correct ordering and partitioning") {
-    withSQLConf("spark.sql.shuffle.partitions" -> "200") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "200") {
       val df1 = Seq(("a", 1), ("b", 1), ("c", 2)).toDF("item", "group")
       val df2 = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("item", "id")
       val df3 = df1.join(df2, Seq("item")).select($"id", $"group".as("item")).distinct()
