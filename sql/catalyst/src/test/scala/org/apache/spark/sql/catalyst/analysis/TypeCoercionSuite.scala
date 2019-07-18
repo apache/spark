@@ -1576,6 +1576,21 @@ class TypeCoercionSuite extends AnalysisTest {
         SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
     )
   }
+
+  test("binary arithmetic with string promotion") {
+    val rule = TypeCoercion.PromoteStrings(conf)
+    val timestamp = Literal(new Timestamp(0L))
+    val intervalStr = Literal("interval 3 month 7 hours")
+    ruleTest(rule,
+      Add(timestamp, intervalStr),
+      Add(timestamp, Cast(intervalStr, CalendarIntervalType)))
+    ruleTest(rule,
+      Add(intervalStr, timestamp),
+      Add(Cast(intervalStr, CalendarIntervalType), timestamp))
+    ruleTest(rule,
+      Subtract(timestamp, intervalStr),
+      Subtract(timestamp, Cast(intervalStr, CalendarIntervalType)))
+  }
 }
 
 
