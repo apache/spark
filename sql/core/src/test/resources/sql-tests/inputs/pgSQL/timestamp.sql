@@ -62,7 +62,7 @@ CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 
 -- [SPARK-28259] Date/Time Output Styles and Date Order Conventions
 -- Postgres v6.0 standard output format
-INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01 1997 PST');
+-- INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01 1997 PST');
 
 -- Variations on Postgres v6.1 standard output format
 -- INSERT INTO TIMESTAMP_TBL VALUES ('Mon Feb 10 17:32:01.000001 1997 PST');
@@ -142,8 +142,6 @@ INSERT INTO TIMESTAMP_TBL VALUES ('2001-09-22T18:19:20');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('Jan 01 17:32:01 2000');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('Dec 31 17:32:01 2000');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('Jan 01 17:32:01 2001');
-
-select * from TIMESTAMP_TBL;
 
 -- Currently unsupported syntax and ranges
 -- INSERT INTO TIMESTAMP_TBL VALUES ('Feb 16 17:32:01 -0097');
@@ -241,6 +239,8 @@ SELECT '' AS date_trunc_week, date_trunc( 'week', timestamp '2004-02-29 15:44:17
 -- SELECT '' AS to_char_11, to_char(d1, 'FMIYYY FMIYY FMIY FMI FMIW FMIDDD FMID')
 --    FROM TIMESTAMP_TBL;
 
+
+--[SPARK-28432] Missing Date/Time Functions: make_timestamp
 -- timestamp numeric fields constructor
 -- SELECT make_timestamp(2014,12,28,6,30,45.887);
 
