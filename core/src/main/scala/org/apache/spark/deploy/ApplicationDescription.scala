@@ -35,7 +35,6 @@ private[spark] case class ApplicationDescription(
     // only used if dynamic allocation is enabled
     initialExecutorLimit: Option[Int] = None,
     user: String = System.getProperty("user.name", "<unknown>"),
-    // map from resource name to its requested amount by the executor
     resourceReqsPerExecutor: Seq[ResourceRequirement] = Seq.empty) {
 
   override def toString: String = "ApplicationDescription(" + name + ")"
