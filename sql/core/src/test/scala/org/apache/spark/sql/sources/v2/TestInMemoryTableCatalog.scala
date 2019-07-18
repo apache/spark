@@ -40,6 +40,7 @@ class TestInMemoryTableCatalog extends TableCatalog {
 
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
+  protected val droppedTables: mutable.Set[Identifier] = mutable.Set[Identifier]()
   private var _name: Option[String] = None
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
@@ -103,7 +104,11 @@ class TestInMemoryTableCatalog extends TableCatalog {
     }
   }
 
-  override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
+  override def dropTable(ident: Identifier): Boolean = {
+    val isRemoved = Option(tables.remove(ident)).isDefined
+    droppedTables += ident
+    isRemoved
+  }
 
   def clearTables(): Unit = {
     tables.clear()
@@ -201,17 +206,15 @@ object TestInMemoryTableCatalog {
   val SIMULATE_FAILED_CREATE_PROPERTY = "spark.sql.test.simulateFailedCreate"
 
   def maybeSimulateFailedTableCreation(tableProperties: util.Map[String, String]): Unit = {
-    if (tableProperties.containsKey(TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY)
-      && tableProperties.get(TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY)
-      .equalsIgnoreCase("true")) {
+    if ("true".equalsIgnoreCase(
+      tableProperties.get(TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY))) {
       throw new IllegalStateException("Manual create table failure.")
     }
   }
 
   def maybeSimulateFailedTableWrite(tableOptions: CaseInsensitiveStringMap): Unit = {
-    val shouldSimulateFailedWrite = tableOptions
-      .getBoolean(TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION, false)
-    if (shouldSimulateFailedWrite) {
+    if (tableOptions.getBoolean(
+      TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION, false)) {
       throw new IllegalStateException("Manual write to table failure.")
     }
   }
@@ -263,6 +266,10 @@ class TestStagingInMemoryCatalog
     extends StagedTable with SupportsWrite with SupportsRead {
 
     override def commitStagedChanges(): Unit = {
+      if (droppedTables.contains(ident)) {
+        throw new IllegalStateException(
+          s"Table $ident was already dropped; aborting this commit.")
+      }
       if (replaceIfExists) {
         tables.put(ident, delegateTable)
       } else {
