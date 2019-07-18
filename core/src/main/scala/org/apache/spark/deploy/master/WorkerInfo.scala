@@ -75,7 +75,7 @@ private[spark] class WorkerInfo(
   }
 
   def resourcesCanBeReleased: Map[String, ResourceInformation] = {
-    resources.map { case (rName, rInfo) =>
+    resources.filter(_._2.availableAddrs.nonEmpty).map { case (rName, rInfo) =>
       rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
     }
   }
