@@ -37,11 +37,11 @@ package object config {
 
   private[spark] val SPARK_RESOURCES_DIR =
     ConfigBuilder("spark.resources.dir")
-      .doc("Directory used to create spark-resources directory under it. If user does not" +
-        "config it explicitly, SPARK_HOME will be used by default. And since spark-resources" +
-        "is used to coordinate resources among workers/drivers(client only) in Standalone," +
-        "so that user shouldn't clean up this directory while workers/drivers are still" +
-        "alive to avoid the most likely resources conflict.")
+      .doc("Directory used to coordinate resources among workers/drivers(client only) in " +
+        "Standalone. Default is SPARK_HOME. Make sure to use the same directory with the " +
+        "worker when submits the application in client mode and don't clean up this " +
+        "directory while workers/drivers are still alive to avoid the most likely resources " +
+        "conflict. ")
       .stringConf
       .createOptional
 

@@ -195,14 +195,12 @@ of the most common options to set are:
 </tr>
 <tr>
  <td><code>spark.resources.dir</code></td>
-  <td>$SPARK_HOME/</td>
+  <td>SPARK_HOME</td>
   <td>
-    Directory used to create spark-resources/ under it in Standalone. If user does not
-    config this explicitly, $SPARK_HOME/ will be used by default. And since spark-resources/
-    is used to coordinate resources among workers/drivers(client only) in Standalone,
-    so that user shouldn't clean up this directory while workers/drivers are still alive
-    to avoid the most likely resources conflict. And make it sure to config the same
-    directory with the worker when submits the application in client mode.
+    Directory used to coordinate resources among workers/drivers(client only) in Standalone.
+    Default is SPARK_HOME. Make sure to use the same directory with the worker when submits
+    the application in client mode and don't clean up this directory while workers/drivers
+    are still alive to avoid the most likely resources conflict. 
   </td>
 </tr>
 <tr>
