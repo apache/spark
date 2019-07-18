@@ -1,6 +1,6 @@
 -- This test file was converted from pivot.sql.
 
---Note some test cases have been commented as the current integrated UDFs cannot handle complex types
+-- Note some test cases have been commented as the current integrated UDFs cannot handle complex types
 
 create temporary view courseSales as select * from values
   ("dotNET", 2012, 10000),
@@ -204,9 +204,9 @@ PIVOT (
   FOR year IN (course, 2013)
 );
 
---todo complex type fix
+-- todo complex type fix
 -- pivot on join query with columns of complex data types
---SELECT * FROM (
+-- SELECT * FROM (
 --  SELECT course, year, a
 --  FROM courseSales
 --  JOIN yearsWithComplexTypes ON year = y
@@ -216,9 +216,9 @@ PIVOT (
 --  FOR course IN ('dotNET', 'Java')
 --);
 
---todo complex type fix
+-- todo complex type fix
 -- pivot on multiple pivot columns with agg columns of complex data types
---SELECT * FROM (
+-- SELECT * FROM (
 --  SELECT course, year, y, a
 --  FROM courseSales
 --  JOIN yearsWithComplexTypes ON year = y
