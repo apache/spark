@@ -339,7 +339,8 @@ case class DataSource(
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
         if (baseRelation.schema != schema) {
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
+          throw new AnalysisException(s"$className does not allow user-specified schemas, " +
+              s"source schema: ${baseRelation.schema}, user-specific schema: ${schema}")
         }
         baseRelation
 
