@@ -87,7 +87,19 @@ private[spark] object ResourceUtils extends Logging {
   val AMOUNT = "amount"
 
   /**
-   * Assign resources to workers from the same host to avoid address conflict.
+   * Assign resources to workers/drivers from the same host to avoid address conflict.
+   *
+   * This function works in three steps. First, acquiring the lock on RESOURCES_LOCK_FILE
+   * to achieve synchronization among workers and drivers. Second, getting all allocated
+   * resources from ALLOCATED_RESOURCES_FILE and assigning isolated resources to the worker
+   * or driver after differentiating available resources in discovered resources from
+   * allocated resources. If available resources don't meet worker's or driver's requirement,
+   * try to update allocated resources by excluding the resource allocation if its related
+   * process has already terminated and do the assignment again. If still don't meet requirement,
+   * exception would be threw. Third, updating ALLOCATED_RESOURCES_FILE with new allocated
+   * resources along with pid for the worker or driver. Then, return allocated resources
+   * information after releasing the lock.
+   *
    * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
    * @param resources the resources found by worker/driver on the host
@@ -111,15 +123,14 @@ private[spark] object ResourceUtils extends Logging {
     var origAllocation = Seq.empty[StandaloneResourceAllocation]
     var allocated = {
       if (resourcesFile.exists()) {
-        origAllocation = allocatedResources(resourcesFile.getPath)
+        origAllocation = allocatedStandaloneResources(resourcesFile.getPath)
         val allocations = origAllocation.map { resource =>
-          val thePid = resource.pid
           val resourceMap = {
             resource.allocations.map { allocation =>
               allocation.id.resourceName -> allocation.addresses.toArray
             }.toMap
           }
-          thePid -> resourceMap
+          resource.pid -> resourceMap
         }.toMap
         allocations
       } else {
@@ -133,7 +144,7 @@ private[spark] object ResourceUtils extends Logging {
     // Whether we need to keep allocating for the worker/driver and we'll only go through
     // the loop at most twice.
     var keepAllocating = true
-    while(keepAllocating) {
+    while (keepAllocating) {
       keepAllocating = false
       val pidsToCheck = mutable.Set[Int]()
       newAssignments = resourceRequirements.map { req =>
@@ -178,7 +189,7 @@ private[spark] object ResourceUtils extends Logging {
 
     }
     val newAllocation = {
-      val allocations = newAssignments.map{ case (rName, addresses) =>
+      val allocations = newAssignments.map { case (rName, addresses) =>
         ResourceAllocation(ResourceID(componentName, rName), addresses)
       }.toSeq
       StandaloneResourceAllocation(pid, allocations)
@@ -214,7 +225,7 @@ private[spark] object ResourceUtils extends Logging {
       val lock = acquireLock(conf)
       val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
       if (resourcesFile.exists()) {
-        val (target, others) = allocatedResources(resourcesFile.getPath).partition(_.pid == pid)
+        val (target, others) = allocatedStandaloneResources(resourcesFile.getPath).partition(_.pid == pid)
         if (target.nonEmpty) {
           val rNameToAddresses = {
             target.head.allocations.map { allocation =>
@@ -228,7 +239,7 @@ private[spark] object ResourceUtils extends Logging {
               rName -> retained
             }
             .filter(_._2.nonEmpty)
-            .map{ case (rName, addresses) =>
+            .map { case (rName, addresses) =>
               ResourceAllocation(ResourceID(componentName, rName), addresses)
             }.toSeq
           }
@@ -256,7 +267,7 @@ private[spark] object ResourceUtils extends Logging {
     val lockFileChannel = new RandomAccessFile(lockFile, "rw").getChannel
     var keepTry = true
     var lock: FileLock = null
-    while(keepTry) {
+    while (keepTry) {
       try {
         lock = lockFileChannel.lock()
         logInfo(s"Acquired lock on $RESOURCES_LOCK_FILE.")
@@ -388,7 +399,8 @@ private[spark] object ResourceUtils extends Logging {
     }
   }
 
-  private def allocatedResources(resourcesFile: String): Seq[StandaloneResourceAllocation] = {
+  private def allocatedStandaloneResources(resourcesFile: String)
+    : Seq[StandaloneResourceAllocation] = {
     withResourcesJson[StandaloneResourceAllocation](resourcesFile) { json =>
       implicit val formats = DefaultFormats
       parse(json).extract[Seq[StandaloneResourceAllocation]]
