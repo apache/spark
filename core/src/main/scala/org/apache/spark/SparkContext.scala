@@ -245,7 +245,12 @@ class SparkContext(config: SparkConf) extends Logging {
   def isLocal: Boolean = Utils.isLocalMaster(_conf)
 
   private def isClientStandalone: Boolean = {
-    deployMode == "client" && (master.startsWith("spark://") || master.startsWith("local-cluster"))
+    val isSparkCluster = master match {
+      case SparkMasterRegex.SPARK_REGEX(_) => true
+      case SparkMasterRegex.LOCAL_CLUSTER_REGEX(_, _, _) => true
+      case _ => false
+    }
+    deployMode == "client" && isSparkCluster
   }
 
   /**
