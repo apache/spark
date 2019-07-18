@@ -135,7 +135,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
 
   test("failOnDataLoss=false should not return duplicated records: microbatch v1") {
     withSQLConf(
-      "spark.sql.streaming.disabledV2MicroBatchReaders" ->
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key ->
         classOf[KafkaSourceProvider].getCanonicalName) {
       verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = true) { (df, table) =>
         val query = df.writeStream.format("memory").queryName(table).start()

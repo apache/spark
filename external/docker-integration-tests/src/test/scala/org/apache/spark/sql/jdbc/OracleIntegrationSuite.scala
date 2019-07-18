@@ -376,8 +376,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val e = intercept[org.apache.spark.SparkException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getMessage.contains(
-      "requirement failed: Decimal precision 39 exceeds max precision 38"))
+    assert(e.getCause().isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
 
     // custom schema can read data
     val props = new Properties()

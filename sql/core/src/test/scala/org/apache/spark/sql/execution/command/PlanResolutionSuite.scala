@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.internal.SQLConf.DEFAULT_V2_CATALOG
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -77,7 +78,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
     val newConf = conf.copy()
-    newConf.setConfString("spark.sql.default.catalog", "testcat")
+    newConf.setConfString(DEFAULT_V2_CATALOG.key, "testcat")
     DataSourceResolution(newConf, if (withDefault) lookupWithDefault else lookupWithoutDefault)
         .apply(parsePlan(query))
   }
