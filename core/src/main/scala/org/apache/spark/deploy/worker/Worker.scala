@@ -516,12 +516,12 @@ private[deploy] class Worker(
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
-      val execWithResources = executors.values.map { e =>
-        (new ExecutorDescription(e.appId, e.execId, e.cores, e.state), e.resources)
+      val executorResponses = executors.values.map { e =>
+        ExecutorResponse(new ExecutorDescription(e.appId, e.execId, e.cores, e.state), e.resources)
       }
-      val driverWithResources = drivers.keys.map { id => (id, drivers(id).resources)}
+      val driverResponses = drivers.keys.map { id => DriverResponse(id, drivers(id).resources)}
       masterRef.send(WorkerSchedulerStateResponse(
-        workerId, execWithResources.toList, driverWithResources.toSeq))
+        workerId, executorResponses.toList, driverResponses.toSeq))
 
     case ReconnectWorker(masterUrl) =>
       logInfo(s"Master with url $masterUrl requested this worker to reconnect.")

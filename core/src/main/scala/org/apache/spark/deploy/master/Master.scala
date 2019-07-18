@@ -365,16 +365,16 @@ private[deploy] class Master(
 
       if (canCompleteRecovery) { completeRecovery() }
 
-    case WorkerSchedulerStateResponse(workerId, execWithResources, driverWithResources) =>
+    case WorkerSchedulerStateResponse(workerId, execResponses, driverResponses) =>
       idToWorker.get(workerId) match {
         case Some(worker) =>
           logInfo("Worker has been re-registered: " + workerId)
           worker.state = WorkerState.ALIVE
 
-          val validExecutors = execWithResources.filter(
-            exec => idToApp.get(exec._1.appId).isDefined)
+          val validExecutors = execResponses.filter(
+            exec => idToApp.get(exec.desc.appId).isDefined)
           for (exec <- validExecutors) {
-            val (execDesc, execResources) = (exec._1, exec._2)
+            val (execDesc, execResources) = (exec.desc, exec.resources)
             val app = idToApp(execDesc.appId)
             val execInfo = app.addExecutor(
               worker, execDesc.cores, execResources, Some(execDesc.execId))
@@ -383,8 +383,8 @@ private[deploy] class Master(
             execInfo.copyState(execDesc)
           }
 
-          for (driver <- driverWithResources) {
-            val (driverId, driverResource) = (driver._1, driver._2)
+          for (driver <- driverResponses) {
+            val (driverId, driverResource) = (driver.driverId, driver.resources)
             drivers.find(_.id == driverId).foreach { driver =>
               driver.worker = Some(worker)
               driver.state = DriverState.RUNNING

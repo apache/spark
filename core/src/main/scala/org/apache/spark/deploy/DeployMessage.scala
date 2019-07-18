@@ -32,7 +32,6 @@ private[deploy] sealed trait DeployMessage extends Serializable
 
 /** Contains messages sent between Scheduler endpoint nodes. */
 private[deploy] object DeployMessages {
-
   // Worker to Master
 
   /**
@@ -77,10 +76,14 @@ private[deploy] object DeployMessages {
       exception: Option[Exception])
     extends DeployMessage
 
+  case class ExecutorResponse(desc: ExecutorDescription, resources: Map[String, ResourceInformation])
+
+  case class DriverResponse(driverId: String, resources: Map[String, ResourceInformation])
+
   case class WorkerSchedulerStateResponse(
       id: String,
-      execWithResources: List[(ExecutorDescription, Map[String, ResourceInformation])],
-      driverWithResources: Seq[(String, Map[String, ResourceInformation])])
+      execResponses: List[ExecutorResponse],
+      driverResponses: Seq[DriverResponse])
 
   /**
    * A worker will send this message to the master when it registers with the master. Then the
