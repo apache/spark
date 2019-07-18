@@ -6,7 +6,7 @@ as t1(int_col1);
 
 CREATE FUNCTION myDoubleAvg AS 'test.org.apache.spark.sql.MyDoubleAvg';
 
-SELECT default.myDoubleAvg(udf(int_col1)) as my_avg from t1;
+SELECT default.myDoubleAvg(udf(int_col1)) as my_avg, udf(default.myDoubleAvg(udf(int_col1))) as my_avg2, udf(default.myDoubleAvg(int_col1)) as my_avg3 from t1;
 
 SELECT default.myDoubleAvg(udf(int_col1), udf(3)) as my_avg from t1;
 
