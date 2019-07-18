@@ -100,11 +100,11 @@ SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
 PIVOT (
-  udf(sum(earnings)), udf(min(year))
+  udf(sum(udf(earnings))), udf(min(year))
   FOR course IN ('dotNET', 'Java')
 )
 -- !query 7 schema
-struct<dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(year) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(year) as string)) AS INT):int>
+struct<dotNET_CAST(udf(cast(sum(cast(cast(udf(cast(earnings as string)) as int) as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(year) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(cast(udf(cast(earnings as string)) as int) as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(year) as string)) AS INT):int>
 -- !query 7 output
 63000	2012	50000	2012
 
@@ -361,7 +361,7 @@ struct<year:int,[1, 1]:bigint,[2, 2]:bigint>
 
 -- !query 24
 SELECT * FROM (
-  SELECT course, earnings, year, a
+  SELECT course, earnings, udf(year) as year, a
   FROM courseSales
   JOIN yearsWithComplexTypes ON year = y
 )

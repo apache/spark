@@ -59,7 +59,7 @@ SELECT * FROM (
   SELECT year, course, earnings FROM courseSales
 )
 PIVOT (
-  udf(sum(earnings)), udf(min(year))
+  udf(sum(udf(earnings))), udf(min(year))
   FOR course IN ('dotNET', 'Java')
 );
 
@@ -241,7 +241,7 @@ PIVOT (
 
 -- pivot on multiple pivot columns containing array type
 SELECT * FROM (
-  SELECT course, earnings, year, a
+  SELECT course, earnings, udf(year) as year, a
   FROM courseSales
   JOIN yearsWithComplexTypes ON year = y
 )
