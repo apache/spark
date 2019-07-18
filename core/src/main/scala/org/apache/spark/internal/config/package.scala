@@ -1182,10 +1182,11 @@ package object config {
 
   private[spark] val IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD =
     ConfigBuilder("spark.io.file.unsplittable.warning.threshold")
-    .doc("When spark loading one single large unsplittable file, if file size exceed this " +
-      "threshold, then log warning.")
-    .longConf
-    .createWithDefault(1024 * 1024 * 1024)
+      .internal()
+      .doc("When spark loading one single large unsplittable file, if file size exceed this " +
+        "threshold, then log warning.")
+      .longConf
+      .createWithDefault(1024 * 1024 * 1024)
 
   private[spark] val EVENT_LOG_COMPRESSION_CODEC =
     ConfigBuilder("spark.eventLog.compression.codec")
