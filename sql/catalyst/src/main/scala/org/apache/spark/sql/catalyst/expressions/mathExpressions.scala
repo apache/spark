@@ -287,6 +287,29 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
   """)
 case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH")
 
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - hyperbolic angle
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.0
+      > SELECT _FUNC_(0);
+       NaN
+  """,
+  since = "3.0.0")
+case class Acosh(child: Expression)
+  extends UnaryMathExpression((x: Double) => math.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+  }
+}
+
 /**
  * Convert a num from one base to another
  *
@@ -558,6 +581,31 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH")
 
 @ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - hyperbolic angle
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0.0
+  """,
+  since = "3.0.0")
+case class Asinh(child: Expression)
+  extends UnaryMathExpression((x: Double) => x match {
+    case Double.NegativeInfinity => Double.NegativeInfinity
+    case _ => math.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c =>
+      s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
+      s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+  }
+}
+
+@ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the square root of `expr`.",
   examples = """
     Examples:
@@ -616,6 +664,29 @@ case class Cot(child: Expression)
        0.0
   """)
 case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH")
+
+@ExpressionDescription(
+  usage = """
+    _FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.
+  """,
+  arguments = """
+    Arguments:
+      * expr - hyperbolic angle
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(0);
+       0.0
+      > SELECT _FUNC_(2);
+       NaN
+  """,
+  since = "3.0.0")
+case class Atanh(child: Expression)
+  extends UnaryMathExpression((x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)), "ATANH") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"0.5 * java.lang.Math.log((1.0 + $c)/(1.0 - $c))")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts radians to degrees.",

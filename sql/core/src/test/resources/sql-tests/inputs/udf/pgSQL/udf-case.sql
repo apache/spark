@@ -6,14 +6,8 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/case.sql
 -- Test the CASE statement
 --
--- This test suite contains two Cartesian products without using explicit CROSS JOIN syntax.
--- Thus, we set spark.sql.crossJoin.enabled to true.
-
 -- This test file was converted from pgSQL/case.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
-set spark.sql.crossJoin.enabled=true;
 CREATE TABLE CASE_TBL (
   i integer,
   f double
@@ -42,7 +36,7 @@ INSERT INTO CASE2_TBL VALUES (NULL, -6);
 
 SELECT '3' AS `One`,
   CASE
-    WHEN CAST(udf(1 < 2) AS boolean) THEN 3
+    WHEN udf(1 < 2) THEN 3
   END AS `Simple WHEN`;
 
 SELECT '<NULL>' AS `One`,
@@ -64,7 +58,7 @@ SELECT udf('4') AS `One`,
 
 SELECT udf('6') AS `One`,
   CASE
-    WHEN CAST(udf(1 > 2) AS boolean) THEN 3
+    WHEN udf(1 > 2) THEN 3
     WHEN udf(4) < 5 THEN 6
     ELSE 7
   END AS `Two WHEN with default`;
@@ -74,7 +68,7 @@ SELECT '7' AS `None`,
   END AS `NULL on no matches`;
 
 -- Constant-expression folding shouldn't evaluate unreachable subexpressions
-SELECT CASE WHEN CAST(udf(1=0) AS boolean) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
+SELECT CASE WHEN udf(1=0) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END;
 SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END;
 
 -- [SPARK-27923] PostgreSQL throws an exception but Spark SQL is NULL
@@ -146,7 +140,7 @@ SELECT udf('') AS Five, NULLIF(a.i,b.i) AS `NULLIF(a.i,b.i)`,
 
 SELECT '' AS `Two`, *
   FROM CASE_TBL a, CASE2_TBL b
-  WHERE CAST(udf(COALESCE(f,b.i) = 2) AS boolean);
+  WHERE udf(COALESCE(f,b.i) = 2);
 
 -- We don't support update now.
 --
@@ -269,4 +263,3 @@ SELECT CASE
 
 DROP TABLE CASE_TBL;
 DROP TABLE CASE2_TBL;
-set spark.sql.crossJoin.enabled=false;
