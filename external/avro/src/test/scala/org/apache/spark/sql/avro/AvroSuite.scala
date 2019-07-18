@@ -50,7 +50,7 @@ abstract class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUti
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
+    spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {

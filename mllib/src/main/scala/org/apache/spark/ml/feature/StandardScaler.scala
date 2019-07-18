@@ -169,7 +169,7 @@ class StandardScalerModel private[ml] (
           case d: DenseVector => d.values.clone()
           case v: Vector => v.toArray
         }
-        val newValues = scaler.transfromWithMean(values)
+        val newValues = scaler.transformWithMean(values)
         Vectors.dense(newValues)
     } else if ($(withStd)) {
       vector: Vector =>
