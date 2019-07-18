@@ -75,7 +75,7 @@ case class StandaloneResourceAllocation(pid: Int, allocations: Seq[ResourceAlloc
 private[spark] object ResourceUtils extends Logging {
   // These directory/files are used to coordinate the resources between
   // the drivers/workers on the host in Spark Standalone.
-  val SPARK_RESOURCES_DIRECTORY = "spark-resources"
+  val SPARK_RESOURCES_COORDINATE_DIR = "spark-resources"
   val ALLOCATED_RESOURCES_FILE = "__allocated_resources__.json"
   val RESOURCES_LOCK_FILE = "__allocated_resources__.lock"
 
@@ -300,7 +300,7 @@ private[spark] object ResourceUtils extends Logging {
       }
       sparkHome
     })
-    val resourceDir = new File(coordinateDir, SPARK_RESOURCES_DIRECTORY)
+    val resourceDir = new File(coordinateDir, SPARK_RESOURCES_COORDINATE_DIR)
     if (!resourceDir.exists()) {
       Utils.createDirectory(resourceDir)
     }

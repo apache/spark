@@ -83,7 +83,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   private def assertResourcesFileDeleted(): Unit = {
     assert(sys.props.contains("spark.test.home"))
     val sparkHome = sys.props.get("spark.test.home")
-    val resourceFile = new File(sparkHome + "/" + SPARK_RESOURCES_DIRECTORY,
+    val resourceFile = new File(sparkHome + "/" + SPARK_RESOURCES_COORDINATE_DIR,
       ALLOCATED_RESOURCES_FILE)
     assert(!resourceFile.exists())
   }
