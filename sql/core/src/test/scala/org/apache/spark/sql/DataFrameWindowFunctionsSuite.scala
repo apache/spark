@@ -700,9 +700,15 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     import java.lang.Float.floatToRawIntBits
     import java.lang.Double.doubleToRawLongBits
 
-    // 0.0/0.0 and NaN are different values.
-    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
-    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
+    if (System.getProperty("os.arch").contains("aarch64")) {
+      // 0.0/0.0 and NaN are same value on aarch64.
+      assert(floatToRawIntBits(0.0f/0.0f) == floatToRawIntBits(Float.NaN))
+      assert(doubleToRawLongBits(0.0/0.0) == doubleToRawLongBits(Double.NaN))
+    } else {
+      // 0.0/0.0 and NaN are different values.
+      assert(floatToRawIntBits(0.0f / 0.0f) != floatToRawIntBits(Float.NaN))
+      assert(doubleToRawLongBits(0.0 / 0.0) != doubleToRawLongBits(Double.NaN))
+    }
 
     val df = Seq(
       (Float.NaN, Double.NaN),
