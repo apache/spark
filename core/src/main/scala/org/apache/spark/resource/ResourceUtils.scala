@@ -238,7 +238,8 @@ private[spark] object ResourceUtils extends Logging {
       val lock = acquireLock(conf)
       val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
       if (resourcesFile.exists()) {
-        val (target, others) = allocatedStandaloneResources(resourcesFile.getPath).partition(_.pid == pid)
+        val (target, others) =
+          allocatedStandaloneResources(resourcesFile.getPath).partition(_.pid == pid)
         if (target.nonEmpty) {
           val rNameToAddresses = {
             target.head.allocations.map { allocation =>

@@ -76,7 +76,9 @@ private[deploy] object DeployMessages {
       exception: Option[Exception])
     extends DeployMessage
 
-  case class ExecutorResponse(desc: ExecutorDescription, resources: Map[String, ResourceInformation])
+  case class ExecutorResponse(
+      desc: ExecutorDescription,
+      resources: Map[String, ResourceInformation])
 
   case class DriverResponse(driverId: String, resources: Map[String, ResourceInformation])
 
