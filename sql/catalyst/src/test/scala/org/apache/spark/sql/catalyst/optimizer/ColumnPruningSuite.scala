@@ -108,15 +108,21 @@ class ColumnPruningSuite extends PlanTest {
         origGenerator: Generator,
         replacedGenerator: Seq[String] => Generator,
         aliasedExprs: Seq[String] => Seq[Expression],
-        unrequiredChildIndex: Seq[Int]) {
+        unrequiredChildIndex: Seq[Int],
+        generatorOutputNames: Seq[String]) {
       withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
-        val structType = StructType.fromDDL("d double, e array<string>, f double, g double")
+        val structType = StructType.fromDDL("d double, e array<string>, f double, g double, " +
+          "h array<struct<h1: int, h2: double>>")
         val input = LocalRelation('a.int, 'b.int, 'c.struct(structType))
+        val generatorOutputs = generatorOutputNames.map(UnresolvedAttribute(_))
+
+        val selectedExprs = Seq(UnresolvedAttribute("a"), 'c.getField("d")) ++
+          generatorOutputs
 
         val query =
           input
-            .generate(origGenerator, outputNames = "generator" :: Nil)
-            .select('a, 'c.getField("d"), 'generator)
+            .generate(origGenerator, outputNames = generatorOutputNames)
+            .select(selectedExprs: _*)
             .analyze
 
         val optimized = Optimize.execute(query)
@@ -124,13 +130,16 @@ class ColumnPruningSuite extends PlanTest {
         val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
 
         val selectedFields = UnresolvedAttribute("a") +: aliasedExprs(aliases)
+        val finalSelectedExprs = Seq(UnresolvedAttribute("a"), $"${aliases(0)}".as("c.d")) ++
+          generatorOutputs
+
         val correctAnswer =
           input
             .select(selectedFields: _*)
             .generate(replacedGenerator(aliases),
               unrequiredChildIndex = unrequiredChildIndex,
-              outputNames = "generator" :: Nil)
-            .select('a, $"${aliases(0)}".as("c.d"), 'generator)
+              outputNames = generatorOutputNames)
+            .select(finalSelectedExprs: _*)
             .analyze
 
         comparePlans(optimized, correctAnswer)
@@ -141,7 +150,8 @@ class ColumnPruningSuite extends PlanTest {
       Explode('c.getField("e")),
       aliases => Explode($"${aliases(1)}".as("c.e")),
       aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1))),
-      Seq(2)
+      Seq(2),
+      Seq("explode")
     )
     runTest(Stack(2 :: 'c.getField("f") :: 'c.getField("g") :: Nil),
       aliases => Stack(2 :: $"${aliases(1)}".as("c.f") :: $"${aliases(2)}".as("c.g") :: Nil),
@@ -149,7 +159,22 @@ class ColumnPruningSuite extends PlanTest {
         'c.getField("d").as(aliases(0)),
         'c.getField("f").as(aliases(1)),
         'c.getField("g").as(aliases(2))),
-      Seq(2, 3)
+      Seq(2, 3),
+      Seq("stack")
+    )
+    runTest(
+      PosExplode('c.getField("e")),
+      aliases => PosExplode($"${aliases(1)}".as("c.e")),
+      aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1))),
+      Seq(2),
+      Seq("pos", "explode")
+    )
+    runTest(
+      Inline('c.getField("h")),
+      aliases => Inline($"${aliases(1)}".as("c.h")),
+      aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("h").as(aliases(1))),
+      Seq(2),
+      Seq("h1", "h2")
     )
   }
 
