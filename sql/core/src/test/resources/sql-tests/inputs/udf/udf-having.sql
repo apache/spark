@@ -1,6 +1,4 @@
 -- This test file was converted from having.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
 create temporary view hav as select * from values
   ("one", 1),

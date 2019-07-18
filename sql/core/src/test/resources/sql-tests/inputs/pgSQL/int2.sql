@@ -88,11 +88,9 @@ WHERE f1 > -32767;
 
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT2_TBL i;
 
--- PostgreSQL `/` is the same with Spark `div` since SPARK-2659.
-SELECT '' AS five, i.f1, i.f1 div smallint('2') AS x FROM INT2_TBL i;
+SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT2_TBL i;
 
--- PostgreSQL `/` is the same with Spark `div` since SPARK-2659.
-SELECT '' AS five, i.f1, i.f1 div int('2') AS x FROM INT2_TBL i;
+SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT2_TBL i;
 
 -- corner cases
 SELECT string(shiftleft(smallint(-1), 15));
