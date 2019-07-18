@@ -625,8 +625,7 @@ object DecisionTreeSuite extends SparkFunSuite {
     assert(a.isLeaf === b.isLeaf)
     assert(a.split === b.split)
     (a.stats, b.stats) match {
-      // TODO: Check other fields besides the information gain.
-      case (Some(aStats), Some(bStats)) => assert(aStats.gain === bStats.gain)
+      case (Some(aStats), Some(bStats)) => assert(aStats == bStats)
       case (None, None) =>
       case _ => fail(s"Only one instance has stats defined. (a.stats: ${a.stats}, " +
         s"b.stats: ${b.stats})")
