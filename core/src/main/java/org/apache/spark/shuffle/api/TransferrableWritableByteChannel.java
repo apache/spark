@@ -25,7 +25,7 @@ import java.nio.channels.WritableByteChannel;
 import org.apache.spark.annotation.Private;
 
 /**
- * :: Experimental ::
+ * :: Private ::
  * Represents an output byte channel that can copy bytes from input file channels to some
  * arbitrary storage system.
  * <p>

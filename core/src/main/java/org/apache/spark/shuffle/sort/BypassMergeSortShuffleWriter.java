@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import javax.annotation.Nullable;
 
@@ -39,7 +38,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
-import org.apache.spark.shuffle.api.SupportsTransferTo;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.ShuffleWriteSupport;
@@ -212,16 +210,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             FileInputStream in = new FileInputStream(file);
             // Using TransferrableWritableByteChannel to make resource closing consistent between
             // this implementation and UnsafeShuffleWriter.
-            TransferrableWritableByteChannel outputChannel = null;
+            TransferrableWritableByteChannel outputChannel = writer.openTransferrableChannel();
             try (FileChannel inputChannel = in.getChannel()) {
-              if (writer instanceof SupportsTransferTo) {
-                outputChannel = ((SupportsTransferTo) writer).openTransferrableChannel();
-              } else {
-                // Use default transferrable writable channel anyways in order to have parity with
-                // UnsafeShuffleWriter.
-                outputChannel = new DefaultTransferrableWritableByteChannel(
-                    Channels.newChannel(writer.openStream()));
-              }
               outputChannel.transferFrom(inputChannel, 0L, inputChannel.size());
               copyThrewException = false;
             } finally {

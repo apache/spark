@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.apache.spark.annotation.Private;
 
 /**
- * :: Experimental ::
+ * :: Private ::
  * A top-level writer that returns child writers for persisting the output of a map task,
  * and then commits all of the writes as one atomic operation.
  *
@@ -32,16 +32,16 @@ import org.apache.spark.annotation.Private;
 public interface ShuffleMapOutputWriter {
 
   /**
-   * Creates a writer that can open an output stream to persist bytes for a given chunk of
-   * a map task.
+   * Creates a writer that can open an output stream to persist bytes targeted for a given reduce
+   * partition id.
    * <p>
-   * The chunk corresponds to bytes in a partition that all share the same reduce id, hence
-   * the given argument. This will not be called twice for the same partition identifier.
-   * The partition identifier will be in the range of precisely 0 (inclusive) to numPartitions
-   * (exclusive), where numPartitions was provided upon the creation of this map output writer via
+   * The chunk corresponds to bytes in the given reduce partition. This will not be called twice
+   * for the same partition within any given map task. The partition identifier will be in the
+   * range of precisely 0 (inclusive) to numPartitions (exclusive), where numPartitions was
+   * provided upon the creation of this map output writer via
    * {@link ShuffleWriteSupport#createMapOutputWriter(int, int, long, int)}.
    */
-  ShufflePartitionWriter getPartitionWriter(int partitionId) throws IOException;
+  ShufflePartitionWriter getPartitionWriter(int reducePartitionId) throws IOException;
 
   /**
    * Commits the writes done by all partition writers returned by all calls to this object's

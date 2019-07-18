@@ -20,8 +20,14 @@ package org.apache.spark.shuffle.api;
 import org.apache.spark.annotation.Private;
 
 /**
- * :: Experimental ::
+ * :: Private ::
  * An interface for plugging in modules for storing and reading temporary shuffle data.
+ * <p>
+ * This is the root of a plugin system for storing shuffle bytes to arbitrary storage
+ * backends in the sort-based shuffle algorithm implemented by the
+ * {@link org.apache.spark.shuffle.sort.SortShuffleManager}. If another shuffle algorithm is
+ * needed instead of sort-based shuffle, one should implement
+ * {@link org.apache.spark.shuffle.ShuffleManager} instead.
  * <p>
  * A single instance of this module is loaded per process in the Spark application.
  * The default implementation reads and writes shuffle data from the local disks of

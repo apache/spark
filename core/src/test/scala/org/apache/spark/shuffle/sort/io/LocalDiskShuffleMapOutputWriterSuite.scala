@@ -32,7 +32,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
-import org.apache.spark.shuffle.api.SupportsTransferTo
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
@@ -155,7 +154,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   test("writing to a channel") {
     (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
-      val channel = writer.asInstanceOf[SupportsTransferTo].openTransferrableChannel()
+      val channel = writer.openTransferrableChannel()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
       val intBuffer = byteBuffer.asIntBuffer()
       intBuffer.put(data(p))
@@ -174,7 +173,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       assert(writer.getNumBytesWritten === D_LEN * 4)
     }
     mapOutputWriter.commitAllPartitions()
-    val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble}.toArray
+    val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble }.toArray
     assert(partitionSizesInMergedFile === partitionLengths)
     assert(mergedOutputFile.length() === partitionLengths.sum)
     assert(data === readRecordsFromFile(true))
@@ -203,7 +202,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   test("copyStreamsWithNIO with a channel") {
     (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
-      val channel = writer.asInstanceOf[SupportsTransferTo].openTransferrableChannel()
+      val channel = writer.openTransferrableChannel()
       val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
       val intBuffer = byteBuffer.asIntBuffer()
       intBuffer.put(data(p))

@@ -22,7 +22,7 @@ import java.io.IOException;
 import org.apache.spark.annotation.Private;
 
 /**
- * :: Experimental ::
+ * :: Private ::
  * A module that returns shuffle writers to persist data that is written by shuffle map tasks.
  *
  * @since 3.0.0

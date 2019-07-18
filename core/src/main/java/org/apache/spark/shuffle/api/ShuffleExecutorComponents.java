@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.api;
 import org.apache.spark.annotation.Private;
 
 /**
- * :: Experimental ::
+ * :: Private ::
  * An interface for building shuffle support for Executors.
  *
  * @since 3.0.0

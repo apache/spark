@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
-import org.apache.spark.shuffle.api.SupportsTransferTo;
 import org.apache.spark.shuffle.api.TransferrableWritableByteChannel;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.shuffle.sort.DefaultTransferrableWritableByteChannel;
@@ -85,11 +84,11 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public ShufflePartitionWriter getPartitionWriter(int partitionId) throws IOException {
-    if (partitionId <= lastPartitionId) {
+  public ShufflePartitionWriter getPartitionWriter(int reducePartitionId) throws IOException {
+    if (reducePartitionId <= lastPartitionId) {
       throw new IllegalArgumentException("Partitions should be requested in increasing order.");
     }
-    lastPartitionId = partitionId;
+    lastPartitionId = reducePartitionId;
     if (outputTempFile == null) {
       outputTempFile = Utils.tempFileWith(outputFile);
     }
@@ -98,7 +97,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     } else {
       currChannelPosition = 0L;
     }
-    return new LocalDiskShufflePartitionWriter(partitionId);
+    return new LocalDiskShufflePartitionWriter(reducePartitionId);
   }
 
   @Override
@@ -147,7 +146,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
   }
 
-  private class LocalDiskShufflePartitionWriter implements SupportsTransferTo {
+  private class LocalDiskShufflePartitionWriter implements ShufflePartitionWriter {
 
     private final int partitionId;
     private PartitionWriterStream partStream = null;
