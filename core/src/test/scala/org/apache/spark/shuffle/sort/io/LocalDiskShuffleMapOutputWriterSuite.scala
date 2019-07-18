@@ -17,9 +17,7 @@
 
 package org.apache.spark.shuffle.sort.io
 
-import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.math.BigInteger
-import java.nio.ByteBuffer
+import java.io.{ByteArrayOutputStream, File, FileInputStream, FileOutputStream}
 
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
@@ -32,18 +30,28 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
-import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
 
 class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  @Mock(answer = RETURNS_SMART_NULLS) private var blockResolver: IndexShuffleBlockResolver = _
-  @Mock(answer = RETURNS_SMART_NULLS) private var shuffleWriteMetrics: ShuffleWriteMetrics = _
+  @Mock(answer = RETURNS_SMART_NULLS)
+  private var blockResolver: IndexShuffleBlockResolver = _
+
+  @Mock(answer = RETURNS_SMART_NULLS)
+  private var shuffleWriteMetrics: ShuffleWriteMetrics = _
 
   private val NUM_PARTITIONS = 4
-  private val D_LEN = 10
-  private val data: Array[Array[Int]] = (0 until NUM_PARTITIONS).map {
-    p => (1 to D_LEN).map(_ + p).toArray }.toArray
+  private val data: Array[Array[Byte]] = (0 until NUM_PARTITIONS).map {
+    p => {
+      if (p == 3) {
+        Array.emptyByteArray
+      } else {
+        (0 to p * 10).map(_ + p).map(_.toByte).toArray
+      }
+    }
+  }.toArray
+
+  private val partitionLengths = data.map(_.length)
 
   private var tempFile: File = _
   private var mergedOutputFile: File = _
@@ -92,47 +100,6 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       conf)
   }
 
-  private def readRecordsFromFile(fromByte: Boolean): Array[Array[Int]] = {
-    var startOffset = 0L
-    val result = new Array[Array[Int]](NUM_PARTITIONS)
-    (0 until NUM_PARTITIONS).foreach { p =>
-      val partitionSize = partitionSizesInMergedFile(p).toInt
-      lazy val inner = new Array[Int](partitionSize)
-      lazy val innerBytebuffer = ByteBuffer.allocate(partitionSize)
-      if (partitionSize > 0) {
-        val in = new FileInputStream(mergedOutputFile)
-        in.getChannel.position(startOffset)
-        val lin = new LimitedInputStream(in, partitionSize)
-        var nonEmpty = true
-        var count = 0
-        while (nonEmpty) {
-          try {
-            val readBit = lin.read()
-            if (fromByte) {
-              innerBytebuffer.put(readBit.toByte)
-            } else {
-              inner(count) = readBit
-            }
-            count += 1
-          } catch {
-            case _: Exception =>
-              nonEmpty = false
-          }
-        }
-        in.close()
-      }
-      if (fromByte) {
-        result(p) = innerBytebuffer.array().sliding(4, 4).map { b =>
-          new BigInteger(b).intValue()
-        }.toArray
-      } else {
-        result(p) = inner
-      }
-      startOffset += partitionSize
-    }
-    result
-  }
-
   test("writing to an outputstream") {
     (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
@@ -142,82 +109,54 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       intercept[IllegalStateException] {
         stream.write(p)
       }
-      assert(writer.getNumBytesWritten === D_LEN)
+      assert(writer.getNumBytesWritten === data(p).length)
     }
-    mapOutputWriter.commitAllPartitions()
-    val partitionLengths = (0 until NUM_PARTITIONS).map { _ => D_LEN.toDouble}.toArray
-    assert(partitionSizesInMergedFile === partitionLengths)
-    assert(mergedOutputFile.length() === partitionLengths.sum)
-    assert(data === readRecordsFromFile(false))
+    verifyWrittenRecords()
   }
 
   test("writing to a channel") {
     (0 until NUM_PARTITIONS).foreach { p =>
       val writer = mapOutputWriter.getPartitionWriter(p)
-      val channel = writer.openTransferrableChannel()
-      val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
-      val intBuffer = byteBuffer.asIntBuffer()
-      intBuffer.put(data(p))
-      val numBytes = byteBuffer.remaining()
       val outputTempFile = File.createTempFile("channelTemp", "", tempDir)
       val outputTempFileStream = new FileOutputStream(outputTempFile)
-      Utils.copyStream(
-        new ByteBufferInputStream(byteBuffer),
-        outputTempFileStream,
-        closeStreams = true)
+      outputTempFileStream.write(data(p))
+      outputTempFileStream.close()
       val tempFileInput = new FileInputStream(outputTempFile)
-      channel.transferFrom(tempFileInput.getChannel, 0L, numBytes)
-      // Bytes require * 4
-      channel.close()
-      tempFileInput.close()
-      assert(writer.getNumBytesWritten === D_LEN * 4)
-    }
-    mapOutputWriter.commitAllPartitions()
-    val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble }.toArray
-    assert(partitionSizesInMergedFile === partitionLengths)
-    assert(mergedOutputFile.length() === partitionLengths.sum)
-    assert(data === readRecordsFromFile(true))
-  }
-
-  test("copyStreams with an outputstream") {
-    (0 until NUM_PARTITIONS).foreach { p =>
-      val writer = mapOutputWriter.getPartitionWriter(p)
-      val stream = writer.openStream()
-      val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
-      val intBuffer = byteBuffer.asIntBuffer()
-      intBuffer.put(data(p))
-      val in = new ByteArrayInputStream(byteBuffer.array())
-      Utils.copyStream(in, stream, false, false)
-      in.close()
-      stream.close()
-      assert(writer.getNumBytesWritten === D_LEN * 4)
-    }
-    mapOutputWriter.commitAllPartitions()
-    val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble}.toArray
-    assert(partitionSizesInMergedFile === partitionLengths)
-    assert(mergedOutputFile.length() === partitionLengths.sum)
-    assert(data === readRecordsFromFile(true))
-  }
-
-  test("copyStreamsWithNIO with a channel") {
-    (0 until NUM_PARTITIONS).foreach { p =>
-      val writer = mapOutputWriter.getPartitionWriter(p)
       val channel = writer.openTransferrableChannel()
-      val byteBuffer = ByteBuffer.allocate(D_LEN * 4)
-      val intBuffer = byteBuffer.asIntBuffer()
-      intBuffer.put(data(p))
-      val out = new FileOutputStream(tempFile)
-      out.write(byteBuffer.array())
-      out.close()
-      val in = new FileInputStream(tempFile)
-      channel.transferFrom(in.getChannel, 0L, byteBuffer.remaining())
-      channel.close()
-      assert(writer.getNumBytesWritten === D_LEN * 4)
+      Utils.tryWithResource(new FileInputStream(outputTempFile)) { tempFileInput =>
+        Utils.tryWithResource(writer.openTransferrableChannel()) { channel =>
+          channel.transferFrom(tempFileInput.getChannel, 0L, data(p).length)
+        }
+      }
+      assert(writer.getNumBytesWritten === data(p).length)
     }
+    verifyWrittenRecords()
+  }
+
+  private def readRecordsFromFile() = {
+    var startOffset = 0L
+    val result = new Array[Array[Byte]](NUM_PARTITIONS)
+    (0 until NUM_PARTITIONS).foreach { p =>
+      val partitionSize = data(p).length
+      if (partitionSize > 0) {
+        val in = new FileInputStream(mergedOutputFile)
+        in.getChannel.position(startOffset)
+        val lin = new LimitedInputStream(in, partitionSize)
+        val bytesOut = new ByteArrayOutputStream
+        Utils.copyStream(lin, bytesOut, true, true)
+        result(p) = bytesOut.toByteArray
+      } else {
+        result(p) = Array.emptyByteArray
+      }
+      startOffset += partitionSize
+    }
+    result
+  }
+
+  private def verifyWrittenRecords(): Unit = {
     mapOutputWriter.commitAllPartitions()
-    val partitionLengths = (0 until NUM_PARTITIONS).map { _ => (D_LEN * 4).toDouble}.toArray
     assert(partitionSizesInMergedFile === partitionLengths)
     assert(mergedOutputFile.length() === partitionLengths.sum)
-    assert(data === readRecordsFromFile(true))
+    assert(data === readRecordsFromFile())
   }
 }

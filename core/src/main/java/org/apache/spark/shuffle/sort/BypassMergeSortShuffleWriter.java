@@ -210,24 +210,30 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             FileInputStream in = new FileInputStream(file);
             // Using TransferrableWritableByteChannel to make resource closing consistent between
             // this implementation and UnsafeShuffleWriter.
-            TransferrableWritableByteChannel outputChannel = writer.openTransferrableChannel();
-            try (FileChannel inputChannel = in.getChannel()) {
-              outputChannel.transferFrom(inputChannel, 0L, inputChannel.size());
-              copyThrewException = false;
+            try {
+              TransferrableWritableByteChannel outputChannel = writer.openTransferrableChannel();
+              try (FileChannel inputChannel = in.getChannel()) {
+                outputChannel.transferFrom(inputChannel, 0L, inputChannel.size());
+                copyThrewException = false;
+              } finally {
+                Closeables.close(outputChannel, copyThrewException);
+              }
             } finally {
               Closeables.close(in, copyThrewException);
-              Closeables.close(outputChannel, copyThrewException);
             }
           } else {
             FileInputStream in = new FileInputStream(file);
             OutputStream outputStream = null;
             try {
               outputStream = writer.openStream();
-              Utils.copyStream(in, outputStream, false, false);
-              copyThrewException = false;
+              try {
+                Utils.copyStream(in, outputStream, false, false);
+                copyThrewException = false;
+              } finally {
+                Closeables.close(outputStream, copyThrewException);
+              }
             } finally {
               Closeables.close(in, copyThrewException);
-              Closeables.close(outputStream, copyThrewException);
             }
           }
           if (!file.delete()) {
