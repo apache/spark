@@ -1605,3 +1605,39 @@ private case class GetTimestamp(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Create date from year, month and day fields.",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2013, 7, 15);
+       '2013-07-15'
+  """,
+  since = "3.0.0")
+case class MakeDate(year: Expression, month: Expression, day: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  override def children: Seq[Expression] = Seq(year, month, day)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
+
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
+    LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int]).toEpochDay
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (year, month, day) => {
+      s"""java.time.LocalDate($year, $month, $day).toEpochDay"""
+    })
+  }
+
+  override def prettyName: String = "make_date"
+}
