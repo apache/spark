@@ -155,4 +155,15 @@ object NestedColumnAliasing {
     case MapType(keyType, valueType, _) => totalFieldNum(keyType) + totalFieldNum(valueType)
     case _ => 1 // UDT and others
   }
+
+  /**
+   * This is a while-list for pruning nested fields at `Generator`.
+   */
+  def canPruneGenerator(g: Generator): Boolean = g match {
+    case _: Explode => true
+    case _: Stack => true
+    case _: PosExplode => true
+    case _: Inline => true
+    case _ => false
+  }
 }
