@@ -259,7 +259,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSparkSession {
   }
 
   def extractLeftDeepInnerJoins(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case j @ Join(left, right, _: InnerLike, _) => right +: extractLeftDeepInnerJoins(left)
+    case j @ Join(left, right, _: InnerLike, _, _) => right +: extractLeftDeepInnerJoins(left)
     case Filter(_, child) => extractLeftDeepInnerJoins(child)
     case Project(_, child) => extractLeftDeepInnerJoins(child)
     case _ => Seq(plan)

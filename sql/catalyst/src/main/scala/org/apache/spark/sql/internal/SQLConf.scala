@@ -1400,7 +1400,7 @@ object SQLConf {
     buildConf("spark.sql.cbo.planStats.enabled")
       .doc("When true, the logical plan will fetch row counts and column statistics from catalog.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val JOIN_REORDER_ENABLED =
     buildConf("spark.sql.cbo.joinReorder.enabled")
