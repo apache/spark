@@ -190,7 +190,7 @@ class CSVOptions(
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
   /**
-   * The max error content in CSV parser/writer exception message.
+   * The max error content length in CSV parser/writer exception message.
    */
   val maxErrorContentLength = 1024
 
