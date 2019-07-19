@@ -1,5 +1,6 @@
 -- This test file was converted from inline-table.sql.
 -- [SPARK-28291] UDFs cannot be evaluated within inline table definition
+-- TODO: We should add UDFs in VALUES clause when [SPARK-28291] is resolved.
 
 -- single row, without table and column alias
 select udf(col1), udf(col2) from values ("one", 1);
