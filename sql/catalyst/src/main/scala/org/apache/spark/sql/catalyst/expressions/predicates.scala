@@ -841,6 +841,24 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
 
+object BooleanTest {
+  // Check the argument of boolean test is valid.
+  def checkBooleanTestArgs(v: Any): Unit = {
+    if (v != null && !v.isInstanceOf[Boolean]) {
+      throw new AnalysisException("argument of Boolean Test must be boolean or null, " +
+        s"not type $v")
+    }
+  }
+
+  def calculate(v: Any, booleanValue: Boolean): Boolean = {
+    checkBooleanTestArgs(v)
+    booleanValue match {
+      case true => v == true
+      case false => v == false
+    }
+  }
+}
+
 /**
  * Test the value of an expression is true, false, or unknown.
  */
@@ -849,20 +867,23 @@ case class BooleanTest(child: Expression, booleanOpt: Option[Boolean])
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any = booleanOpt match {
-    case Some(true) => child.eval(input) == true
-    case Some(false) => child.eval(input) == false
-    case None => child.eval(input) == null
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    booleanOpt match {
+      case None =>
+        value == null
+      case other =>
+        BooleanTest.calculate(value, booleanOpt.get)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, input => booleanOpt match {
-      case Some(true) => s"java.lang.Boolean.TRUE.equals($input)"
-      case Some(false) => s"java.lang.Boolean.FALSE.equals($input)"
       case None => s"$input == null"
+      case other => "org.apache.spark.sql.catalyst.expressions.BooleanTest" +
+        s".calculate($input, ${booleanOpt.get});"
     })
   }
 
   override def sql: String = s"""(${child.sql} IS ${booleanOpt.getOrElse("UNKNOWN")})"""
 }
-

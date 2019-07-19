@@ -1210,6 +1210,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * - (NOT) LIKE
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
+   * - IS (NOT) (TRUE | FALSE | UNKNOWN)
    * - IS (NOT) DISTINCT FROM
    */
   private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
@@ -1222,12 +1223,6 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     def getValueExpressions(e: Expression): Seq[Expression] = e match {
       case c: CreateNamedStruct => c.valExprs
       case other => Seq(other)
-    }
-    // Check the argument of boolean test is valid.
-    def checkBooleanTestArgs(e: Expression): Unit = e.dataType match {
-      case BooleanType | NullType =>
-      case other => throw new ParseException("argument of boolean test must be boolean or null, " +
-        s"not type $other", ctx)
     }
 
     // Create the predicate.
@@ -1249,24 +1244,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         IsNotNull(e)
       case SqlBaseParser.NULL =>
         IsNull(e)
-      case SqlBaseParser.TRUE if ctx.NOT != null =>
-        checkBooleanTestArgs(e)
-        Not(BooleanTest(e, Some(true)))
       case SqlBaseParser.TRUE =>
-        checkBooleanTestArgs(e)
-        BooleanTest(e, Some(true))
-      case SqlBaseParser.FALSE if ctx.NOT != null =>
-        checkBooleanTestArgs(e)
-        Not(BooleanTest(e, Some(false)))
+        invertIfNotDefined(BooleanTest(e, Some(true)))
       case SqlBaseParser.FALSE =>
-        checkBooleanTestArgs(e)
-        BooleanTest(e, Some(false))
-      case SqlBaseParser.UNKNOWN if ctx.NOT != null =>
-        checkBooleanTestArgs(e)
-        IsNotNull(e)
+        invertIfNotDefined(BooleanTest(e, Some(false)))
       case SqlBaseParser.UNKNOWN =>
-        checkBooleanTestArgs(e)
-        IsNull(e)
+        invertIfNotDefined(BooleanTest(e, None))
       case SqlBaseParser.DISTINCT if ctx.NOT != null =>
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>

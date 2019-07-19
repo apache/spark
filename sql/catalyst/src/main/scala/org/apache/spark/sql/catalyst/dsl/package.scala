@@ -114,6 +114,8 @@ package object dsl {
     def isNotTrue: Predicate = Not(BooleanTest(expr, Some(true)))
     def isFalse: Predicate = BooleanTest(expr, Some(false))
     def isNotFalse: Predicate = Not(BooleanTest(expr, Some(false)))
+    def isUnknown: Predicate = BooleanTest(expr, None)
+    def isNotUnknown: Predicate = Not(BooleanTest(expr, None))
 
     def getItem(ordinal: Expression): UnresolvedExtractValue = UnresolvedExtractValue(expr, ordinal)
     def getField(fieldName: String): UnresolvedExtractValue =
