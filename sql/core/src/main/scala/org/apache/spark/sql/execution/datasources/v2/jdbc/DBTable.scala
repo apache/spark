@@ -17,62 +17,60 @@
 
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import java.sql.Connection
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.datasources.FileFormat
-import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.execution.datasources.v2.csv.CSVWriteBuilder
+import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions.JDBC_TABLE_NAME
+import org.apache.spark.sql.execution.streaming.MetadataLogFileIndex
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.sources.v2.TableCapability.{BATCH_READ, BATCH_WRITE, TRUNCATE}
+import org.apache.spark.sql.sources.v2.TableCapability.{BATCH_READ, BATCH_WRITE, OVERWRITE_BY_FILTER, TRUNCATE}
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 
 case class DBTable (sparkSession: SparkSession,
-                     options: CaseInsensitiveStringMap,
-                     userSpecifiedSchema: Option[StructType])
+                    options: CaseInsensitiveStringMap,
+                    userSchema: Option[StructType])
   extends Table with SupportsWrite with SupportsRead with Logging{
 
+  private val userOptions = new JDBCOptions(options.asScala.toMap)
+  private val tableName = userOptions.parameters(JDBC_TABLE_NAME)
+  private val conn : Connection = JdbcUtils.createConnectionFactory(userOptions)()
 
   override def name: String = {
-    // TODO - Should come from user options
-
-    logInfo("***dsv2-flows*** name called")
-
-    "mysqltable"
+    logInfo("***dsv2-flows*** name called. Table name is " + tableName)
+    tableName
   }
 
-  def schema: StructType = {
-    // TODO - Remove hardcoded schema
+  override def schema: StructType = {
+    // TODO - check why a schema request? What if no table exists and
+    // no userSpecifiedSchema
     logInfo("***dsv2-flows*** schema called")
-    StructType(Seq(
-      StructField("name", StringType, true),
-      StructField("rollnum", StringType, true),
-      StructField("occupation", StringType, true)))
+    val schemaInDB = JdbcUtils.getSchemaOption(conn, userOptions)
+    Utils.logSchema("schema from DB", schemaInDB)
+    schemaInDB.getOrElse(StructType(Nil))
   }
 
   override def capabilities: java.util.Set[TableCapability] = DBTable.CAPABILITIES
 
-  def supportsDataType(dataType: DataType): Boolean = true
-
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     logInfo("***dsv2-flows*** newWriteBuilder called")
-    new JDBCWriteBuilder()
+    Utils.logSchema("Schema passed to DBTable", userSchema)
+    new JDBCWriteBuilder(
+      new JdbcOptionsInWrite(options.asScala.toMap), userSchema)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     logInfo("***dsv2-flows*** newScanBuilder called")
     new JDBCScanBuilder()
   }
-
 }
 
 object DBTable {
-  private val CAPABILITIES = Set(BATCH_WRITE, BATCH_READ, TRUNCATE).asJava
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE, OVERWRITE_BY_FILTER).asJava
 }
-
-
-
