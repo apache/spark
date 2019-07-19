@@ -562,9 +562,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
    * --------------------------------- */
 
   private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
-    def lexOrder(x: (Int, Int), y: (Int, Int)) =
-      x._1 < y._1 || x._2 < y._2
-
     (event1, event2) match {
       case (e1: SparkListenerStageSubmitted, e2: SparkListenerStageSubmitted) =>
         assert(e1.properties === e2.properties)
@@ -612,8 +609,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
           })
         assertSeqEquals[((Int, Int), ExecutorMetrics)](
-          e1.executorUpdates.toSeq.sortWith((x, y) => lexOrder(x._1, y._1)),
-          e2.executorUpdates.toSeq.sortWith((x, y) => lexOrder(x._1, y._1)),
+          e1.executorUpdates.toSeq.sortBy(_._1),
+          e2.executorUpdates.toSeq.sortBy(_._1),
           (a, b) => {
             val (k1, v1) = a
             val (k2, v2) = b
