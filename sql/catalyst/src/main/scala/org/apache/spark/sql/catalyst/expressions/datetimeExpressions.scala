@@ -1630,12 +1630,14 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
   override def dataType: DataType = DateType
 
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
-    LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int]).toEpochDay
+    val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
+    localDateToDays(ld)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (year, month, day) => {
-      s"""java.time.LocalDate($year, $month, $day).toEpochDay"""
+      s"$dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day))"
     })
   }
 
