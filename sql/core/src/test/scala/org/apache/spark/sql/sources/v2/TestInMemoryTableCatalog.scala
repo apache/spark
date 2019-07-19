@@ -40,7 +40,6 @@ class TestInMemoryTableCatalog extends TableCatalog {
 
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
-  protected val droppedTables: mutable.Set[Identifier] = mutable.Set[Identifier]()
   private var _name: Option[String] = None
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
@@ -105,9 +104,7 @@ class TestInMemoryTableCatalog extends TableCatalog {
   }
 
   override def dropTable(ident: Identifier): Boolean = {
-    val isRemoved = Option(tables.remove(ident)).isDefined
-    droppedTables += ident
-    isRemoved
+    Option(tables.remove(ident)).isDefined
   }
 
   def clearTables(): Unit = {
