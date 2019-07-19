@@ -47,7 +47,7 @@ SELECT (SELECT udf(min(k)) FROM t2) abs_min_t2 FROM t1 WHERE  t1.k = udf('one');
 -- Except operation that will be replaced by left anti join
 SELECT t1.k
 FROM   t1
-WHERE  t1.v <= (SELECT   max(udf(t2.v))
+WHERE  t1.v <= (SELECT   udf(max(udf(t2.v)))
                 FROM     t2
                 WHERE    udf(t2.k) = udf(t1.k))
 MINUS
