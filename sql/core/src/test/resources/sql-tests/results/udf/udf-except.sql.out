@@ -30,9 +30,9 @@ struct<>
 
 
 -- !query 2
-SELECT * FROM t1 EXCEPT SELECT * FROM t2
+SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2
 -- !query 2 schema
-struct<k:string,v:int>
+struct<CAST(udf(cast(k as string)) AS STRING):string,CAST(udf(cast(v as string)) AS INT):int>
 -- !query 2 output
 three	3
 two	2
@@ -92,7 +92,7 @@ SELECT t1.k
 FROM   t1
 WHERE  t1.v <= (SELECT   max(udf(t2.v))
                 FROM     t2
-                WHERE    t2.k = t1.k)
+                WHERE    udf(t2.k) = udf(t1.k))
 MINUS
 SELECT t1.k
 FROM   t1

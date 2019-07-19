@@ -17,7 +17,7 @@ create temporary view t2 as select * from values
 
 
 -- Except operation that will be replaced by left anti join
-SELECT * FROM t1 EXCEPT SELECT * FROM t2;
+SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2;
 
 
 -- Except operation that will be replaced by Filter: SPARK-22181
@@ -49,7 +49,7 @@ SELECT t1.k
 FROM   t1
 WHERE  t1.v <= (SELECT   max(udf(t2.v))
                 FROM     t2
-                WHERE    t2.k = t1.k)
+                WHERE    udf(t2.k) = udf(t1.k))
 MINUS
 SELECT t1.k
 FROM   t1
