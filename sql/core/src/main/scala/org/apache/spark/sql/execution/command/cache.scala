@@ -89,6 +89,4 @@ case object ClearCacheCommand extends RunnableCommand with IgnoreCachedData {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
-
-  override def clone(): LogicalPlan = this
 }

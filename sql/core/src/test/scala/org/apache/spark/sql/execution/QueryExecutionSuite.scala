@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 import scala.io.Source
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -138,28 +139,38 @@ class QueryExecutionSuite extends SharedSQLContext {
       (_: LogicalPlan) => throw new Error("error"))
     val error = intercept[Error](qe.toString)
     assert(error.getMessage.contains("error"))
+
+    spark.experimental.extraStrategies = Nil
   }
 
-  test("analyzed plan should not change after it's generated") {
-    val df = spark.range(10).filter('id > 0).as("a")
-    val analyzedPlan = df.queryExecution.analyzed
-    val tag = new TreeNodeTag[String]("test")
-    analyzedPlan.setTagValue(tag, "tag")
+  test("SPARK-28346: clone the query plan between analyzer, optimizer and planner") {
+    val tag1 = new TreeNodeTag[String]("a")
+    val tag2 = new TreeNodeTag[String]("b")
+    val tag3 = new TreeNodeTag[String]("c")
+    val tag4 = new TreeNodeTag[String]("d")
 
-    def checkPlan(l: LogicalPlan): Unit = {
-      assert(l.isInstanceOf[SubqueryAlias])
-      val sub = l.asInstanceOf[SubqueryAlias]
-      assert(sub.child.isInstanceOf[Filter])
-      assert(sub.getTagValue(tag).isDefined)
-      assert(sub.child.getTagValue(tag).isEmpty)
+    def assertNoTag(tag: TreeNodeTag[String], plans: QueryPlan[_]*): Unit = {
+      plans.foreach { plan =>
+        assert(plan.getTagValue(tag).isEmpty)
+      }
     }
 
-    checkPlan(analyzedPlan)
-    val df2 = df.filter('id > 0)
-    // trigger optimizaion
-    df2.queryExecution.optimizedPlan
+    val df = spark.range(10)
+    val analyzedPlan = df.queryExecution.analyzed
+    val optimizedPlan = df.queryExecution.optimizedPlan
+    val physicalPlan = df.queryExecution.sparkPlan
+    val finalPlan = df.queryExecution.executedPlan
 
-    // The previous analyzed plan should not get changed.
-    checkPlan(analyzedPlan)
+    analyzedPlan.setTagValue(tag1, "v")
+    assertNoTag(tag1, optimizedPlan, physicalPlan, finalPlan)
+
+    optimizedPlan.setTagValue(tag2, "v")
+    assertNoTag(tag2, analyzedPlan, physicalPlan, finalPlan)
+
+    physicalPlan.setTagValue(tag3, "v")
+    assertNoTag(tag3, analyzedPlan, optimizedPlan, finalPlan)
+
+    finalPlan.setTagValue(tag4, "v")
+    assertNoTag(tag4, analyzedPlan, optimizedPlan, physicalPlan)
   }
 }

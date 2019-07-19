@@ -223,6 +223,7 @@ case class InMemoryRelation(
       statsOfPlanToCache).asInstanceOf[this.type]
   }
 
+  // override `clone` since the default implementation won't carry over mutable states.
   override def clone(): LogicalPlan = {
     val cloned = this.copy()
     cloned.statsOfPlanToCache = this.statsOfPlanToCache

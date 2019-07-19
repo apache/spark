@@ -168,6 +168,4 @@ case object ResetCommand extends RunnableCommand with IgnoreCachedData {
     sparkSession.sessionState.conf.clear()
     Seq.empty[Row]
   }
-
-  override def clone(): LogicalPlan = this
 }
