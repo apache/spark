@@ -41,24 +41,6 @@ object YarnSparkHadoopUtil {
   val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
-  val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
-  val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
-
-  /**
-   * Convert Spark resources into YARN resources.
-   * The only resources we know how to map from spark configs to yarn configs are
-   * gpus and fpgas, everything else the user has to specify them in both the
-   * spark.yarn.*.resource and the spark.*.resource configs.
-   */
-  private[yarn] def getYarnResourcesFromSparkResources(
-      confPrefix: String,
-      sparkConf: SparkConf
-      ): Map[String, String] = {
-    Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG).map {
-      case (rName, yarnName) =>
-        (yarnName -> sparkConf.get(ResourceID(confPrefix, rName).amountConf, "0"))
-    }.filter { case (_, count) => count.toLong > 0 }
-  }
 
   // All RM requests are issued with same priority : we do not (yet) have any distinction between
   // request types (like map/reduce in hadoop for example)

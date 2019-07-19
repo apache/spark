@@ -1851,7 +1851,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a [[CalendarInterval]] for a unit value pair. Two unit configuration types are
    * supported:
    * - Single unit.
-   * - From-To unit (only 'YEAR TO MONTH' and 'DAY TO SECOND' and 'HOUR to SECOND' are supported).
+   * - From-To unit ('YEAR TO MONTH', 'DAY TO HOUR', 'DAY TO MINUTE', 'DAY TO SECOND',
+   * 'HOUR TO MINUTE', 'HOUR TO SECOND' and 'MINUTE TO SECOND' are supported).
    */
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
     import ctx._
@@ -1866,10 +1867,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           CalendarInterval.fromSingleUnitString(u, s)
         case ("year", Some("month")) =>
           CalendarInterval.fromYearMonthString(s)
+        case ("day", Some("hour")) =>
+          CalendarInterval.fromDayTimeString(s, "day", "hour")
+        case ("day", Some("minute")) =>
+          CalendarInterval.fromDayTimeString(s, "day", "minute")
         case ("day", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s)
+          CalendarInterval.fromDayTimeString(s, "day", "second")
+        case ("hour", Some("minute")) =>
+          CalendarInterval.fromDayTimeString(s, "hour", "minute")
         case ("hour", Some("second")) =>
-          CalendarInterval.fromDayTimeString(s)
+          CalendarInterval.fromDayTimeString(s, "hour", "second")
+        case ("minute", Some("second")) =>
+          CalendarInterval.fromDayTimeString(s, "minute", "second")
         case (from, Some(t)) =>
           throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
       }
