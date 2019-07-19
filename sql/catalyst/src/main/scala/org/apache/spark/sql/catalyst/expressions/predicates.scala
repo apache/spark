@@ -844,7 +844,7 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 
 object BooleanTest {
   // Check the argument of boolean test is valid.
-  def checkBooleanTestArgs(v: Any): Unit = {
+  private def checkBooleanTestArgs(v: Any): Unit = {
     if (v != null && !v.isInstanceOf[Boolean]) {
       throw new AnalysisException("argument of Boolean Test must be boolean or null, " +
         s"not type $v")
