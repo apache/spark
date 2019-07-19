@@ -318,17 +318,30 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
   /**
    * Statically evaluate an expression containing zero or more placeholders, given a set
-   * of bindings for placeholder values.
+   * of bindings for placeholder values, if the expression is evaluable. If it is not,
+   * bind statically evaluated expression results to an expression.
    */
-  private def evalExpr(expr: Expression, bindings: Map[ExprId, Option[Any]]) : Option[Any] = {
+  private def bindingExpr(
+      expr: Expression,
+      bindings: Map[ExprId, Option[Expression]]): Option[Expression] = {
     val rewrittenExpr = expr transform {
       case r: AttributeReference =>
         bindings(r.exprId) match {
-          case Some(v) => Literal.create(v, r.dataType)
+          case Some(v) => v
           case None => Literal.default(NullType)
         }
     }
-    Option(rewrittenExpr.eval())
+    if (rewrittenExpr.find(_.isInstanceOf[PythonUDF]).isDefined) {
+      // SPARK-28441: `PythonUDF` can't be statically evaluated.
+      Some(rewrittenExpr)
+    } else {
+      val exprVal = rewrittenExpr.eval()
+      if (exprVal == null) {
+        None
+      } else {
+        Some(Literal.create(exprVal, expr.dataType))
+      }
+    }
   }
 
   /**
@@ -354,27 +367,21 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
    * CheckAnalysis become less restrictive, this method will need to change.
    */
-  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Any] = {
+  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Expression] = {
     // Inputs to this method will start with a chain of zero or more SubqueryAlias
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
-    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
+    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Expression]] = lp match {
       case SubqueryAlias(_, child) => evalPlan(child)
       case Filter(condition, child) =>
-        val bindings = evalPlan(child)
-        if (bindings.isEmpty) bindings
-        else {
-          val exprResult = evalExpr(condition, bindings).getOrElse(false)
-            .asInstanceOf[Boolean]
-          if (exprResult) bindings else Map.empty
-        }
+        evalPlan(child)
 
       case Project(projectList, child) =>
         val bindings = evalPlan(child)
         if (bindings.isEmpty) {
           bindings
         } else {
-          projectList.map(ne => (ne.exprId, evalExpr(ne, bindings))).toMap
+          projectList.map(ne => (ne.exprId, bindingExpr(ne, bindings))).toMap
         }
 
       case Aggregate(_, aggExprs, _) =>
@@ -384,7 +391,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         aggExprs.map {
           case ref: AttributeReference => (ref.exprId, None)
           case alias @ Alias(_: AttributeReference, _) => (alias.exprId, None)
-          case ne => (ne.exprId, evalAggOnZeroTups(ne))
+          case ne =>
+            val aggEval = evalAggOnZeroTups(ne)
+            if (aggEval.isEmpty) {
+              (ne.exprId, None)
+            } else {
+              (ne.exprId, Some(Literal.create(evalAggOnZeroTups(ne).get, ne.dataType)))
+            }
         }.toMap
 
       case _ =>
@@ -473,7 +486,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               currentChild.output :+
                 Alias(
                   If(IsNull(alwaysTrueRef),
-                    Literal.create(resultWithZeroTups.get, origOutput.dataType),
+                    resultWithZeroTups.get,
                     aggValRef), origOutput.name)(exprId = origOutput.exprId),
               Join(currentChild,
                 Project(query.output :+ alwaysTrueExpr, query),
@@ -494,11 +507,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
-            // CASE WHEN alwayTrue IS NULL THEN resultOnZeroTups
+            // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
             //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
             //      ELSE (aggregate value) END AS (original column name)
             val caseExpr = Alias(CaseWhen(Seq(
-              (IsNull(alwaysTrueRef), Literal.create(resultWithZeroTups.get, origOutput.dataType)),
+              (IsNull(alwaysTrueRef), resultWithZeroTups.get),
               (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
               aggValRef),
               origOutput.name)(exprId = origOutput.exprId)
