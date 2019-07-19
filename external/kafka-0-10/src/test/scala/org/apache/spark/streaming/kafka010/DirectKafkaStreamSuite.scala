@@ -252,11 +252,13 @@ class DirectKafkaStreamSuite
     // Setup context and kafka stream with largest offset
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
-      val s = new DirectKafkaInputDStream[String, String](
+      val s = new DirectKafkaInputDStream[String, String, ConsumerRecord[String, String]](
         ssc,
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf))
+        new DefaultPerPartitionConfig(sparkConf),
+        (r: ConsumerRecord[String, String]) => r
+      )
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -305,14 +307,16 @@ class DirectKafkaStreamSuite
     kafkaParams.put("auto.offset.reset", "none")
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
-      val s = new DirectKafkaInputDStream[String, String](
+      val s = new DirectKafkaInputDStream[String, String, ConsumerRecord[String, String]](
         ssc,
         preferredHosts,
         ConsumerStrategies.Assign[String, String](
           List(topicPartition),
           kafkaParams.asScala,
           Map(topicPartition -> 11L)),
-        new DefaultPerPartitionConfig(sparkConf))
+        new DefaultPerPartitionConfig(sparkConf),
+        (r: ConsumerRecord[String, String]) => r
+      )
       s.consumer.poll(0)
       assert(
         s.consumer.position(topicPartition) >= offsetBeforeStart,
@@ -583,11 +587,12 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
 
     val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](
+      new DirectKafkaInputDStream[String, String, ConsumerRecord[String, String]](
         ssc,
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf)
+        new DefaultPerPartitionConfig(sparkConf),
+        (r: ConsumerRecord[String, String]) => r
       ) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
@@ -656,11 +661,12 @@ class DirectKafkaStreamSuite
     ssc = new StreamingContext(sparkConf, Milliseconds(500))
 
     val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](
+      new DirectKafkaInputDStream[String, String, ConsumerRecord[String, String]](
         ssc,
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf)
+        new DefaultPerPartitionConfig(sparkConf),
+        (r: ConsumerRecord[String, String]) => r
       )
     }
     kafkaStream.start()
@@ -697,11 +703,12 @@ class DirectKafkaStreamSuite
       new TopicPartition(topic, 3) -> 0L
     )
     val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](
+      new DirectKafkaInputDStream[String, String, ConsumerRecord[String, String]](
         ssc,
         preferredHosts,
         ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf)
+        new DefaultPerPartitionConfig(sparkConf),
+        (r: ConsumerRecord[String, String]) => r
       ) {
         currentOffsets = fromOffsets
         override val rateController = Some(new ConstantRateController(id, null, estimateRate))
@@ -723,6 +730,60 @@ class DirectKafkaStreamSuite
     )
     assert(result.contains(expected), s"Number of messages per partition must be at least equal" +
       s" to the specified minimum")
+  }
+
+  test("custom message handler") {
+    val topic = "messagehandler"
+    kafkaTestUtils.createTopic(topic, 1)
+    val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
+    val executorKafkaParams = new JHashMap[String, Object](kafkaParams)
+    KafkaUtils.fixKafkaParams(executorKafkaParams)
+
+    val messages = Map("foo" -> 5)
+    val totalSent = messages.values.sum
+    kafkaTestUtils.sendMessages(topic, messages)
+
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+
+    // Setup the streaming context
+    import DirectKafkaStreamSuite._
+    ssc = new StreamingContext(sparkConf, Milliseconds(1000))
+    val collector = new InputInfoCollector
+    ssc.addStreamingListener(collector)
+
+    val stream = withClue("Error creating direct stream") {
+      KafkaUtils.createDirectStream[String, String, String](
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf),
+        (r: ConsumerRecord[String, String]) => r.value().toUpperCase())
+    }
+
+    val collectedData = new ConcurrentLinkedQueue[Array[String]]()
+
+    // This is to collect the raw data received from Kafka
+    stream.foreachRDD { (rdd: RDD[String], _: Time) =>
+      val data = rdd.collect()
+      collectedData.add(data)
+    }
+
+    ssc.start()
+    eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
+      assert(collectedData.size === totalSent,
+        "didn't get expected number of messages, messages:\n" +
+         collectedData.asScala.mkString("\n"))
+
+      // Calculate all the record number collected in the StreamingListener.
+      assert(collector.numRecordsSubmitted.get() === totalSent)
+      assert(collector.numRecordsStarted.get() === totalSent)
+      assert(collector.numRecordsCompleted.get() === totalSent)
+    }
+    ssc.stop()
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
@@ -751,7 +812,7 @@ class DirectKafkaStreamSuite
     val ekp = new JHashMap[String, Object](kafkaParams)
     KafkaUtils.fixKafkaParams(ekp)
 
-    val s = new DirectKafkaInputDStream[String, String](
+    val s = new DirectKafkaInputDStream[String, String, ConsumerRecord[String, String]](
       ssc,
       preferredHosts,
       new ConsumerStrategy[String, String] {
@@ -764,7 +825,8 @@ class DirectKafkaStreamSuite
           consumer
         }
       },
-      ppc.getOrElse(new DefaultPerPartitionConfig(sparkConf))
+      ppc.getOrElse(new DefaultPerPartitionConfig(sparkConf)),
+      (r: ConsumerRecord[String, String]) => r
     ) {
         override protected[streaming] val rateController = mockRateController
     }

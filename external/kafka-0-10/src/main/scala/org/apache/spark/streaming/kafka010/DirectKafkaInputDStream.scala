@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
@@ -46,15 +47,18 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  *   see [[ConsumerStrategy]] for more details
  * @param ppc configuration of settings such as max rate on a per-partition basis.
  *   see [[PerPartitionConfig]] for more details.
+ * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
+ * @tparam R type of the returned message value (after processing by messageHandler)
  */
-private[spark] class DirectKafkaInputDStream[K, V](
+private[spark] class DirectKafkaInputDStream[K, V, R : ClassTag](
     _ssc: StreamingContext,
     locationStrategy: LocationStrategy,
     consumerStrategy: ConsumerStrategy[K, V],
-    ppc: PerPartitionConfig
-  ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
+    ppc: PerPartitionConfig,
+    messageHandler: ConsumerRecord[K, V] => R
+  ) extends InputDStream[R](_ssc) with Logging with CanCommitOffsets {
 
   private val initialRate = context.sparkContext.getConf.getLong(
     "spark.streaming.backpressure.initialRate", 0)
@@ -75,7 +79,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     kc
   }
 
-  override def persist(newLevel: StorageLevel): DStream[ConsumerRecord[K, V]] = {
+  override def persist(newLevel: StorageLevel): DStream[R] = {
     logError("Kafka ConsumerRecord is not serializable. " +
       "Use .map to extract fields before calling .persist or .window")
     super.persist(newLevel)
@@ -223,15 +227,15 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }.getOrElse(offsets)
   }
 
-  override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
+  override def compute(validTime: Time): Option[KafkaRDD[K, V, R]] = {
     val untilOffsets = clamp(latestOffsets())
     val offsetRanges = untilOffsets.map { case (tp, uo) =>
       val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
     val useConsumerCache = context.conf.get(CONSUMER_CACHE_ENABLED)
-    val rdd = new KafkaRDD[K, V](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
-      getPreferredHosts, useConsumerCache)
+    val rdd = new KafkaRDD[K, V, R](context.sparkContext, executorKafkaParams, offsetRanges.toArray,
+      getPreferredHosts, messageHandler, useConsumerCache)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val description = offsetRanges.filter { offsetRange =>
@@ -314,7 +318,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     override def update(time: Time): Unit = {
       batchForTime.clear()
       generatedRDDs.foreach { kv =>
-        val a = kv._2.asInstanceOf[KafkaRDD[K, V]].offsetRanges.map(_.toTuple).toArray
+        val a = kv._2.asInstanceOf[KafkaRDD[K, V, R]].offsetRanges.map(_.toTuple)
         batchForTime += kv._1 -> a
       }
     }
@@ -324,11 +328,12 @@ private[spark] class DirectKafkaInputDStream[K, V](
     override def restore(): Unit = {
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-         generatedRDDs += t -> new KafkaRDD[K, V](
+         generatedRDDs += t -> new KafkaRDD[K, V, R](
            context.sparkContext,
            executorKafkaParams,
            b.map(OffsetRange(_)),
            getPreferredHosts,
+           messageHandler,
            // during restore, it's possible same partition will be consumed from multiple
            // threads, so do not use cache.
            false

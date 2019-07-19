@@ -19,6 +19,8 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
+import scala.reflect.ClassTag
+
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
@@ -54,11 +56,39 @@ object KafkaUtils extends Logging {
       offsetRanges: Array[OffsetRange],
       locationStrategy: LocationStrategy
     ): RDD[ConsumerRecord[K, V]] = {
+    createRDD[K, V, ConsumerRecord[K, V]](sc, kafkaParams, offsetRanges, locationStrategy,
+      (r: ConsumerRecord[K, V]) => r)
+  }
+
+  /**
+    * Scala constructor for a batch-oriented interface for consuming from Kafka.
+    * Starting and ending offsets are specified in advance,
+    * so that you can control exactly-once semantics. A message handler function
+    * can be provided in order to transform Kafka event at an early stage.
+    * @param kafkaParams Kafka
+    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+    * configuration parameters</a>. Requires "bootstrap.servers" to be set
+    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+    *   see [[LocationStrategies]] for more details.
+    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type of the returned message value (after processing by messageHandler)
+    */
+  def createRDD[K, V, R : ClassTag](
+      sc: SparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      locationStrategy: LocationStrategy,
+      messageHandler: ConsumerRecord[K, V] => R
+    ): RDD[R] = {
     val preferredHosts = locationStrategy match {
       case PreferBrokers =>
         throw new IllegalArgumentException(
           "If you want to prefer brokers, you must provide a mapping using PreferFixed " +
-          "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
+            "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you.")
       case PreferConsistent => ju.Collections.emptyMap[TopicPartition, String]()
       case PreferFixed(hostMap) => hostMap
     }
@@ -66,7 +96,7 @@ object KafkaUtils extends Logging {
     fixKafkaParams(kp)
     val osr = offsetRanges.clone()
 
-    new KafkaRDD[K, V](sc, kp, osr, preferredHosts, true)
+    new KafkaRDD[K, V, R](sc, kp, osr, preferredHosts, messageHandler, true)
   }
 
   /**
@@ -91,6 +121,34 @@ object KafkaUtils extends Logging {
     ): JavaRDD[ConsumerRecord[K, V]] = {
 
     new JavaRDD(createRDD[K, V](jsc.sc, kafkaParams, offsetRanges, locationStrategy))
+  }
+
+  /**
+    * Java constructor for a batch-oriented interface for consuming from Kafka.
+    * Starting and ending offsets are specified in advance,
+    * so that you can control exactly-once semantics.
+    * @param kafkaParams Kafka
+    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+    * configuration parameters</a>. Requires "bootstrap.servers" to be set
+    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+    *   see [[LocationStrategies]] for more details.
+    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type of the returned message value (after processing by messageHandler)
+    */
+  def createRDD[K, V, R : ClassTag](
+      jsc: JavaSparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      locationStrategy: LocationStrategy,
+      messageHandler: ConsumerRecord[K, V] => R
+    ): JavaRDD[R] = {
+
+    new JavaRDD(createRDD[K, V, R](jsc.sc, kafkaParams, offsetRanges, locationStrategy,
+      messageHandler))
   }
 
   /**
@@ -133,7 +191,33 @@ object KafkaUtils extends Logging {
       consumerStrategy: ConsumerStrategy[K, V],
       perPartitionConfig: PerPartitionConfig
     ): InputDStream[ConsumerRecord[K, V]] = {
-    new DirectKafkaInputDStream[K, V](ssc, locationStrategy, consumerStrategy, perPartitionConfig)
+    createDirectStream(ssc, locationStrategy, consumerStrategy,
+      perPartitionConfig, (r: ConsumerRecord[K, V]) => r)
+  }
+
+  /**
+    * Scala constructor for a DStream where
+    * each given Kafka topic/partition corresponds to an RDD partition.
+    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+    *   see [[LocationStrategies]] for more details.
+    * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
+    *   see [[ConsumerStrategies]] for more details.
+    * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
+    *   see [[PerPartitionConfig]] for more details.
+    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type of the returned message value (after processing by messageHandler)
+    */
+  def createDirectStream[K, V, R : ClassTag](
+     ssc: StreamingContext,
+     locationStrategy: LocationStrategy,
+     consumerStrategy: ConsumerStrategy[K, V],
+     perPartitionConfig: PerPartitionConfig,
+     messageHandler: ConsumerRecord[K, V] => R
+   ): InputDStream[R] = {
+    new DirectKafkaInputDStream[K, V, R](ssc, locationStrategy, consumerStrategy,
+      perPartitionConfig, messageHandler)
   }
 
   /**
@@ -177,6 +261,33 @@ object KafkaUtils extends Logging {
     new JavaInputDStream(
       createDirectStream[K, V](
         jssc.ssc, locationStrategy, consumerStrategy, perPartitionConfig))
+  }
+
+  /**
+    * Java constructor for a DStream where
+    * each given Kafka topic/partition corresponds to an RDD partition.
+    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+    *   see [[LocationStrategies]] for more details.
+    * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
+    *   see [[ConsumerStrategies]] for more details
+    * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
+    *   see [[PerPartitionConfig]] for more details.
+    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type of the returned message value (after processing by messageHandler)
+    */
+  def createDirectStream[K, V, R : ClassTag](
+      jssc: JavaStreamingContext,
+      locationStrategy: LocationStrategy,
+      consumerStrategy: ConsumerStrategy[K, V],
+      perPartitionConfig: PerPartitionConfig,
+      messageHandler: ConsumerRecord[K, V] => R
+    ): JavaInputDStream[R] = {
+    new JavaInputDStream(
+      createDirectStream[K, V, R](
+        jssc.ssc, locationStrategy, consumerStrategy, perPartitionConfig,
+        messageHandler))
   }
 
   /**

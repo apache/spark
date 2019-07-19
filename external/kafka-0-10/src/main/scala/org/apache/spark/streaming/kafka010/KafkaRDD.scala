@@ -19,6 +19,8 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
+import scala.reflect.ClassTag
+
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 
@@ -42,17 +44,20 @@ import org.apache.spark.storage.StorageLevel
  * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
  * In most cases, use [[LocationStrategies.PreferConsistent]]
  * Use [[LocationStrategies.PreferBrokers]] if your executors are on same nodes as brokers.
+ * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
  * @param useConsumerCache whether to use a consumer from a per-jvm cache
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
+ * @tparam R type of the returned message value (after processing by messageHandler)
  */
-private[spark] class KafkaRDD[K, V](
+private[spark] class KafkaRDD[K, V, R : ClassTag](
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
     val preferredHosts: ju.Map[TopicPartition, String],
+    messageHandler: ConsumerRecord[K, V] => R,
     useConsumerCache: Boolean
-) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
+) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
 
   require("none" ==
     kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String],
@@ -108,18 +113,18 @@ private[spark] class KafkaRDD[K, V](
       count == 0L
     }
 
-  override def take(num: Int): Array[ConsumerRecord[K, V]] =
+  override def take(num: Int): Array[R] =
     if (compacted) {
       super.take(num)
     } else if (num < 1) {
-      Array.empty[ConsumerRecord[K, V]]
+      Array.empty[R]
     } else {
       val nonEmptyPartitions = this.partitions
         .map(_.asInstanceOf[KafkaRDDPartition])
         .filter(_.count > 0)
 
       if (nonEmptyPartitions.isEmpty) {
-        Array.empty[ConsumerRecord[K, V]]
+        Array.empty[R]
       } else {
         // Determine in advance how many messages need to be taken from each partition
         val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
@@ -134,7 +139,7 @@ private[spark] class KafkaRDD[K, V](
 
         context.runJob(
           this,
-          (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
+          (tc: TaskContext, it: Iterator[R]) =>
           it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
         ).flatten
       }
@@ -181,7 +186,7 @@ private[spark] class KafkaRDD[K, V](
       s"for topic ${part.topic} partition ${part.partition}. " +
       "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
 
-  override def compute(thePart: Partition, context: TaskContext): Iterator[ConsumerRecord[K, V]] = {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     require(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
@@ -192,10 +197,11 @@ private[spark] class KafkaRDD[K, V](
       logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
         s"offsets ${part.fromOffset} -> ${part.untilOffset}")
       if (compacted) {
-        new CompactedKafkaRDDIterator[K, V](
+        new CompactedKafkaRDDIterator[K, V, R](
           part,
           context,
           kafkaParams,
+          messageHandler,
           useConsumerCache,
           pollTimeout,
           cacheInitialCapacity,
@@ -203,10 +209,11 @@ private[spark] class KafkaRDD[K, V](
           cacheLoadFactor
         )
       } else {
-        new KafkaRDDIterator[K, V](
+        new KafkaRDDIterator[K, V, R](
           part,
           context,
           kafkaParams,
+          messageHandler,
           useConsumerCache,
           pollTimeout,
           cacheInitialCapacity,
@@ -222,16 +229,17 @@ private[spark] class KafkaRDD[K, V](
  * An iterator that fetches messages directly from Kafka for the offsets in partition.
  * Uses a cached consumer where possible to take advantage of prefetching
  */
-private class KafkaRDDIterator[K, V](
+private class KafkaRDDIterator[K, V, R](
   part: KafkaRDDPartition,
   context: TaskContext,
   kafkaParams: ju.Map[String, Object],
+  messageHandler: ConsumerRecord[K, V] => R,
   useConsumerCache: Boolean,
   pollTimeout: Long,
   cacheInitialCapacity: Int,
   cacheMaxCapacity: Int,
   cacheLoadFactor: Float
-) extends Iterator[ConsumerRecord[K, V]] {
+) extends Iterator[R] {
 
   context.addTaskCompletionListener[Unit](_ => closeIfNeeded())
 
@@ -250,13 +258,13 @@ private class KafkaRDDIterator[K, V](
 
   override def hasNext(): Boolean = requestOffset < part.untilOffset
 
-  override def next(): ConsumerRecord[K, V] = {
+  override def next(): R = {
     if (!hasNext) {
       throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
     }
     val r = consumer.get(requestOffset, pollTimeout)
     requestOffset += 1
-    r
+    messageHandler(r)
   }
 }
 
@@ -265,19 +273,21 @@ private class KafkaRDDIterator[K, V](
  * Uses a cached consumer where possible to take advantage of prefetching.
  * Intended for compacted topics, or other cases when non-consecutive offsets are ok.
  */
-private class CompactedKafkaRDDIterator[K, V](
+private class CompactedKafkaRDDIterator[K, V, R](
     part: KafkaRDDPartition,
     context: TaskContext,
     kafkaParams: ju.Map[String, Object],
+    messageHandler: ConsumerRecord[K, V] => R,
     useConsumerCache: Boolean,
     pollTimeout: Long,
     cacheInitialCapacity: Int,
     cacheMaxCapacity: Int,
     cacheLoadFactor: Float
-  ) extends KafkaRDDIterator[K, V](
+  ) extends KafkaRDDIterator[K, V, R](
     part,
     context,
     kafkaParams,
+    messageHandler,
     useConsumerCache,
     pollTimeout,
     cacheInitialCapacity,
@@ -293,7 +303,7 @@ private class CompactedKafkaRDDIterator[K, V](
 
   override def hasNext(): Boolean = okNext
 
-  override def next(): ConsumerRecord[K, V] = {
+  override def next(): R = {
     if (!hasNext) {
       throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
     }
@@ -307,6 +317,6 @@ private class CompactedKafkaRDDIterator[K, V](
         consumer.compactedPrevious()
       }
     }
-    r
+    messageHandler(r)
   }
 }

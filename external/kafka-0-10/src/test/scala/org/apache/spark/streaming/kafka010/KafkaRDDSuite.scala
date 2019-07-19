@@ -26,6 +26,7 @@ import scala.util.Random
 import kafka.log.{CleanerConfig, Log, LogCleaner, LogConfig, ProducerStateManager}
 import kafka.server.{BrokerTopicStats, LogDirFailureChannel}
 import kafka.utils.Pool
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.record.{CompressionType, MemoryRecords, SimpleRecord}
 import org.apache.kafka.common.serialization.StringDeserializer
@@ -158,6 +159,13 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
         .map(_.value)
         .collect()
     }
+
+    // message handler
+    val lengthRdd = KafkaUtils.createRDD[String, String, Int](sc, kafkaParams, offsetRanges,
+      preferredHosts, (r: ConsumerRecord[String, String]) => r.value().length)
+
+    val eventsLengths = lengthRdd.collect.toSet
+    assert(eventsLengths === Set(3, 5))
   }
 
   test("compacted topic") {
@@ -272,11 +280,12 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("executor sorting") {
     val kafkaParams = new ju.HashMap[String, Object](getKafkaParams())
     kafkaParams.put("auto.offset.reset", "none")
-    val rdd = new KafkaRDD[String, String](
+    val rdd = new KafkaRDD[String, String, ConsumerRecord[String, String]](
       sc,
       kafkaParams,
       Array(OffsetRange("unused", 0, 1, 2)),
       ju.Collections.emptyMap[TopicPartition, String](),
+      (r: ConsumerRecord[String, String]) => r,
       true)
     val a3 = ExecutorCacheTaskLocation("a", "3")
     val a4 = ExecutorCacheTaskLocation("a", "4")
