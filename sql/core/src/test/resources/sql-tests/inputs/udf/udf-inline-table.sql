@@ -17,7 +17,7 @@ select udf(a) from values 1, 2, 3 as data(a);
 select udf(a), b from values ("one", 1), ("two", 2), ("three", null) as data(a, b);
 
 -- null type
-select a, udf(b) from values ("one", null), ("two", null) as data(a, b);
+select udf(a), b from values ("one", null), ("two", null) as data(a, b);
 
 -- int and long coercion
 select udf(a), b from values ("one", 1), ("two", 2L) as data(a, b);
