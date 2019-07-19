@@ -2308,7 +2308,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    *
    * Expected format:
    * {{{
-   *   REPLACE TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   [CREATE OR] REPLACE TABLE [db_name.]table_name
    *   USING table_provider
    *   replace_table_clauses
    *   [[AS] select_statement];

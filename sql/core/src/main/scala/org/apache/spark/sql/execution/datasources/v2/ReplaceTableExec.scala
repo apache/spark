@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.sources.v2.StagedTable
@@ -32,19 +32,19 @@ import org.apache.spark.util.Utils
 
 case class ReplaceTableExec(
     catalog: TableCatalog,
-    identifier: Identifier,
+    ident: Identifier,
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
     orCreate: Boolean) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    if (catalog.tableExists(identifier)) {
-      catalog.dropTable(identifier)
+    if (catalog.tableExists(ident)) {
+      catalog.dropTable(ident)
     } else if (!orCreate) {
-      throw new CannotReplaceMissingTableException(identifier)
+      throw new CannotReplaceMissingTableException(ident)
     }
-    catalog.createTable(identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+    catalog.createTable(ident, tableSchema, partitioning.toArray, tableProperties.asJava)
     sqlContext.sparkContext.parallelize(Seq.empty, 1)
   }
 
@@ -60,18 +60,17 @@ case class AtomicReplaceTableExec(
     orCreate: Boolean) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val staged = if (catalog.tableExists(identifier)) {
-      catalog.stageReplace(
-        identifier,
-        tableSchema,
-        partitioning.toArray,
-        tableProperties.asJava)
-    } else if (orCreate) {
-      catalog.stageCreate(
-        identifier,
-        tableSchema,
-        partitioning.toArray,
-        tableProperties.asJava)
+    val staged = if (orCreate) {
+      catalog.stageCreateOrReplace(
+        identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+    } else if (catalog.tableExists(identifier)) {
+      try {
+        catalog.stageReplace(
+          identifier, tableSchema, partitioning.toArray, tableProperties.asJava)
+      } catch {
+        case e: NoSuchTableException =>
+          throw new CannotReplaceMissingTableException(identifier, Some(e))
+      }
     } else {
       throw new CannotReplaceMissingTableException(identifier)
     }

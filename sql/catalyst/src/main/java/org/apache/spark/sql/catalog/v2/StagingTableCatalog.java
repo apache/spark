@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.apache.spark.sql.catalog.v2.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.sources.v2.StagedTable;
 import org.apache.spark.sql.sources.v2.SupportsWrite;
@@ -87,10 +88,11 @@ public interface StagingTableCatalog extends TableCatalog {
    * can decide whether to move forward with the table replacement anyways or abort the commit
    * operation.
    * <p>
-   * If the table does not exist, committing the staged changes should fail. This differs from the
-   * semantics of {@link #stageCreateOrReplace(Identifier, StructType, Transform[], Map)}, which
-   * should create the table in the data source if the table does not exist at the time of
-   * committing the operation.
+   * If the table does not exist, committing the staged changes should fail with
+   * {@link NoSuchTableException}. This differs from the semantics of
+   * {@link #stageCreateOrReplace(Identifier, StructType, Transform[], Map)}, which should create
+   * the table in the data source if the table does not exist at the time of committing the
+   * operation.
    *
    * @param ident a table identifier
    * @param schema the schema of the new table, as a struct type
@@ -99,12 +101,13 @@ public interface StagingTableCatalog extends TableCatalog {
    * @return metadata for the new table
    * @throws UnsupportedOperationException If a requested partition transform is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   * @throws NoSuchTableException If the table does not exist
    */
   StagedTable stageReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,
-      Map<String, String> properties) throws NoSuchNamespaceException;
+      Map<String, String> properties) throws NoSuchNamespaceException, NoSuchTableException;
 
   /**
    * Stage the creation or replacement of a table, preparing it to be committed into the metastore

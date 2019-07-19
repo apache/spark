@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -213,21 +213,21 @@ case class AtomicReplaceTableAsSelectExec(
     orCreate: Boolean) extends AtomicTableWriteExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val stagedTable = if (catalog.tableExists(ident)) {
-      if (orCreate) {
-        catalog.stageCreateOrReplace(
-          ident, query.schema, partitioning.toArray, properties.asJava)
-      } else {
-        catalog.stageReplace(
-          ident, query.schema, partitioning.toArray, properties.asJava)
-      }
-    } else if (orCreate) {
+    val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
         ident, query.schema, partitioning.toArray, properties.asJava)
+    } else if (catalog.tableExists(ident)) {
+      try {
+        catalog.stageReplace(
+          ident, query.schema, partitioning.toArray, properties.asJava)
+      } catch {
+        case e: NoSuchTableException =>
+          throw new CannotReplaceMissingTableException(ident, Some(e))
+      }
     } else {
       throw new CannotReplaceMissingTableException(ident)
     }
-    writeToStagedTable(stagedTable, writeOptions, ident)
+    writeToStagedTable(staged, writeOptions, ident)
   }
 }
 
