@@ -81,7 +81,7 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     def test_different_schemas(self):
         right = self.data2.withColumn('v3', lit('a'))
-        self._test_merge(self.data1, right, output_schema='id long, k int, v int, v2 int, v3 string')
+        self._test_merge(self.data1, right, 'id long, k int, v int, v2 int, v3 string')
 
     def test_complex_group_by(self):
         left = pd.DataFrame.from_dict({
@@ -173,9 +173,10 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 left.groupby('id').cogroup(right.groupby('id')).apply(lambda l, r: l)
 
-            # Udf missing return type and PandasUdfType
+            # Udf missing return type
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
-                left.groupby('id').cogroup(right.groupby('id')).apply(udf(lambda l, r: l, DoubleType()))
+                left.groupby('id').cogroup(right.groupby('id'))\
+                    .apply(udf(lambda l, r: l, DoubleType()))
 
             # Pass in expression rather than udf
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
@@ -183,17 +184,18 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
 
             # Zero arg function
             with self.assertRaisesRegexp(ValueError, 'Invalid function'):
-                left.groupby('id').cogroup(right.groupby('id')).apply(
-                    pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())])))
+                left.groupby('id').cogroup(right.groupby('id'))\
+                    .apply(pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())])))
 
             # Udf without PandasUDFType
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
-                left.groupby('id').cogroup(right.groupby('id')).apply(pandas_udf(lambda x, y: x, DoubleType()))
+                left.groupby('id').cogroup(right.groupby('id'))\
+                    .apply(pandas_udf(lambda x, y: x, DoubleType()))
 
             # Udf with incorrect PandasUDFType
             with self.assertRaisesRegexp(ValueError, 'Invalid udf.*COGROUPED_MAP'):
-                left.groupby('id').cogroup(right.groupby('id')).apply(
-                    pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
+                left.groupby('id').cogroup(right.groupby('id'))\
+                    .apply(pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     @staticmethod
     def _test_with_key(left, right, isLeft):

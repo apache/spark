@@ -371,7 +371,8 @@ class InterleavedArrowReader(object):
         elif dataframes_in_group == 0:
             raise StopIteration
         else:
-            raise ValueError('Received Invalid number of ddataframes in group {0}'.format(dataframes_in_group))
+            raise ValueError(
+                'Received Invalid number of dataframes in group {0}'.format(dataframes_in_group))
 
     def next(self):
         return self.__next__()

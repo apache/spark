@@ -70,7 +70,8 @@ def _create_udf(f, returnType, evalType):
                 and len(argspec.args) not in (2, 3):
             raise ValueError(
                 "Invalid function: pandas_udfs with function type COGROUPED_MAP "
-                "must take either two arguments (left, right) or three arguments (key, left, right).")
+                "must take either two arguments (left, right) "
+                "or three arguments (key, left, right).")
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(

@@ -97,4 +97,3 @@ class CoGroupedData(object):
     def _extract_cols(gd):
         df = gd._df
         return [df[col] for col in df.columns]
-

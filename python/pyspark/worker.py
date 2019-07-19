@@ -432,8 +432,8 @@ def read_udfs(pickleSer, infile, eval_type):
         df1_vals = ["a[0][%d]" % o for o in parsed_offsets[0][1]]
         df2_keys = ["a[1][%d]" % o for o in parsed_offsets[1][0]]
         df2_vals = ["a[1][%d]" % o for o in parsed_offsets[1][1]]
-        mapper_str = "lambda a: f([%s], [%s], [%s], [%s])"  \
-                     % (", ".join(df1_keys), ", ".join(df1_vals), ", ".join(df2_keys), ", ".join(df2_vals))
+        mapper_str = "lambda a: f([%s], [%s], [%s], [%s])" % (
+            ", ".join(df1_keys), ", ".join(df1_vals), ", ".join(df2_keys), ", ".join(df2_vals))
     else:
         # Create function like this:
         #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
