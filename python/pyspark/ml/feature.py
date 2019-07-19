@@ -2066,9 +2066,9 @@ class RobustScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     >>> scalerPath = temp_path + "/robust-scaler"
     >>> scaler.save(scalerPath)
     >>> loadedScaler = RobustScaler.load(scalerPath)
-    >>> loadedScaler.getWithMean() == scaler.getWithMean()
+    >>> loadedScaler.getWithCentering() == scaler.getWithCentering()
     True
-    >>> loadedScaler.getWithStd() == scaler.getWithStd()
+    >>> loadedScaler.getWithScaling() == scaler.getWithScaling()
     True
     >>> modelPath = temp_path + "/robust-scaler-model"
     >>> model.save(modelPath)
@@ -2144,7 +2144,7 @@ class RobustScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         return self.getOrDefault(self.upper)
 
     @since("3.0.0")
-    def getWithCentering(self, value):
+    def setWithCentering(self, value):
         """
         Sets the value of :py:attr:`withCentering`.
         """
