@@ -2,48 +2,49 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- STRINGS
--- -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/strings.sql
+-- -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/strings.sql
 -- Test various data entry syntaxes.
 --
 
--- [SPARK-28073] ANSI SQL: Character literals
 -- SQL string continuation syntax
 -- E021-03 character string literals
--- SELECT 'first line'
--- ' - next line'
--- 	' - third line'
--- 	AS "Three lines to one";
+SELECT 'first line'
+' - next line'
+	' - third line'
+	AS `Three lines to one`;
 
+-- Spark SQL support this string continuation syntax
 -- illegal string continuation syntax
--- SELECT 'first line'
--- ' - next line' /* this comment is not allowed here */
--- ' - third line'
--- 	AS "Illegal comment within continuation";
+SELECT 'first line'
+' - next line' /* this comment is not allowed here */
+' - third line'
+	AS `Illegal comment within continuation`;
 
+-- [SPARK-28447] ANSI SQL: Unicode escapes in literals
 -- Unicode escapes
 -- SET standard_conforming_strings TO on;
 
-SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
-SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
+-- SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+-- SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
 
-SELECT U&' \' UESCAPE '!' AS "tricky";
-SELECT 'tricky' AS U&"\" UESCAPE '!';
+-- SELECT U&' \' UESCAPE '!' AS "tricky";
+-- SELECT 'tricky' AS U&"\" UESCAPE '!';
 
-SELECT U&'wrong: \061';
-SELECT U&'wrong: \+0061';
-SELECT U&'wrong: +0061' UESCAPE '+';
+-- SELECT U&'wrong: \061';
+-- SELECT U&'wrong: \+0061';
+-- SELECT U&'wrong: +0061' UESCAPE '+';
 
 -- SET standard_conforming_strings TO off;
 
-SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
-SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
+-- SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+-- SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
 
-SELECT U&' \' UESCAPE '!' AS "tricky";
-SELECT 'tricky' AS U&"\" UESCAPE '!';
+-- SELECT U&' \' UESCAPE '!' AS "tricky";
+-- SELECT 'tricky' AS U&"\" UESCAPE '!';
 
-SELECT U&'wrong: \061';
-SELECT U&'wrong: \+0061';
-SELECT U&'wrong: +0061' UESCAPE '+';
+-- SELECT U&'wrong: \061';
+-- SELECT U&'wrong: \+0061';
+-- SELECT U&'wrong: +0061' UESCAPE '+';
 
 -- RESET standard_conforming_strings;
 
@@ -319,22 +320,23 @@ SELECT 'indio' NOT LIKE 'in_o' AS `true`;
 -- SELECT 'be_r' LIKE '__e__r' ESCAPE '_' AS "false";
 -- SELECT 'be_r' NOT LIKE '__e__r' ESCAPE '_' AS "true";
 
+-- [SPARK-28448] Implement ILIKE operator
 --
 -- test ILIKE (case-insensitive LIKE)
 -- Be sure to form every test as an ILIKE/NOT ILIKE pair.
 --
 
-SELECT 'hawkeye' ILIKE 'h%' AS "true";
-SELECT 'hawkeye' NOT ILIKE 'h%' AS "false";
+-- SELECT 'hawkeye' ILIKE 'h%' AS "true";
+-- SELECT 'hawkeye' NOT ILIKE 'h%' AS "false";
 
-SELECT 'hawkeye' ILIKE 'H%' AS "true";
-SELECT 'hawkeye' NOT ILIKE 'H%' AS "false";
+-- SELECT 'hawkeye' ILIKE 'H%' AS "true";
+-- SELECT 'hawkeye' NOT ILIKE 'H%' AS "false";
 
-SELECT 'hawkeye' ILIKE 'H%Eye' AS "true";
-SELECT 'hawkeye' NOT ILIKE 'H%Eye' AS "false";
+-- SELECT 'hawkeye' ILIKE 'H%Eye' AS "true";
+-- SELECT 'hawkeye' NOT ILIKE 'H%Eye' AS "false";
 
-SELECT 'Hawkeye' ILIKE 'h%' AS "true";
-SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
+-- SELECT 'Hawkeye' ILIKE 'h%' AS "true";
+-- SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
 
 --
 -- test %/_ combination cases, cf bugs #4821 and #5478
@@ -395,12 +397,13 @@ insert into toasttest values(repeat('1234567890',10000));
 insert into toasttest values(repeat('1234567890',10000));
 insert into toasttest values(repeat('1234567890',10000));
 
+-- [SPARK-28451] substr returns different values
 -- If the starting position is zero or less, then return from the start of the string
 -- adjusting the length to be consistent with the "negative start" per SQL.
-SELECT substr(f1, -1, 5) from toasttest;
+-- SELECT substr(f1, -1, 5) from toasttest;
 
 -- If the length is less than zero, an ERROR is thrown.
-SELECT substr(f1, 5, -1) from toasttest;
+-- SELECT substr(f1, 5, -1) from toasttest;
 
 -- If no third argument (length) is provided, the length to the end of the
 -- string is assumed.
@@ -492,9 +495,9 @@ SELECT length('abcdef') AS `length_6`;
 -- test strpos
 --
 
-SELECT position('abcdef', 'cd') AS `pos_3`;
+SELECT position('cd', 'abcdef') AS `pos_3`;
 
-SELECT position('abcdef', 'xy') AS `pos_0`;
+SELECT position('xy', 'abcdef') AS `pos_0`;
 
 --
 -- test replace
@@ -577,35 +580,36 @@ select md5(binary('1234567890123456789012345678901234567890123456789012345678901
 -- SELECT sha512('');
 -- SELECT sha512('The quick brown fox jumps over the lazy dog.');
 
+-- [SPARK-28449] Missing escape_string_warning and standard_conforming_strings config
 --
 -- test behavior of escape_string_warning and standard_conforming_strings options
 --
-set escape_string_warning = off;
-set standard_conforming_strings = off;
+-- set escape_string_warning = off;
+-- set standard_conforming_strings = off;
 
-show escape_string_warning;
-show standard_conforming_strings;
+-- show escape_string_warning;
+-- show standard_conforming_strings;
 
-set escape_string_warning = on;
-set standard_conforming_strings = on;
+-- set escape_string_warning = on;
+-- set standard_conforming_strings = on;
 
-show escape_string_warning;
-show standard_conforming_strings;
+-- show escape_string_warning;
+-- show standard_conforming_strings;
 
-select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+-- select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
 
-set standard_conforming_strings = off;
+-- set standard_conforming_strings = off;
 
-select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+-- select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
 
-set escape_string_warning = off;
-set standard_conforming_strings = on;
+-- set escape_string_warning = off;
+-- set standard_conforming_strings = on;
 
-select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+-- select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
 
-set standard_conforming_strings = off;
+-- set standard_conforming_strings = off;
 
-select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+-- select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
 
 
 --
@@ -636,6 +640,7 @@ SELECT ascii('x');
 SELECT ascii('');
 
 SELECT chr(65);
+-- PostgreSQL throws: ERROR:  null character not permitted
 SELECT chr(0);
 
 SELECT repeat('Pg', 4);
