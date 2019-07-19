@@ -40,7 +40,6 @@ class UnsafeArraySuite extends SparkFunSuite {
   val dateArray = Array(
     DateTimeUtils.stringToDate(UTF8String.fromString("1970-1-1")).get,
     DateTimeUtils.stringToDate(UTF8String.fromString("2016-7-26")).get)
-  private def defaultTz = DateTimeUtils.defaultTimeZone()
   private def defaultZoneId = ZoneId.systemDefault()
   val timestampArray = Array(
     DateTimeUtils.stringToTimestamp(
