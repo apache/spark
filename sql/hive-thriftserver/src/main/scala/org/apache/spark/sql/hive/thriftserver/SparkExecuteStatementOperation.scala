@@ -45,7 +45,8 @@ private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
     statement: String,
     confOverlay: JMap[String, String],
-    runInBackground: Boolean = true)
+    runInBackground: Boolean = true,
+    dfsDelegationToken: String)
     (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
   with Logging {
@@ -216,6 +217,12 @@ private[hive] class SparkExecuteStatementOperation(
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
+    // Always set current username to local properties
+    sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_CURRENT_USER, parentSession.getUserName)
+    if(dfsDelegationToken != null){
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_TOKENS,dfsDelegationToken)
+    }
+
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -267,6 +274,9 @@ private[hive] class SparkExecuteStatementOperation(
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw new HiveSQLException(e.toString)
+    } finally {
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_CURRENT_USER, null)
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_TOKENS, null)
     }
     setState(OperationState.FINISHED)
     HiveThriftServer2.listener.onStatementFinish(statementId)

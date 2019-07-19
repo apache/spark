@@ -22,8 +22,10 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.lang.management.ManagementFactory
 import java.net.{URI, URL}
 import java.nio.ByteBuffer
+import java.security.PrivilegedAction
 import java.util.Properties
 import java.util.concurrent._
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -32,6 +34,10 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.token.Token
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -365,6 +371,36 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      val currentUser: String = taskDescription.properties.getProperty(SparkContext.SPARK_JOB_CURRENT_USER, null)
+      currentUser match {
+        case user: String =>
+          val ugi = UserGroupInformation.createProxyUser(user, UserGroupInformation.getCurrentUser)
+          if (taskDescription.properties.containsKey(SparkContext.SPARK_JOB_TOKENS)) {
+            val creds = new Credentials()
+            val originalCreds = ugi.getCredentials
+            taskDescription
+              .properties
+              .getProperty(SparkContext.SPARK_JOB_TOKENS)
+              .split(SparkContext.SPARK_JOB_TOKEN_DELIMiTER)
+              .foreach(tokenStr => {
+                val delegationToken = new Token()
+                delegationToken.decodeFromUrlString(tokenStr)
+                creds.addToken(new Text(delegationToken.getService), delegationToken)
+              })
+            ugi.addCredentials(creds)
+            val existing = ugi.getCredentials()
+            existing.mergeAll(originalCreds)
+            ugi.addCredentials(existing)
+          }
+
+          ugi.doAs[Unit](new PrivilegedAction[Unit] {
+            override def run(): Unit = runWithUgi()
+          })
+        case _ => runWithUgi()
+      }
+    }
+
+  def runWithUgi(): Unit = {
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean

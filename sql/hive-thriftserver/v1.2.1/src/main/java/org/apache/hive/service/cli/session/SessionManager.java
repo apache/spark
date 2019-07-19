@@ -48,15 +48,15 @@ import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
  */
 public class SessionManager extends CompositeService {
 
-  private static final Log LOG = LogFactory.getLog(SessionManager.class);
+  static final Log LOG = LogFactory.getLog(SessionManager.class);
   public static final String HIVERCFILE = ".hiverc";
-  private HiveConf hiveConf;
-  private final Map<SessionHandle, HiveSession> handleToSession =
+  protected HiveConf hiveConf;
+  protected final Map<SessionHandle, HiveSession> handleToSession =
       new ConcurrentHashMap<SessionHandle, HiveSession>();
-  private final OperationManager operationManager = new OperationManager();
+  protected final OperationManager operationManager = new OperationManager();
   private ThreadPoolExecutor backgroundOperationPool;
-  private boolean isOperationLogEnabled;
-  private File operationLogRootDir;
+  protected boolean isOperationLogEnabled;
+  protected File operationLogRootDir;
 
   private long checkInterval;
   private long sessionTimeout;
