@@ -24,6 +24,26 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 
+
+/**
+ * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapCoGroupsInPandas]]
+ *
+ * The input dataframes are first Cogrouped.  Rows from each side of the cogroup are passed to the
+ * Python worker via Arrow.  As each side of the cogroup may have a different schema we send every
+ * group in it's own Arrow stream.
+ * The Python worker turns the resulting record batches to `pandas.DataFrame`s, invokes the
+ * user-defined function, and passes the resulting `pandas.DataFrame`
+ * as an Arrow record batch. Finally, each record batch is turned to
+ * Iterator[InternalRow] using ColumnarBatch.
+ *
+ * Note on memory usage:
+ * Both the Python worker and the Java executor need to have enough memory to
+ * hold the largest cogroup. The memory on the Java side is used to construct the
+ * record batches (off heap memory). The memory on the Python side is used for
+ * holding the `pandas.DataFrame`. It's possible to further split one group into
+ * multiple record batches to reduce the memory footprint on the Java side, this
+ * is left as future work.
+ */
 case class FlatMapCoGroupsInPandasExec(
     leftGroup: Seq[Attribute],
     rightGroup: Seq[Attribute],
@@ -56,7 +76,7 @@ case class FlatMapCoGroupsInPandasExec(
       val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
         .map{case (_, l, r) => (l, r)}
 
-      val runner = new InterleavedArrowPythonRunner(
+      val runner = new CogroupedArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         Array(leftArgOffsets ++ rightArgOffsets),

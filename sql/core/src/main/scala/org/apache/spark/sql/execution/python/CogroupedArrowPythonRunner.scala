@@ -32,8 +32,12 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 
-
-class InterleavedArrowPythonRunner(
+/**
+ * Python UDF Runner for cogrouped udfs.  Although the data is exchanged with the python
+ * worker via arrow, we cannot use `ArrowPythonRunner` as we need to send more than one
+ * dataframe.
+ */
+class CogroupedArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],

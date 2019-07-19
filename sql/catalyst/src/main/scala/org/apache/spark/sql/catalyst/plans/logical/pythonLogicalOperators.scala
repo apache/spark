@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, PythonUDF}
 
 /**
- * FlatMap groups using an udf: pandas.Dataframe -> pandas.DataFrame.
+ * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
  * This is used by DataFrame.groupby().apply().
  */
 case class FlatMapGroupsInPandas(
@@ -40,7 +40,7 @@ case class FlatMapGroupsInPandas(
 }
 
 /**
- * Map partitions using an udf: iter(pandas.Dataframe) -> iter(pandas.DataFrame).
+ * Map partitions using a udf: iter(pandas.Dataframe) -> iter(pandas.DataFrame).
  * This is used by DataFrame.mapInPandas()
  */
 case class MapInPandas(
@@ -51,7 +51,10 @@ case class MapInPandas(
   override val producedAttributes = AttributeSet(output)
 }
 
-
+/**
+ * Flatmap cogroups  using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
+ * This is used by DataFrame.groupby().cogroup().apply().
+ */
 case class FlatMapCoGroupsInPandas(
                                     leftAttributes: Seq[Attribute],
                                     rightAttributes: Seq[Attribute],
@@ -59,6 +62,7 @@ case class FlatMapCoGroupsInPandas(
                                     output: Seq[Attribute],
                                     left: LogicalPlan,
                                     right: LogicalPlan) extends BinaryNode {
+
   override val producedAttributes = AttributeSet(output)
 }
 

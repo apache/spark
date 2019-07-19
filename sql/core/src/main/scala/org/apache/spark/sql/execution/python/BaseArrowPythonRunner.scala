@@ -31,7 +31,9 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
-
+/**
+ * Common functionality for a udf runner that exchanges data with Python worker via Arrow stream.
+ */
 abstract class BaseArrowPythonRunner[T](
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,

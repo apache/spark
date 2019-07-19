@@ -523,6 +523,16 @@ class RelationalGroupedDataset protected[sql](
     Dataset.ofRows(df.sparkSession, plan)
   }
 
+  /**
+   * Applies a vectorized python user-defined function to each cogrouped data.
+   * The user-defined function defines a transformation:
+   * `pandas.DataFrame`, `pandas.DataFrame` -> `pandas.DataFrame`.
+   * For each group int he cogrouped data, all elements in the group are passed as a
+   * `pandas.DataFrame` and the results for all cogroups are combined into a new [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
   private[sql] def flatMapCoGroupsInPandas
   (r: RelationalGroupedDataset, expr: PythonUDF): DataFrame = {
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
