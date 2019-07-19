@@ -3,11 +3,11 @@
 --
 --
 -- TEXT
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/text.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/text.sql
 
 SELECT string('this is a text string') = string('this is a text string') AS true;
 
-SELECT string('this is a text string') = string('this is a text strin') AS false;
+SELECT string('this is a text string') = string('this is a text strin') AS `false`;
 
 CREATE TABLE TEXT_TBL (f1 string) USING parquet;
 
@@ -45,19 +45,21 @@ select concat_ws('',10,20,null,30);
 select concat_ws(NULL,10,20,null,30) is null;
 select reverse('abcde');
 -- [SPARK-28036] Built-in udf left/right has inconsistent behavior
-select i, left('ahoj', i), right('ahoj', i) from range(-5, 5) t(i) order by i;
+-- select i, left('ahoj', i), right('ahoj', i) from range(-5, 5) t(i) order by i;
 -- [SPARK-28037] Add built-in String Functions: quote_literal
-select quote_literal('');
-select quote_literal('abc''');
-select quote_literal(e'\\');
+-- select quote_literal('');
+-- select quote_literal('abc''');
+-- select quote_literal(e'\\');
+
+-- Skip these tests because Spark does not support variadic labeled argument
 -- check variadic labeled argument
-select concat(variadic array[1,2,3]);
-select concat_ws(',', variadic array[1,2,3]);
-select concat_ws(',', variadic NULL::int[]);
-select concat(variadic NULL::int[]) is NULL;
-select concat(variadic '{}'::int[]) = '';
+-- select concat(variadic array[1,2,3]);
+-- select concat_ws(',', variadic array[1,2,3]);
+-- select concat_ws(',', variadic NULL::int[]);
+-- select concat(variadic NULL::int[]) is NULL;
+-- select concat(variadic '{}'::int[]) = '';
 --should fail
-select concat_ws(',', variadic 10);
+-- select concat_ws(',', variadic 10);
 
 -- [SPARK-27930] Replace format to format_string
 /*
@@ -73,16 +75,13 @@ select format_string('Hello %s %s', 'World');
 select format_string('Hello %s');
 select format_string('Hello %x', 20);
 -- check literal and sql identifiers
--- UnknownFormatConversionException: Conversion = 'I'
+-- [SPARK-27930] format_string can not fully support PostgreSQL's format
 -- select format_string('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
-select format_string('%s%s%s','Hello', NULL,'World');
--- UnknownFormatConversionException: Conversion = 'I'
-select format_string('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL);
--- UnknownFormatConversionException: Conversion = 'I'
-select format_string('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
+-- select format_string('%s%s%s','Hello', NULL,'World');
+-- select format_string('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, NULL);
+-- select format_string('INSERT INTO %I VALUES(%L,%L)', 'mytab', NULL, 'Hello');
 -- should fail, sql identifier cannot be NULL
--- UnknownFormatConversionException: Conversion = 'I'
-select format_string('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
+-- select format_string('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
 -- check positional placeholders
 select format_string('%1$s %3$s', 1, 2, 3);
 select format_string('%1$s %12$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
@@ -91,25 +90,27 @@ select format_string('%1$s %4$s', 1, 2, 3);
 select format_string('%1$s %13$s', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
 --PostgreSQL throw ERROR:  format specifies argument 0, but arguments are numbered from 1
 select format_string('%0$s', 'Hello');
-select format_string('%*0$s', 'Hello');
-select format_string('%1$', 1);
-select format_string('%1$1', 1);
+-- [SPARK-27930] format_string can not fully support PostgreSQL's format
+-- select format_string('%*0$s', 'Hello');
+-- select format_string('%1$', 1);
+-- select format_string('%1$1', 1);
 -- check mix of positional and ordered placeholders
 select format_string('Hello %s %1$s %s', 'World', 'Hello again');
 select format_string('Hello %s %s, %2$s %2$s', 'World', 'Hello again');
+-- Skip these tests because Spark does not support variadic labeled argument
 -- check variadic labeled arguments
-select format('%s, %s', variadic array['Hello','World']);
-select format('%s, %s', variadic array[1, 2]);
-select format('%s, %s', variadic array[true, false]);
-select format('%s, %s', variadic array[true, false]::text[]);
+-- select format('%s, %s', variadic array['Hello','World']);
+-- select format('%s, %s', variadic array[1, 2]);
+-- select format('%s, %s', variadic array[true, false]);
+-- select format('%s, %s', variadic array[true, false]::text[]);
 -- check variadic with positional placeholders
-select format('%2$s, %1$s', variadic array['first', 'second']);
-select format('%2$s, %1$s', variadic array[1, 2]);
+-- select format('%2$s, %1$s', variadic array['first', 'second']);
+-- select format('%2$s, %1$s', variadic array[1, 2]);
 -- variadic argument can be array type NULL, but should not be referenced
-select format('Hello', variadic NULL::int[]);
+-- select format('Hello', variadic NULL::int[]);
 -- variadic argument allows simulating more than FUNC_MAX_ARGS parameters
-select format(string_agg('%s',','), variadic array_agg(i))
-from generate_series(1,200) g(i);
+-- select format(string_agg('%s',','), variadic array_agg(i))
+-- from generate_series(1,200) g(i);
 -- check field widths and left, right alignment
 select format_string('>>%10s<<', 'Hello');
 select format_string('>>%10s<<', NULL);
@@ -118,7 +119,7 @@ select format_string('>>%-10s<<', '');
 select format_string('>>%-10s<<', 'Hello');
 select format_string('>>%-10s<<', NULL);
 select format_string('>>%1$10s<<', 'Hello');
--- [SPARK-27930] Spark SQL's format_string can not fully support PostgreSQL's format
+-- [SPARK-27930] format_string can not fully support PostgreSQL's format
 -- select format_string('>>%1$-10I<<', 'Hello');
 -- select format_string('>>%2$*1$L<<', 10, 'Hello');
 -- select format_string('>>%2$*1$L<<', 10, NULL);
@@ -129,3 +130,5 @@ select format_string('>>%1$10s<<', 'Hello');
 -- select format_string('>>%10L<<', NULL);
 -- select format_string('>>%2$*1$L<<', NULL, 'Hello');
 -- select format_string('>>%2$*1$L<<', 0, 'Hello');
+
+DROP TABLE TEXT_TBL;
