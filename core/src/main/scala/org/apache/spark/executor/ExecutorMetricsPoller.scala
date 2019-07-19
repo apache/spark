@@ -60,7 +60,7 @@ private[spark] class ExecutorMetricsPoller(
 
   type StageKey = (Int, Int)
   // Task Count and Metric Peaks
-  case class TCMP(count: AtomicLong, peaks: AtomicLongArray)
+  private case class TCMP(count: AtomicLong, peaks: AtomicLongArray)
 
   // Map of (stageId, stageAttemptId) to (count of running tasks, executor metric peaks)
   private val stageTCMP = new ConcurrentHashMap[StageKey, TCMP]
