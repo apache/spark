@@ -452,6 +452,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     }
   }
 
+  encodeDecodeTest("foo" -> 1L, "copied encoder") {
+    Encoders.product[(String, Long)].copyEncoder.asInstanceOf[ExpressionEncoder[(String, Long)]]
+  }
+
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
