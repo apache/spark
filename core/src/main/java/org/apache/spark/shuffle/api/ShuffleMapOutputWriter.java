@@ -42,6 +42,12 @@ public interface ShuffleMapOutputWriter {
    * provided upon the creation of this map output writer via
    * {@link ShuffleWriteSupport#createMapOutputWriter(
    * int, int, long, int, ShuffleWriteMetricsReporter)}.
+   * <p>
+   * Calls to this method will be invoked with monotonically increasing reducePartitionIds; each
+   * call to this method will be called with a reducePartitionId that is strictly greater than
+   * the reducePartitionIds given to any previous call to this method. This method is not
+   * guaranteed to be called for every partition id in the above described range. In particular,
+   * no guarantees are made as to whether or not this method will be called for empty partitions.
    */
   ShufflePartitionWriter getPartitionWriter(int reducePartitionId) throws IOException;
 
