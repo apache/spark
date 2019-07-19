@@ -17,40 +17,42 @@
 
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
-import java.io.IOException
 import java.sql.{Connection, PreparedStatement}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
-import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils._
+import org.apache.spark.sql.execution.datasources.jdbc.{JdbcOptionsInWrite, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils.{getCommonJDBCType, getJdbcType}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
-import org.apache.spark.sql.sources.v2.writer.{DataWriter, WriterCommitMessage}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{BooleanType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, StringType, StructType}
 
-class JDBCDataWriter(options: JdbcOptionsInWrite,
-                     jdbcConn: Connection, schema: StructType)
-  extends DataWriter[InternalRow] with Logging{
-  @throws[IOException]
-  def write(record: InternalRow): Unit = {
-    logInfo("***dsv2-flows*** write " )
-    JdbcUtils.saveRow(jdbcConn, record, options, schema)
+/* Misc utils
+
+ */
+object Utils extends Logging{
+  def logSchema(prefix: String, schema: Option[StructType]) : Unit = {
+    schema match {
+      case Some(i) =>
+        val schemaString = i.printTreeString()
+        logInfo(s"***dsv2-flows*** $prefix schema exists" )
+        logInfo(s"***dsv2-flows*** $prefix schemaInDB schema is $schemaString")
+      case None =>
+        logInfo(s"***dsv2-flows*** $prefix schemaInDB schema is None" )
+    }
   }
 
-  @throws[IOException]
-  def commit: WriterCommitMessage = {
-    logInfo("***dsv2-flows*** commit called " )
-    JDBCWriterCommitMessage
+  def createTable(structType: StructType): Unit = {
+    /* Create table per passed schema. Raise exception on any failure.
+     */
   }
 
-  @throws[IOException]
-  def abort(): Unit = {
-    logInfo("***dsv2-flows*** abort called " )
+  def strictSchemaCheck(schemaInSpark: StructType) : StructType = {
+    // TODO : Raise exception if fwPassedSchema is not same as schemaInDB.
+    schemaInSpark
   }
 
-}
 
-object JDBCWriterCommitMessage extends WriterCommitMessage {
-  val commitMessage: String = "committed"
+
+
+
 }

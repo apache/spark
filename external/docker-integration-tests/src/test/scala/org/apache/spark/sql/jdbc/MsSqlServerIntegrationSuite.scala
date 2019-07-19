@@ -99,6 +99,30 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         |'the', 'lazy',
         |'dog')
       """.stripMargin).executeUpdate()
+    conn.prepareStatement(
+      """
+        |CREATE TABLE strings_numbers (
+        |i NVarChar(10),
+        |j INT,
+        |k NVarChar(20))
+      """.stripMargin).executeUpdate()
+    conn.prepareStatement(
+      """
+        |INSERT INTO strings_numbers VALUES (
+        |'string',38,
+        |'big string')
+      """.stripMargin).executeUpdate()
+  }
+
+  test("JDBCV2 write test") {
+    // Read 1 row using JDBC. Write(append) this row using jdbcv2.
+    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
+    df1.show(10)
+    assert(df1.count == 1)
+    df1.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "strings_numbers").save()
+    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
+    df2.show(10)
+    assert(df2.count == 2)
   }
 
   test("Basic test") {

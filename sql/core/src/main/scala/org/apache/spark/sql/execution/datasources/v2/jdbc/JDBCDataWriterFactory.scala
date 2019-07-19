@@ -17,16 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import java.sql.Connection
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.jdbc.{JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory}
+import org.apache.spark.sql.types.StructType
 
-class JDBCDataWriterFactory extends DataWriterFactory with Logging{
-
+/* Writer factory that's serialized and send to executors
+ */
+class JDBCDataWriterFactory(options: JdbcOptionsInWrite, schema: StructType) extends
+  DataWriterFactory with Logging{
   def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    logInfo("***dsv2-flows*** createWriter called " )
-
-    new JDBCDataWriter()
+    // TODO : Check if every task in executor call createWriter to gets its own writer object.
+    // JDBC connection should not be shared between Tasks.
+    // JDBCUtil.createConnectionFactory should take care of that??
+    logInfo(s"***dsv2-flows*** createWriter called for partition $partitionId taskID $taskId")
+    val conn: Connection = JdbcUtils.createConnectionFactory(options)()
+    new JDBCDataWriter(options, conn, schema)
   }
 
 }

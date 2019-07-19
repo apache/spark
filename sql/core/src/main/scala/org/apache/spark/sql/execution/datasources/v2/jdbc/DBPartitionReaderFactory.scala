@@ -28,5 +28,4 @@ class DBPartitionReaderFactory(schema : StructType) extends PartitionReaderFacto
     logInfo("***dsv2-flows*** createReader called")
     new DBPartitionReader(schema)
   }
-
 }
