@@ -274,6 +274,7 @@ private[spark] class TaskSetManager(
           if (copiesRunning(index) == 0) {
             return Some(index)
           } else if (speculative && copiesRunning(index) == 1) {
+            speculatableTasks -= index
             return Some(index)
           }
         }
