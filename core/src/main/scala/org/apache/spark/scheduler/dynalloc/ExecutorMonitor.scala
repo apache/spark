@@ -188,7 +188,12 @@ private[spark] class ExecutorMonitor(
           exec.updateActiveShuffles(activeShuffleIds)
           if (exec.hasActiveShuffle) {
             needTimeoutUpdate = true
-            activatedExecs += id
+            // Don't collect too many ids or the debug message becomes not very useful.
+            if (activatedExecs.size < 10) {
+              activatedExecs += id
+            } else if (activatedExecs.size == 10) {
+              activatedExecs += "..."
+            }
           }
         }
       }
@@ -237,8 +242,13 @@ private[spark] class ExecutorMonitor(
       executors.asScala.foreach { case (id, exec) =>
         if (exec.hasActiveShuffle) {
           exec.updateActiveShuffles(activeShuffles)
-          if (!exec.hasActiveShuffle) {
-            deactivatedExecs += id
+          if (!exec.hasActiveShuffle && log.isDebugEnabled) {
+            // Don't collect too many ids or the debug message becomes not very useful.
+            if (deactivatedExecs.size < 10) {
+              deactivatedExecs += id
+            } else if (deactivatedExecs.size == 10) {
+              deactivatedExecs += "..."
+            }
           }
         }
       }
@@ -448,7 +458,8 @@ private[spark] class ExecutorMonitor(
         } else {
           idleTimeoutMs
         }
-        idleStart + timeout
+        val deadline = idleStart + timeout
+        if (deadline >= 0) deadline else Long.MaxValue
       } else {
         Long.MaxValue
       }
