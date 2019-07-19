@@ -870,4 +870,82 @@ object JdbcUtils extends Logging {
       statement.close()
     }
   }
+
+  /**
+   * Inserts row into the database represented by the connection.
+   *
+   * @param conn - JDBCConnection to the given database.
+   * @param record - InternalRow to be inserted
+   * @throws IllegalArgumentException if the schema contains an unsupported type.
+   * Additions to JDBCUtils to support DSV2 JDBC adapter.
+   * TODO : Refactoring to remove makeIRSetter and use makeSetter with InternalRows
+   * TODO : Reactor to remove v2 imports/types from this pure DSV1 file.
+   * TODO : Support for Transactions, Isolation levels
+   * TODO : Just add to statement here. Commit should be outside of this function.
+   */
+  def saveRow(conn: Connection, record: InternalRow,
+                  options : JdbcOptionsInWrite, schema : StructType) : Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    val rddSchema = JdbcUtils.getSchemaOption(conn, options)
+    val passedSchema = schema
+
+    val insertStatement = JdbcUtils.getInsertStatement(options.table,
+      schema, rddSchema, true, dialect)
+    val stmt = conn.prepareStatement(insertStatement)
+    logInfo("***dsv2-flows***  insertStatement is $insertStatement")
+    val setters = schema.fields.map(f => makeIRSetter(conn, dialect, f.dataType))
+    val nullTypes = schema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
+    val numFields = schema.fields.length
+
+    var colNum = 0
+    while (colNum < numFields) {
+      logInfo("***dsv2-flows***  stmt prep field " + colNum)
+      if (record.isNullAt(colNum)) {
+        stmt.setNull(colNum + 1, nullTypes(colNum))
+      } else {
+        setters(colNum).apply(stmt, record, colNum)
+      }
+      colNum = colNum + 1
+    }
+    stmt.execute()
+  }
+
+  private type JDBCValueSetterIR = (PreparedStatement, InternalRow, Int) => Unit
+
+  private def makeIRSetter(conn: Connection, dialect: JdbcDialect,
+                         dataType: DataType): JDBCValueSetterIR = dataType match {
+    case IntegerType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setInt(pos + 1, row.getInt(pos))
+
+    case LongType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setLong(pos + 1, row.getLong(pos))
+
+    case DoubleType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setDouble(pos + 1, row.getDouble(pos))
+
+    case FloatType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setFloat(pos + 1, row.getFloat(pos))
+
+    case ShortType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setShort(pos + 1, row.getShort(pos))
+
+    case ByteType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setByte(pos + 1, row.getByte(pos))
+
+    case BooleanType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setBoolean(pos + 1, row.getBoolean(pos))
+
+    case StringType =>
+      (stmt: PreparedStatement, row: InternalRow, pos: Int) =>
+        stmt.setString(pos + 1, row.getString(pos))
+    case _ =>
+      throw new IllegalArgumentException(s"Not supported ${dataType.catalogString}")
+  }
 }
