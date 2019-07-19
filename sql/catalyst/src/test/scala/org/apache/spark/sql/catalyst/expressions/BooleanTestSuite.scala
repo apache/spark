@@ -50,4 +50,3 @@ class BooleanTestSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Not(BooleanTest(Literal.create(null, NullType), None)), false, row0)
   }
 }
-

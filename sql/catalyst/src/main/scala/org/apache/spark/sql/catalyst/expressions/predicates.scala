@@ -844,23 +844,6 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 /**
  * Test the value of an expression is true, false, or unknown.
  */
-@ExpressionDescription(
-  usage = "_FUNC_(expr, booleanValue) - Returns true if `expr` equals booleanValue, " +
-    "or false otherwise.",
-  arguments = """
-    Arguments:
-      * expr - a boolean expression
-      * booleanValue - a boolean value represented by a string. booleanValue must be one
-          of TRUE, FALSE and UNKNOWN.
-  """,
-  examples = """
-    Examples:
-    > SELECT _FUNC_(1 > 2, true);
-       false
-    > SELECT _FUNC_(2 > 1, true);
-       true
-  """,
-  since = "3.0.0")
 case class BooleanTest(child: Expression, booleanOpt: Option[Boolean])
   extends UnaryExpression with Predicate {
 

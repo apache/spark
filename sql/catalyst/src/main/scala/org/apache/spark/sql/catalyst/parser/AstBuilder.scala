@@ -1263,10 +1263,10 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         BooleanTest(e, Some(false))
       case SqlBaseParser.UNKNOWN if ctx.NOT != null =>
         checkBooleanTestArgs(e)
-        Not(BooleanTest(e, None))
+        IsNotNull(e)
       case SqlBaseParser.UNKNOWN =>
         checkBooleanTestArgs(e)
-        BooleanTest(e, None)
+        IsNull(e)
       case SqlBaseParser.DISTINCT if ctx.NOT != null =>
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
