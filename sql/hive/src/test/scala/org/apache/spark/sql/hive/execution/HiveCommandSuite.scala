@@ -304,6 +304,19 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  test("case insensitive property of partition column name in insert command") {
+    // check for case insensitive property of partition column name in insert command.
+    withTable("parquet_tab4") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
+        sql("INSERT INTO parquet_tab4 PARTITION(YEar = 2015, month = 1) SELECT 1, 1")
+        checkAnswer(
+          sql("SELECT * FROM parquet_tab4"),
+          Row(1, 1, 2015, 1))
+      }
+    }
+  }
+
   test("Truncate Table") {
     withTable("non_part_table", "part_table") {
       sql(
