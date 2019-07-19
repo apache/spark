@@ -251,39 +251,39 @@ FFFFFFFFFFFFFF85
 
 
 -- !query 31
-SELECT CAST('interval 3 month 1 hour' AS interval)
--- !query 31 schema
-struct<CAST(interval 3 month 1 hour AS CALENDARINTERVAL):calendarinterval>
--- !query 31 output
-interval 3 months 1 hours
-
-
--- !query 32
-SELECT CAST(interval 3 month 1 hour AS string)
--- !query 32 schema
-struct<CAST(interval 3 months 1 hours AS STRING):string>
--- !query 32 output
-interval 3 months 1 hours
-
-
--- !query 33
 DESC FUNCTION boolean
--- !query 33 schema
+-- !query 31 schema
 struct<function_desc:string>
--- !query 33 output
+-- !query 31 output
 Class: org.apache.spark.sql.catalyst.expressions.Cast
 Function: boolean
 Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.
 
 
--- !query 34
+-- !query 32
 DESC FUNCTION EXTENDED boolean
--- !query 34 schema
+-- !query 32 schema
 struct<function_desc:string>
--- !query 34 output
+-- !query 32 output
 Class: org.apache.spark.sql.catalyst.expressions.Cast
 Extended Usage:
     No example/argument for boolean.
 
 Function: boolean
 Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.
+
+
+-- !query 33
+SELECT CAST('interval 3 month 1 hour' AS interval)
+-- !query 33 schema
+struct<CAST(interval 3 month 1 hour AS INTERVAL):interval>
+-- !query 33 output
+interval 3 months 1 hours
+
+
+-- !query 34
+SELECT CAST(interval 3 month 1 hour AS string)
+-- !query 34 schema
+struct<CAST(interval 3 months 1 hours AS STRING):string>
+-- !query 34 output
+interval 3 months 1 hours

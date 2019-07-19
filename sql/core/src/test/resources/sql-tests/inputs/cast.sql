@@ -53,10 +53,10 @@ SELECT HEX(CAST(-123 AS binary));
 SELECT HEX(CAST(123L AS binary));
 SELECT HEX(CAST(-123L AS binary));
 
--- cast string to interval and interval to string
-SELECT CAST('interval 3 month 1 hour' AS interval);
-SELECT CAST(interval 3 month 1 hour AS string);
-
 DESC FUNCTION boolean;
 DESC FUNCTION EXTENDED boolean;
 -- TODO: migrate all cast tests here.
+
+-- cast string to interval and interval to string
+SELECT CAST('interval 3 month 1 hour' AS interval);
+SELECT CAST(interval 3 month 1 hour AS string);
