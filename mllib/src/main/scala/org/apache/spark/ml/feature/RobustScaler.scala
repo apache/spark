@@ -37,12 +37,12 @@ import org.apache.spark.sql.types.{StructField, StructType}
 private[feature] trait RobustScalerParams extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * lower quantile to calculate quantile range, shared by all features
+   * Lower quantile to calculate quantile range, shared by all features
    * Default: 0.25
    * @group param
    */
   val lower: DoubleParam = new DoubleParam(this, "lower",
-    "lower quantile to calculate quantile range",
+    "Lower quantile to calculate quantile range",
     ParamValidators.inRange(0, 1, false, false))
 
   /** @group getParam */
@@ -51,12 +51,12 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
   setDefault(lower -> 0.25)
 
   /**
-   * upper quantile to calculate quantile range, shared by all features
+   * Upper quantile to calculate quantile range, shared by all features
    * Default: 0.75
    * @group param
    */
   val upper: DoubleParam = new DoubleParam(this, "upper",
-    "upper quantile to calculate quantile range",
+    "Upper quantile to calculate quantile range",
     ParamValidators.inRange(0, 1, false, false))
 
   /** @group getParam */
@@ -106,7 +106,7 @@ private[feature] trait RobustScalerParams extends Params with HasInputCol with H
 
 /**
  * Scale features using statistics that are robust to outliers.
- * This Scaler removes the median and scales the data according to the quantile range.
+ * RobustScaler removes the median and scales the data according to the quantile range.
  * The quantile range is by default IQR (Interquartile Range, quantile range between the
  * 1st quartile = 25th quantile and the 3rd quartile = 75th quantile) but can be configured.
  * Centering and scaling happen independently on each feature by computing the relevant
