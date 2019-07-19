@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle.sort.io;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShuffleWriteSupport;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
@@ -40,14 +40,9 @@ public class LocalDiskShuffleWriteSupport implements ShuffleWriteSupport {
       int shuffleId,
       int mapId,
       long mapTaskAttemptId,
-      int numPartitions) {
-    TaskContext taskContext = TaskContext.get();
-    if (taskContext == null) {
-      throw new IllegalStateException(
-          "Task context must be set before creating a map output writer.");
-    }
+      int numPartitions,
+      ShuffleWriteMetricsReporter writeMetrics) {
     return new LocalDiskShuffleMapOutputWriter(
-      shuffleId, mapId, numPartitions,
-        taskContext.taskMetrics().shuffleWriteMetrics(), blockResolver, sparkConf);
+      shuffleId, mapId, numPartitions, writeMetrics, blockResolver, sparkConf);
   }
 }

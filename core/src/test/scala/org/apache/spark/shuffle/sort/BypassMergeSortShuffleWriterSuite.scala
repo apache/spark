@@ -122,17 +122,6 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
-    TaskContext.setTaskContext(new TaskContextImpl(
-      stageId = 0,
-      stageAttemptNumber = 0,
-      partitionId = 0,
-      taskAttemptId = Random.nextInt(10000),
-      attemptNumber = 0,
-      taskMemoryManager = taskMemoryManager,
-      localProperties = new Properties,
-      metricsSystem = null,
-      taskMetrics = taskMetrics))
-
     writeSupport = new LocalDiskShuffleWriteSupport(conf, blockResolver)
   }
 

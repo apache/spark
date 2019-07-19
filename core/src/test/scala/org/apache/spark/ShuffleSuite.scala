@@ -386,7 +386,6 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         writer: ShuffleWriter[Int, Int],
         taskContext: TaskContext)(
         iter: Iterator[(Int, Int)]): Option[MapStatus] = {
-      TaskContext.setTaskContext(taskContext)
       try {
         val files = writer.write(iter)
         writer.stop(true)
@@ -411,7 +410,6 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
     val taskContext = new TaskContextImpl(
       1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem)
-    TaskContext.setTaskContext(taskContext)
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
     TaskContext.unset()
