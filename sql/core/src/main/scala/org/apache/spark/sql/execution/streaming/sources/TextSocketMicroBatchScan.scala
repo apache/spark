@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A [[MicroBatchScan]] that reads text lines through a TCP socket, designed only for tutorials
- * and debugging. This MicroBatchReadSupport will *not* work in production applications due to
+ * and debugging. This [[MicroBatchScan]] will *not* work in production applications due to
  * multiple reasons, including no support for fault recovery.
  */
 class TextSocketMicroBatchScan(

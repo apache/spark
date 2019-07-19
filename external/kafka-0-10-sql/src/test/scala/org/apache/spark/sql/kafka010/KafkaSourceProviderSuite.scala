@@ -39,12 +39,12 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("micro-batch mode - options should be handled as case-insensitive") {
-    def verifyFieldsInMicroBatchStream(
+    def verifyFieldsInMicroBatchScan(
         options: CaseInsensitiveStringMap,
         expectedPollTimeoutMs: Long,
         expectedMaxOffsetsPerTrigger: Option[Long]): Unit = {
-      // KafkaMicroBatchStream reads Spark conf from SparkEnv for default value
-      // hence we set mock SparkEnv here before creating KafkaMicroBatchStream
+      // KafkaMicroBatchScan reads Spark conf from SparkEnv for default value
+      // hence we set mock SparkEnv here before creating KafkaMicroBatchScan
       val sparkEnv = mock(classOf[SparkEnv])
       when(sparkEnv.conf).thenReturn(new SparkConf())
       SparkEnv.set(sparkEnv)
@@ -61,11 +61,11 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     buildCaseInsensitiveStringMapForUpperAndLowerKey(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString,
       KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER -> expectedValue.toString)
-      .foreach(verifyFieldsInMicroBatchStream(_, expectedValue, Some(expectedValue)))
+      .foreach(verifyFieldsInMicroBatchScan(_, expectedValue, Some(expectedValue)))
   }
 
   test("SPARK-28142 - continuous mode - options should be handled as case-insensitive") {
-    def verifyFieldsInContinuousStream(
+    def verifyFieldsInContinuousScan(
         options: CaseInsensitiveStringMap,
         expectedPollTimeoutMs: Long): Unit = {
       val builder = getKafkaDataSourceScanBuilder(options)
@@ -77,7 +77,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
     val expectedValue = 1000
     buildCaseInsensitiveStringMapForUpperAndLowerKey(
       KafkaSourceProvider.CONSUMER_POLL_TIMEOUT -> expectedValue.toString)
-      .foreach(verifyFieldsInContinuousStream(_, expectedValue))
+      .foreach(verifyFieldsInContinuousScan(_, expectedValue))
   }
 
   private def buildCaseInsensitiveStringMapForUpperAndLowerKey(

@@ -43,7 +43,7 @@ import org.apache.spark.util.RpcUtils
 
 /**
  * A [[ContinuousScan]] that reads text lines through a TCP socket, designed only for tutorials
- * and debugging. This ContinuousStream will *not* work in production applications due to
+ * and debugging. This [[ContinuousScan]] will *not* work in production applications due to
  * multiple reasons, including no support for fault recovery.
  *
  * The driver maintains a socket connection to the host-port, keeps the received messages in

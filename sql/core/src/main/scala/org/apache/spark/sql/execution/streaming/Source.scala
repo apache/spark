@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.StructType
  * monotonically increasing notion of progress that can be represented as an [[Offset]]. Spark
  * will regularly query each [[Source]] to see if any more data is available.
  *
- * Note that, we extends `SparkDataStream` here, to make the v1 streaming source API be compatible
+ * Note that, we extends [[StreamingScan]] here, to make the v1 streaming source API be compatible
  * with data source v2.
  */
 trait Source extends StreamingScan {
