@@ -82,10 +82,15 @@ public interface StagingTableCatalog extends TableCatalog {
    * When the table is committed, the contents of any writes performed by the Spark planner are
    * committed along with the metadata about the table passed into this method's arguments. If the
    * table exists, the metadata and the contents of this table replace the metadata and contents of
-   * the existing table. If the table does not exist, it should be created in the metastore. If a
-   * concurrent process commits changes to the table's data or metadata in the metastore while the
-   * write is being performed but before the staged changes are committed, the catalog can decide
-   * whether to move forward with the table replacement anyways or abort the commit operation.
+   * the existing table. If a concurrent process commits changes to the table's data or metadata
+   * while the write is being performed but before the staged changes are committed, the catalog
+   * can decide whether to move forward with the table replacement anyways or abort the commit
+   * operation.
+   * <p>
+   * If the table does not exist, committing the staged changes should fail. This differs from the
+   * semantics of {@link #stageCreateOrReplace(Identifier, StructType, Transform[], Map)}, which
+   * should create the table in the data source if the table does not exist at the time of
+   * committing the operation.
    *
    * @param ident a table identifier
    * @param schema the schema of the new table, as a struct type
@@ -96,6 +101,37 @@ public interface StagingTableCatalog extends TableCatalog {
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   StagedTable stageReplace(
+      Identifier ident,
+      StructType schema,
+      Transform[] partitions,
+      Map<String, String> properties) throws NoSuchNamespaceException;
+
+  /**
+   * Stage the creation or replacement of a table, preparing it to be committed into the metastore
+   * when the returned table's {@link StagedTable#commitStagedChanges()} is called.
+   * <p>
+   * When the table is committed, the contents of any writes performed by the Spark planner are
+   * committed along with the metadata about the table passed into this method's arguments. If the
+   * table exists, the metadata and the contents of this table replace the metadata and contents of
+   * the existing table. If a concurrent process commits changes to the table's data or metadata
+   * while the write is being performed but before the staged changes are committed, the catalog
+   * can decide whether to move forward with the table replacement anyways or abort the commit
+   * operation.
+   * <p>
+   * If the table does not exist when the changes are committed, the table should be created in the
+   * backing data source. This differs from the expected semantics of
+   * {@link #stageReplace(Identifier, StructType, Transform[], Map)}, which should fail when
+   * the staged changes are committed but the table doesn't exist at commit time.
+   *
+   * @param ident a table identifier
+   * @param schema the schema of the new table, as a struct type
+   * @param partitions transforms to use for partitioning data in the table
+   * @param properties a string map of table properties
+   * @return metadata for the new table
+   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
+   */
+  StagedTable stageCreateOrReplace(
       Identifier ident,
       StructType schema,
       Transform[] partitions,

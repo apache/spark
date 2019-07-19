@@ -315,6 +315,17 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     }
   }
 
+  test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
+    import TestInMemoryTableCatalog._
+    spark.sql(s"CREATE TABLE testcat_atomic.created USING $orc2 AS SELECT id, data FROM source")
+    intercept[CannotReplaceMissingTableException] {
+      spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
+        s" USING $orc2" +
+        s" TBLPROPERTIES (`$SIMULATE_DROP_BEFORE_REPLACE_PROPERTY`=true)" +
+        s" AS SELECT id, data FROM source")
+    }
+  }
+
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
 

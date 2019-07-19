@@ -214,10 +214,15 @@ case class AtomicReplaceTableAsSelectExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val stagedTable = if (catalog.tableExists(ident)) {
-      catalog.stageReplace(
-        ident, query.schema, partitioning.toArray, properties.asJava)
+      if (orCreate) {
+        catalog.stageCreateOrReplace(
+          ident, query.schema, partitioning.toArray, properties.asJava)
+      } else {
+        catalog.stageReplace(
+          ident, query.schema, partitioning.toArray, properties.asJava)
+      }
     } else if (orCreate) {
-      catalog.stageCreate(
+      catalog.stageCreateOrReplace(
         ident, query.schema, partitioning.toArray, properties.asJava)
     } else {
       throw new CannotReplaceMissingTableException(ident)

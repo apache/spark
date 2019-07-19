@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingT
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
@@ -204,6 +204,7 @@ class InMemoryTable(
 object TestInMemoryTableCatalog {
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
   val SIMULATE_FAILED_CREATE_PROPERTY = "spark.sql.test.simulateFailedCreate"
+  val SIMULATE_DROP_BEFORE_REPLACE_PROPERTY = "spark.sql.test.simulateDropBeforeReplace"
 
   def maybeSimulateFailedTableCreation(tableProperties: util.Map[String, String]): Unit = {
     if ("true".equalsIgnoreCase(
@@ -222,13 +223,18 @@ object TestInMemoryTableCatalog {
 
 class TestStagingInMemoryCatalog
   extends TestInMemoryTableCatalog with StagingTableCatalog {
+  import CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.sources.v2.TestInMemoryTableCatalog._
 
   override def stageCreate(
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
-    newStagedTable(ident, schema, partitions, properties, replaceIfExists = false)
+    validateStagedTable(partitions, properties)
+    new TestStagedCreateTable(
+      ident,
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
   }
 
   override def stageReplace(
@@ -236,50 +242,38 @@ class TestStagingInMemoryCatalog
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): StagedTable = {
-    newStagedTable(ident, schema, partitions, properties, replaceIfExists = true)
+    validateStagedTable(partitions, properties)
+    new TestStagedReplaceTable(
+      ident,
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
   }
 
-  private def newStagedTable(
+  override def stageCreateOrReplace(
       ident: Identifier,
       schema: StructType,
       partitions: Array[Transform],
-      properties: util.Map[String, String],
-      replaceIfExists: Boolean): StagedTable = {
-    import CatalogV2Implicits.IdentifierHelper
+      properties: util.Map[String, String]): StagedTable = {
+    validateStagedTable(partitions, properties)
+    new TestStagedCreateOrReplaceTable(
+      ident,
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+  }
+
+  private def validateStagedTable(
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Unit = {
     if (partitions.nonEmpty) {
       throw new UnsupportedOperationException(
         s"Catalog $name: Partitioned tables are not supported")
     }
 
-    TestInMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-
-    new TestStagedTable(
-      ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties),
-      replaceIfExists)
+    maybeSimulateFailedTableCreation(properties)
   }
 
-  private class TestStagedTable(
+  private abstract class TestStagedTable(
       ident: Identifier,
-      delegateTable: InMemoryTable,
-      replaceIfExists: Boolean)
+      delegateTable: InMemoryTable)
     extends StagedTable with SupportsWrite with SupportsRead {
-
-    override def commitStagedChanges(): Unit = {
-      if (droppedTables.contains(ident)) {
-        throw new IllegalStateException(
-          s"Table $ident was already dropped; aborting this commit.")
-      }
-      if (replaceIfExists) {
-        tables.put(ident, delegateTable)
-      } else {
-        val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
-        if (maybePreCommittedTable != null) {
-          throw new TableAlreadyExistsException(
-            s"Table with identifier $ident and name $name was already created.")
-        }
-      }
-    }
 
     override def abortStagedChanges(): Unit = {}
 
@@ -297,7 +291,50 @@ class TestStagingInMemoryCatalog
       delegateTable.newScanBuilder(options)
     }
   }
+
+  private class TestStagedCreateTable(
+    ident: Identifier,
+    delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+
+    override def commitStagedChanges(): Unit = {
+      val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
+      if (maybePreCommittedTable != null) {
+        throw new TableAlreadyExistsException(
+          s"Table with identifier $ident and name $name was already created.")
+      }
+    }
+  }
+
+  private class TestStagedReplaceTable(
+    ident: Identifier,
+    delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+
+    override def commitStagedChanges(): Unit = {
+      maybeSimulateDropBeforeCommit()
+      val maybePreCommittedTable = tables.replace(ident, delegateTable)
+      if (maybePreCommittedTable == null) {
+        throw new CannotReplaceMissingTableException(ident)
+      }
+    }
+
+    private def maybeSimulateDropBeforeCommit(): Unit = {
+      if ("true".equalsIgnoreCase(
+        delegateTable.properties.get(SIMULATE_DROP_BEFORE_REPLACE_PROPERTY))) {
+        tables.remove(ident)
+      }
+    }
+  }
+
+  private class TestStagedCreateOrReplaceTable(
+    ident: Identifier,
+    delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+
+    override def commitStagedChanges(): Unit = {
+      tables.put(ident, delegateTable)
+    }
+  }
 }
+
 
 class BufferedRows extends WriterCommitMessage with InputPartition with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
