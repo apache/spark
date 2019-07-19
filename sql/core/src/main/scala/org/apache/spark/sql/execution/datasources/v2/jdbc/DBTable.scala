@@ -58,8 +58,6 @@ case class DBTable (sparkSession: SparkSession,
 
   override def capabilities: java.util.Set[TableCapability] = DBTable.CAPABILITIES
 
-  def supportsDataType(dataType: DataType): Boolean = true
-
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     logInfo("***dsv2-flows*** newWriteBuilder called")
     Utils.logSchema("Schema passed to DBTable", userSchema)
@@ -73,5 +71,5 @@ case class DBTable (sparkSession: SparkSession,
 }
 
 object DBTable {
-  private val CAPABILITIES = Set(BATCH_WRITE, BATCH_READ, TRUNCATE).asJava
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE, OVERWRITE_BY_FILTER).asJava
 }

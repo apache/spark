@@ -23,7 +23,6 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcOptionsInWrite
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 
-
 class JDBCBatchWrite(options: JdbcOptionsInWrite, fwPassedSchema: StructType)
   extends BatchWrite with Logging{
   def createBatchWriterFactory: DataWriterFactory = {
