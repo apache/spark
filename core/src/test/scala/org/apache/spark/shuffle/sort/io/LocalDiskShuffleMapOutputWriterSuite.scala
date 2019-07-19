@@ -17,7 +17,9 @@
 
 package org.apache.spark.shuffle.sort.io
 
-import java.io.{ByteArrayOutputStream, File, FileInputStream, FileOutputStream}
+import java.io.{File, FileInputStream, FileOutputStream}
+import java.nio.file.Files
+import java.util.Arrays
 
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
@@ -28,7 +30,6 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.util.Utils
 
@@ -134,22 +135,12 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   private def readRecordsFromFile() = {
-    var startOffset = 0L
-    val result = new Array[Array[Byte]](NUM_PARTITIONS)
-    (0 until NUM_PARTITIONS).foreach { p =>
-      val partitionSize = data(p).length
-      if (partitionSize > 0) {
-        val in = new FileInputStream(mergedOutputFile)
-        in.getChannel.position(startOffset)
-        val lin = new LimitedInputStream(in, partitionSize)
-        val bytesOut = new ByteArrayOutputStream
-        Utils.copyStream(lin, bytesOut, true, true)
-        result(p) = bytesOut.toByteArray
-      } else {
-        result(p) = Array.emptyByteArray
-      }
-      startOffset += partitionSize
-    }
+    val mergedOutputBytes = Files.readAllBytes(mergedOutputFile.toPath)
+    val result = (0 until NUM_PARTITIONS).map { part =>
+      val startOffset = data.slice(0, part).map(_.length).sum
+      val partitionSize = data(part).length
+      Arrays.copyOfRange(mergedOutputBytes, startOffset, startOffset + partitionSize)
+    }.toArray
     result
   }
 
