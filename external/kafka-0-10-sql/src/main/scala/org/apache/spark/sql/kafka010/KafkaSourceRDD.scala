@@ -74,7 +74,7 @@ private[kafka010] class KafkaSourceRDD(
   }
 
   override def getPartitions: Array[Partition] = {
-    offsetRanges.zipWithIndex.map { case (o, i) => new KafkaSourceRDDPartition(i, o) }.toArray
+    offsetRanges.zipWithIndex.map { case (o, i) => KafkaSourceRDDPartition(i, o) }.toArray
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
