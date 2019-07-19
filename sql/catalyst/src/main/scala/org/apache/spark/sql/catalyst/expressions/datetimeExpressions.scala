@@ -1607,7 +1607,7 @@ private case class GetTimestamp(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp) - Create date from year, month and day fields.",
+  usage = "_FUNC_(year, month, day) - Create date from year, month and day fields.",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
