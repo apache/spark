@@ -198,6 +198,17 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("a = b is not null", ('a === 'b).isNotNull)
   }
 
+  test("is true | false expressions") {
+    assertEqual("a is true", 'a.isTrue)
+    assertEqual("a is not true", 'a.isNotTrue)
+    assertEqual("a is false", 'a.isFalse)
+    assertEqual("a is not true", 'a.isNotFalse)
+    assertEqual("a = b is true", ('a === 'b).isTrue)
+    assertEqual("a = b is not true", ('a === 'b).isNotTrue)
+    assertEqual("a = b is false", ('a === 'b).isFalse)
+    assertEqual("a = b is not false", ('a === 'b).isNotFalse)
+  }
+
   test("is distinct expressions") {
     assertEqual("a is distinct from b", !('a <=> 'b))
     assertEqual("a is not distinct from b", 'a <=> 'b)
