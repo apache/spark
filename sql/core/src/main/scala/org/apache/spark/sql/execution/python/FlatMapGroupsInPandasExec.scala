@@ -125,7 +125,8 @@ case class FlatMapGroupsInPandasExec(
     val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
     val dedupSchema = StructType.fromAttributes(dedupAttributes)
 
-    inputRDD.mapPartitionsInternal { iter =>
+    // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
+    inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
       val grouped = if (groupingAttributes.isEmpty) {
         Iterator(iter)
       } else {
@@ -156,6 +157,6 @@ case class FlatMapGroupsInPandasExec(
         flattenedBatch.setNumRows(batch.numRows())
         flattenedBatch.rowIterator.asScala
       }.map(unsafeProj)
-    }
+    }}
   }
 }

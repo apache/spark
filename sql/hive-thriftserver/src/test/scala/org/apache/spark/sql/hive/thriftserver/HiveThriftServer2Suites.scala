@@ -21,7 +21,7 @@ import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
-import java.util.UUID
+import java.util.{Locale, UUID}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -44,6 +44,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -536,9 +537,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.5"))
       } else {
-        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
     }
   }
@@ -553,9 +554,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.5"))
       } else {
-        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
     }
   }
@@ -659,7 +660,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
-    "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
+    s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement()(
@@ -820,7 +821,12 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
       statements.zip(fs).foreach { case (s, f) => f(s) }
     } finally {
       tableNames.foreach { name =>
-        statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        // TODO: Need a better way to drop the view.
+        if (name.toUpperCase(Locale.ROOT).startsWith("VIEW")) {
+          statements(0).execute(s"DROP VIEW IF EXISTS $name")
+        } else {
+          statements(0).execute(s"DROP TABLE IF EXISTS $name")
+        }
       }
       statements.foreach(_.close())
       connections.foreach(_.close())

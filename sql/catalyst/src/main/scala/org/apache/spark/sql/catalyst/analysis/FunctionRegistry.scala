@@ -222,9 +222,12 @@ object FunctionRegistry {
 
     // math functions
     expression[Acos]("acos"),
+    expression[Acosh]("acosh"),
     expression[Asin]("asin"),
+    expression[Asinh]("asinh"),
     expression[Atan]("atan"),
     expression[Atan2]("atan2"),
+    expression[Atanh]("atanh"),
     expression[Bin]("bin"),
     expression[BRound]("bround"),
     expression[Cbrt]("cbrt"),
@@ -348,6 +351,7 @@ object FunctionRegistry {
     expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
+    expression[Overlay]("overlay"),
     expression[RLike]("rlike"),
     expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),

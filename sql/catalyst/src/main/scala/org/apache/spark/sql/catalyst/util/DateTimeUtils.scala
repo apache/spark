@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.time.Year.isLeap
-import java.time.temporal.IsoFields
+import java.time.temporal.{ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -45,17 +44,19 @@ object DateTimeUtils {
   // it's 2440587.5, rounding up to compatible with Hive
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
-  final val NANOS_PER_MICROS = MICROSECONDS.toNanos(1)
-  final val NANOS_PER_MILLIS = MILLISECONDS.toNanos(1)
-  final val NANOS_PER_SECOND = SECONDS.toNanos(1)
-  final val MICROS_PER_MILLIS = MILLISECONDS.toMicros(1)
-  final val MICROS_PER_SECOND = SECONDS.toMicros(1)
-  final val MICROS_PER_DAY = DAYS.toMicros(1)
-  final val MILLIS_PER_SECOND = SECONDS.toMillis(1)
-  final val MILLIS_PER_MINUTE = MINUTES.toMillis(1)
-  final val MILLIS_PER_HOUR = HOURS.toMillis(1)
-  final val MILLIS_PER_DAY = DAYS.toMillis(1)
-  final val SECONDS_PER_DAY = DAYS.toSeconds(1)
+  // Pre-calculated values can provide an opportunity of additional optimizations
+  // to the compiler like constants propagation and folding.
+  final val NANOS_PER_MICROS: Long = 1000
+  final val MICROS_PER_MILLIS: Long = 1000
+  final val MILLIS_PER_SECOND: Long = 1000
+  final val SECONDS_PER_DAY: Long = 24 * 60 * 60
+  final val MICROS_PER_SECOND: Long = MILLIS_PER_SECOND * MICROS_PER_MILLIS
+  final val NANOS_PER_MILLIS: Long = NANOS_PER_MICROS * MICROS_PER_MILLIS
+  final val NANOS_PER_SECOND: Long = NANOS_PER_MICROS * MICROS_PER_SECOND
+  final val MICROS_PER_DAY: Long = SECONDS_PER_DAY * MICROS_PER_SECOND
+  final val MILLIS_PER_MINUTE: Long = 60 * MILLIS_PER_SECOND
+  final val MILLIS_PER_HOUR: Long = 60 * MILLIS_PER_MINUTE
+  final val MILLIS_PER_DAY: Long = SECONDS_PER_DAY * MILLIS_PER_SECOND
 
   // number of days between 1.1.1970 and 1.1.2001
   final val to2001 = -11323
@@ -406,6 +407,10 @@ object DateTimeUtils {
       // year should have exact four digits
       return None
     }
+    if (i < 2 && j < bytes.length) {
+      // For the `yyyy` and `yyyy-[m]m` formats, entire input must be consumed.
+      return None
+    }
     segments(i) = currentSegmentValue
     try {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
@@ -500,59 +505,11 @@ object DateTimeUtils {
   }
 
   /**
-   * The number of days for each month (not leap year)
-   */
-  private val monthDays = Array(31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
-
-  /**
-   * Returns the date value for the first day of the given month.
-   * The month is expressed in months since year zero (17999 BC), starting from 0.
-   */
-  private def firstDayOfMonth(absoluteMonth: Int): SQLDate = {
-    val absoluteYear = absoluteMonth / 12
-    var monthInYear = absoluteMonth - absoluteYear * 12
-    var date = getDateFromYear(absoluteYear)
-    if (monthInYear >= 2 && isLeap(absoluteYear + YearZero)) {
-      date += 1
-    }
-    while (monthInYear > 0) {
-      date += monthDays(monthInYear - 1)
-      monthInYear -= 1
-    }
-    date
-  }
-
-  /**
-   * Returns the date value for January 1 of the given year.
-   * The year is expressed in years since year zero (17999 BC), starting from 0.
-   */
-  private def getDateFromYear(absoluteYear: Int): SQLDate = {
-    val absoluteDays = (absoluteYear * 365 + absoluteYear / 400 - absoluteYear / 100
-      + absoluteYear / 4)
-    absoluteDays - toYearZero
-  }
-
-  /**
    * Add date and year-month interval.
    * Returns a date value, expressed in days since 1.1.1970.
    */
   def dateAddMonths(days: SQLDate, months: Int): SQLDate = {
-    val (year, monthInYear, dayOfMonth, daysToMonthEnd) = splitDate(days)
-    val absoluteMonth = (year - YearZero) * 12 + monthInYear - 1 + months
-    val nonNegativeMonth = if (absoluteMonth >= 0) absoluteMonth else 0
-    val currentMonthInYear = nonNegativeMonth % 12
-    val currentYear = nonNegativeMonth / 12
-
-    val leapDay = if (currentMonthInYear == 1 && isLeap(currentYear + YearZero)) 1 else 0
-    val lastDayOfMonth = monthDays(currentMonthInYear) + leapDay
-
-    val currentDayInMonth = if (daysToMonthEnd == 0 || dayOfMonth >= lastDayOfMonth) {
-      // last day of the month
-      lastDayOfMonth
-    } else {
-      dayOfMonth
-    }
-    firstDayOfMonth(nonNegativeMonth) + currentDayInMonth - 1
+    LocalDate.ofEpochDay(days).plusMonths(months).toEpochDay.toInt
   }
 
   /**
@@ -563,12 +520,12 @@ object DateTimeUtils {
       start: SQLTimestamp,
       months: Int,
       microseconds: Long,
-      timeZone: TimeZone): SQLTimestamp = {
-    val days = millisToDays(MICROSECONDS.toMillis(start), timeZone)
-    val newDays = dateAddMonths(days, months)
-    start +
-      MILLISECONDS.toMicros(daysToMillis(newDays, timeZone) - daysToMillis(days, timeZone)) +
-      microseconds
+      zoneId: ZoneId): SQLTimestamp = {
+    val resultTimestamp = microsToInstant(start)
+      .atZone(zoneId)
+      .plusMonths(months)
+      .plus(microseconds, ChronoUnit.MICROS)
+    instantToMicros(resultTimestamp.toInstant)
   }
 
   /**

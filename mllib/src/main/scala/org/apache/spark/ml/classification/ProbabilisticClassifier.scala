@@ -147,8 +147,8 @@ abstract class ProbabilisticClassificationModel[
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
     }
     outputData.toDF
   }

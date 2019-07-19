@@ -469,6 +469,8 @@ def post_python_tests_results():
         run_cmd(["git", "push", "-f", "origin", "gh-pages"])
     finally:
         os.chdir("..")
+        # 10. Remove the cloned repository.
+        shutil.rmtree("pyspark-coverage-site")
 
 
 def run_python_packaging_tests():

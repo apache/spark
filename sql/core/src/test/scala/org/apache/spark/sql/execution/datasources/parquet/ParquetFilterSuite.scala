@@ -1208,6 +1208,14 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       }
     }
 
+    // SPARK-28371: make sure filter is null-safe.
+    withParquetDataFrame(Seq(Tuple1[String](null))) { implicit df =>
+      checkFilterPredicate(
+        '_1.startsWith("blah").asInstanceOf[Predicate],
+        classOf[UserDefinedByInstance[_, _]],
+        Seq.empty[Row])
+    }
+
     import testImplicits._
     // Test canDrop() has taken effect
     testStringStartsWith(spark.range(1024).map(_.toString).toDF(), "value like 'a%'")

@@ -205,19 +205,19 @@ k
 
 
 -- !query 25
-SELECT trim('yxTomxx', 'xyz'), trim(BOTH 'xyz' FROM 'yxTomxx')
+SELECT trim('yxTomxx', 'xyz'), trim(BOTH 'xyz' FROM 'yxTomxx'), trim('xyz' FROM 'yxTomxx')
 -- !query 25 schema
-struct<trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string>
+struct<trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string,trim(yxTomxx, xyz):string>
 -- !query 25 output
-Tom	Tom
+Tom	Tom	Tom
 
 
 -- !query 26
-SELECT trim('xxxbarxxx', 'x'), trim(BOTH 'x' FROM 'xxxbarxxx')
+SELECT trim('xxxbarxxx', 'x'), trim(BOTH 'x' FROM 'xxxbarxxx'), trim('x' FROM 'xxxbarxxx')
 -- !query 26 schema
-struct<trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string>
+struct<trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string,trim(xxxbarxxx, x):string>
 -- !query 26 output
-bar	bar
+bar	bar	bar
 
 
 -- !query 27

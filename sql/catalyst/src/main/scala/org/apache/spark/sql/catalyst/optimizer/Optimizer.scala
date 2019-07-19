@@ -63,8 +63,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         PushProjectionThroughUnion,
         ReorderJoin,
         EliminateOuterJoin,
-        PushPredicateThroughJoin,
-        PushDownPredicate,
+        PushDownPredicates,
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
@@ -172,7 +171,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters,
-      ObjectSerializerPruning) :+
+      ObjectSerializerPruning,
+      ReassignLambdaVariableID) :+
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) :+
@@ -588,6 +588,24 @@ object ColumnPruning extends Rule[LogicalPlan] {
         .map(_._2)
       p.copy(child = g.copy(child = newChild, unrequiredChildIndex = unrequiredIndices))
 
+    // prune unrequired nested fields
+    case p @ Project(projectList, g: Generate) if SQLConf.get.nestedPruningOnExpressions &&
+        NestedColumnAliasing.canPruneGenerator(g.generator) =>
+      NestedColumnAliasing.getAliasSubMap(projectList ++ g.generator.children).map {
+        case (nestedFieldToAlias, attrToAliases) =>
+          val newGenerator = g.generator.transform {
+            case f: ExtractValue if nestedFieldToAlias.contains(f) =>
+              nestedFieldToAlias(f).toAttribute
+          }.asInstanceOf[Generator]
+
+          // Defer updating `Generate.unrequiredChildIndex` to next round of `ColumnPruning`.
+          val newGenerate = g.copy(generator = newGenerator)
+
+          val newChild = NestedColumnAliasing.replaceChildrenWithAliases(newGenerate, attrToAliases)
+
+          Project(NestedColumnAliasing.getNewProjectList(projectList, nestedFieldToAlias), newChild)
+      }.getOrElse(p)
+
     // Eliminate unneeded attributes from right side of a Left Existence Join.
     case j @ Join(_, right, LeftExistence(_), _, _) =>
       j.copy(right = prunedChild(right, j.references))
@@ -910,7 +928,9 @@ object CombineUnions extends Rule[LogicalPlan] {
  * one conjunctive predicate.
  */
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+
+  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // The query execution/optimization does not guarantee the expressions are evaluated in order.
     // We only can combine them if and only if both are deterministic.
     case Filter(fc, nf @ Filter(nc, grandChild)) if fc.deterministic && nc.deterministic =>
@@ -996,14 +1016,29 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
+ * The unified version for predicate pushdown of normal operators and joins.
+ * This rule improves performance of predicate pushdown for cascading joins such as:
+ *  Filter-Join-Join-Join. Most predicates can be pushed down in a single pass.
+ */
+object PushDownPredicates extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    CombineFilters.applyLocally
+      .orElse(PushPredicateThroughNonJoin.applyLocally)
+      .orElse(PushPredicateThroughJoin.applyLocally)
+  }
+}
+
+/**
  * Pushes [[Filter]] operators through many operators iff:
  * 1) the operator is deterministic
  * 2) the predicate is deterministic and the operator will not change any of rows.
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+
+  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -1220,7 +1255,9 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
+
+  val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition, hint)) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =

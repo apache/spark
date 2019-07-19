@@ -44,6 +44,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  *   spark.eventLog.enabled - Whether event logging is enabled.
  *   spark.eventLog.logBlockUpdates.enabled - Whether to log block updates
  *   spark.eventLog.compress - Whether to compress logged events
+ *   spark.eventLog.compression.codec - The codec to compress logged events
  *   spark.eventLog.overwrite - Whether to overwrite any existing files.
  *   spark.eventLog.dir - Path to the directory in which events are logged.
  *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
@@ -73,11 +74,12 @@ private[spark] class EventLoggingListener(
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
     if (shouldCompress) {
-      Some(CompressionCodec.createCodec(sparkConf))
+      Some(CompressionCodec.createCodec(sparkConf, sparkConf.get(EVENT_LOG_COMPRESSION_CODEC)))
     } else {
       None
     }
-  private val compressionCodecName = compressionCodec.map { c =>
+  // Visible for tests only.
+  private[scheduler] val compressionCodecName = compressionCodec.map { c =>
     CompressionCodec.getShortName(c.getClass.getName)
   }
 

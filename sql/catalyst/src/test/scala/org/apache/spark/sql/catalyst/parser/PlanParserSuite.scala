@@ -100,7 +100,7 @@ class PlanParserSuite extends AnalysisTest {
         "cte2" -> ((table("cte1").select(star()), Seq.empty))))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
-      "Found duplicate keys 'cte1'")
+      "CTE definition can't have duplicate names: 'cte1'.")
   }
 
   test("simple select query") {
@@ -736,6 +736,40 @@ class PlanParserSuite extends AnalysisTest {
     assertTrimPlans(
       "SELECT TRIM(TRAILING FROM '  bunch o blanks  ')",
       StringTrimRight(Literal("  bunch o blanks  "), None)
+    )
+
+    assertTrimPlans(
+      "SELECT TRIM('xyz' FROM 'yxTomxx')",
+      StringTrim(Literal("yxTomxx"), Some(Literal("xyz")))
+    )
+  }
+
+  test("OVERLAY function") {
+    def assertOverlayPlans(inputSQL: String, expectedExpression: Expression): Unit = {
+      comparePlans(
+        parsePlan(inputSQL),
+        Project(Seq(UnresolvedAlias(expectedExpression)), OneRowRelation())
+      )
+    }
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING '_' FROM 6)",
+      new Overlay(Literal("Spark SQL"), Literal("_"), Literal(6))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'CORE' FROM 7)",
+      new Overlay(Literal("Spark SQL"), Literal("CORE"), Literal(7))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'ANSI ' FROM 7 FOR 0)",
+      Overlay(Literal("Spark SQL"), Literal("ANSI "), Literal(7), Literal(0))
+    )
+
+    assertOverlayPlans(
+      "SELECT OVERLAY('Spark SQL' PLACING 'tructured' FROM 2 FOR 4)",
+      Overlay(Literal("Spark SQL"), Literal("tructured"), Literal(2), Literal(4))
     )
   }
 
