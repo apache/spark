@@ -25,7 +25,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCDataSourceV2 extends TableProvider with DataSourceRegister with Logging{
-
   override def shortName(): String = {
     logInfo("***dsv2-flows*** shortName - return connector name")
     "jdbcv2"
