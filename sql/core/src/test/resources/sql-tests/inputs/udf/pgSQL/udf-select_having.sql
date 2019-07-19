@@ -41,6 +41,10 @@ SELECT udf(c), max(udf(a)) FROM test_having
 
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) = udf(max(a));
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) < udf(max(a));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) < udf(max(a));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) < udf(udf(max(a)));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) < udf(udf(max(a)));
+
 
 -- errors: ungrouped column references
 SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a));
@@ -48,7 +52,9 @@ SELECT 1 AS one FROM test_having HAVING udf(a) > 1;
 
 -- the really degenerate case: need not scan table at all
 SELECT 1 AS one FROM test_having HAVING udf(1 > 2);
+SELECT 1 AS one FROM test_having HAVING udf(udf(1) > udf(2));
 SELECT 1 AS one FROM test_having HAVING udf(1 < 2);
+SELECT 1 AS one FROM test_having HAVING udf(udf(1) < udf(2));
 
 -- and just to prove that we aren't scanning the table:
 SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2;
