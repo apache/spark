@@ -514,4 +514,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       assert(df.collect().toSeq === Seq(Row(expected)))
     }
   }
+
+  test("SPARK-28321 0-args Java UDF should not be called only once") {
+    val nonDeterministicJavaUDF = udf(
+      new UDF0[Int] {
+        override def call(): Int = scala.util.Random.nextInt()
+      }, IntegerType).asNondeterministic()
+
+    assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
+  }
 }

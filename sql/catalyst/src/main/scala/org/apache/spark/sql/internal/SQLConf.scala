@@ -234,6 +234,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED =
+    buildConf("spark.sql.inMemoryTableScanStatistics.enable")
+      .internal()
+      .doc("When true, enable in-memory table scan accumulators.")
+      .booleanConf
+      .createWithDefault(false)
+
   val CACHE_VECTORIZED_READER_ENABLED =
     buildConf("spark.sql.inMemoryColumnarStorage.enableVectorizedReader")
       .doc("Enables vectorized reader for columnar caching.")
@@ -1024,6 +1031,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_VECTORIZED_HASH_MAP =
+    buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
+      .internal()
+      .doc("Enable vectorized aggregate hash map. This is for testing/benchmarking only.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -1510,6 +1524,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .doc("When true, will perform integral division with the / operator " +
+      "if both sides are integral types.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
@@ -1633,6 +1653,16 @@ object SQLConf {
       .doc("Prune nested fields from object serialization operator which are unnecessary in " +
         "satisfying a query. This optimization allows object serializers to avoid " +
         "executing unnecessary nested expressions.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val NESTED_PRUNING_ON_EXPRESSIONS =
+    buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from expressions in an operator which are unnecessary in " +
+        "satisfying a query. Note that this optimization doesn't prune nested fields from " +
+        "physical data source scanning. For pruning nested fields from scanning, please use " +
+        "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
       .booleanConf
       .createWithDefault(false)
 
@@ -1834,6 +1864,12 @@ object SQLConf {
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
+    .internal()
+    .doc("When true, outer CTE definitions takes precedence over inner definitions.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2109,6 +2145,8 @@ class SQLConf extends Serializable with Logging {
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
+  def inMemoryTableScanStatisticsEnabled: Boolean = getConf(IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED)
+
   def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
@@ -2147,6 +2185,8 @@ class SQLConf extends Serializable with Logging {
   def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
+
+  def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
@@ -2270,6 +2310,8 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
+  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
+
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
@@ -2282,6 +2324,8 @@ class SQLConf extends Serializable with Logging {
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedPruningOnExpressions: Boolean = getConf(NESTED_PRUNING_ON_EXPRESSIONS)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 

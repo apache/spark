@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog, TableChange}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -165,6 +166,7 @@ class Analyzer(
       new SubstituteUnresolvedOrdinals(conf)),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveAlterTable ::
       ResolveTables ::
       ResolveRelations ::
       ResolveReferences ::
@@ -210,38 +212,6 @@ class Analyzer(
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
-
-  /**
-   * Analyze cte definitions and substitute child plan with analyzed cte definitions.
-   */
-  object CTESubstitution extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case With(child, relations) =>
-        // substitute CTE expressions right-to-left to resolve references to previous CTEs:
-        // with a as (select * from t), b as (select * from a) select * from b
-        relations.foldRight(child) {
-          case ((cteName, ctePlan), currentPlan) =>
-            substituteCTE(currentPlan, cteName, ctePlan)
-        }
-      case other => other
-    }
-
-    private def substituteCTE(
-        plan: LogicalPlan,
-        cteName: String,
-        ctePlan: LogicalPlan): LogicalPlan = {
-      plan resolveOperatorsUp {
-        case UnresolvedRelation(Seq(table)) if resolver(cteName, table) =>
-          ctePlan
-        case other =>
-          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
-          other transformExpressions {
-            case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.plan, cteName, ctePlan))
-          }
-      }
-    }
-  }
 
   /**
    * Substitute child plan with WindowSpecDefinitions.
@@ -784,6 +754,86 @@ class Analyzer(
     private def isRunningDirectlyOnFiles(table: TableIdentifier): Boolean = {
       table.database.isDefined && conf.runSQLonFile && !catalog.isTemporaryTable(table) &&
         (!catalog.databaseExists(table.database.get) || !catalog.tableExists(table))
+    }
+  }
+
+  /**
+   * Resolve ALTER TABLE statements that use a DSv2 catalog.
+   *
+   * This rule converts unresolved ALTER TABLE statements to v2 when a v2 catalog is responsible
+   * for the table identifier. A v2 catalog is responsible for an identifier when the identifier
+   * has a catalog specified, like prod_catalog.db.table, or when a default v2 catalog is set and
+   * the table identifier does not include a catalog.
+   */
+  object ResolveAlterTable extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case alter @ AlterTableAddColumnsStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
+        val changes = cols.map { col =>
+          TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+        }
+
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          changes)
+
+      case alter @ AlterTableAlterColumnStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), colName, dataType, comment) =>
+        val typeChange = dataType.map { newDataType =>
+          TableChange.updateColumnType(colName.toArray, newDataType, true)
+        }
+
+        val commentChange = comment.map { newComment =>
+          TableChange.updateColumnComment(colName.toArray, newComment)
+        }
+
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          typeChange.toSeq ++ commentChange.toSeq)
+
+      case alter @ AlterTableRenameColumnStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), col, newName) =>
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          Seq(TableChange.renameColumn(col.toArray, newName)))
+
+      case alter @ AlterTableDropColumnsStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
+        val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          changes)
+
+      case alter @ AlterTableSetPropertiesStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), props) =>
+        val changes = props.map {
+          case (key, value) =>
+            TableChange.setProperty(key, value)
+        }
+
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          changes.toSeq)
+
+      case alter @ AlterTableUnsetPropertiesStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), keys, _) =>
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          keys.map(key => TableChange.removeProperty(key)))
+
+      case alter @ AlterTableSetLocationStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), newLoc) =>
+        AlterTable(
+          v2Catalog.asTableCatalog, ident,
+          UnresolvedRelation(alter.tableName),
+          Seq(TableChange.setProperty("location", newLoc)))
     }
   }
 

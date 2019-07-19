@@ -709,11 +709,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
         s"for this plan (id=$codegenStageId). To avoid this, you can raise the limit " +
         s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
-      child match {
-        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
-        case f: FileSourceScanExec if f.supportsBatch => // do nothing
-        case _ => return child.execute()
-      }
+      return child.execute()
     }
 
     val references = ctx.references.toArray

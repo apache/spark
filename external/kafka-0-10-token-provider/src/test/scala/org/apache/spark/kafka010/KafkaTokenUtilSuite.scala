@@ -155,6 +155,15 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(saslJaasConfig.contains("useTicketCache=true"))
   }
 
+  test("createAdminClientProperties with specified params should include it") {
+    val clusterConf = createClusterConf(identifier1, SASL_SSL.name,
+      Map("customKey" -> "customValue"))
+
+    val adminClientProperties = KafkaTokenUtil.createAdminClientProperties(sparkConf, clusterConf)
+
+    assert(adminClientProperties.get("customKey") === "customValue")
+  }
+
   test("isGlobalJaasConfigurationProvided without global config should return false") {
     assert(!KafkaTokenUtil.isGlobalJaasConfigurationProvided)
   }
