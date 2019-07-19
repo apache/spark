@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.io.File
 
 import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
