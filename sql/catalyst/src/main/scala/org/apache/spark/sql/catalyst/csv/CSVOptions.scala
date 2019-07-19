@@ -190,6 +190,11 @@ class CSVOptions(
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
   /**
+   * The max error content in CSV parser/writer exception message.
+   */
+  val maxErrorContentLength = 1024
+
+  /**
    * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
@@ -220,6 +225,7 @@ class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings.setErrorContentLength(maxErrorContentLength)
     writerSettings
   }
 
@@ -246,6 +252,7 @@ class CSVOptions(
     lineSeparatorInRead.foreach { _ =>
       settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
     }
+    settings.setErrorContentLength(maxErrorContentLength)
 
     settings
   }
