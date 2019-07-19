@@ -2094,7 +2094,7 @@ class RobustScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     def __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
                  inputCol=None, outputCol=None):
         """
-        __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+        __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
                  inputCol=None, outputCol=None)
         """
         super(RobustScaler, self).__init__()
@@ -2108,7 +2108,7 @@ class RobustScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     def setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
                   inputCol=None, outputCol=None):
         """
-        setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+        setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
                   inputCol=None, outputCol=None)
         Sets params for this RobustScaler.
         """
