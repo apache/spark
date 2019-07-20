@@ -51,8 +51,8 @@ object Partitioner {
    *
    * When available, we choose the partitioner from rdds with maximum number of partitions. If this
    * partitioner is eligible (number of partitions within an order of maximum number of partitions
-   * in rdds), or has partition number higher than default partitions number - we use this
-   * partitioner.
+   * in rdds), or has partition number higher than or equal to default partitions number - we use
+   * this partitioner.
    *
    * Otherwise, we'll use a new HashPartitioner with the default partitions number.
    *
@@ -79,9 +79,9 @@ object Partitioner {
     }
 
     // If the existing max partitioner is an eligible one, or its partitions number is larger
-    // than the default number of partitions, use the existing partitioner.
+    // than or equal to the default number of partitions, use the existing partitioner.
     if (hasMaxPartitioner.nonEmpty && (isEligiblePartitioner(hasMaxPartitioner.get, rdds) ||
-        defaultNumPartitions < hasMaxPartitioner.get.getNumPartitions)) {
+        defaultNumPartitions <= hasMaxPartitioner.get.getNumPartitions)) {
       hasMaxPartitioner.get.partitioner.get
     } else {
       new HashPartitioner(defaultNumPartitions)

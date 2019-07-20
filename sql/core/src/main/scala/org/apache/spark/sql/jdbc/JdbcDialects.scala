@@ -21,8 +21,7 @@ import java.sql.{Connection, Date, Timestamp}
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.sql.types._
 
 /**
@@ -34,7 +33,7 @@ import org.apache.spark.sql.types._
  *                     send a null value to the database.
  */
 @DeveloperApi
-@InterfaceStability.Evolving
+@Evolving
 case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
 
 /**
@@ -57,7 +56,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-@InterfaceStability.Evolving
+@Evolving
 abstract class JdbcDialect extends Serializable {
   /**
    * Check if this dialect instance can handle a certain jdbc url.
@@ -197,7 +196,7 @@ abstract class JdbcDialect extends Serializable {
  * sure to register your dialects first.
  */
 @DeveloperApi
-@InterfaceStability.Evolving
+@Evolving
 object JdbcDialects {
 
   /**

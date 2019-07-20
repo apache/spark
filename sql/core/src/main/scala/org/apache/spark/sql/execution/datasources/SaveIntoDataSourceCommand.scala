@@ -48,7 +48,7 @@ case class SaveIntoDataSourceCommand(
     Seq.empty[Row]
   }
 
-  override def simpleString: String = {
+  override def simpleString(maxFields: Int): String = {
     val redacted = SQLConf.get.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }

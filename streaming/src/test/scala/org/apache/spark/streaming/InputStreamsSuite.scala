@@ -31,6 +31,7 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
+import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
@@ -292,8 +293,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val textPath = new Path(generatedSubDir, "renamed.txt")
         write(textPath, "renamed\n")
         val now = clock.getTimeMillis()
-        val modTime = now + durationMs / 2
-        fs.setTimes(textPath, modTime, modTime)
+        fs.setTimes(textPath, now, now)
         val textFilestatus = fs.getFileStatus(existingFile)
         assert(textFilestatus.getModificationTime < now + durationMs)
 
@@ -334,9 +334,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       // Let the data from the receiver be received
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       while ((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
-        System.currentTimeMillis() - startTime < 5000) {
+        System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(5)) {
         Thread.sleep(100)
         clock.advance(batchDuration.milliseconds)
       }
@@ -532,7 +532,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
 
 /** This is a server to test the network input stream */
-class TestServer(portToBind: Int = 0) extends Logging {
+class TestServer(portToBind: Int = 0) extends Logging with Assertions {
 
   val queue = new ArrayBlockingQueue[String](100)
 
@@ -592,7 +592,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
     servingThread.start()
     if (!waitForStart(10000)) {
       stop()
-      throw new AssertionError("Timeout: TestServer cannot start in 10 seconds")
+      fail("Timeout: TestServer cannot start in 10 seconds")
     }
   }
 

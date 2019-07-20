@@ -22,6 +22,7 @@ import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -86,7 +87,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("groupByKey where map output sizes exceed maxMbInFlight") {
-    val conf = new SparkConf().set("spark.reducer.maxSizeInFlight", "1m")
+    val conf = new SparkConf().set(config.REDUCER_MAX_SIZE_IN_FLIGHT.key, "1m")
     sc = new SparkContext(clusterUrl, "test", conf)
     // This data should be around 20 MB, so even with 4 mappers and 2 reducers, each map output
     // file should be about 2.5 MB
@@ -195,7 +196,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)
     }
-    // This will exercise the getRemoteBytes / getRemoteValues code paths:
+    // This will exercise the getRemoteValues code path:
     assert(blockIds.flatMap(id => blockManager.get[Int](id).get.data).toSet === (1 to 1000).toSet)
   }
 
@@ -216,8 +217,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("compute without caching when no partitions fit in memory") {
     val size = 10000
     val conf = new SparkConf()
-      .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", (size / 2).toString)
+      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024L)
+      .set(TEST_MEMORY, size.toLong / 2)
+
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, 2).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
@@ -232,8 +234,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val size = 10000
     val numPartitions = 20
     val conf = new SparkConf()
-      .set("spark.storage.unrollMemoryThreshold", "1024")
-      .set("spark.testing.memory", size.toString)
+      .set(config.STORAGE_UNROLL_MEMORY_THRESHOLD, 1024L)
+      .set(TEST_MEMORY, size.toLong)
+
     sc = new SparkContext(clusterUrl, "test", conf)
     val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
     assert(data.count() === size)
@@ -319,9 +322,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val data = sc.parallelize(Seq(true, false, false, false), 4)
     data.persist(StorageLevel.MEMORY_ONLY_2)
     data.count
-    assert(sc.persistentRdds.isEmpty === false)
-    data.unpersist()
-    assert(sc.persistentRdds.isEmpty === true)
+    assert(sc.persistentRdds.nonEmpty)
+    data.unpersist(blocking = true)
+    assert(sc.persistentRdds.isEmpty)
 
     failAfter(Span(3000, Millis)) {
       try {

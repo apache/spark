@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Fractional, Numeric, Ordering}
+import scala.math.{Fractional, Numeric}
 import scala.math.Numeric.FloatAsIfIntegral
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.util.Utils
 
 /**
@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
  *
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 class FloatType private() extends FractionalType {
   // The companion object and this class is separated so the companion object also subclasses
   // this type. Otherwise, the companion object would be of type "FloatType$" in byte code.
@@ -38,9 +38,8 @@ class FloatType private() extends FractionalType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
   private[sql] val numeric = implicitly[Numeric[Float]]
   private[sql] val fractional = implicitly[Fractional[Float]]
-  private[sql] val ordering = new Ordering[Float] {
-    override def compare(x: Float, y: Float): Int = Utils.nanSafeCompareFloats(x, y)
-  }
+  private[sql] val ordering =
+    (x: Float, y: Float) => Utils.nanSafeCompareFloats(x, y)
   private[sql] val asIntegral = FloatAsIfIntegral
 
   /**
@@ -55,5 +54,5 @@ class FloatType private() extends FractionalType {
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 case object FloatType extends FloatType

@@ -17,9 +17,8 @@
 
 package org.apache.spark.api.r
 
-import java.io.{DataInputStream, File}
+import java.io.{File, OutputStream}
 import java.net.Socket
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -27,11 +26,10 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
-import org.apache.spark.api.python.{PythonRDD, PythonServer}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.security.SocketAuthHelper
+import org.apache.spark.security.SocketAuthServer
 
 private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
@@ -45,7 +43,7 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
   override def getPartitions: Array[Partition] = parent.partitions
 
   override def compute(partition: Partition, context: TaskContext): Iterator[U] = {
-    val runner = new RRunner[U](
+    val runner = new RRunner[T, U](
       func, deserializer, serializer, packageNames, broadcastVars, numPartitions)
 
     // The parent may be also an RRDD, so we should launch it first.
@@ -104,7 +102,7 @@ private class StringRRDD[T: ClassTag](
   lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
 }
 
-private[r] object RRDD {
+private[spark] object RRDD {
   def createSparkContext(
       master: String,
       appName: String,
@@ -163,7 +161,12 @@ private[r] object RRDD {
    */
   def createRDDFromFile(jsc: JavaSparkContext, fileName: String, parallelism: Int):
   JavaRDD[Array[Byte]] = {
-    PythonRDD.readRDDFromFile(jsc, fileName, parallelism)
+    JavaRDD.readRDDFromFile(jsc, fileName, parallelism)
+  }
+
+  private[spark] def serveToStream(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
+    SocketAuthServer.serveToStream(threadName, new RAuthHelper(SparkEnv.get.conf))(writeFunc)
   }
 }
 
@@ -172,23 +175,11 @@ private[r] object RRDD {
  * over a socket. This is used in preference to writing data to a file when encryption is enabled.
  */
 private[spark] class RParallelizeServer(sc: JavaSparkContext, parallelism: Int)
-    extends PythonServer[JavaRDD[Array[Byte]]](
-      new RSocketAuthHelper(), "sparkr-parallelize-server") {
+    extends SocketAuthServer[JavaRDD[Array[Byte]]](
+      new RAuthHelper(SparkEnv.get.conf), "sparkr-parallelize-server") {
 
   override def handleConnection(sock: Socket): JavaRDD[Array[Byte]] = {
     val in = sock.getInputStream()
-    PythonRDD.readRDDFromInputStream(sc.sc, in, parallelism)
-  }
-}
-
-private[spark] class RSocketAuthHelper extends SocketAuthHelper(SparkEnv.get.conf) {
-  override protected def readUtf8(s: Socket): String = {
-    val din = new DataInputStream(s.getInputStream())
-    val len = din.readInt()
-    val bytes = new Array[Byte](len)
-    din.readFully(bytes)
-    // The R code adds a null terminator to serialized strings, so ignore it here.
-    assert(bytes(bytes.length - 1) == 0) // sanity check.
-    new String(bytes, 0, bytes.length - 1, UTF_8)
+    JavaRDD.readRDDFromInputStream(sc.sc, in, parallelism)
   }
 }

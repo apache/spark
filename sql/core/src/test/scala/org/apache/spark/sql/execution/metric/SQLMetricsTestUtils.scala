@@ -27,6 +27,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
+import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
 
@@ -39,6 +40,18 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   }
 
   protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
+
+  // Pattern of size SQLMetric value, e.g. "\n96.2 MiB (32.1 MiB, 32.1 MiB, 32.1 MiB)"
+  protected val sizeMetricPattern = {
+    val bytes = "([0-9]+(\\.[0-9]+)?) (EiB|PiB|TiB|GiB|MiB|KiB|B)"
+    s"\\n$bytes \\($bytes, $bytes, $bytes\\)"
+  }
+
+  // Pattern of timing SQLMetric value, e.g. "\n2.0 ms (1.0 ms, 1.0 ms, 1.0 ms)"
+  protected val timingMetricPattern = {
+    val duration = "([0-9]+(\\.[0-9]+)?) (ms|s|m|h)"
+    s"\\n$duration \\($duration, $duration, $duration\\)"
+  }
 
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
@@ -72,8 +85,10 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       assert(metricValue == expected)
     }
 
-    val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
-    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
+    val totalNumBytesMetric = executedNode.metrics.find(
+      _.name == "written output total (min, med, max)").get
+    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "")
+      .split(" ").head.trim.toDouble
     assert(totalNumBytes > 0)
   }
 
@@ -132,6 +147,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
    * @param df `DataFrame` to run
    * @param expectedNumOfJobs number of jobs that will run
    * @param expectedNodeIds the node ids of the metrics to collect from execution data.
+   * @param enableWholeStage enable whole-stage code generation or not.
    */
   protected def getSparkPlanMetrics(
        df: DataFrame,
@@ -139,7 +155,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
        expectedNodeIds: Set[Long],
        enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
     val previousExecutionIds = currentExecutionIds()
-    withSQLConf("spark.sql.codegen.wholeStage" -> enableWholeStage.toString) {
+    withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
@@ -185,15 +201,36 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val optActualMetrics = getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetrics.keySet)
+    val expectedMetricsPredicates = expectedMetrics.mapValues { case (nodeName, nodeMetrics) =>
+      (nodeName, nodeMetrics.mapValues(expectedMetricValue =>
+        (actualMetricValue: Any) => expectedMetricValue.toString === actualMetricValue))
+    }
+    testSparkPlanMetricsWithPredicates(df, expectedNumOfJobs, expectedMetricsPredicates)
+  }
+
+  /**
+   * Call `df.collect()` and verify if the collected metrics satisfy the specified predicates.
+   * @param df `DataFrame` to run
+   * @param expectedNumOfJobs number of jobs that will run
+   * @param expectedMetricsPredicates the expected metrics predicates. The format is
+   *                                  `nodeId -> (operatorName, metric name -> metric predicate)`.
+   * @param enableWholeStage enable whole-stage code generation or not.
+   */
+  protected def testSparkPlanMetricsWithPredicates(
+      df: DataFrame,
+      expectedNumOfJobs: Int,
+      expectedMetricsPredicates: Map[Long, (String, Map[String, Any => Boolean])],
+      enableWholeStage: Boolean = false): Unit = {
+    val optActualMetrics =
+      getSparkPlanMetrics(df, expectedNumOfJobs, expectedMetricsPredicates.keySet, enableWholeStage)
     optActualMetrics.foreach { actualMetrics =>
-      assert(expectedMetrics.keySet === actualMetrics.keySet)
-      for (nodeId <- expectedMetrics.keySet) {
-        val (expectedNodeName, expectedMetricsMap) = expectedMetrics(nodeId)
+      assert(expectedMetricsPredicates.keySet === actualMetrics.keySet)
+      for ((nodeId, (expectedNodeName, expectedMetricsPredicatesMap))
+          <- expectedMetricsPredicates) {
         val (actualNodeName, actualMetricsMap) = actualMetrics(nodeId)
         assert(expectedNodeName === actualNodeName)
-        for (metricName <- expectedMetricsMap.keySet) {
-          assert(expectedMetricsMap(metricName).toString === actualMetricsMap(metricName))
+        for ((metricName, metricPredicate) <- expectedMetricsPredicatesMap) {
+          assert(metricPredicate(actualMetricsMap(metricName)))
         }
       }
     }

@@ -116,7 +116,8 @@ install_zinc() {
 # the build/ folder
 install_scala() {
   # determine the Scala version used in Spark
-  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+  local scala_binary_version=`grep "scala.binary.version" "${_DIR}/../pom.xml" | head -n1 | awk -F '[<>]' '{print $3}'`
+  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | grep ${scala_binary_version} | head -n1 | awk -F '[<>]' '{print $3}'`
   local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
   local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.lightbend.com}
 
@@ -133,12 +134,6 @@ install_scala() {
 # the environment
 ZINC_PORT=${ZINC_PORT:-"3030"}
 
-# Remove `--force` for backward compatibility.
-if [ "$1" == "--force" ]; then
-  echo "WARNING: '--force' is deprecated and ignored."
-  shift
-fi
-
 # Install the proper version of Scala, Zinc and Maven for the build
 install_zinc
 install_scala
@@ -153,6 +148,7 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`"${ZINC_BIN}" -status -port ${ZINC_PORT}`
   export ZINC_OPTS=${ZINC_OPTS:-"$_COMPILE_JVM_OPTS"}
   "${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
   "${ZINC_BIN}" -start -port ${ZINC_PORT} \
+    -server 127.0.0.1 -idle-timeout 3h \
     -scala-compiler "${SCALA_COMPILER}" \
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
@@ -162,5 +158,12 @@ export MAVEN_OPTS=${MAVEN_OPTS:-"$_COMPILE_JVM_OPTS"}
 
 echo "Using \`mvn\` from path: $MVN_BIN" 1>&2
 
-# Last, call the `mvn` command as usual
+# call the `mvn` command as usual
+# SPARK-25854
 "${MVN_BIN}" -DzincPort=${ZINC_PORT} "$@"
+MVN_RETCODE=$?
+
+# Try to shut down zinc explicitly if the server is still running.
+"${ZINC_BIN}" -shutdown -port ${ZINC_PORT}
+
+exit $MVN_RETCODE

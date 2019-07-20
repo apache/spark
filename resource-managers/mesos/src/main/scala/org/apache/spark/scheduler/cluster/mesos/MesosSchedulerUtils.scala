@@ -36,8 +36,9 @@ import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
+import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
 
 /**
@@ -83,10 +84,10 @@ trait MesosSchedulerUtils extends Logging {
       fwInfoBuilder.setId(FrameworkID.newBuilder().setValue(id).build())
     }
 
-    conf.getOption("spark.mesos.role").foreach { role =>
+    conf.get(mesosConfig.ROLE).foreach { role =>
       fwInfoBuilder.setRole(role)
     }
-    val maxGpus = conf.getInt("spark.mesos.gpus.max", 0)
+    val maxGpus = conf.get(mesosConfig.MAX_GPUS)
     if (maxGpus > 0) {
       fwInfoBuilder.addCapabilities(Capability.newBuilder().setType(Capability.Type.GPU_RESOURCES))
     }
@@ -103,10 +104,10 @@ trait MesosSchedulerUtils extends Logging {
       conf: SparkConf,
       fwInfoBuilder: Protos.FrameworkInfo.Builder): Protos.Credential.Builder = {
     val credBuilder = Credential.newBuilder()
-    conf.getOption("spark.mesos.principal")
+    conf.get(mesosConfig.CREDENTIAL_PRINCIPAL)
       .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL")))
       .orElse(
-        conf.getOption("spark.mesos.principal.file")
+        conf.get(mesosConfig.CREDENTIAL_PRINCIPAL_FILE)
           .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE")))
           .map { principalFile =>
             Files.toString(new File(principalFile), StandardCharsets.UTF_8)
@@ -115,10 +116,10 @@ trait MesosSchedulerUtils extends Logging {
         fwInfoBuilder.setPrincipal(principal)
         credBuilder.setPrincipal(principal)
       }
-    conf.getOption("spark.mesos.secret")
+    conf.get(mesosConfig.CREDENTIAL_SECRET)
       .orElse(Option(conf.getenv("SPARK_MESOS_SECRET")))
       .orElse(
-        conf.getOption("spark.mesos.secret.file")
+        conf.get(mesosConfig.CREDENTIAL_SECRET_FILE)
          .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE")))
          .map { secretFile =>
            Files.toString(new File(secretFile), StandardCharsets.UTF_8)
@@ -128,7 +129,8 @@ trait MesosSchedulerUtils extends Logging {
       }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(
-        "spark.mesos.principal must be configured when spark.mesos.secret is set")
+        s"${mesosConfig.CREDENTIAL_PRINCIPAL} must be configured when " +
+          s"${mesosConfig.CREDENTIAL_SECRET} is set")
     }
     credBuilder
   }
@@ -399,37 +401,31 @@ trait MesosSchedulerUtils extends Logging {
    *         (whichever is larger)
    */
   def executorMemory(sc: SparkContext): Int = {
-    sc.conf.getInt("spark.mesos.executor.memoryOverhead",
+    sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
   }
 
-  def setupUris(uris: String,
+  def setupUris(uris: Seq[String],
                 builder: CommandInfo.Builder,
                 useFetcherCache: Boolean = false): Unit = {
-    uris.split(",").foreach { uri =>
+    uris.foreach { uri =>
       builder.addUris(CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetcherCache))
     }
   }
 
-  private def getRejectOfferDurationStr(conf: SparkConf): String = {
-    conf.get("spark.mesos.rejectOfferDuration", "120s")
-  }
-
   protected def getRejectOfferDuration(conf: SparkConf): Long = {
-    Utils.timeStringAsSeconds(getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION)
   }
 
   protected def getRejectOfferDurationForUnmetConstraints(conf: SparkConf): Long = {
-    conf.getTimeAsSeconds(
-      "spark.mesos.rejectOfferDurationForUnmetConstraints",
-      getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION_FOR_UNMET_CONSTRAINTS)
+      .getOrElse(getRejectOfferDuration(conf))
   }
 
   protected def getRejectOfferDurationForReachedMaxCores(conf: SparkConf): Long = {
-    conf.getTimeAsSeconds(
-      "spark.mesos.rejectOfferDurationForReachedMaxCores",
-      getRejectOfferDurationStr(conf))
+    conf.get(mesosConfig.REJECT_OFFER_DURATION_FOR_REACHED_MAX_CORES)
+      .getOrElse(getRejectOfferDuration(conf))
   }
 
   /**
@@ -558,8 +554,8 @@ trait MesosSchedulerUtils extends Logging {
    * framework ID, the driver calls this method after the first registration.
    */
   def unsetFrameworkID(sc: SparkContext) {
-    sc.conf.remove("spark.mesos.driver.frameworkId")
-    System.clearProperty("spark.mesos.driver.frameworkId")
+    sc.conf.remove(mesosConfig.DRIVER_FRAMEWORK_ID)
+    System.clearProperty(mesosConfig.DRIVER_FRAMEWORK_ID.key)
   }
 
   def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {

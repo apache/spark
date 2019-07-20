@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
 
-@BeanInfo
-case class DCTTestData(vec: Vector, wantedVec: Vector)
+case class DCTTestData(vec: Vector, wantedVec: Vector) {
+  def getVec: Vector = vec
+  def getWantedVec: Vector = wantedVec
+}
 
 class DCTSuite extends MLTest with DefaultReadWriteTest {
 

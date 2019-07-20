@@ -3,6 +3,21 @@ layout: global
 displayTitle: GraphX Programming Guide
 title: GraphX
 description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -283,7 +298,7 @@ class Graph[VD, ED] {
   // Functions for caching graphs ==================================================================
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
   def cache(): Graph[VD, ED]
-  def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
+  def unpersistVertices(blocking: Boolean = false): Graph[VD, ED]
   // Change the partitioning heuristic  ============================================================
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
   // Transform vertex and edge attributes ==========================================================
@@ -317,7 +332,7 @@ class Graph[VD, ED] {
   // Iterative graph-parallel computation ==========================================================
   def pregel[A](initialMsg: A, maxIterations: Int, activeDirection: EdgeDirection)(
       vprog: (VertexId, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED]
   // Basic graph algorithms ========================================================================
@@ -522,7 +537,7 @@ val joinedGraph = graph.joinVertices(uniqueCosts,
 
 A key step in many graph analytics tasks is aggregating information about the neighborhood of each
 vertex.
-For example, we might want to know the number of followers each user has or the average age of the
+For example, we might want to know the number of followers each user has or the average age of
 the followers of each user.  Many iterative graph algorithms (e.g., PageRank, Shortest Path, and
 connected components) repeatedly aggregate properties of neighboring vertices (e.g., current
 PageRank Value, shortest path to the source, and smallest reachable vertex id).
@@ -700,7 +715,7 @@ a new value for the vertex property, and then send messages to neighboring verti
 super step.  Unlike Pregel, messages are computed in parallel as a
 function of the edge triplet and the message computation has access to both the source and
 destination vertex attributes.  Vertices that do not receive a message are skipped within a super
-step.  The Pregel operators terminates iteration and returns the final graph when there are no
+step.  The Pregel operator terminates iteration and returns the final graph when there are no
 messages remaining.
 
 > Note, unlike more standard Pregel implementations, vertices in GraphX can only send messages to
@@ -726,7 +741,7 @@ class GraphOps[VD, ED] {
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
 
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop until no messages remain or maxIterations is achieved
     var i = 0

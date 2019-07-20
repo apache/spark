@@ -29,27 +29,6 @@ select 2 * 5;
 select 5 % 3;
 select pmod(-7, 3);
 
--- check operator precedence.
--- We follow Oracle operator precedence in the table below that lists the levels of precedence
--- among SQL operators from high to low:
-------------------------------------------------------------------------------------------
--- Operator                                          Operation
-------------------------------------------------------------------------------------------
--- +, -                                              identity, negation
--- *, /                                              multiplication, division
--- +, -, ||                                          addition, subtraction, concatenation
--- =, !=, <, >, <=, >=, IS NULL, LIKE, BETWEEN, IN   comparison
--- NOT                                               exponentiation, logical negation
--- AND                                               conjunction
--- OR                                                disjunction
-------------------------------------------------------------------------------------------
-explain select 'a' || 1 + 2;
-explain select 1 - 2 || 'b';
-explain select 2 * 4  + 3 || 'b';
-explain select 3 + 1 || 'a' || 4 / 2;
-explain select 1 == 1 OR 'a' || 'b' ==  'ab';
-explain select 'a' || 'c' == 'ac' AND 2 == 3;
-
 -- math functions
 select cot(1);
 select cot(null);

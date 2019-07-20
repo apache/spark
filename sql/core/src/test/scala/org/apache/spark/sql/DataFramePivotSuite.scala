@@ -333,4 +333,15 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
     }
     assert(exception.getMessage.contains("Unsupported literal type"))
   }
+
+  test("SPARK-26403: pivoting by array column") {
+    val df = Seq(
+      (2, Seq.empty[String]),
+      (2, Seq("a", "x")),
+      (3, Seq.empty[String]),
+      (3, Seq("a", "x"))).toDF("x", "s")
+    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
+    val actual = df.groupBy("x").pivot("s").count()
+    checkAnswer(actual, expected)
+  }
 }

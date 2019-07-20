@@ -1,5 +1,5 @@
 [ {
-  "id" : "<driver>",
+  "id" : "driver",
   "hostPort" : "localhost:57971",
   "isActive" : true,
   "rddBlocks" : 0,
@@ -20,5 +20,6 @@
   "maxMemory" : 278302556,
   "addTime" : "2015-02-03T16:43:00.906GMT",
   "executorLogs" : { },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 } ]

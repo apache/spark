@@ -57,6 +57,20 @@ First, let's load and attach the package.
 library(SparkR)
 ```
 
+```{r, include=FALSE}
+# disable eval if java version not supported
+override_eval <- tryCatch(!is.numeric(SparkR:::checkJavaVersion()),
+          error = function(e) { TRUE },
+          warning = function(e) { TRUE })
+
+if (override_eval) {
+  opts_hooks$set(eval = function(options) {
+    options$eval = FALSE
+    options
+  })
+}
+```
+
 `SparkSession` is the entry point into SparkR which connects your R program to a Spark cluster. You can create a `SparkSession` using `sparkR.session` and pass in options such as the application name, any Spark packages depended on, etc.
 
 We use default settings in which it runs in local mode. It auto downloads Spark package in the background if no previous installation is found. For more details about setup, see [Spark Session](#SetupSparkSession).
@@ -205,7 +219,7 @@ SparkR supports operating on a variety of data sources through the `SparkDataFra
 The general method for creating `SparkDataFrame` from data sources is `read.df`. This method takes in the path for the file to load and the type of data source, and the currently active Spark Session will be used automatically. SparkR supports reading CSV, JSON and Parquet files natively and through Spark Packages you can find data source connectors for popular file formats like Avro. These packages can be added with `sparkPackages` parameter when initializing SparkSession using `sparkR.session`.
 
 ```{r, eval=FALSE}
-sparkR.session(sparkPackages = "com.databricks:spark-avro_2.11:3.0.0")
+sparkR.session(sparkPackages = "com.databricks:spark-avro_2.12:3.0.0")
 ```
 
 We can see how to use data sources using an example CSV input file. For more information please refer to SparkR [read.df](https://spark.apache.org/docs/latest/api/R/read.df.html) API documentation.
@@ -535,6 +549,8 @@ SparkR supports the following machine learning models and algorithms.
 
 * Latent Dirichlet Allocation (LDA)
 
+* Power Iteration Clustering (PIC)
+
 #### Collaborative Filtering
 
 * Alternating Least Squares (ALS)
@@ -542,6 +558,7 @@ SparkR supports the following machine learning models and algorithms.
 #### Frequent Pattern Mining
 
 * FP-growth
+* PrefixSpan
 
 #### Statistics
 
@@ -967,6 +984,18 @@ predicted <- predict(model, df)
 head(predicted)
 ```
 
+#### Power Iteration Clustering
+
+Power Iteration Clustering (PIC) is a scalable graph clustering algorithm. `spark.assignClusters` method runs the PIC algorithm and returns a cluster assignment for each input vertex.
+
+```{r}
+df <- createDataFrame(list(list(0L, 1L, 1.0), list(0L, 2L, 1.0),
+                           list(1L, 2L, 1.0), list(3L, 4L, 1.0),
+                           list(4L, 0L, 0.1)),
+                      schema = c("src", "dst", "weight"))
+head(spark.assignClusters(df, initMode = "degree", weightCol = "weight"))
+```
+
 #### FP-growth
 
 `spark.fpGrowth` executes FP-growth algorithm to mine frequent itemsets on a `SparkDataFrame`. `itemsCol` should be an array of values.
@@ -996,6 +1025,19 @@ We can make predictions based on the `antecedent`.
 
 ```{r}
 head(predict(fpm, df))
+```
+
+#### PrefixSpan
+
+`spark.findFrequentSequentialPatterns` method can be used to find the complete set of frequent sequential patterns in the input sequences of itemsets.
+
+```{r}
+df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
+                           list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+                           list(list(list(1L, 2L), list(5L))),
+                           list(list(list(6L)))),
+                      schema = c("sequence"))
+head(spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L))
 ```
 
 #### Kolmogorov-Smirnov Test

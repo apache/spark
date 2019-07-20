@@ -31,6 +31,7 @@ import org.apache.hive.service.server.HiveServer2
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
@@ -63,7 +64,7 @@ object HiveThriftServer2 extends Logging {
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
-    uiTab = if (sqlContext.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
+    uiTab = if (sqlContext.sparkContext.getConf.get(UI_ENABLED)) {
       Some(new ThriftServerTab(sqlContext.sparkContext))
     } else {
       None
@@ -71,6 +72,13 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
+    // If the arguments contains "-h" or "--help", print out the usage and exit.
+    if (args.contains("-h") || args.contains("--help")) {
+      HiveServer2.main(args)
+      // The following code should not be reachable. It is added to ensure the main function exits.
+      return
+    }
+
     Utils.initDaemon(log)
     val optionsProcessor = new HiveServer2.ServerOptionsProcessor("HiveThriftServer2")
     optionsProcessor.parse(args)
@@ -94,7 +102,7 @@ object HiveThriftServer2 extends Logging {
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
-      uiTab = if (SparkSQLEnv.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
+      uiTab = if (SparkSQLEnv.sparkContext.getConf.get(UI_ENABLED)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
       } else {
         None
@@ -129,7 +137,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val STARTED, COMPILED, FAILED, FINISHED = Value
+    val STARTED, COMPILED, FAILED, FINISHED, CLOSED = Value
     type ExecutionState = Value
   }
 
@@ -139,16 +147,17 @@ object HiveThriftServer2 extends Logging {
       val startTimestamp: Long,
       val userName: String) {
     var finishTimestamp: Long = 0L
+    var closeTimestamp: Long = 0L
     var executePlan: String = ""
     var detail: String = ""
     var state: ExecutionState.Value = ExecutionState.STARTED
     val jobId: ArrayBuffer[String] = ArrayBuffer[String]()
     var groupId: String = ""
-    def totalTime: Long = {
-      if (finishTimestamp == 0L) {
+    def totalTime(endTime: Long): Long = {
+      if (endTime == 0L) {
         System.currentTimeMillis - startTimestamp
       } else {
-        finishTimestamp - startTimestamp
+        endTime - startTimestamp
       }
     }
   }
@@ -244,6 +253,11 @@ object HiveThriftServer2 extends Logging {
       executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
       trimExecutionIfNecessary()
+    }
+
+    def onOperationClosed(id: String): Unit = synchronized {
+      executionList(id).closeTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.CLOSED
     }
 
     private def trimExecutionIfNecessary() = {

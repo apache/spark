@@ -126,8 +126,9 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 /**
  * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
- * we support a limited subset of the R operators, including '~', '.', ':', '+', and '-'. Also see
- * the R formula docs here: http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+ * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*' and '^'.
+ * Also see the R formula docs here:
+ * http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
  *
  * The basic operators are:
  *  - `~` separate target and terms
@@ -135,6 +136,8 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  *  - `-` remove a term, "- 1" means removing intercept
  *  - `:` interaction (multiplication for numeric values, or binarized categorical values)
  *  - `.` all columns except target
+ *  - `*` factor crossing, includes the terms and interactions between them
+ *  - `^` factor crossing to a specified degree
  *
  * Suppose `a` and `b` are double columns, we use the following simple examples
  * to illustrate the effect of `RFormula`:
@@ -142,6 +145,10 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * are coefficients.
  *  - `y ~ a + b + a:b - 1` means model `y ~ w1 * a + w2 * b + w3 * a * b` where `w1, w2, w3`
  * are coefficients.
+ *  - `y ~ a * b` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
+ *  - `y ~ (a + b)^2` means model `y ~ w0 + w1 * a + w2 * b + w3 * a * b` where `w0` is the
+ *  intercept and `w1, w2, w3` are coefficients
  *
  * RFormula produces a vector column of features and a double or string column of label.
  * Like when formulas are used in R for linear regression, string input columns will be one-hot
@@ -246,7 +253,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
         if (!hasIntercept && !keepReferenceCategory) {
-          encoderStages += new OneHotEncoderEstimator(uid)
+          encoderStages += new OneHotEncoder(uid)
             .setInputCols(Array(indexed(term)))
             .setOutputCols(Array(encodedCol))
             .setDropLast(false)
@@ -269,7 +276,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     if (oneHotEncodeColumns.nonEmpty) {
       val (inputCols, outputCols) = oneHotEncodeColumns.toArray.unzip
-      encoderStages += new OneHotEncoderEstimator(uid)
+      encoderStages += new OneHotEncoder(uid)
         .setInputCols(inputCols)
         .setOutputCols(outputCols)
         .setDropLast(true)

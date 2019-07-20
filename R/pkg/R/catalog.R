@@ -17,40 +17,6 @@
 
 # catalog.R: SparkSession catalog functions
 
-#' (Deprecated) Create an external table
-#'
-#' Creates an external table based on the dataset in a data source,
-#' Returns a SparkDataFrame associated with the external table.
-#'
-#' The data source is specified by the \code{source} and a set of options(...).
-#' If \code{source} is not specified, the default data source configured by
-#' "spark.sql.sources.default" will be used.
-#'
-#' @param tableName a name of the table.
-#' @param path the path of files to load.
-#' @param source the name of external data source.
-#' @param schema the schema of the data required for some data sources.
-#' @param ... additional argument(s) passed to the method.
-#' @return A SparkDataFrame.
-#' @rdname createExternalTable-deprecated
-#' @seealso \link{createTable}
-#' @examples
-#'\dontrun{
-#' sparkR.session()
-#' df <- createExternalTable("myjson", path="path/to/json", source="json", schema)
-#' }
-#' @name createExternalTable
-#' @method createExternalTable default
-#' @note createExternalTable since 1.4.0
-createExternalTable.default <- function(tableName, path = NULL, source = NULL, schema = NULL, ...) {
-  .Deprecated("createTable", old = "createExternalTable")
-  createTable(tableName, path, source, schema, ...)
-}
-
-createExternalTable <- function(x, ...) {
-  dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
-}
-
 #' Creates a table based on the dataset in a data source
 #'
 #' Creates a table based on the dataset in a data source. Returns a SparkDataFrame associated with
@@ -116,16 +82,11 @@ createTable <- function(tableName, path = NULL, source = NULL, schema = NULL, ..
 #' cacheTable("table")
 #' }
 #' @name cacheTable
-#' @method cacheTable default
 #' @note cacheTable since 1.4.0
-cacheTable.default <- function(tableName) {
+cacheTable <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
   invisible(handledCallJMethod(catalog, "cacheTable", tableName))
-}
-
-cacheTable <- function(x, ...) {
-  dispatchFunc("cacheTable(tableName)", x, ...)
 }
 
 #' Uncache Table
@@ -145,16 +106,11 @@ cacheTable <- function(x, ...) {
 #' uncacheTable("table")
 #' }
 #' @name uncacheTable
-#' @method uncacheTable default
 #' @note uncacheTable since 1.4.0
-uncacheTable.default <- function(tableName) {
+uncacheTable <- function(tableName) {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
   invisible(handledCallJMethod(catalog, "uncacheTable", tableName))
-}
-
-uncacheTable <- function(x, ...) {
-  dispatchFunc("uncacheTable(tableName)", x, ...)
 }
 
 #' Clear Cache
@@ -167,46 +123,11 @@ uncacheTable <- function(x, ...) {
 #' clearCache()
 #' }
 #' @name clearCache
-#' @method clearCache default
 #' @note clearCache since 1.4.0
-clearCache.default <- function() {
+clearCache <- function() {
   sparkSession <- getSparkSession()
   catalog <- callJMethod(sparkSession, "catalog")
   invisible(callJMethod(catalog, "clearCache"))
-}
-
-clearCache <- function() {
-  dispatchFunc("clearCache()")
-}
-
-#' (Deprecated) Drop Temporary Table
-#'
-#' Drops the temporary table with the given table name in the catalog.
-#' If the table has been cached/persisted before, it's also unpersisted.
-#'
-#' @param tableName The name of the SparkSQL table to be dropped.
-#' @seealso \link{dropTempView}
-#' @rdname dropTempTable-deprecated
-#' @examples
-#' \dontrun{
-#' sparkR.session()
-#' df <- read.df(path, "parquet")
-#' createOrReplaceTempView(df, "table")
-#' dropTempTable("table")
-#' }
-#' @name dropTempTable
-#' @method dropTempTable default
-#' @note dropTempTable since 1.4.0
-dropTempTable.default <- function(tableName) {
-  .Deprecated("dropTempView", old = "dropTempTable")
-  if (class(tableName) != "character") {
-    stop("tableName must be a string.")
-  }
-  dropTempView(tableName)
-}
-
-dropTempTable <- function(x, ...) {
-  dispatchFunc("dropTempView(viewName)", x, ...)
 }
 
 #' Drops the temporary view with the given view name in the catalog.
@@ -249,15 +170,10 @@ dropTempView <- function(viewName) {
 #' tables("hive")
 #' }
 #' @name tables
-#' @method tables default
 #' @note tables since 1.4.0
-tables.default <- function(databaseName = NULL) {
+tables <- function(databaseName = NULL) {
   # rename column to match previous output schema
   withColumnRenamed(listTables(databaseName), "name", "tableName")
-}
-
-tables <- function(x, ...) {
-  dispatchFunc("tables(databaseName = NULL)", x, ...)
 }
 
 #' Table Names
@@ -273,18 +189,13 @@ tables <- function(x, ...) {
 #' tableNames("hive")
 #' }
 #' @name tableNames
-#' @method tableNames default
 #' @note tableNames since 1.4.0
-tableNames.default <- function(databaseName = NULL) {
+tableNames <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
   callJStatic("org.apache.spark.sql.api.r.SQLUtils",
               "getTableNames",
               sparkSession,
               databaseName)
-}
-
-tableNames <- function(x, ...) {
-  dispatchFunc("tableNames(databaseName = NULL)", x, ...)
 }
 
 #' Returns the current default database

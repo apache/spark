@@ -192,6 +192,7 @@ class SparkSession(object):
     """A class attribute having a :class:`Builder` to construct :class:`SparkSession` instances"""
 
     _instantiatedSession = None
+    _activeSession = None
 
     @ignore_unicode_prefix
     def __init__(self, sparkContext, jsparkSession=None):
@@ -233,7 +234,9 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
+            SparkSession._activeSession = self
             self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
+            self._jvm.SparkSession.setActiveSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -254,6 +257,29 @@ class SparkSession(object):
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
+
+    @classmethod
+    @since(3.0)
+    def getActiveSession(cls):
+        """
+        Returns the active SparkSession for the current thread, returned by the builder.
+        >>> s = SparkSession.getActiveSession()
+        >>> l = [('Alice', 1)]
+        >>> rdd = s.sparkContext.parallelize(l)
+        >>> df = s.createDataFrame(rdd, ['name', 'age'])
+        >>> df.select("age").collect()
+        [Row(age=1)]
+        """
+        from pyspark import SparkContext
+        sc = SparkContext._active_spark_context
+        if sc is None:
+            return None
+        else:
+            if sc._jvm.SparkSession.getActiveSession().isDefined():
+                SparkSession(sc, sc._jvm.SparkSession.getActiveSession().get())
+                return SparkSession._activeSession
+            else:
+                return None
 
     @property
     @since(2.0)
@@ -504,8 +530,8 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from pyspark.serializers import ArrowStreamSerializer, _create_batch
-        from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
+        from pyspark.serializers import ArrowStreamPandasSerializer
+        from pyspark.sql.types import from_arrow_type, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
             require_minimum_pyarrow_version
 
@@ -513,6 +539,15 @@ class SparkSession(object):
         require_minimum_pyarrow_version()
 
         from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
+        import pyarrow as pa
+
+        # Create the Spark schema from list of names passed in with Arrow types
+        if isinstance(schema, (list, tuple)):
+            arrow_schema = pa.Schema.from_pandas(pdf, preserve_index=False)
+            struct = StructType()
+            for name, field in zip(schema, arrow_schema):
+                struct.add(name, from_arrow_type(field.type), nullable=field.nullable)
+            schema = struct
 
         # Determine arrow types to coerce data when creating batches
         if isinstance(schema, StructType):
@@ -529,20 +564,15 @@ class SparkSession(object):
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
-        # Create Arrow record batches
-        batches = [_create_batch([(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)],
-                                 timezone)
-                   for pdf_slice in pdf_slices]
-
-        # Create the Spark schema from the first Arrow batch (always at least 1 batch after slicing)
-        if isinstance(schema, (list, tuple)):
-            struct = from_arrow_schema(batches[0].schema)
-            for i, name in enumerate(schema):
-                struct.fields[i].name = name
-                struct.names[i] = name
-            schema = struct
+        # Create list of Arrow (columns, type) for serializer dump_stream
+        arrow_data = [[(c, t) for (_, c), t in zip(pdf_slice.iteritems(), arrow_types)]
+                      for pdf_slice in pdf_slices]
 
         jsqlContext = self._wrapped._jsqlContext
+
+        safecheck = self._wrapped._conf.arrowSafeTypeConversion()
+        col_by_name = True  # col by name only applies to StructType columns, can't happen here
+        ser = ArrowStreamPandasSerializer(timezone, safecheck, col_by_name)
 
         def reader_func(temp_filename):
             return self._jvm.PythonSQLUtils.readArrowStreamFromFile(jsqlContext, temp_filename)
@@ -551,8 +581,7 @@ class SparkSession(object):
             return self._jvm.ArrowRDDServer(jsqlContext)
 
         # Create Spark DataFrame from Arrow stream file, using one batch per partition
-        jrdd = self._sc._serialize_to_jvm(batches, ArrowStreamSerializer(), reader_func,
-                                          create_RDD_server)
+        jrdd = self._sc._serialize_to_jvm(arrow_data, ser, reader_func, create_RDD_server)
         jdf = self._jvm.PythonSQLUtils.toDataFrame(jrdd, schema.json(), jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
@@ -622,7 +651,12 @@ class SparkSession(object):
         .. versionchanged:: 2.1
            Added verifySchema.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+
+        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
+            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
+            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
+            practice.
 
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
@@ -671,6 +705,8 @@ class SparkSession(object):
             ...
         Py4JJavaError: ...
         """
+        SparkSession._activeSession = self
+        self._jvm.SparkSession.setActiveSession(self._jsparkSession)
         if isinstance(data, DataFrame):
             raise TypeError("data is already a DataFrame")
 
@@ -700,28 +736,28 @@ class SparkSession(object):
                           (x.encode('utf-8') if not isinstance(x, str) else x)
                           for x in data.columns]
 
-            if self._wrapped._conf.arrowEnabled() and len(data) > 0:
+            if self._wrapped._conf.arrowPySparkEnabled() and len(data) > 0:
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self._wrapped._conf.arrowFallbackEnabled():
+                    if self._wrapped._conf.arrowPySparkFallbackEnabled():
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                             "failed by the reason below:\n  %s\n"
                             "Attempting non-optimization as "
-                            "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                            "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                             "true." % _exception_message(e))
                         warnings.warn(msg)
                     else:
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                            "the error below and will not continue because automatic fallback "
-                            "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
-                            "false.\n  %s" % _exception_message(e))
+                            "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                            "reached the error below and will not continue because automatic "
+                            "fallback with 'spark.sql.execution.arrow.pyspark.fallback.enabled' "
+                            "has been set to false.\n  %s" % _exception_message(e))
                         warnings.warn(msg)
                         raise
             data = self._convert_from_pandas(data, schema, timezone)
@@ -826,7 +862,9 @@ class SparkSession(object):
         self._sc.stop()
         # We should clean the default session up. See SPARK-23228.
         self._jvm.SparkSession.clearDefaultSession()
+        self._jvm.SparkSession.clearActiveSession()
         SparkSession._instantiatedSession = None
+        SparkSession._activeSession = None
 
     @since(2.0)
     def __enter__(self):

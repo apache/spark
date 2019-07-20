@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 /**
@@ -37,6 +37,8 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
    * the read tasks of the skewed partitions to multiple Spark tasks.
    * The number of Spark tasks will be *approximately* `numPartitions`. It can be less or more
    * depending on rounding errors or Kafka partitions that didn't receive any new data.
+   *
+   * Empty ranges (`KafkaOffsetRange.size <= 0`) will be dropped.
    */
   def getRanges(
       fromOffsets: PartitionOffsetMap,
@@ -89,8 +91,9 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
 private[kafka010] object KafkaOffsetRangeCalculator {
 
-  def apply(options: DataSourceOptions): KafkaOffsetRangeCalculator = {
-    val optionalValue = Option(options.get("minPartitions").orElse(null)).map(_.toInt)
+  def apply(options: CaseInsensitiveStringMap): KafkaOffsetRangeCalculator = {
+    val optionalValue = Option(options.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY))
+      .map(_.toInt)
     new KafkaOffsetRangeCalculator(optionalValue)
   }
 }

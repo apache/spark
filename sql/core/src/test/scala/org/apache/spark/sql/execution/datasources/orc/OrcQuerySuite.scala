@@ -31,13 +31,13 @@ import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
@@ -103,7 +103,7 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("Read/write UserDefinedType") {
     withTempPath { path =>
-      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val data = Seq((1, new TestUDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
       val udtDF = data.toDF("id", "vectors")
       udtDF.write.orc(path.getAbsolutePath)
       val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)
@@ -270,10 +270,16 @@ abstract class OrcQueryTest extends OrcTest {
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
-    withOrcTable(data, "t") {
-      sql("INSERT INTO TABLE t SELECT * FROM tmp")
-      checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+
+    withOrcFile(data) { file =>
+      withTempView("t") {
+        spark.read.orc(file).createOrReplaceTempView("t")
+        checkAnswer(spark.table("t"), data.map(Row.fromTuple))
+        sql("INSERT INTO TABLE t SELECT * FROM tmp")
+        checkAnswer(spark.table("t"), (data ++ data).map(Row.fromTuple))
+      }
     }
+
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tmp"),
       ignoreIfNotExists = true,
@@ -445,16 +451,7 @@ abstract class OrcQueryTest extends OrcTest {
   test("Support for pushing down filters for decimal types") {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(i => Tuple1(BigDecimal.valueOf(i)))
-      withTempPath { file =>
-        // It needs to repartition data so that we can have several ORC files
-        // in order to skip stripes in ORC.
-        spark.createDataFrame(data).toDF("a").repartition(10)
-          .write.orc(file.getCanonicalPath)
-        val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
-        val actual = stripSparkFilter(df).count()
-
-        assert(actual < 10)
-      }
+      checkPredicatePushDown(spark.createDataFrame(data).toDF("a"), 10, "a == 2")
     }
   }
 
@@ -465,16 +462,7 @@ abstract class OrcQueryTest extends OrcTest {
         val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
         Tuple1(new Timestamp(milliseconds))
       }
-      withTempPath { file =>
-        // It needs to repartition data so that we can have several ORC files
-        // in order to skip stripes in ORC.
-        spark.createDataFrame(data).toDF("a").repartition(10)
-          .write.orc(file.getCanonicalPath)
-        val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
-        val actual = stripSparkFilter(df).count()
-
-        assert(actual < 10)
-      }
+      checkPredicatePushDown(spark.createDataFrame(data).toDF("a"), 10, s"a == '$timeString'")
     }
   }
 
@@ -615,6 +603,22 @@ abstract class OrcQueryTest extends OrcTest {
       assert(m4.contains("Malformed ORC file"))
     }
   }
+
+  test("SPARK-27160 Predicate pushdown correctness on DecimalType for ORC") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        val path = dir.getCanonicalPath
+        Seq(BigDecimal(0.1), BigDecimal(0.2), BigDecimal(-0.3))
+          .toDF("x").write.orc(path)
+        val df = spark.read.orc(path)
+        checkAnswer(df.filter("x >= 0.1"), Seq(Row(0.1), Row(0.2)))
+        checkAnswer(df.filter("x > 0.1"), Seq(Row(0.2)))
+        checkAnswer(df.filter("x <= 0.15"), Seq(Row(0.1), Row(-0.3)))
+        checkAnswer(df.filter("x < 0.1"), Seq(Row(-0.3)))
+        checkAnswer(df.filter("x == 0.2"), Seq(Row(0.2)))
+      }
+    }
+  }
 }
 
 class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
@@ -674,6 +678,12 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-25579 ORC PPD should support column names with dot") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      checkPredicatePushDown(spark.range(10).toDF("col.dot"), 10, "`col.dot` == 2")
+    }
+  }
+
   test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
     withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
       val e = intercept[AnalysisException] {
@@ -692,4 +702,12 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
       }
     }
   }
+}
+
+class OrcV1QuerySuite extends OrcQuerySuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "orc")
 }

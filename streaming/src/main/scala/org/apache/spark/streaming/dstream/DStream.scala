@@ -455,7 +455,7 @@ abstract class DStream[T: ClassTag] (
     if (unpersistData) {
       logDebug(s"Unpersisting old RDDs: ${oldRDDs.values.map(_.id).mkString(", ")}")
       oldRDDs.values.foreach { rdd =>
-        rdd.unpersist(false)
+        rdd.unpersist()
         // Explicitly remove blocks of BlockRDD
         rdd match {
           case b: BlockRDD[_] =>

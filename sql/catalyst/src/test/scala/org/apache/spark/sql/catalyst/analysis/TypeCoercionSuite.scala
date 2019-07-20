@@ -742,7 +742,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val nullLit = Literal.create(null, NullType)
     val floatNullLit = Literal.create(null, FloatType)
     val floatLit = Literal.create(1.0f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
     val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
     val strArrayLit = Literal(Array("c"))
@@ -793,11 +793,11 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateArray(Literal(1.0)
         :: Literal(1)
-        :: Literal.create(1.0, FloatType)
+        :: Literal.create(1.0f, FloatType)
         :: Nil),
       CreateArray(Literal(1.0)
         :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal.create(1.0, FloatType), DoubleType)
+        :: Cast(Literal.create(1.0f, FloatType), DoubleType)
         :: Nil))
 
     ruleTest(TypeCoercion.FunctionArgumentConversion,
@@ -834,23 +834,23 @@ class TypeCoercionSuite extends AnalysisTest {
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal(1)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil),
       CreateMap(Cast(Literal(1), FloatType)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil))
     ruleTest(TypeCoercion.FunctionArgumentConversion,
       CreateMap(Literal.create(null, DecimalType(5, 3))
         :: Literal("a")
-        :: Literal.create(2.0, FloatType)
+        :: Literal.create(2.0f, FloatType)
         :: Literal("b")
         :: Nil),
       CreateMap(Literal.create(null, DecimalType(5, 3)).cast(DoubleType)
         :: Literal("a")
-        :: Literal.create(2.0, FloatType).cast(DoubleType)
+        :: Literal.create(2.0f, FloatType).cast(DoubleType)
         :: Literal("b")
         :: Nil))
     // type coercion for map values
@@ -895,11 +895,11 @@ class TypeCoercionSuite extends AnalysisTest {
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1.0)
           :: Literal(1)
-          :: Literal.create(1.0, FloatType)
+          :: Literal.create(1.0f, FloatType)
           :: Nil),
         operator(Literal(1.0)
           :: Cast(Literal(1), DoubleType)
-          :: Cast(Literal.create(1.0, FloatType), DoubleType)
+          :: Cast(Literal.create(1.0f, FloatType), DoubleType)
           :: Nil))
       ruleTest(TypeCoercion.FunctionArgumentConversion,
         operator(Literal(1L)
@@ -966,7 +966,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val falseLit = Literal.create(false, BooleanType)
     val stringLit = Literal.create("c", StringType)
     val floatLit = Literal.create(1.0f, FloatType)
-    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val timestampLit = Literal.create(Timestamp.valueOf("2017-04-12 00:00:00"), TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
 
     ruleTest(rule,
@@ -1016,14 +1016,16 @@ class TypeCoercionSuite extends AnalysisTest {
       CaseKeyWhen(Literal(true), Seq(Literal(1), Literal("a")))
     )
     ruleTest(TypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq((Literal(true), Literal(1.2))), Literal.create(1, DecimalType(7, 2))),
       CaseWhen(Seq((Literal(true), Literal(1.2))),
-        Cast(Literal.create(1, DecimalType(7, 2)), DoubleType))
+        Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(1.2))),
+        Cast(Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2)), DoubleType))
     )
     ruleTest(TypeCoercion.CaseWhenCoercion,
-      CaseWhen(Seq((Literal(true), Literal(100L))), Literal.create(1, DecimalType(7, 2))),
+      CaseWhen(Seq((Literal(true), Literal(100L))),
+        Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2))),
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
-        Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
+        Cast(Literal.create(BigDecimal.valueOf(1), DecimalType(7, 2)), DecimalType(22, 2)))
     )
   }
 
@@ -1124,14 +1126,14 @@ class TypeCoercionSuite extends AnalysisTest {
       Concat(Seq(Cast(Literal(new java.sql.Date(0)), StringType),
         Cast(Literal(new Timestamp(0)), StringType))))
 
-    withSQLConf("spark.sql.function.concatBinaryAsString" -> "true") {
+    withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Cast(Literal("123".getBytes), StringType),
           Cast(Literal("456".getBytes), StringType))))
     }
 
-    withSQLConf("spark.sql.function.concatBinaryAsString" -> "false") {
+    withSQLConf(SQLConf.CONCAT_BINARY_AS_STRING.key -> "false") {
       ruleTest(rule,
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))),
         Concat(Seq(Literal("123".getBytes), Literal("456".getBytes))))
@@ -1178,14 +1180,14 @@ class TypeCoercionSuite extends AnalysisTest {
       Elt(Seq(Literal(2), Cast(Literal(new java.sql.Date(0)), StringType),
         Cast(Literal(new Timestamp(0)), StringType))))
 
-    withSQLConf("spark.sql.function.eltOutputAsString" -> "true") {
+    withSQLConf(SQLConf.ELT_OUTPUT_AS_STRING.key -> "true") {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Cast(Literal("123".getBytes), StringType),
           Cast(Literal("456".getBytes), StringType))))
     }
 
-    withSQLConf("spark.sql.function.eltOutputAsString" -> "false") {
+    withSQLConf(SQLConf.ELT_OUTPUT_AS_STRING.key -> "false") {
       ruleTest(rule,
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
         Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
@@ -1404,6 +1406,7 @@ class TypeCoercionSuite extends AnalysisTest {
     val timestamp = Literal(new Timestamp(0L))
     val interval = Literal(new CalendarInterval(0, 0))
     val str = Literal("2015-01-01")
+    val intValue = Literal(0, IntegerType)
 
     ruleTest(dateTimeOperations, Add(date, interval), Cast(TimeAdd(date, interval), DateType))
     ruleTest(dateTimeOperations, Add(interval, date), Cast(TimeAdd(date, interval), DateType))
@@ -1422,6 +1425,11 @@ class TypeCoercionSuite extends AnalysisTest {
     // interval operations should not be effected
     ruleTest(dateTimeOperations, Add(interval, interval), Add(interval, interval))
     ruleTest(dateTimeOperations, Subtract(interval, interval), Subtract(interval, interval))
+
+    ruleTest(dateTimeOperations, Add(date, intValue), DateAdd(date, intValue))
+    ruleTest(dateTimeOperations, Add(intValue, date), DateAdd(date, intValue))
+    ruleTest(dateTimeOperations, Subtract(date, intValue), DateSub(date, intValue))
+    ruleTest(dateTimeOperations, Subtract(date, date), DateDiff(date, date))
   }
 
   /**
@@ -1448,7 +1456,7 @@ class TypeCoercionSuite extends AnalysisTest {
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
     "in aggregation function like sum") {
-    val rules = Seq(FunctionArgumentConversion, Division)
+    val rules = Seq(FunctionArgumentConversion, Division(conf))
     // Casts Integer to Double
     ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
     // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
@@ -1467,10 +1475,33 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("SPARK-17117 null type coercion in divide") {
-    val rules = Seq(FunctionArgumentConversion, Division, ImplicitTypeCasts)
+    val rules = Seq(FunctionArgumentConversion, Division(conf), ImplicitTypeCasts)
     val nullLit = Literal.create(null, NullType)
     ruleTest(rules, Divide(1L, nullLit), Divide(Cast(1L, DoubleType), Cast(nullLit, DoubleType)))
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
+  }
+
+  test("SPARK-28395 Division operator support integral division") {
+    val rules = Seq(FunctionArgumentConversion, Division(conf))
+    Seq(true, false).foreach { preferIntegralDivision =>
+      withSQLConf(SQLConf.PREFER_INTEGRAL_DIVISION.key -> s"$preferIntegralDivision") {
+        val result1 = if (preferIntegralDivision) {
+          IntegralDivide(1L, 1L)
+        } else {
+          Divide(Cast(1L, DoubleType), Cast(1L, DoubleType))
+        }
+        ruleTest(rules, Divide(1L, 1L), result1)
+        val result2 = if (preferIntegralDivision) {
+          IntegralDivide(1, Cast(1, ShortType))
+        } else {
+          Divide(Cast(1, DoubleType), Cast(Cast(1, ShortType), DoubleType))
+        }
+        ruleTest(rules, Divide(1, Cast(1, ShortType)), result2)
+
+        ruleTest(rules, Divide(1L, 1D), Divide(Cast(1L, DoubleType), Cast(1D, DoubleType)))
+        ruleTest(rules, Divide(Decimal(1.1), 1L), Divide(Decimal(1.1), 1L))
+      }
+    }
   }
 
   test("binary comparison with string promotion") {
@@ -1490,7 +1521,7 @@ class TypeCoercionSuite extends AnalysisTest {
         DoubleType)))
     Seq(true, false).foreach { convertToTS =>
       withSQLConf(
-        "spark.sql.legacy.compareDateTimestampInTimestamp" -> convertToTS.toString) {
+        SQLConf.COMPARE_DATE_TIMESTAMP_IN_TIMESTAMP.key -> convertToTS.toString) {
         val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
         val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
         val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))

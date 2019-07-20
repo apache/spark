@@ -50,7 +50,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
           And(_: AttributeReference, _: AttributeReference),
-          InputAdapter(_: BatchEvalPythonExec)) => f
+          InputAdapter(_: BatchEvalPythonExec, _)) => f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
@@ -60,7 +60,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val df = Seq(("Hello", 4)).toDF("a", "b")
       .where("dummyPythonUDF(a, dummyPythonUDF(a, b)) and a in (3, 4)")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
-      case f @ FilterExec(_: AttributeReference, InputAdapter(_: BatchEvalPythonExec)) => f
+      case f @ FilterExec(_: AttributeReference, InputAdapter(_: BatchEvalPythonExec, _)) => f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(FilterExec(_: In, _))) => b
     }
     assert(qualifiedPlanNodes.size == 2)
@@ -72,7 +72,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
-          InputAdapter(_: BatchEvalPythonExec)) => f
+          InputAdapter(_: BatchEvalPythonExec, _)) => f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)
@@ -85,7 +85,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
-          InputAdapter(_: BatchEvalPythonExec)) => f
+          InputAdapter(_: BatchEvalPythonExec, _)) => f
       case b @ BatchEvalPythonExec(_, _, WholeStageCodegenExec(_: FilterExec)) => b
     }
     assert(qualifiedPlanNodes.size == 2)

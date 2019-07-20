@@ -16,107 +16,23 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.k8s._
-import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.internal.config.ConfigEntry
 
-class KubernetesExecutorBuilderSuite extends SparkFunSuite {
-  private val BASIC_STEP_TYPE = "basic"
-  private val SECRETS_STEP_TYPE = "mount-secrets"
-  private val ENV_SECRETS_STEP_TYPE = "env-secrets"
-  private val LOCAL_DIRS_STEP_TYPE = "local-dirs"
-  private val MOUNT_VOLUMES_STEP_TYPE = "mount-volumes"
+class KubernetesExecutorBuilderSuite extends PodBuilderSuite {
 
-  private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    BASIC_STEP_TYPE, classOf[BasicExecutorFeatureStep])
-  private val mountSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
-  private val envSecretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    ENV_SECRETS_STEP_TYPE, classOf[EnvSecretsFeatureStep])
-  private val localDirsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    LOCAL_DIRS_STEP_TYPE, classOf[LocalDirsFeatureStep])
-  private val mountVolumesStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
-    MOUNT_VOLUMES_STEP_TYPE, classOf[MountVolumesFeatureStep])
-
-  private val builderUnderTest = new KubernetesExecutorBuilder(
-    _ => basicFeatureStep,
-    _ => mountSecretsStep,
-    _ => envSecretsStep,
-    _ => localDirsStep,
-    _ => mountVolumesStep)
-
-  test("Basic steps are consistently applied.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Nil,
-      Seq.empty[String])
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf), BASIC_STEP_TYPE, LOCAL_DIRS_STEP_TYPE)
+  override protected def templateFileConf: ConfigEntry[_] = {
+    Config.KUBERNETES_EXECUTOR_PODTEMPLATE_FILE
   }
 
-  test("Apply secrets step if secrets are present.") {
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map("secret" -> "secretMountPath"),
-      Map("secret-name" -> "secret-key"),
-      Map.empty,
-      Nil,
-      Seq.empty[String])
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      SECRETS_STEP_TYPE,
-      ENV_SECRETS_STEP_TYPE)
+  override protected def buildPod(sparkConf: SparkConf, client: KubernetesClient): SparkPod = {
+    sparkConf.set("spark.driver.host", "https://driver.host.com")
+    val conf = KubernetesTestConf.createExecutorConf(sparkConf = sparkConf)
+    val secMgr = new SecurityManager(sparkConf)
+    new KubernetesExecutorBuilder().buildFromFeatures(conf, secMgr, client)
   }
 
-  test("Apply volumes step if mounts are present.") {
-    val volumeSpec = KubernetesVolumeSpec(
-      "volume",
-      "/tmp",
-      false,
-      KubernetesHostPathVolumeConf("/checkpoint"))
-    val conf = KubernetesConf(
-      new SparkConf(false),
-      KubernetesExecutorSpecificConf(
-        "executor-id", Some(new PodBuilder().build())),
-      "prefix",
-      "appId",
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      Map.empty,
-      volumeSpec :: Nil,
-      Seq.empty[String])
-    validateStepTypesApplied(
-      builderUnderTest.buildFromFeatures(conf),
-      BASIC_STEP_TYPE,
-      LOCAL_DIRS_STEP_TYPE,
-      MOUNT_VOLUMES_STEP_TYPE)
-  }
-
-  private def validateStepTypesApplied(resolvedPod: SparkPod, stepTypes: String*): Unit = {
-    assert(resolvedPod.pod.getMetadata.getLabels.size === stepTypes.size)
-    stepTypes.foreach { stepType =>
-      assert(resolvedPod.pod.getMetadata.getLabels.get(stepType) === stepType)
-    }
-  }
 }

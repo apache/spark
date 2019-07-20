@@ -100,16 +100,16 @@ class MatrixFactorizationModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> users_for_products[0]
     (1, (Rating(user=2, product=1, rating=...),))
 
-    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     3.73...
 
     >>> df = sqlContext.createDataFrame([Rating(1, 1, 1.0), Rating(1, 2, 2.0), Rating(2, 1, 2.0)])
-    >>> model = ALS.train(df, 1, nonnegative=True, seed=10)
+    >>> model = ALS.train(df, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     3.73...
 
-    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=123456789)
     >>> model.predict(2, 2)
     0.4...
 

@@ -38,7 +38,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
-  protected val parquetDataSourceName: String = "parquet"
+  protected val parquetDataSourceName: String =
+    classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat].getCanonicalName
 
   private def isParquetDataSource: Boolean = dataSourceName == parquetDataSourceName
 
@@ -115,7 +116,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     new StructType()
       .add("f1", FloatType, nullable = true)
       .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
-    new UDT.MyDenseVectorUDT()
+    new TestUDT.MyDenseVectorUDT()
   ).filter(supportsDataType)
 
   test(s"test all data types") {
@@ -135,46 +136,50 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         logInfo(s"Testing $dataType data type$extraMessage")
 
         val extraOptions = Map[String, String](
-          "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString
+          "parquet.enable.dictionary" -> parquetDictionaryEncodingEnabled.toString,
+          "timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX"
         )
 
         withTempPath { file =>
           val path = file.getCanonicalPath
 
-          val dataGenerator = RandomDataGenerator.forType(
-            dataType = dataType,
-            nullable = true,
-            new Random(System.nanoTime())
-          ).getOrElse {
-            fail(s"Failed to create data generator for schema $dataType")
+          val seed = System.nanoTime()
+          withClue(s"Random data generated with the seed: ${seed}") {
+            val dataGenerator = RandomDataGenerator.forType(
+              dataType = dataType,
+              nullable = true,
+              new Random(seed)
+            ).getOrElse {
+              fail(s"Failed to create data generator for schema $dataType")
+            }
+
+            // Create a DF for the schema with random data. The index field is used to sort the
+            // DataFrame.  This is a workaround for SPARK-10591.
+            val schema = new StructType()
+              .add("index", IntegerType, nullable = false)
+              .add("col", dataType, nullable = true)
+            val rdd =
+              spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
+            val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+            df.write
+              .mode("overwrite")
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .options(extraOptions)
+              .save(path)
+
+            val loadedDF = spark
+              .read
+              .format(dataSourceName)
+              .option("dataSchema", df.schema.json)
+              .schema(df.schema)
+              .options(extraOptions)
+              .load(path)
+              .orderBy("index")
+
+            checkAnswer(loadedDF, df)
           }
-
-          // Create a DF for the schema with random data. The index field is used to sort the
-          // DataFrame.  This is a workaround for SPARK-10591.
-          val schema = new StructType()
-            .add("index", IntegerType, nullable = false)
-            .add("col", dataType, nullable = true)
-          val rdd =
-            spark.sparkContext.parallelize((1 to 10).map(i => Row(i, dataGenerator())))
-          val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
-
-          df.write
-            .mode("overwrite")
-            .format(dataSourceName)
-            .option("dataSchema", df.schema.json)
-            .options(extraOptions)
-            .save(path)
-
-          val loadedDF = spark
-            .read
-            .format(dataSourceName)
-            .option("dataSchema", df.schema.json)
-            .schema(df.schema)
-            .options(extraOptions)
-            .load(path)
-            .orderBy("index")
-
-          checkAnswer(loadedDF, df)
         }
       }
     }
@@ -813,10 +818,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         assert(preferredLocations.distinct.length == 2)
       }
 
-      checkLocality()
-
-      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> dataSourceName) {
         checkLocality()
+
+        withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+          checkLocality()
+        }
       }
     }
   }

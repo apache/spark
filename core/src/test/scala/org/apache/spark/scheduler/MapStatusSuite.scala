@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 
 import scala.util.Random
 
-import org.mockito.Mockito._
+import org.mockito.Mockito.mock
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
@@ -31,6 +31,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.storage.BlockManagerId
 
 class MapStatusSuite extends SparkFunSuite {
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   test("compressSize") {
     assert(MapStatus.compressSize(0L) === 0)
@@ -180,7 +181,7 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("SPARK-21133 HighlyCompressedMapStatus#writeExternal throws NPE") {
     val conf = new SparkConf()
-      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .set(config.SERIALIZER, classOf[KryoSerializer].getName)
       .setMaster("local")
       .setAppName("SPARK-21133")
     withSpark(new SparkContext(conf)) { sc =>

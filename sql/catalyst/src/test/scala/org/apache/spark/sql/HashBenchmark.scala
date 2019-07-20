@@ -102,7 +102,7 @@ object HashBenchmark extends BenchmarkBase {
     }
   }
 
-  override def runBenchmarkSuite(): Unit = {
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val singleInt = new StructType().add("i", IntegerType)
     test("single ints", singleInt, 1 << 15, 1 << 14)
 

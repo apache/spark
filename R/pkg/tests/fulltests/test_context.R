@@ -54,15 +54,6 @@ test_that("Check masked functions", {
                sort(namesOfMaskedCompletely, na.last = TRUE))
 })
 
-test_that("repeatedly starting and stopping SparkR", {
-  for (i in 1:4) {
-    sc <- suppressWarnings(sparkR.init(master = sparkRTestMaster))
-    rdd <- parallelize(sc, 1:20, 2L)
-    expect_equal(countRDD(rdd), 20)
-    suppressWarnings(sparkR.stop())
-  }
-})
-
 test_that("repeatedly starting and stopping SparkSession", {
   for (i in 1:4) {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
@@ -101,9 +92,6 @@ test_that("job group functions can be called", {
   cancelJobGroup("groupId")
   clearJobGroup()
 
-  suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
-  suppressWarnings(cancelJobGroup(sc, "groupId"))
-  suppressWarnings(clearJobGroup(sc))
   sparkR.session.stop()
 })
 

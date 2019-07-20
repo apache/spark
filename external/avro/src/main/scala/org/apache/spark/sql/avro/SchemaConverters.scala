@@ -43,6 +43,10 @@ object SchemaConverters {
    * This function takes an avro schema and returns a sql schema.
    */
   def toSqlType(avroSchema: Schema): SchemaType = {
+    toSqlTypeHelper(avroSchema, Set.empty)
+  }
+
+  def toSqlTypeHelper(avroSchema: Schema, existingRecordNames: Set[String]): SchemaType = {
     avroSchema.getType match {
       case INT => avroSchema.getLogicalType match {
         case _: Date => SchemaType(DateType, nullable = false)
@@ -66,22 +70,31 @@ object SchemaConverters {
 
       case ENUM => SchemaType(StringType, nullable = false)
 
+      case NULL => SchemaType(NullType, nullable = true)
+
       case RECORD =>
+        if (existingRecordNames.contains(avroSchema.getFullName)) {
+          throw new IncompatibleSchemaException(s"""
+            |Found recursive reference in Avro schema, which can not be processed by Spark:
+            |${avroSchema.toString(true)}
+          """.stripMargin)
+        }
+        val newRecordNames = existingRecordNames + avroSchema.getFullName
         val fields = avroSchema.getFields.asScala.map { f =>
-          val schemaType = toSqlType(f.schema())
+          val schemaType = toSqlTypeHelper(f.schema(), newRecordNames)
           StructField(f.name, schemaType.dataType, schemaType.nullable)
         }
 
         SchemaType(StructType(fields), nullable = false)
 
       case ARRAY =>
-        val schemaType = toSqlType(avroSchema.getElementType)
+        val schemaType = toSqlTypeHelper(avroSchema.getElementType, existingRecordNames)
         SchemaType(
           ArrayType(schemaType.dataType, containsNull = schemaType.nullable),
           nullable = false)
 
       case MAP =>
-        val schemaType = toSqlType(avroSchema.getValueType)
+        val schemaType = toSqlTypeHelper(avroSchema.getValueType, existingRecordNames)
         SchemaType(
           MapType(StringType, schemaType.dataType, valueContainsNull = schemaType.nullable),
           nullable = false)
@@ -91,13 +104,14 @@ object SchemaConverters {
           // In case of a union with null, eliminate it and make a recursive call
           val remainingUnionTypes = avroSchema.getTypes.asScala.filterNot(_.getType == NULL)
           if (remainingUnionTypes.size == 1) {
-            toSqlType(remainingUnionTypes.head).copy(nullable = true)
+            toSqlTypeHelper(remainingUnionTypes.head, existingRecordNames).copy(nullable = true)
           } else {
-            toSqlType(Schema.createUnion(remainingUnionTypes.asJava)).copy(nullable = true)
+            toSqlTypeHelper(Schema.createUnion(remainingUnionTypes.asJava), existingRecordNames)
+              .copy(nullable = true)
           }
         } else avroSchema.getTypes.asScala.map(_.getType) match {
           case Seq(t1) =>
-            toSqlType(avroSchema.getTypes.get(0))
+            toSqlTypeHelper(avroSchema.getTypes.get(0), existingRecordNames)
           case Seq(t1, t2) if Set(t1, t2) == Set(INT, LONG) =>
             SchemaType(LongType, nullable = false)
           case Seq(t1, t2) if Set(t1, t2) == Set(FLOAT, DOUBLE) =>
@@ -107,7 +121,7 @@ object SchemaConverters {
             // This is consistent with the behavior when converting between Avro and Parquet.
             val fields = avroSchema.getTypes.asScala.zipWithIndex.map {
               case (s, i) =>
-                val schemaType = toSqlType(s)
+                val schemaType = toSqlTypeHelper(s, existingRecordNames)
                 // All fields are nullable because only one of them is set at a time
                 StructField(s"member$i", schemaType.dataType, nullable = true)
             }
@@ -139,6 +153,7 @@ object SchemaConverters {
       case FloatType => builder.floatType()
       case DoubleType => builder.doubleType()
       case StringType => builder.stringType()
+      case NullType => builder.nullType()
       case d: DecimalType =>
         val avroType = LogicalTypes.decimal(d.precision, d.scale)
         val fixedSize = minBytesForPrecision(d.precision)
@@ -169,7 +184,7 @@ object SchemaConverters {
       // This should never happen.
       case other => throw new IncompatibleSchemaException(s"Unexpected type $other.")
     }
-    if (nullable) {
+    if (nullable && catalystType != NullType) {
       Schema.createUnion(schema, nullSchema)
     } else {
       schema

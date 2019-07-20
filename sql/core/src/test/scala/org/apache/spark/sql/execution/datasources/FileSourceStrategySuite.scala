@@ -201,7 +201,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("partitioned table - case insensitive") {
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val table =
         createTable(
           files = Seq(
@@ -279,7 +279,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("Locality support for FileScanRDD") {
-    val partition = FilePartition(0, Seq(
+    val partition = FilePartition(0, Array(
       PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
       PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2")),
       PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3")),
@@ -414,24 +414,30 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
-    withTempPath { path =>
-      val tempDir = path.getCanonicalPath
-      spark.range(100)
-        .selectExpr("id", "id as b")
-        .write
-        .partitionBy("id")
-        .parquet(tempDir)
-      val df = spark.read.parquet(tempDir)
-      def getPlan(df: DataFrame): SparkPlan = {
-        df.queryExecution.executedPlan
+    Seq("orc", "").foreach { useV1ReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1ReaderList) {
+        withTempPath { path =>
+          val tempDir = path.getCanonicalPath
+          spark.range(100)
+            .selectExpr("id", "id as b")
+            .write
+            .partitionBy("id")
+            .orc(tempDir)
+          val df = spark.read.orc(tempDir)
+
+          def getPlan(df: DataFrame): SparkPlan = {
+            df.queryExecution.executedPlan
+          }
+
+          assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
+          assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
+        }
       }
-      assert(getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 2"))))
-      assert(!getPlan(df.where("id = 2")).sameResult(getPlan(df.where("id = 3"))))
     }
   }
 
   test("[SPARK-16818] exchange reuse respects differences in partition pruning") {
-    spark.conf.set("spark.sql.exchange.reuse", true)
+    spark.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, true)
     withTempPath { path =>
       val tempDir = path.getCanonicalPath
       spark.range(10)
@@ -614,7 +620,7 @@ class TestFileFormat extends TextBasedFileFormat {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    throw new NotImplementedError("JUST FOR TESTING")
+    throw new UnsupportedOperationException("JUST FOR TESTING")
   }
 
   override def buildReader(

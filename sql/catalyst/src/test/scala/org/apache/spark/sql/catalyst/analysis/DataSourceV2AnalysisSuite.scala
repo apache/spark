@@ -19,15 +19,98 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, UpCast}
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LeafNode, LogicalPlan, Project}
-import org.apache.spark.sql.types.{DoubleType, FloatType, StructField, StructType}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types._
+
+class V2AppendDataAnalysisSuite extends DataSourceV2AnalysisSuite {
+  override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
+    AppendData.byName(table, query)
+  }
+
+  override def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
+    AppendData.byPosition(table, query)
+  }
+}
+
+class V2OverwritePartitionsDynamicAnalysisSuite extends DataSourceV2AnalysisSuite {
+  override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
+    OverwritePartitionsDynamic.byName(table, query)
+  }
+
+  override def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
+    OverwritePartitionsDynamic.byPosition(table, query)
+  }
+}
+
+class V2OverwriteByExpressionAnalysisSuite extends DataSourceV2AnalysisSuite {
+  override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
+    OverwriteByExpression.byName(table, query, Literal(true))
+  }
+
+  override def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
+    OverwriteByExpression.byPosition(table, query, Literal(true))
+  }
+
+  test("delete expression is resolved using table fields") {
+    val table = TestRelation(StructType(Seq(
+      StructField("x", DoubleType, nullable = false),
+      StructField("y", DoubleType))).toAttributes)
+
+    val query = TestRelation(StructType(Seq(
+      StructField("a", DoubleType, nullable = false),
+      StructField("b", DoubleType))).toAttributes)
+
+    val a = query.output.head
+    val b = query.output.last
+    val x = table.output.head
+
+    val parsedPlan = OverwriteByExpression.byPosition(table, query,
+      LessThanOrEqual(UnresolvedAttribute(Seq("x")), Literal(15.0d)))
+
+    val expectedPlan = OverwriteByExpression.byPosition(table,
+      Project(Seq(
+        Alias(Cast(a, DoubleType, Some(conf.sessionLocalTimeZone)), "x")(),
+        Alias(Cast(b, DoubleType, Some(conf.sessionLocalTimeZone)), "y")()),
+        query),
+      LessThanOrEqual(
+        AttributeReference("x", DoubleType, nullable = false)(x.exprId),
+        Literal(15.0d)))
+
+    assertNotResolved(parsedPlan)
+    checkAnalysis(parsedPlan, expectedPlan)
+    assertResolved(expectedPlan)
+  }
+
+  test("delete expression is not resolved using query fields") {
+    val xRequiredTable = TestRelation(StructType(Seq(
+      StructField("x", DoubleType, nullable = false),
+      StructField("y", DoubleType))).toAttributes)
+
+    val query = TestRelation(StructType(Seq(
+      StructField("a", DoubleType, nullable = false),
+      StructField("b", DoubleType))).toAttributes)
+
+    // the write is resolved (checked above). this test plan is not because of the expression.
+    val parsedPlan = OverwriteByExpression.byPosition(xRequiredTable, query,
+      LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
+
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
+  }
+}
 
 case class TestRelation(output: Seq[AttributeReference]) extends LeafNode with NamedRelation {
   override def name: String = "table-name"
 }
 
-class DataSourceV2AnalysisSuite extends AnalysisTest {
+case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
+  extends LeafNode with NamedRelation {
+  override def name: String = "test-name"
+  override def skipSchemaResolution: Boolean = true
+}
+
+abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
   val table = TestRelation(StructType(Seq(
     StructField("x", FloatType),
     StructField("y", FloatType))).toAttributes)
@@ -40,21 +123,25 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     StructField("x", DoubleType),
     StructField("y", DoubleType))).toAttributes)
 
-  test("Append.byName: basic behavior") {
+  def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan
+
+  def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
+
+  test("byName: basic behavior") {
     val query = TestRelation(table.schema.toAttributes)
 
-    val parsedPlan = AppendData.byName(table, query)
+    val parsedPlan = byName(table, query)
 
     checkAnalysis(parsedPlan, parsedPlan)
     assertResolved(parsedPlan)
   }
 
-  test("Append.byName: does not match by position") {
+  test("byName: does not match by position") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
       StructField("b", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byName(table, query)
+    val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -62,12 +149,12 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot find data for output column", "'x'", "'y'"))
   }
 
-  test("Append.byName: case sensitive column resolution") {
+  test("byName: case sensitive column resolution") {
     val query = TestRelation(StructType(Seq(
       StructField("X", FloatType), // doesn't match case!
       StructField("y", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byName(table, query)
+    val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -76,7 +163,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       caseSensitive = true)
   }
 
-  test("Append.byName: case insensitive column resolution") {
+  test("byName: case insensitive column resolution") {
     val query = TestRelation(StructType(Seq(
       StructField("X", FloatType), // doesn't match case!
       StructField("y", FloatType))).toAttributes)
@@ -84,8 +171,8 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     val X = query.output.head
     val y = query.output.last
 
-    val parsedPlan = AppendData.byName(table, query)
-    val expectedPlan = AppendData.byName(table,
+    val parsedPlan = byName(table, query)
+    val expectedPlan = byName(table,
       Project(Seq(
         Alias(Cast(toLower(X), FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
@@ -96,7 +183,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertResolved(expectedPlan)
   }
 
-  test("Append.byName: data columns are reordered by name") {
+  test("byName: data columns are reordered by name") {
     // out of order
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType),
@@ -105,8 +192,8 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     val y = query.output.head
     val x = query.output.last
 
-    val parsedPlan = AppendData.byName(table, query)
-    val expectedPlan = AppendData.byName(table,
+    val parsedPlan = byName(table, query)
+    val expectedPlan = byName(table,
       Project(Seq(
         Alias(Cast(x, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
@@ -117,26 +204,26 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertResolved(expectedPlan)
   }
 
-  test("Append.byName: fail nullable data written to required columns") {
-    val parsedPlan = AppendData.byName(requiredTable, table)
+  test("byName: fail nullable data written to required columns") {
+    val parsedPlan = byName(requiredTable, table)
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'", "'y'"))
   }
 
-  test("Append.byName: allow required data written to nullable columns") {
-    val parsedPlan = AppendData.byName(table, requiredTable)
+  test("byName: allow required data written to nullable columns") {
+    val parsedPlan = byName(table, requiredTable)
     assertResolved(parsedPlan)
     checkAnalysis(parsedPlan, parsedPlan)
   }
 
-  test("Append.byName: missing required columns cause failure and are identified by name") {
+  test("byName: missing required columns cause failure and are identified by name") {
     // missing required field x
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType, nullable = false))).toAttributes)
 
-    val parsedPlan = AppendData.byName(requiredTable, query)
+    val parsedPlan = byName(requiredTable, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -144,12 +231,12 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot find data for output column", "'x'"))
   }
 
-  test("Append.byName: missing optional columns cause failure and are identified by name") {
+  test("byName: missing optional columns cause failure and are identified by name") {
     // missing optional field x
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byName(table, query)
+    val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -157,8 +244,8 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot find data for output column", "'x'"))
   }
 
-  test("Append.byName: fail canWrite check") {
-    val parsedPlan = AppendData.byName(table, widerTable)
+  test("byName: fail canWrite check") {
+    val parsedPlan = byName(table, widerTable)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -166,12 +253,12 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
   }
 
-  test("Append.byName: insert safe cast") {
+  test("byName: insert safe cast") {
     val x = table.output.head
     val y = table.output.last
 
-    val parsedPlan = AppendData.byName(widerTable, table)
-    val expectedPlan = AppendData.byName(widerTable,
+    val parsedPlan = byName(widerTable, table)
+    val expectedPlan = byName(widerTable,
       Project(Seq(
         Alias(Cast(x, DoubleType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(y, DoubleType, Some(conf.sessionLocalTimeZone)), "y")()),
@@ -182,13 +269,13 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertResolved(expectedPlan)
   }
 
-  test("Append.byName: fail extra data fields") {
+  test("byName: fail extra data fields") {
     val query = TestRelation(StructType(Seq(
       StructField("x", FloatType),
       StructField("y", FloatType),
       StructField("z", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byName(table, query)
+    val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -197,7 +284,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Data columns: 'x', 'y', 'z'"))
   }
 
-  test("Append.byName: multiple field errors are reported") {
+  test("byName: multiple field errors are reported") {
     val xRequiredTable = TestRelation(StructType(Seq(
       StructField("x", FloatType, nullable = false),
       StructField("y", DoubleType))).toAttributes)
@@ -206,7 +293,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       StructField("x", DoubleType),
       StructField("b", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byName(xRequiredTable, query)
+    val parsedPlan = byName(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -216,7 +303,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot find data for output column", "'y'"))
   }
 
-  test("Append.byPosition: basic behavior") {
+  test("byPosition: basic behavior") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
       StructField("b", FloatType))).toAttributes)
@@ -224,8 +311,8 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     val a = query.output.head
     val b = query.output.last
 
-    val parsedPlan = AppendData.byPosition(table, query)
-    val expectedPlan = AppendData.byPosition(table,
+    val parsedPlan = byPosition(table, query)
+    val expectedPlan = byPosition(table,
       Project(Seq(
         Alias(Cast(a, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(b, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
@@ -236,7 +323,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertResolved(expectedPlan)
   }
 
-  test("Append.byPosition: data columns are not reordered") {
+  test("byPosition: data columns are not reordered") {
     // out of order
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType),
@@ -245,8 +332,8 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     val y = query.output.head
     val x = query.output.last
 
-    val parsedPlan = AppendData.byPosition(table, query)
-    val expectedPlan = AppendData.byPosition(table,
+    val parsedPlan = byPosition(table, query)
+    val expectedPlan = byPosition(table,
       Project(Seq(
         Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(x, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
@@ -257,26 +344,26 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertResolved(expectedPlan)
   }
 
-  test("Append.byPosition: fail nullable data written to required columns") {
-    val parsedPlan = AppendData.byPosition(requiredTable, table)
+  test("byPosition: fail nullable data written to required columns") {
+    val parsedPlan = byPosition(requiredTable, table)
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'", "'y'"))
   }
 
-  test("Append.byPosition: allow required data written to nullable columns") {
-    val parsedPlan = AppendData.byPosition(table, requiredTable)
+  test("byPosition: allow required data written to nullable columns") {
+    val parsedPlan = byPosition(table, requiredTable)
     assertResolved(parsedPlan)
     checkAnalysis(parsedPlan, parsedPlan)
   }
 
-  test("Append.byPosition: missing required columns cause failure") {
+  test("byPosition: missing required columns cause failure") {
     // missing optional field x
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType, nullable = false))).toAttributes)
 
-    val parsedPlan = AppendData.byPosition(requiredTable, query)
+    val parsedPlan = byPosition(requiredTable, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -285,12 +372,12 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Data columns: 'y'"))
   }
 
-  test("Append.byPosition: missing optional columns cause failure") {
+  test("byPosition: missing optional columns cause failure") {
     // missing optional field x
     val query = TestRelation(StructType(Seq(
       StructField("y", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byPosition(table, query)
+    val parsedPlan = byPosition(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -299,12 +386,12 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Data columns: 'y'"))
   }
 
-  test("Append.byPosition: fail canWrite check") {
+  test("byPosition: fail canWrite check") {
     val widerTable = TestRelation(StructType(Seq(
       StructField("a", DoubleType),
       StructField("b", DoubleType))).toAttributes)
 
-    val parsedPlan = AppendData.byPosition(table, widerTable)
+    val parsedPlan = byPosition(table, widerTable)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -312,7 +399,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
   }
 
-  test("Append.byPosition: insert safe cast") {
+  test("byPosition: insert safe cast") {
     val widerTable = TestRelation(StructType(Seq(
       StructField("a", DoubleType),
       StructField("b", DoubleType))).toAttributes)
@@ -320,8 +407,8 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     val x = table.output.head
     val y = table.output.last
 
-    val parsedPlan = AppendData.byPosition(widerTable, table)
-    val expectedPlan = AppendData.byPosition(widerTable,
+    val parsedPlan = byPosition(widerTable, table)
+    val expectedPlan = byPosition(widerTable,
       Project(Seq(
         Alias(Cast(x, DoubleType, Some(conf.sessionLocalTimeZone)), "a")(),
         Alias(Cast(y, DoubleType, Some(conf.sessionLocalTimeZone)), "b")()),
@@ -332,13 +419,13 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
     assertResolved(expectedPlan)
   }
 
-  test("Append.byPosition: fail extra data fields") {
+  test("byPosition: fail extra data fields") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
       StructField("b", FloatType),
       StructField("c", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byName(table, query)
+    val parsedPlan = byName(table, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
@@ -347,7 +434,7 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       "Data columns: 'a', 'b', 'c'"))
   }
 
-  test("Append.byPosition: multiple field errors are reported") {
+  test("byPosition: multiple field errors are reported") {
     val xRequiredTable = TestRelation(StructType(Seq(
       StructField("x", FloatType, nullable = false),
       StructField("y", DoubleType))).toAttributes)
@@ -356,13 +443,71 @@ class DataSourceV2AnalysisSuite extends AnalysisTest {
       StructField("x", DoubleType),
       StructField("b", FloatType))).toAttributes)
 
-    val parsedPlan = AppendData.byPosition(xRequiredTable, query)
+    val parsedPlan = byPosition(xRequiredTable, query)
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq(
       "Cannot write incompatible data to table", "'table-name'",
       "Cannot write nullable values to non-null column", "'x'",
       "Cannot safely cast", "'x'", "DoubleType to FloatType"))
+  }
+
+  test("bypass output column resolution") {
+    val table = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("a", FloatType, nullable = false),
+      StructField("b", DoubleType))).toAttributes)
+
+    val query = TestRelation(StructType(Seq(
+      StructField("s", StringType))).toAttributes)
+
+    withClue("byName") {
+      val parsedPlan = byName(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+
+    withClue("byPosition") {
+      val parsedPlan = byPosition(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+  }
+
+  test("check fields of struct type column") {
+    val tableWithStructCol = TestRelation(
+      new StructType().add(
+        "col", new StructType().add("a", IntegerType).add("b", IntegerType)
+      ).toAttributes
+    )
+
+    val query = TestRelation(
+      new StructType().add(
+        "col", new StructType().add("x", IntegerType).add("y", IntegerType)
+      ).toAttributes
+    )
+
+    withClue("byName") {
+      val parsedPlan = byName(tableWithStructCol, query)
+      assertNotResolved(parsedPlan)
+      assertAnalysisError(parsedPlan, Seq(
+        "Cannot write incompatible data to table", "'table-name'",
+        "Struct 'col' 0-th field name does not match", "expected 'a', found 'x'",
+        "Struct 'col' 1-th field name does not match", "expected 'b', found 'y'"))
+    }
+
+    withClue("byPosition") {
+      val parsedPlan = byPosition(tableWithStructCol, query)
+      assertNotResolved(parsedPlan)
+
+      val expectedQuery = Project(Seq(Alias(
+        Cast(
+          query.output.head,
+          new StructType().add("a", IntegerType).add("b", IntegerType),
+          Some(conf.sessionLocalTimeZone)),
+        "col")()),
+        query)
+      checkAnalysis(parsedPlan, byPosition(tableWithStructCol, expectedQuery))
+    }
   }
 
   def assertNotResolved(logicalPlan: LogicalPlan): Unit = {

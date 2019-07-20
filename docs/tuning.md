@@ -3,6 +3,21 @@ layout: global
 displayTitle: Tuning Spark
 title: Tuning
 description: Tuning and performance optimization guide for Spark SPARK_VERSION_SHORT
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -115,7 +130,7 @@ variety of workloads without requiring user expertise of how memory is divided i
 Although there are two relevant configurations, the typical user should not need to adjust them
 as the default values are applicable to most workloads:
 
-* `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MB)
+* `spark.memory.fraction` expresses the size of `M` as a fraction of the (JVM heap space - 300MiB)
 (default 0.6). The rest of the space (40%) is reserved for user data structures, internal
 metadata in Spark, and safeguarding against OOM errors in the case of sparse and unusually
 large records.
@@ -147,7 +162,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
    Java standard library.
 2. Avoid nested structures with a lot of small objects and pointers when possible.
 3. Consider using numeric IDs or enumeration objects instead of strings for keys.
-4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
+4. If you have less than 32 GiB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. You can add these options in
    [`spark-env.sh`](configuration.html#environment-variables).
 
@@ -224,8 +239,8 @@ temporary objects created during task execution. Some steps which may be useful 
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 128 MB,
-  we can estimate size of Eden to be `4*3*128MB`.
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 128 MiB,
+  we can estimate size of Eden to be `4*3*128MiB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 
@@ -233,7 +248,7 @@ Our experience suggests that the effect of GC tuning depends on your application
 There are [many more tuning options](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/index.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
 
-GC tuning flags for executors can be specified by setting `spark.executor.extraJavaOptions` in
+GC tuning flags for executors can be specified by setting `spark.executor.defaultJavaOptions` or `spark.executor.extraJavaOptions` in
 a job's configuration.
 
 # Other Considerations
@@ -267,7 +282,7 @@ available in `SparkContext` can greatly reduce the size of each serialized task,
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.
 Spark prints the serialized size of each task on the master, so you can look at that to
-decide whether your tasks are too large; in general tasks larger than about 20 KB are probably
+decide whether your tasks are too large; in general tasks larger than about 20 KiB are probably
 worth optimizing.
 
 ## Data Locality

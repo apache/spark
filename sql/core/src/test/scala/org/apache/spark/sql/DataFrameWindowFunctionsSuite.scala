@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import org.scalatest.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
+import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -668,17 +670,76 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       ("S2", "P2", 300)
     ).toDF("sno", "pno", "qty")
 
-    val w1 = Window.partitionBy("sno")
-    val w2 = Window.partitionBy("sno", "pno")
+    Seq(true, false).foreach { transposeWindowEnabled =>
+      val excludedRules = if (transposeWindowEnabled) "" else TransposeWindow.ruleName
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules) {
+        val w1 = Window.partitionBy("sno")
+        val w2 = Window.partitionBy("sno", "pno")
+
+        val select = df.select($"sno", $"pno", $"qty", sum($"qty").over(w2).alias("sum_qty_2"))
+          .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1"))
+
+        val expectedNumExchanges = if (transposeWindowEnabled) 1 else 2
+        val actualNumExchanges = select.queryExecution.executedPlan.collect {
+          case e: Exchange => e
+        }.length
+        assert(actualNumExchanges == expectedNumExchanges)
+
+        checkAnswer(
+          select,
+          Seq(
+            Row("S1", "P1", 100, 800, 800),
+            Row("S1", "P1", 700, 800, 800),
+            Row("S2", "P1", 200, 200, 500),
+            Row("S2", "P2", 300, 300, 500)))
+      }
+    }
+  }
+
+  test("NaN and -0.0 in window partition keys") {
+    val df = Seq(
+      (Float.NaN, Double.NaN),
+      (0.0f/0.0f, 0.0/0.0),
+      (0.0f, 0.0),
+      (-0.0f, -0.0)).toDF("f", "d")
 
     checkAnswer(
-      df.select($"sno", $"pno", $"qty", sum($"qty").over(w2).alias("sum_qty_2"))
-        .select($"sno", $"pno", $"qty", col("sum_qty_2"), sum("qty").over(w1).alias("sum_qty_1")),
+      df.select($"f", count(lit(1)).over(Window.partitionBy("f", "d"))),
       Seq(
-        Row("S1", "P1", 100, 800, 800),
-        Row("S1", "P1", 700, 800, 800),
-        Row("S2", "P1", 200, 200, 500),
-        Row("S2", "P2", 300, 300, 500)))
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
 
+    // test with complicated window partition keys.
+    val windowSpec1 = Window.partitionBy(array("f"), struct("d"))
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(windowSpec1)),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    val windowSpec2 = Window.partitionBy(array(struct("f")), struct(array("d")))
+    checkAnswer(
+      df.select($"f", count(lit(1)).over(windowSpec2)),
+      Seq(
+        Row(Float.NaN, 2),
+        Row(0.0f/0.0f, 2),
+        Row(0.0f, 2),
+        Row(-0.0f, 2)))
+
+    // test with df with complicated-type columns.
+    val df2 = Seq(
+      (Array(-0.0f, 0.0f), Tuple2(-0.0d, Double.NaN), Seq(Tuple2(-0.0d, Double.NaN))),
+      (Array(0.0f, -0.0f), Tuple2(0.0d, Double.NaN), Seq(Tuple2(0.0d, 0.0/0.0)))
+    ).toDF("arr", "stru", "arrOfStru")
+    val windowSpec3 = Window.partitionBy("arr", "stru", "arrOfStru")
+    checkAnswer(
+      df2.select($"arr", $"stru", $"arrOfStru", count(lit(1)).over(windowSpec3)),
+      Seq(
+        Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
+        Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
   }
 }

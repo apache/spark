@@ -20,10 +20,11 @@ package org.apache.spark
 import java.io.Serializable
 import java.util.Properties
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Evolving}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
@@ -95,13 +96,6 @@ abstract class TaskContext extends Serializable {
    * Returns true if the task has been killed.
    */
   def isInterrupted(): Boolean
-
-  /**
-   * Returns true if the task is running locally in the driver program.
-   * @return false
-   */
-  @deprecated("Local execution was removed, so this always returns false", "2.0.0")
-  def isRunningLocally(): Boolean
 
   /**
    * Adds a (Java friendly) listener to be executed on task completion.
@@ -182,6 +176,14 @@ abstract class TaskContext extends Serializable {
    * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String
+
+  /**
+   * Resources allocated to the task. The key is the resource name and the value is information
+   * about the resource. Please refer to [[org.apache.spark.resource.ResourceInformation]] for
+   * specifics.
+   */
+  @Evolving
+  def resources(): Map[String, ResourceInformation]
 
   @DeveloperApi
   def taskMetrics(): TaskMetrics

@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.{URI, URL}
+import java.util.EnumSet
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
@@ -39,7 +40,7 @@ import org.json4s.jackson.JsonMethods.{pretty, render}
 
 import org.apache.spark.{SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.Utils
 
 /**
@@ -68,43 +69,16 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
     new ServletParams(responder, "text/plain")
 
-  def createServlet[T <: AnyRef](
+  private def createServlet[T <: AnyRef](
       servletParams: ServletParams[T],
-      securityMgr: SecurityManager,
       conf: SparkConf): HttpServlet = {
-
-    // SPARK-10589 avoid frame-related click-jacking vulnerability, using X-Frame-Options
-    // (see http://tools.ietf.org/html/rfc7034). By default allow framing only from the
-    // same origin, but allow framing for a specific named URI.
-    // Example: spark.ui.allowFramingFrom = https://example.com/
-    val allowFramingFrom = conf.getOption("spark.ui.allowFramingFrom")
-    val xFrameOptionsValue =
-      allowFramingFrom.map(uri => s"ALLOW-FROM $uri").getOrElse("SAMEORIGIN")
-
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
         try {
-          if (securityMgr.checkUIViewPermissions(request.getRemoteUser)) {
-            response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
-            response.setStatus(HttpServletResponse.SC_OK)
-            val result = servletParams.responder(request)
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-            response.setHeader("X-Frame-Options", xFrameOptionsValue)
-            response.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
-            if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
-              response.setHeader("X-Content-Type-Options", "nosniff")
-            }
-            if (request.getScheme == "https") {
-              conf.get(UI_STRICT_TRANSPORT_SECURITY).foreach(
-                response.setHeader("Strict-Transport-Security", _))
-            }
-            response.getWriter.print(servletParams.extractFn(result))
-          } else {
-            response.setStatus(HttpServletResponse.SC_FORBIDDEN)
-            response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-            response.sendError(HttpServletResponse.SC_FORBIDDEN,
-              "User is not authorized to access this page.")
-          }
+          response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
+          response.setStatus(HttpServletResponse.SC_OK)
+          val result = servletParams.responder(request)
+          response.getWriter.print(servletParams.extractFn(result))
         } catch {
           case e: IllegalArgumentException =>
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage)
@@ -124,10 +98,9 @@ private[spark] object JettyUtils extends Logging {
   def createServletHandler[T <: AnyRef](
       path: String,
       servletParams: ServletParams[T],
-      securityMgr: SecurityManager,
       conf: SparkConf,
       basePath: String = ""): ServletContextHandler = {
-    createServletHandler(path, createServlet(servletParams, securityMgr, conf), basePath)
+    createServletHandler(path, createServlet(servletParams, conf), basePath)
   }
 
   /** Create a context handler that responds to a request with the given path prefix */
@@ -257,36 +230,6 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
-  /** Add filters, if any, to the given list of ServletContextHandlers */
-  def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
-    val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
-    filters.foreach {
-      case filter : String =>
-        if (!filter.isEmpty) {
-          logInfo(s"Adding filter $filter to ${handlers.map(_.getContextPath).mkString(", ")}.")
-          val holder : FilterHolder = new FilterHolder()
-          holder.setClassName(filter)
-          // Get any parameters for each filter
-          conf.get("spark." + filter + ".params", "").split(',').map(_.trim()).toSet.foreach {
-            param: String =>
-              if (!param.isEmpty) {
-                val parts = param.split("=")
-                if (parts.length == 2) holder.setInitParameter(parts(0), parts(1))
-             }
-          }
-
-          val prefix = s"spark.$filter.param."
-          conf.getAll
-            .filter { case (k, v) => k.length() > prefix.length() && k.startsWith(prefix) }
-            .foreach { case (k, v) => holder.setInitParameter(k.substring(prefix.length()), v) }
-
-          val enumDispatcher = java.util.EnumSet.of(DispatcherType.ASYNC, DispatcherType.ERROR,
-            DispatcherType.FORWARD, DispatcherType.INCLUDE, DispatcherType.REQUEST)
-          handlers.foreach { case(handler) => handler.addFilter(holder, "/*", enumDispatcher) }
-        }
-    }
-  }
-
   /**
    * Attempt to start a Jetty server bound to the supplied hostName:port using the given
    * context handlers.
@@ -298,11 +241,8 @@ private[spark] object JettyUtils extends Logging {
       hostName: String,
       port: Int,
       sslOptions: SSLOptions,
-      handlers: Seq[ServletContextHandler],
       conf: SparkConf,
       serverName: String = ""): ServerInfo = {
-
-    addFilters(handlers, conf)
 
     // Start the server first, with no connectors.
     val pool = new QueuedThreadPool
@@ -356,13 +296,17 @@ private[spark] object JettyUtils extends Logging {
 
         (connector, connector.getLocalPort())
       }
+      val httpConfig = new HttpConfiguration()
+      val requestHeaderSize = conf.get(UI_REQUEST_HEADER_SIZE).toInt
+      logDebug(s"Using requestHeaderSize: $requestHeaderSize")
+      httpConfig.setRequestHeaderSize(requestHeaderSize)
 
       // If SSL is configured, create the secure connector first.
       val securePort = sslOptions.createJettySslContextFactory().map { factory =>
         val securePort = sslOptions.port.getOrElse(if (port > 0) Utils.userPort(port, 400) else 0)
         val secureServerName = if (serverName.nonEmpty) s"$serverName (HTTPS)" else serverName
         val connectionFactories = AbstractConnectionFactory.getFactories(factory,
-          new HttpConnectionFactory())
+          new HttpConnectionFactory(httpConfig))
 
         def sslConnect(currentPort: Int): (ServerConnector, Int) = {
           newConnector(connectionFactories, currentPort)
@@ -377,7 +321,7 @@ private[spark] object JettyUtils extends Logging {
 
       // Bind the HTTP port.
       def httpConnect(currentPort: Int): (ServerConnector, Int) = {
-        newConnector(Array(new HttpConnectionFactory()), currentPort)
+        newConnector(Array(new HttpConnectionFactory(httpConfig)), currentPort)
       }
 
       val (httpConnector, httpPort) = Utils.startServiceOnPort[ServerConnector](port, httpConnect,
@@ -396,16 +340,6 @@ private[spark] object JettyUtils extends Logging {
       }
 
       server.addConnector(httpConnector)
-
-      // Add all the known handlers now that connectors are configured.
-      handlers.foreach { h =>
-        h.setVirtualHosts(toVirtualHosts(SPARK_CONNECTOR_NAME))
-        val gzipHandler = new GzipHandler()
-        gzipHandler.setHandler(h)
-        collection.addHandler(gzipHandler)
-        gzipHandler.start()
-      }
-
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
       ServerInfo(server, httpPort, securePort, conf, collection)
     } catch {
@@ -487,6 +421,16 @@ private[spark] object JettyUtils extends Logging {
     }
   }
 
+  def addFilter(
+      handler: ServletContextHandler,
+      filter: String,
+      params: Map[String, String]): Unit = {
+    val holder = new FilterHolder()
+    holder.setClassName(filter)
+    params.foreach { case (k, v) => holder.setInitParameter(k, v) }
+    handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
+  }
+
   // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
   private def createRedirectURI(
       scheme: String, server: String, port: Int, path: String, query: String) = {
@@ -507,20 +451,37 @@ private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
     securePort: Option[Int],
-    conf: SparkConf,
-    private val rootHandler: ContextHandlerCollection) {
+    private val conf: SparkConf,
+    private val rootHandler: ContextHandlerCollection) extends Logging {
 
-  def addHandler(handler: ServletContextHandler): Unit = {
+  def addHandler(
+      handler: ServletContextHandler,
+      securityMgr: SecurityManager): Unit = synchronized {
     handler.setVirtualHosts(JettyUtils.toVirtualHosts(JettyUtils.SPARK_CONNECTOR_NAME))
-    JettyUtils.addFilters(Seq(handler), conf)
-    rootHandler.addHandler(handler)
+    addFilters(handler, securityMgr)
+
+    val gzipHandler = new GzipHandler()
+    gzipHandler.setHandler(handler)
+    rootHandler.addHandler(gzipHandler)
+
     if (!handler.isStarted()) {
       handler.start()
     }
+    gzipHandler.start()
   }
 
-  def removeHandler(handler: ContextHandler): Unit = {
-    rootHandler.removeHandler(handler)
+  def removeHandler(handler: ServletContextHandler): Unit = synchronized {
+    // Since addHandler() always adds a wrapping gzip handler, find the container handler
+    // and remove it.
+    rootHandler.getHandlers()
+      .find { h =>
+        h.isInstanceOf[GzipHandler] && h.asInstanceOf[GzipHandler].getHandler() == handler
+      }
+      .foreach { h =>
+        rootHandler.removeHandler(h)
+        h.stop()
+      }
+
     if (handler.isStarted) {
       handler.stop()
     }
@@ -535,4 +496,33 @@ private[spark] case class ServerInfo(
       threadPool.asInstanceOf[LifeCycle].stop
     }
   }
+
+  /**
+   * Add filters, if any, to the given ServletContextHandlers. Always adds a filter at the end
+   * of the chain to perform security-related functions.
+   */
+  private def addFilters(handler: ServletContextHandler, securityMgr: SecurityManager): Unit = {
+    conf.get(UI_FILTERS).foreach { filter =>
+      logInfo(s"Adding filter to ${handler.getContextPath()}: $filter")
+      val oldParams = conf.getOption(s"spark.$filter.params").toSeq
+        .flatMap(Utils.stringToSeq)
+        .flatMap { param =>
+          val parts = param.split("=")
+          if (parts.length == 2) Some(parts(0) -> parts(1)) else None
+        }
+        .toMap
+
+      val newParams = conf.getAllWithPrefix(s"spark.$filter.param.").toMap
+
+      JettyUtils.addFilter(handler, filter, oldParams ++ newParams)
+    }
+
+    // This filter must come after user-installed filters, since that's where authentication
+    // filters are installed. This means that custom filters will see the request before it's
+    // been validated by the security filter.
+    val securityFilter = new HttpSecurityFilter(conf, securityMgr)
+    val holder = new FilterHolder(securityFilter)
+    handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
+  }
+
 }

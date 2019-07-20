@@ -29,7 +29,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #'
 #' This function reads a text file from HDFS, a local file system (available on all
 #' nodes), or any Hadoop-supported file system URI, and creates an
-#' RDD of strings from it.
+#' RDD of strings from it. The text files must be encoded as UTF-8.
 #'
 #' @param sc SparkContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
@@ -81,13 +81,33 @@ objectFile <- function(sc, path, minPartitions = NULL) {
   RDD(jrdd, "byte")
 }
 
+makeSplits <- function(numSerializedSlices, length) {
+  # Generate the slice ids to put each row
+  # For instance, for numSerializedSlices of 22, length of 50
+  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
+  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
+  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
+  if (numSerializedSlices > 0) {
+    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
+      # nolint start
+      start <- trunc((as.numeric(x) * length) / numSerializedSlices)
+      end <- trunc(((as.numeric(x) + 1) * length) / numSerializedSlices)
+      # nolint end
+      rep(start, end - start)
+    }))
+  } else {
+    1
+  }
+}
+
 #' Create an RDD from a homogeneous list or vector.
 #'
 #' This function creates an RDD from a local homogeneous list in R. The elements
 #' in the list are split into \code{numSlices} slices and distributed to nodes
 #' in the cluster.
 #'
-#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MB), the function
+#' If size of serialized slices is larger than spark.r.maxAllocationLimit or (200MiB), the function
 #' will write it to disk and send the file name to JVM. Also to make sure each slice is not
 #' larger than that limit, number of slices may be increased.
 #'
@@ -143,25 +163,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # For large objects we make sure the size of each slice is also smaller than sizeLimit
   numSerializedSlices <- min(len, max(numSlices, ceiling(objectSize / sizeLimit)))
 
-  # Generate the slice ids to put each row
-  # For instance, for numSerializedSlices of 22, length of 50
-  #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
-  # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
-  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
-  # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
-  splits <- if (numSerializedSlices > 0) {
-    unlist(lapply(0: (numSerializedSlices - 1), function(x) {
-      # nolint start
-      start <- trunc((as.numeric(x) * len) / numSerializedSlices)
-      end <- trunc(((as.numeric(x) + 1) * len) / numSerializedSlices)
-      # nolint end
-      rep(start, end - start)
-    }))
-  } else {
-    1
-  }
-
-  slices <- split(coll, splits)
+  slices <- split(coll, makeSplits(numSerializedSlices, len))
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
@@ -173,13 +175,15 @@ parallelize <- function(sc, coll, numSlices = 1) {
   if (objectSize < sizeLimit) {
     jrdd <- callJStatic("org.apache.spark.api.r.RRDD", "createRDDFromArray", sc, serializedSlices)
   } else {
-    if (callJStatic("org.apache.spark.api.r.RUtils", "getEncryptionEnabled", sc)) {
+    if (callJStatic("org.apache.spark.api.r.RUtils", "isEncryptionEnabled", sc)) {
+      connectionTimeout <- as.numeric(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
       # the length of slices here is the parallelism to use in the jvm's sc.parallelize()
       parallelism <- as.integer(numSlices)
       jserver <- newJObject("org.apache.spark.api.r.RParallelizeServer", sc, parallelism)
       authSecret <- callJMethod(jserver, "secret")
       port <- callJMethod(jserver, "port")
-      conn <- socketConnection(port = port, blocking = TRUE, open = "wb", timeout = 1500)
+      conn <- socketConnection(
+        port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
       doServerAuth(conn, authSecret)
       writeToConnection(serializedSlices, conn)
       jrdd <- callJMethod(jserver, "getResult")

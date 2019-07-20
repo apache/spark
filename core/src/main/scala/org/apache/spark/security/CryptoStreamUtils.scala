@@ -20,6 +20,7 @@ import java.io.{Closeable, InputStream, IOException, OutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, WritableByteChannel}
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import javax.crypto.KeyGenerator
 import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 
@@ -133,10 +134,10 @@ private[spark] object CryptoStreamUtils extends Logging {
    */
   private[this] def createInitializationVector(properties: Properties): Array[Byte] = {
     val iv = new Array[Byte](IV_LENGTH_IN_BYTES)
-    val initialIVStart = System.currentTimeMillis()
+    val initialIVStart = System.nanoTime()
     CryptoRandomFactory.getCryptoRandom(properties).nextBytes(iv)
-    val initialIVFinish = System.currentTimeMillis()
-    val initialIVTime = initialIVFinish - initialIVStart
+    val initialIVFinish = System.nanoTime()
+    val initialIVTime = TimeUnit.NANOSECONDS.toMillis(initialIVFinish - initialIVStart)
     if (initialIVTime > 2000) {
       logWarning(s"It costs ${initialIVTime} milliseconds to create the Initialization Vector " +
         s"used by CryptoStream")
