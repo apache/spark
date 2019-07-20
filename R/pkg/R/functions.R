@@ -4028,8 +4028,6 @@ setMethod("current_timestamp",
             column(jc)
           })
 
-
-
 #' @details
 #' \code{make_date}: Returns date made from year, month and day.
 #'
