@@ -34,6 +34,17 @@ NULL
 #' df <- createDataFrame(cbind(model = rownames(mtcars), mtcars))}
 NULL
 
+#' Make date time functions
+#'
+#' @param year The year to represent, from 1 to 9999
+#' @param month The month-of-year to represent, from 1 (January) to 12 (December)
+#' @param day The day-of-month to represent, from 1 to 31
+#'
+#' @name make_datetime_functions
+#' @rdname make_datetime_functions
+#' @family data time functions
+NULL
+
 #' Date time functions for Column operations
 #'
 #' Date time functions defined for \code{Column}.
@@ -4017,20 +4028,22 @@ setMethod("current_timestamp",
             column(jc)
           })
 
+
+
 #' @details
 #' \code{make_date}: Returns date made from year, month and day.
 #'
-#' @rdname column_datetime_functions
-#' @aliases make_date make_date,Column-method
+#' @rdname make_datetime_functions
+#' @aliases make_date make_date,Column,Column,Column-method
 #' @examples
-#'
 #' \dontrun{
 #' df <- createDataFrame(list(list(2019, 7, 20)), c("year", "month", "day"))
 #' head(select(df, make_date(df$year, df$month, df$day)))}
 #' @note make_date since 3.0.0
 setMethod("make_date",
-          signature(y = "Column", m = "Column", d = "Column"),
-          function(y, m, d) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "make_date", y@jc, m@jc, d@jc)
+          signature(year = "Column", month = "Column", day = "Column"),
+          function(year, month, day) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date",
+                              year@jc, month@jc, day@jc)
             column(jc)
           })
