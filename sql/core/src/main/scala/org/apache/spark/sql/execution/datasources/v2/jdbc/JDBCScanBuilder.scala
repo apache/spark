@@ -29,7 +29,6 @@ class JDBCScanBuilder extends ScanBuilder with
 
   var specifiedFilters: Array[Filter] = Array.empty
 
-
   def build: Scan = {
     logInfo("***dsv2-flows*** Scan called")
   new DBTableScan()

@@ -50,9 +50,4 @@ object Utils extends Logging{
     // TODO : Raise exception if fwPassedSchema is not same as schemaInDB.
     schemaInSpark
   }
-
-
-
-
-
 }

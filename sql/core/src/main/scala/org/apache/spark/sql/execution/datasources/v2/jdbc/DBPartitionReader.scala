@@ -26,14 +26,16 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class DBPartitionReader(schema : StructType) extends PartitionReader[InternalRow] with Logging {
-
   var dummyRows = 0
+  /*
+   * Note : Read implementation is dummy as of now.
+   * It returns a hard coded schema and rows.
+   */
 
   @throws[IOException]
   def next(): Boolean = {
 
     logInfo("***dsv2-flows*** next() called")
-
     if(dummyRows <2) {
       dummyRows = dummyRows + 1
       true
@@ -47,7 +49,7 @@ class DBPartitionReader(schema : StructType) extends PartitionReader[InternalRow
     logInfo("***dsv2-flows*** get() called for row " + dummyRows)
 
     // Value for row1
-    var v_name = "shiv"
+    var v_name = "somename"
     var v_rollnum = "38"
     var v_occupation = "worker"
 
@@ -55,7 +57,7 @@ class DBPartitionReader(schema : StructType) extends PartitionReader[InternalRow
       // Values for row2
       v_name = "someone"
       v_rollnum = "39"
-      v_occupation = "dontknow"
+      v_occupation = "manager"
     }
 
     val values = schema.map(_.name).map {
@@ -64,13 +66,10 @@ class DBPartitionReader(schema : StructType) extends PartitionReader[InternalRow
       case "occupation" => UTF8String.fromString(v_occupation)
       case _ => UTF8String.fromString("anything")
     }
-
     InternalRow.fromSeq(values)
   }
 
   @throws[IOException]
   override def close(): Unit = {
-
   }
-
 }

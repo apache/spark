@@ -23,6 +23,11 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class DBTableScan extends Scan with Batch with Logging {
 
+  /*
+   * Note : Read implementation is dummy as of now.
+   * It returns a hard coded schema and rows.
+   */
+
   val table_schema = StructType(Seq(
     StructField("name", StringType, true),
     StructField("rollnum", StringType, true),
@@ -43,14 +48,10 @@ class DBTableScan extends Scan with Batch with Logging {
   }
 
   def createReaderFactory: PartitionReaderFactory = {
-
     logInfo("***dsv2-flows*** createReaderFactory called")
     new DBPartitionReaderFactory(table_schema)
-
   }
-
 }
 
 object PartitionScheme extends InputPartition {
-
 }
