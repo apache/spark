@@ -891,6 +891,22 @@ def ntile(n):
 
 # ---------------------- Date/Timestamp functions ------------------------------
 
+@since(3.0)
+def make_date(year, month, day):
+    """
+    Create date from year, month and day.
+
+    >>> df = spark.createDataFrame([(2013, 7, 15)], ['year', 'month', 'day'])
+    >>> df.select(make_date('year', 'month', 'day').alias('date')).collect()
+    [Row(date=datetime.date(2013, 7, 15))]
+    """
+    sc = SparkContext._active_spark_context
+    y = _to_java_column(year)
+    m = _to_java_column(month)
+    d = _to_java_column(day)
+    return Column(sc._jvm.functions.make_date(y, m, d))
+
+
 @since(1.5)
 def current_date():
     """
