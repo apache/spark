@@ -253,10 +253,10 @@ class CSVOptions(
   }
 }
 
-object CSVOptions {
+private[spark] object CSVOptions {
   /**
    * The max error content length in CSV parser/writer exception message.
    */
-  val maxErrorContentLength = 1024
+  val maxErrorContentLength = 1000
 
 }
