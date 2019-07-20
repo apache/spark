@@ -42,7 +42,7 @@ NULL
 #'
 #' @name make_datetime_functions
 #' @rdname make_datetime_functions
-#' @family data time functions
+#' @family make datetime functions
 NULL
 
 #' Date time functions for Column operations
