@@ -487,7 +487,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
- * rule PushDownPredicate. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
+ * rule PushDownPredicates. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
  */
 object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
 
