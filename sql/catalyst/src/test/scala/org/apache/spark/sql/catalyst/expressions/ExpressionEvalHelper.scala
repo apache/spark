@@ -418,7 +418,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     }
   }
 
-  private def cmpInterpretWithCodegen(
+  def cmpInterpretWithCodegen(
       inputRow: InternalRow,
       expr: Expression,
       exceptionAllowed: Boolean = false): Unit = {
