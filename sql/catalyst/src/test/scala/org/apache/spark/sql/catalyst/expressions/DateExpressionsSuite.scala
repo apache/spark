@@ -924,17 +924,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
     checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
     checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
-    val msg0 = intercept[java.time.DateTimeException] {
-      MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)).eval(null)
-    }.getMessage
-    assert(msg0.contains("Invalid value") && msg0.contains(Int.MaxValue.toString))
-    val msg1 = intercept[java.time.DateTimeException] {
-        MakeDate(Literal(2019), Literal(13), Literal(19)).eval(null)
-    }.getMessage
-    assert(msg1.contains("Invalid value") && msg1.contains("13"))
-    val msg2 = intercept[java.time.DateTimeException] {
-      MakeDate(Literal(2019), Literal(7), Literal(32)).eval(null)
-    }.getMessage
-    assert(msg2.contains("Invalid value") && msg2.contains("32"))
+    checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
   }
 }

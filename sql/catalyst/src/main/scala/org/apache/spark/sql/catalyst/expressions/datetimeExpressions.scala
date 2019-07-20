@@ -1624,20 +1624,28 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(year, month, day)
-
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
-
   override def dataType: DataType = DateType
+  override def nullable: Boolean = true
 
   override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
-    val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
-    localDateToDays(ld)
+    try {
+      val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
+      localDateToDays(ld)
+    } catch {
+      case _: java.time.DateTimeException => null
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (year, month, day) => {
-      s"$dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day))"
+    nullSafeCodeGen(ctx, ev, (year, month, day) => {
+      s"""
+      try {
+        ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
+      } catch (java.time.DateTimeException e) {
+        ${ev.isNull} = true;
+      }"""
     })
   }
 
