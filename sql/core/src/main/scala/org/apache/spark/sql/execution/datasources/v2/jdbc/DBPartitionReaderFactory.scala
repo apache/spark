@@ -23,7 +23,6 @@ import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, 
 import org.apache.spark.sql.types.StructType
 
 class DBPartitionReaderFactory(schema : StructType) extends PartitionReaderFactory with Logging{
-
   def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     logInfo("***dsv2-flows*** createReader called")
     new DBPartitionReader(schema)
