@@ -61,9 +61,6 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case _ => resultType
   }
 
-  private lazy val castToResultType: (Expression) => Expression =
-    if (sumDataType == resultType) (e: Expression) => e else (e: Expression) => Cast(e, resultType)
-
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
   private lazy val zero = Cast(Literal(0), sumDataType)
@@ -95,5 +92,11 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     )
   }
 
-  override lazy val evaluateExpression: Expression = castToResultType(sum)
+  override lazy val evaluateExpression: Expression = {
+    if (sumDataType == resultType) {
+      sum
+    } else {
+      Cast(sum, resultType)
+    }
+  }
 }
