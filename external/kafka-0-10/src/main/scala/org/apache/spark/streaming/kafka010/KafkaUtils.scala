@@ -61,22 +61,22 @@ object KafkaUtils extends Logging {
   }
 
   /**
-    * Scala constructor for a batch-oriented interface for consuming from Kafka.
-    * Starting and ending offsets are specified in advance,
-    * so that you can control exactly-once semantics. A message handler function
-    * can be provided in order to transform Kafka event at an early stage.
-    * @param kafkaParams Kafka
-    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
-    * configuration parameters</a>. Requires "bootstrap.servers" to be set
-    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
-    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
-    *   see [[LocationStrategies]] for more details.
-    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
-    * @tparam K type of Kafka message key
-    * @tparam V type of Kafka message value
-    * @tparam R type of the returned message value (after processing by messageHandler)
-    */
+   * Scala constructor for a batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics. A message handler function
+   * can be provided in order to transform Kafka event at an early stage.
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+   *   see [[LocationStrategies]] for more details.
+   * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   * @tparam R type of the returned message value (after processing by messageHandler)
+   */
   def createRDD[K, V, R : ClassTag](
       sc: SparkContext,
       kafkaParams: ju.Map[String, Object],
@@ -124,21 +124,21 @@ object KafkaUtils extends Logging {
   }
 
   /**
-    * Java constructor for a batch-oriented interface for consuming from Kafka.
-    * Starting and ending offsets are specified in advance,
-    * so that you can control exactly-once semantics.
-    * @param kafkaParams Kafka
-    * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
-    * configuration parameters</a>. Requires "bootstrap.servers" to be set
-    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
-    * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
-    *   see [[LocationStrategies]] for more details.
-    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
-    * @tparam K type of Kafka message key
-    * @tparam V type of Kafka message value
-    * @tparam R type of the returned message value (after processing by messageHandler)
-    */
+   * Java constructor for a batch-oriented interface for consuming from Kafka.
+   * Starting and ending offsets are specified in advance,
+   * so that you can control exactly-once semantics.
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+   *   see [[LocationStrategies]] for more details.
+   * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   * @tparam R type of the returned message value (after processing by messageHandler)
+   */
   def createRDD[K, V, R : ClassTag](
       jsc: JavaSparkContext,
       kafkaParams: ju.Map[String, Object],
@@ -196,19 +196,19 @@ object KafkaUtils extends Logging {
   }
 
   /**
-    * Scala constructor for a DStream where
-    * each given Kafka topic/partition corresponds to an RDD partition.
-    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
-    *   see [[LocationStrategies]] for more details.
-    * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
-    *   see [[ConsumerStrategies]] for more details.
-    * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
-    *   see [[PerPartitionConfig]] for more details.
-    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
-    * @tparam K type of Kafka message key
-    * @tparam V type of Kafka message value
-    * @tparam R type of the returned message value (after processing by messageHandler)
-    */
+   * Scala constructor for a DStream where
+   * each given Kafka topic/partition corresponds to an RDD partition.
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+   *   see [[LocationStrategies]] for more details.
+   * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
+   *   see [[ConsumerStrategies]] for more details.
+   * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
+   *   see [[PerPartitionConfig]] for more details.
+   * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   * @tparam R type of the returned message value (after processing by messageHandler)
+   */
   def createDirectStream[K, V, R : ClassTag](
      ssc: StreamingContext,
      locationStrategy: LocationStrategy,
@@ -264,19 +264,19 @@ object KafkaUtils extends Logging {
   }
 
   /**
-    * Java constructor for a DStream where
-    * each given Kafka topic/partition corresponds to an RDD partition.
-    * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
-    *   see [[LocationStrategies]] for more details.
-    * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
-    *   see [[ConsumerStrategies]] for more details
-    * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
-    *   see [[PerPartitionConfig]] for more details.
-    * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
-    * @tparam K type of Kafka message key
-    * @tparam V type of Kafka message value
-    * @tparam R type of the returned message value (after processing by messageHandler)
-    */
+   * Java constructor for a DStream where
+   * each given Kafka topic/partition corresponds to an RDD partition.
+   * @param locationStrategy In most cases, pass in [[LocationStrategies.PreferConsistent]],
+   *   see [[LocationStrategies]] for more details.
+   * @param consumerStrategy In most cases, pass in [[ConsumerStrategies.Subscribe]],
+   *   see [[ConsumerStrategies]] for more details
+   * @param perPartitionConfig configuration of settings such as max rate on a per-partition basis.
+   *   see [[PerPartitionConfig]] for more details.
+   * @param messageHandler a function that converts Kafka consumer record to a value of type [[R]].
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   * @tparam R type of the returned message value (after processing by messageHandler)
+   */
   def createDirectStream[K, V, R : ClassTag](
       jssc: JavaStreamingContext,
       locationStrategy: LocationStrategy,
