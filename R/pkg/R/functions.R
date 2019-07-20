@@ -4016,3 +4016,21 @@ setMethod("current_timestamp",
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })
+
+#' @details
+#' \code{make_date}: Returns date made from year, month and day.
+#'
+#' @rdname column_datetime_functions
+#' @aliases make_date make_date,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' df <- createDataFrame(list(list(2019, 7, 20)), c("year", "month", "day"))
+#' head(select(df, make_date(df$year, df$month, df$day)))}
+#' @note make_date since 3.0.0
+setMethod("make_date",
+          signature(y = "Column", m = "Column", d = "Column"),
+          function(y, m, d) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "make_date", y@jc, m@jc, d@jc)
+            column(jc)
+          })
