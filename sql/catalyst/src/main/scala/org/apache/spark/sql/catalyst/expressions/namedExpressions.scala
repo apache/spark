@@ -416,6 +416,8 @@ case class PartitioningAttribute(
     throw new UnsupportedOperationException
 
   override lazy val canonicalized: Expression = this.copy(exprId = ExprId(0))
+
+  override def withExprId(newExprId: ExprId): Attribute = throw new UnsupportedOperationException
 }
 
 object VirtualColumn {
