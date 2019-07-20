@@ -1324,14 +1324,14 @@ def _make_type_verifier(dataType, nullable=True, name=None):
         verify_value = verify_integer
 
     elif isinstance(dataType, LongType):
-        def verify_integer(obj):
+        def verify_long(obj):
             assert_acceptable_types(obj)
             verify_acceptable_types(obj)
-            if not (-9223372036854775808 <= obj <= 9223372036854775807):
+            if obj < -9223372036854775808 or obj > 9223372036854775807:
                 raise ValueError(
                     new_msg("object of LongType out of range, got: %s" % obj))
 
-        verify_value = verify_integer
+        verify_value = verify_long
 
     elif isinstance(dataType, ArrayType):
         element_verifier = _make_type_verifier(
