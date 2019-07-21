@@ -34,5 +34,3 @@ select date '2001-09-28' + 7;
 select 7 + date '2001-09-28';
 select date '2001-10-01' - 7;
 select date '2001-10-01' - date '2001-09-28';
-
-select make_date(2013, 7, 15);
