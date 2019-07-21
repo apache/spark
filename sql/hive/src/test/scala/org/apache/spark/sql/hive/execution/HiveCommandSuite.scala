@@ -290,7 +290,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '1'"),
-        sql("SELECT * FROM non_part_table").collect())
+        sql("SELECT * FROM non_part_table"))
 
       // check for case insensitive property of partition column name in load command.
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -304,7 +304,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("SPARK-28084 case insensitive property of partition column name in insert command") {
+  test("SPARK-28084 case insensitive names of static partitioning in INSERT commands") {
     // check for case insensitive property of partition column name in insert command.
     withTable("part_table") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -317,12 +317,13 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("SPARK-28084 case insensitive property of partition column name " +
-    "in insert command - dynamic partition") {
+  test("SPARK-28084 case insensitive names of dynamic partitioning in INSERT commands") {
     // check for case insensitive property of partition column name in insert command.
     withTable("part_table") {
       val modeConfKey = "hive.exec.dynamic.partition.mode"
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false", modeConfKey -> "nonstrict") {
+      withSQLConf(
+        SQLConf.CASE_SENSITIVE.key -> "false",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
         sql("CREATE TABLE part_table (price int) partitioned by (year int)")
         sql("INSERT INTO part_table PARTITION(YEar) SELECT 1, 2019")
         checkAnswer(
