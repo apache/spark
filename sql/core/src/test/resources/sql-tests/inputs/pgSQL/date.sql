@@ -349,7 +349,6 @@ SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL;
 -- SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- ERROR:  timestamp units "microsec" not recognized
 -- SELECT EXTRACT(UNDEFINED FROM DATE 'infinity');     -- ERROR:  timestamp units "undefined" not supported
 
--- skip test constructors
 -- test constructors
 select make_date(2013, 7, 15);
 select make_date(-44, 3, 15);
