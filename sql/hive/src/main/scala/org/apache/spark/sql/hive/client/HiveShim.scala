@@ -167,7 +167,7 @@ private[client] sealed abstract class Shim {
     klass.getMethod(name, args: _*)
   }
 
-  protected def checkFSClose(loadPath: Path): Unit ={
+  protected def checkFSClose(loadPath: Path): Unit = {
     try {
       SessionState.get.getHdfsEncryptionShim.isPathEncrypted(loadPath)
     } catch {
