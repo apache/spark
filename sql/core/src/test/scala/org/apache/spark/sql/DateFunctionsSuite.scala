@@ -764,18 +764,4 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(Row(Instant.parse(timestamp))))
     }
   }
-
-  test("make_date") {
-    val df = Seq(
-      (1969, 13, 1),
-      (1970, 1, 1),
-      (2019, 7, 19),
-      (9999, 12, 31)).toDF("year", "month", "day")
-    checkAnswer(df.select(make_date($"year", $"month", $"day")),
-      Seq(
-        Row(null),
-        Row(Date.valueOf("1970-01-01")),
-        Row(Date.valueOf("2019-07-19")),
-        Row(Date.valueOf("9999-12-31"))))
-  }
 }

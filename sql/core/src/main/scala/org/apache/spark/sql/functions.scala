@@ -2581,20 +2581,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Makes the date column from the year, month and day columns.
-   *
-   * @param year the year to represent, from 1 to 9999
-   * @param month the month-of-year to represent, from 1 (January) to 12 (December)
-   * @param day the day-of-month to represent, from 1 to 31
-   * @return A date, or null if `year` or `month` or `day` are null, or out of their valid range.
-   * @group datetime_funcs
-   * @since 3.0.0
-   */
-  def make_date(year: Column, month: Column, day: Column): Column = withExpr {
-    MakeDate(year.expr, month.expr, day.expr)
-  }
-
-  /**
    * Returns the date that is `numMonths` after `startDate`.
    *
    * @param startDate A date, timestamp or string. If a string, the data must be in a format that

@@ -1402,9 +1402,6 @@ setGeneric("xxhash64", function(x, ...) { standardGeneric("xxhash64") })
 #' @name NULL
 setGeneric("year", function(x) { standardGeneric("year") })
 
-#' @rdname make_datetime_functions
-#' @name NULL
-setGeneric("make_date", function(year, month, day) { standardGeneric("make_date") })
 
 ###################### Spark.ML Methods ##########################
 
