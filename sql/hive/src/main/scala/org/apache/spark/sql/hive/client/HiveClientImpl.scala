@@ -819,6 +819,18 @@ private[hive] class HiveClientImpl(
     }
   }
 
+  def checkFSClose(loadPath: String): Unit ={
+    try {
+      SessionState.get.getHdfsEncryptionShim.isPathEncrypted(new Path(loadPath))
+    } catch {
+      case e: Exception =>
+        logWarning("Origin FileSystem closed", e)
+        val field = SessionState.get().getClass.getDeclaredField("hdfsEncryptionShim")
+        field.setAccessible(true)
+        field.set(SessionState.get(), null)
+    }
+  }
+
   def loadPartition(
       loadPath: String,
       dbName: String,
@@ -828,6 +840,7 @@ private[hive] class HiveClientImpl(
       inheritTableSpecs: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
+    checkFSClose(loadPath)
     shim.loadPartition(
       client,
       new Path(loadPath), // TODO: Use URI
@@ -844,6 +857,7 @@ private[hive] class HiveClientImpl(
       tableName: String,
       replace: Boolean,
       isSrcLocal: Boolean): Unit = withHiveState {
+    checkFSClose(loadPath)
     shim.loadTable(
       client,
       new Path(loadPath),
@@ -860,6 +874,7 @@ private[hive] class HiveClientImpl(
       replace: Boolean,
       numDP: Int): Unit = withHiveState {
     val hiveTable = client.getTable(dbName, tableName, true /* throw exception */)
+    checkFSClose(loadPath)
     shim.loadDynamicPartitions(
       client,
       new Path(loadPath),
