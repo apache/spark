@@ -240,8 +240,7 @@ SELECT '' AS date_trunc_week, date_trunc( 'week', timestamp '2004-02-29 15:44:17
 --    FROM TIMESTAMP_TBL;
 
 
---[SPARK-28432] Missing Date/Time Functions: make_timestamp
 -- timestamp numeric fields constructor
--- SELECT make_timestamp(2014,12,28,6,30,45.887);
+SELECT make_timestamp(2014,12,28,6,30,45.887);
 
 DROP TABLE TIMESTAMP_TBL;

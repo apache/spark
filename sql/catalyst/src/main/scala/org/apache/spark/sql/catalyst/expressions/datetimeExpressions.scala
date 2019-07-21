@@ -1636,6 +1636,16 @@ case class MakeTimestamp(
     timeZoneId: Option[String] = None)
   extends SenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression) = {
+    this(year, month, day, hour, min, sec, None)
+  }
+
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DoubleType)
