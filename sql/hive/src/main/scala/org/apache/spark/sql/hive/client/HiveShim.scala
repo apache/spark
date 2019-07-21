@@ -166,6 +166,18 @@ private[client] sealed abstract class Shim {
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
+
+  protected def checkFSClose(loadPath: Path): Unit ={
+    try {
+      SessionState.get.getHdfsEncryptionShim.isPathEncrypted(loadPath)
+    } catch {
+      case _: Exception =>
+        val field = SessionState.get().getClass.getDeclaredField("hdfsEncryptionShim")
+        field.setAccessible(true)
+        field.set(SessionState.get(), null)
+    }
+  }
+
 }
 
 private[client] class Shim_v0_12 extends Shim with Logging {
@@ -943,9 +955,85 @@ private[client] class Shim_v1_1 extends Shim_v1_0 {
       JBoolean.TYPE,
       JBoolean.TYPE)
 
+  private lazy val loadPartitionMethod =
+    findMethod(
+      classOf[Hive],
+      "loadPartition",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadTableMethod =
+    findMethod(
+      classOf[Hive],
+      "loadTable",
+      classOf[Path],
+      classOf[String],
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+  private lazy val loadDynamicPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "loadDynamicPartitions",
+      classOf[Path],
+      classOf[String],
+      classOf[JMap[String, String]],
+      JBoolean.TYPE,
+      JInteger.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE,
+      JBoolean.TYPE)
+
   override def dropIndex(hive: Hive, dbName: String, tableName: String, indexName: String): Unit = {
     dropIndexMethod.invoke(hive, dbName, tableName, indexName, throwExceptionInDropIndex,
       deleteDataInDropIndex)
+  }
+
+  override def loadPartition(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    checkFSClose(loadPath)
+    loadPartitionMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      holdDDLTime, inheritTableSpecs: JBoolean, isSkewedStoreAsSubdir: JBoolean,
+      isSrcLocal: JBoolean, isAcid)
+  }
+
+  override def loadTable(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      replace: Boolean,
+      isSrcLocal: Boolean): Unit = {
+    checkFSClose(loadPath)
+    loadTableMethod.invoke(hive, loadPath, tableName, replace: JBoolean, holdDDLTime,
+      isSrcLocal: JBoolean, isSkewedStoreAsSubdir, isAcid)
+  }
+
+  override def loadDynamicPartitions(
+      hive: Hive,
+      loadPath: Path,
+      tableName: String,
+      partSpec: JMap[String, String],
+      replace: Boolean,
+      numDP: Int,
+      listBucketingEnabled: Boolean): Unit = {
+    checkFSClose(loadPath)
+    loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
+      numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean, isAcid)
   }
 
 }
@@ -990,6 +1078,7 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       replace: Boolean,
       numDP: Int,
       listBucketingEnabled: Boolean): Unit = {
+    checkFSClose(loadPath)
     loadDynamicPartitionsMethod.invoke(hive, loadPath, tableName, partSpec, replace: JBoolean,
       numDP: JInteger, holdDDLTime, listBucketingEnabled: JBoolean, isAcid,
       txnIdInLoadDynamicPartitions)
