@@ -1617,7 +1617,7 @@ private case class GetTimestamp(
   examples = """
     Examples:
       > SELECT _FUNC_(2013, 7, 15);
-       '2013-07-15'
+       2013-07-15
   """,
   since = "3.0.0")
 case class MakeDate(year: Expression, month: Expression, day: Expression)
