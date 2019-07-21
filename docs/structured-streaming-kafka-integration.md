@@ -394,12 +394,9 @@ The following configurations are optional:
   <td></td>
   <td>streaming and batch</td>
   <td>Minimum number of partitions to read from Kafka.
-  You can configure Spark to use an arbitrary minimum of partitions to read from Kafka using the minPartitions option.
-  Normally Spark has a 1-1 mapping of Kafka TopicPartitions to Spark partitions consuming from Kafka.
+  By default, Spark has a 1-1 mapping of Kafka TopicPartitions to Spark partitions consuming from Kafka.
   If you set the minPartitions option to a value greater than your Kafka TopicPartitions,
   Spark will divvy up large Kafka partitions to smaller pieces.
-  This option can be set at times of peak loads, data skew, and as your stream is falling behind to increase processing rate.
-  It comes at a cost of initializing Kafka consumers at each trigger, which may impact performance if you use SSL when connecting to Kafka.</td>
 </tr>
 <tr>
   <td>groupIdPrefix</td>
