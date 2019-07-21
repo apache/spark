@@ -63,7 +63,7 @@ SELECT cast(1 as tinyint) / cast(1 as decimal(10, 0)) FROM t
 -- !query 7 schema
 struct<(CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(14,11)>
 -- !query 7 output
-1
+1.00000000000
 
 
 -- !query 8
@@ -163,7 +163,7 @@ SELECT cast(1 as smallint) / cast(1 as decimal(10, 0)) FROM t
 -- !query 19 schema
 struct<(CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(16,11)>
 -- !query 19 output
-1
+1.00000000000
 
 
 -- !query 20
@@ -263,7 +263,7 @@ SELECT cast(1 as int) / cast(1 as decimal(10, 0)) FROM t
 -- !query 31 schema
 struct<(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 31 output
-1
+1.00000000000
 
 
 -- !query 32
@@ -363,7 +363,7 @@ SELECT cast(1 as bigint) / cast(1 as decimal(10, 0)) FROM t
 -- !query 43 schema
 struct<(CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0))):decimal(31,11)>
 -- !query 43 output
-1
+1.00000000000
 
 
 -- !query 44
@@ -615,7 +615,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as tinyint) FROM t
 -- !query 73 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 73 output
-1
+1.000000
 
 
 -- !query 74
@@ -623,7 +623,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as smallint) FROM t
 -- !query 74 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0))):decimal(16,6)>
 -- !query 74 output
-1
+1.000000
 
 
 -- !query 75
@@ -631,7 +631,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as int) FROM t
 -- !query 75 schema
 struct<(CAST(1 AS DECIMAL(10,0)) / CAST(CAST(1 AS INT) AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 75 output
-1
+1.00000000000
 
 
 -- !query 76
@@ -639,7 +639,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as bigint) FROM t
 -- !query 76 schema
 struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(31,21)>
 -- !query 76 output
-1
+1.000000000000000000000
 
 
 -- !query 77
@@ -663,7 +663,7 @@ SELECT cast(1 as decimal(10, 0)) / cast(1 as decimal(10, 0)) FROM t
 -- !query 79 schema
 struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query 79 output
-1
+1.00000000000
 
 
 -- !query 80
