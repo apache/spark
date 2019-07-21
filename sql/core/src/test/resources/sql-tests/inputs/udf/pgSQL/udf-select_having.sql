@@ -22,10 +22,18 @@ INSERT INTO test_having VALUES (9, 4, 'CCCC', 'j');
 
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY b, c;
+SELECT udf(b), udf(c) FROM test_having
+	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), c;
+SELECT udf(b), udf(c) FROM test_having
+	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), udf(c);
 
 -- HAVING is effectively equivalent to WHERE in this case
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(b) = 3 ORDER BY b, c;
+SELECT udf(b), udf(c) FROM test_having
+	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), c;
+SELECT udf(b), udf(c) FROM test_having
+	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), udf(c);
 
 -- [SPARK-28386] Cannot resolve ORDER BY columns with GROUP BY and HAVING
 -- SELECT lower(c), count(c) FROM test_having
@@ -40,10 +48,24 @@ SELECT udf(c), max(udf(a)) FROM test_having
 -- Per SQL spec, these should generate 0 or 1 row, even without aggregates
 
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) = udf(max(a));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) = udf(max(a));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) = udf(udf(max(a)));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) = udf(udf(max(a)));
+
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) < udf(max(a));
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) < udf(max(a));
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) < udf(udf(max(a)));
 SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) < udf(udf(max(a)));
+
+SELECT udf(min(udf(a))), udf(max(udf(a))) FROM test_having HAVING udf(min(udf(a))) = udf(max(udf(a)));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(max(udf(a)));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(udf(max(udf(a))));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(udf(a))) = udf(udf(max(udf(a))));
+
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(udf(a))) < udf(max(udf(a)));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(max(udf(a)));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(udf(max(udf(a))));
+SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(udf(a))) < udf(udf(max(udf(a))));
 
 
 -- errors: ungrouped column references
