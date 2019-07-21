@@ -294,4 +294,11 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
     tmpDir.delete()
   }
+
+  test("Pad Decimal numbers with trailing zeros to the scale of the column") {
+    runCliWithin(1.minute)(
+      "SELECT CAST(1 AS DECIMAL(38, 18));"
+        -> "1.000000000000000000"
+    )
+  }
 }
