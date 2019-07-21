@@ -391,7 +391,7 @@ The following configurations are optional:
 <tr>
   <td>minPartitions</td>
   <td>int</td>
-  <td>0 (disabled)</td>
+  <td></td>
   <td>streaming and batch</td>
   <td>Minimum number of partitions to read from Kafka.
   You can configure Spark to use an arbitrary minimum of partitions to read from Kafka using the minPartitions option.
