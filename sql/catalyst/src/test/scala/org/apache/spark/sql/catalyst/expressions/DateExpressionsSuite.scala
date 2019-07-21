@@ -918,4 +918,29 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("creating values of TimestampType via make_timestamp") {
+    val makeTimestampExpr = MakeTimestamp(
+      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15), Literal(23.5))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2013-7-15 8:15:23.5"))
+
+    checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DoubleType)), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(70.5)), null)
+
+  }
 }
