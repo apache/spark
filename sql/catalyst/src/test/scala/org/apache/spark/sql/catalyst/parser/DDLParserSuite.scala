@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransf
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowTablesStatement}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -614,6 +614,21 @@ class DDLParserSuite extends AnalysisTest {
           Seq("table_name"),
           Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
     }
+  }
+
+  test("show tables") {
+    comparePlans(
+      parsePlan("SHOW TABLES"),
+      ShowTablesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
+      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
   private case class TableSpec(

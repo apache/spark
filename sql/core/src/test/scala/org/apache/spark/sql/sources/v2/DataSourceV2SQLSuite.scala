@@ -22,9 +22,10 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.v2.Identifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.plans.ShowTablesSchema
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
@@ -429,6 +430,8 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), sparkSession.table("source"))
+
+    sparkSession.sql("DROP TABLE table_name")
   }
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
@@ -442,6 +445,8 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     // use the catalog name to force loading with the v2 catalog
     checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
+
+    sparkSession.sql("DROP TABLE table_name")
   }
 
   test("DropTable: basic") {
@@ -1347,6 +1352,42 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
       assert(updated.name == "testcat.ns1.table_name")
       assert(updated.properties == Map("provider" -> "foo").asJava)
+    }
+  }
+
+  test("ShowTables using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
+    val tablesDf = spark.sql("SHOW TABLES FROM testcat.db")
+    assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
+
+    val tables = tablesDf.collect()
+    assert(tables === Seq(Row("", "table_name", true)))
+  }
+
+  test("ShowTables: using v2 catalog, db doesn't exist") {
+    val tablesDf = spark.sql("SHOW TABLES FROM testcat.unknown")
+    assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
+
+    val tables = tablesDf.collect()
+    assert(tables.isEmpty)
+  }
+
+  test("ShowTables: db is not specified") {
+    {
+      val tablesDf = spark.sql("SHOW TABLES")
+      assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
+
+      val tables = tablesDf.collect()
+      assert(tables === Seq(
+        Row("", "source", true),
+        Row("", "source2", true)))
+    }
+    {
+      val tablesDf = spark.sql("SHOW TABLES LIKE '*2'")
+      assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
+
+      val tables = tablesDf.collect()
+      assert(tables === Seq(Row("", "source2", true)))
     }
   }
 }

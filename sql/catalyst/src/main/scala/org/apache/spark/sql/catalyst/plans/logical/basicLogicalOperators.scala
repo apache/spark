@@ -583,6 +583,17 @@ case class AlterTable(
   }
 }
 
+/**
+ * Show tables.
+ */
+case class ShowTables(
+    catalog: TableCatalog,
+    ident: Identifier,
+    pattern: Option[String]) extends Command {
+  override val output = ShowTablesSchema.attributes()
+
+  override lazy val schema = ShowTablesSchema.SHOW_TABLES_SCHEMA
+}
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
