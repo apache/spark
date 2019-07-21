@@ -163,6 +163,11 @@ class CSVOptions(
 
   val inputBufferSize = 128
 
+  /**
+   * The max error content length in CSV parser/writer exception message.
+   */
+  val maxErrorContentLength = 1000
+
   val isCommentSet = this.comment != '\u0000'
 
   val samplingRatio =
@@ -220,7 +225,7 @@ class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
-    writerSettings.setErrorContentLength(CSVOptions.maxErrorContentLength)
+    writerSettings.setErrorContentLength(maxErrorContentLength)
     writerSettings
   }
 
@@ -247,16 +252,8 @@ class CSVOptions(
     lineSeparatorInRead.foreach { _ =>
       settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
     }
-    settings.setErrorContentLength(CSVOptions.maxErrorContentLength)
+    settings.setErrorContentLength(maxErrorContentLength)
 
     settings
   }
-}
-
-private[spark] object CSVOptions {
-  /**
-   * The max error content length in CSV parser/writer exception message.
-   */
-  val maxErrorContentLength = 1000
-
 }
