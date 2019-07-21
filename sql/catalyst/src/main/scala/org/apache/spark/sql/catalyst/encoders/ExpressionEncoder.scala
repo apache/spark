@@ -383,7 +383,7 @@ case class ExpressionEncoder[T](
 
   override def toString: String = s"class[$schemaString]"
 
-  override def copyEncoder: ExpressionEncoder[T] = copy()
+  override def makeCopy: ExpressionEncoder[T] = copy()
 }
 
 // A dummy logical plan that can hold expressions and go through optimizer rules.

@@ -85,5 +85,5 @@ trait Encoder[T] extends Serializable {
    * Create a copied [[Encoder]]. The implementation may just copy internal reusable fields to speed
    * up the [[Encoder]] creation.
    */
-  def copyEncoder: Encoder[T]
+  def makeCopy: Encoder[T]
 }
