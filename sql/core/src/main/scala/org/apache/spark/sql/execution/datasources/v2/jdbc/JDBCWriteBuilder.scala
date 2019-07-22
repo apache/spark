@@ -88,26 +88,12 @@ class JDBCWriteBuilder(options: JdbcOptionsInWrite,
   }
 
   def processAppend() : Unit = {
-    /* Append table logic
-     * 1. Check is table exists. Create if not. Step4.
-     * 2. If table exists and schema does not match, raise exception.
-     * 3. If table exists and schema match. Step4
-     * 4. Send to executors for data insert
+    /* Append table logic : If we have reached this far, table exist and schema check is done.
+     * So processappend does nothing here. just sends request to executors for data insert
      */
     logInfo("***dsv2-flows*** Append to table")
     // log schemas received.
     Utils.logSchema("userSchema", userSchema)
     Utils.logSchema("fwPassedSchema", Option(fwPassedSchema))
-
-    JdbcUtils.tableExists(conn, options) match {
-      case true =>
-        logInfo("***dsv2-flows*** Table exists" )
-        Utils.strictSchemaCheck(fwPassedSchema)
-        logInfo("***dsv2-flows*** schema check done. Good to go." )
-      case _ =>
-        logInfo("***dsv2-flows*** Table does not exists." )
-        // TODO : Check scemantics, Raise exception Or Create it.
-        Utils.createTable(fwPassedSchema)
-    }
   }
 }

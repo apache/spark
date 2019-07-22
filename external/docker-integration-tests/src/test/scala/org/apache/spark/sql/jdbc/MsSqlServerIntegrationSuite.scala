@@ -18,10 +18,12 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Connection, Date, Timestamp}
+import java.sql.{Connection, Date, Struct, Timestamp}
 import java.util.Properties
 
 import org.apache.spark.tags.DockerTest
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types._
 
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
@@ -114,6 +116,20 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """.stripMargin).executeUpdate()
   }
 
+  def create_test_df() : DataFrame = {
+    val schema:StructType = StructType(
+      Seq(StructField ("i", IntegerType, true),
+        StructField ("j", IntegerType, true),
+        StructField ("k", IntegerType, true))
+    )
+    val data:Seq[Row] = Seq(
+      Row(1,1,2),
+      Row(1,2,3)
+    )
+
+    spark.createDataFrame(spark.sparkContext.parallelize(data),schema)
+  }
+
   test("JDBCV2 write test") {
     // Read 1 row using JDBC. Write(append) this row using jdbcv2.
     val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
@@ -123,6 +139,14 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
     df2.show(10)
     assert(df2.count == 2)
+
+    // Create a df with diffirent schema and append this to existing table. No convinced why this
+    // is passing. writing a dataframe with diffirent schema should fail.
+    val df_new = create_test_df()
+    df_new.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "strings_numbers").save()
+    val df2_new = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
+    df2_new.show(10)
+    assert(df2_new.count == 4)
   }
 
   test("Basic test") {

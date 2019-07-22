@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 import java.sql.{Connection, PreparedStatement}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.jdbc.{JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils.{getCommonJDBCType, getJdbcType}
@@ -46,8 +47,15 @@ object Utils extends Logging{
      */
   }
 
-  def strictSchemaCheck(schemaInSpark: StructType) : StructType = {
+  def strictSchemaCheck(schemaInSpark: StructType, dbTableSchema: StructType) : Boolean = {
     // TODO : Raise exception if fwPassedSchema is not same as schemaInDB.
-    schemaInSpark
+    if (schemaInSpark == dbTableSchema) {
+      logInfo(s"***dsv2-flows*** strictSchemaCheck passed" )
+      true
+    } else {
+      logInfo(s"***dsv2-flows*** schema check failed" )
+      throw new AnalysisException(
+        s"Schema does not match with that with the database table")
+    }
   }
 }
