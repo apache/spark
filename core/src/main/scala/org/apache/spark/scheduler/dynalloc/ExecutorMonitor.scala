@@ -182,24 +182,19 @@ private[spark] class ExecutorMonitor(
     if (updateExecutors) {
       val activeShuffleIds = shuffleStages.map(_._2).toSeq
       var needTimeoutUpdate = false
-      val activatedExecs = new mutable.ArrayBuffer[String]()
+      val activatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
         if (!exec.hasActiveShuffle) {
           exec.updateActiveShuffles(activeShuffleIds)
           if (exec.hasActiveShuffle) {
             needTimeoutUpdate = true
-            // Don't collect too many ids or the debug message becomes not very useful.
-            if (activatedExecs.size < 10) {
-              activatedExecs += id
-            } else if (activatedExecs.size == 10) {
-              activatedExecs += "..."
-            }
+            activatedExecs.add(id)
           }
         }
       }
 
-      logDebug(s"Activated executors ${activatedExecs.mkString(",")} due to shuffle data " +
-        s"needed by new job ${event.jobId}.")
+      logDebug(s"Activated executors $activatedExecs due to shuffle data needed by new job" +
+        s"${event.jobId}.")
 
       if (needTimeoutUpdate) {
         nextTimeout.set(Long.MinValue)
@@ -238,23 +233,18 @@ private[spark] class ExecutorMonitor(
         }
       }
 
-      val deactivatedExecs = new mutable.ArrayBuffer[String]()
+      val deactivatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
         if (exec.hasActiveShuffle) {
           exec.updateActiveShuffles(activeShuffles)
-          if (!exec.hasActiveShuffle && log.isDebugEnabled) {
-            // Don't collect too many ids or the debug message becomes not very useful.
-            if (deactivatedExecs.size < 10) {
-              deactivatedExecs += id
-            } else if (deactivatedExecs.size == 10) {
-              deactivatedExecs += "..."
-            }
+          if (!exec.hasActiveShuffle) {
+            deactivatedExecs.add(id)
           }
         }
       }
 
-      logDebug(s"Executors ${deactivatedExecs.mkString(",")} do not have active shuffle data " +
-        s"after job ${event.jobId} finished.")
+      logDebug(s"Executors $deactivatedExecs do not have active shuffle data after job " +
+        s"${event.jobId} finished.")
     }
 
     jobToStageIDs.remove(event.jobId).foreach { stages =>
@@ -501,5 +491,23 @@ private[spark] class ExecutorMonitor(
 
   private case class ShuffleCleanedEvent(id: Int) extends SparkListenerEvent {
     override protected[spark] def logEvent: Boolean = false
+  }
+
+  /** Used to collect executor IDs for debug messages (and avoid too long messages). */
+  private class ExecutorIdCollector {
+    private val ids = if (log.isDebugEnabled) new mutable.ArrayBuffer[String]() else null
+    private var excess = 0
+
+    def add(id: String): Unit = if (log.isDebugEnabled) {
+      if (ids.size < 10) {
+        ids += id
+      } else {
+        excess += 1
+      }
+    }
+
+    override def toString(): String = {
+      ids.mkString(",") + (if (excess > 0) s" (and $excess more)" else "")
+    }
   }
 }
