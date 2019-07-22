@@ -22,18 +22,10 @@ INSERT INTO test_having VALUES (9, 4, 'CCCC', 'j');
 
 -- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 SELECT udf(b), udf(c) FROM test_having
-	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY b, c;
-SELECT udf(b), udf(c) FROM test_having
-	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), c;
-SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), udf(c);
 
 -- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 -- HAVING is effectively equivalent to WHERE in this case
-SELECT udf(b), udf(c) FROM test_having
-	GROUP BY b, c HAVING udf(b) = 3 ORDER BY b, c;
-SELECT udf(b), udf(c) FROM test_having
-	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), c;
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), udf(c);
 
@@ -49,35 +41,15 @@ SELECT udf(c), max(udf(a)) FROM test_having
 -- test degenerate cases involving HAVING without GROUP BY
 -- Per SQL spec, these should generate 0 or 1 row, even without aggregates
 
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) = udf(max(a));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) = udf(max(a));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) = udf(udf(max(a)));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) = udf(udf(max(a)));
-
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) < udf(max(a));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) < udf(max(a));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(a))) < udf(udf(max(a)));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(a)) < udf(udf(max(a)));
-
-SELECT udf(min(udf(a))), udf(max(udf(a))) FROM test_having HAVING udf(min(udf(a))) = udf(max(udf(a)));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(max(udf(a)));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(udf(max(udf(a))));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(udf(a))) = udf(udf(max(udf(a))));
-
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(udf(a))) < udf(max(udf(a)));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(max(udf(a)));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(udf(max(udf(a))));
-SELECT udf(min(a)), udf(max(a)) FROM test_having HAVING udf(min(udf(a))) < udf(udf(max(udf(a))));
-
+SELECT udf(udf(min(udf(a)))), udf(udf(max(udf(a)))) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(udf(max(udf(a))));
+SELECT udf(udf(min(udf(a)))), udf(udf(max(udf(a)))) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(udf(max(udf(a))));
 
 -- errors: ungrouped column references
 SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a));
 SELECT 1 AS one FROM test_having HAVING udf(a) > 1;
 
 -- the really degenerate case: need not scan table at all
-SELECT 1 AS one FROM test_having HAVING udf(1 > 2);
 SELECT 1 AS one FROM test_having HAVING udf(udf(1) > udf(2));
-SELECT 1 AS one FROM test_having HAVING udf(1 < 2);
 SELECT 1 AS one FROM test_having HAVING udf(udf(1) < udf(2));
 
 -- and just to prove that we aren't scanning the table:
