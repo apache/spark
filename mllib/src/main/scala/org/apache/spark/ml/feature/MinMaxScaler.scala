@@ -177,16 +177,18 @@ class MinMaxScalerModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+    val numFeatures = originalMax.size
     val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val scale = $(max) - $(min)
     val minValue = $(min)
 
     val transformer = udf { vector: Vector =>
+      require(vector.size == numFeatures,
+        s"Number of features must be $numFeatures but got ${vector.size}")
       // 0 in sparse vector will probably be rescaled to non-zero
       val values = vector.toArray
-      val size = values.length
       var i = 0
-      while (i < size) {
+      while (i < numFeatures) {
         if (!values(i).isNaN) {
           val raw = if (originalRange(i) != 0) {
             (values(i) - originalMin(i)) / originalRange(i)
@@ -195,7 +197,7 @@ class MinMaxScalerModel private[ml] (
         }
         i += 1
       }
-      Vectors.dense(values)
+      Vectors.dense(values).compressed
     }
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))))
