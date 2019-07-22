@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalog.v2.Identifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
@@ -39,6 +39,8 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set(
+        "spark.sql.catalog.testcat_atomic", classOf[TestStagingInMemoryCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set(V2_SESSION_CATALOG.key, classOf[TestInMemoryTableCatalog].getName)
 
@@ -50,6 +52,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   after {
     spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
+    spark.catalog("testcat_atomic").asInstanceOf[TestInMemoryTableCatalog].clearTables()
     spark.catalog("session").asInstanceOf[TestInMemoryTableCatalog].clearTables()
   }
 
@@ -159,20 +162,168 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
+    val basicCatalog = spark.catalog("testcat").asTableCatalog
+    val atomicCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.schema == new StructType()
+          .add("id", LongType, nullable = false)
+          .add("data", StringType))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: basic v2 implementation.") {
+    val basicCatalog = spark.catalog("testcat").asTableCatalog
+    val atomicCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+        val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        spark.sql(s"REPLACE TABLE $identifier USING foo AS SELECT id FROM source")
+        val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(replacedTable != originalTable, "Table should have been replaced.")
+        assert(replacedTable.name == identifier)
+        assert(replacedTable.partitioning.isEmpty)
+        assert(replacedTable.properties == Map("provider" -> "foo").asJava)
+        assert(replacedTable.schema == new StructType()
+          .add("id", LongType, nullable = false))
+
+        val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(
+          spark.internalCreateDataFrame(rdd, replacedTable.schema),
+          spark.table("source").select("id"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: Non-atomic catalog drops the table if the write fails.") {
     spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
+    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat.table_name" +
+        s" USING foo OPTIONS (`${TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
+        "Table should have been dropped as a result of the replace.")
+  }
+
+  test("ReplaceTableAsSelect: Non-atomic catalog drops the table permanently if the" +
+    " subsequent table creation fails.") {
+    spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
+    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat.table_name" +
+        s" USING foo" +
+        s" TBLPROPERTIES (`${TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
+      "Table should have been dropped and failed to be created.")
+  }
+
+  test("ReplaceTableAsSelect: Atomic catalog does not drop the table when replace fails.") {
+    spark.sql("CREATE TABLE testcat_atomic.table_name USING foo AS SELECT id, data FROM source")
+    val testCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat_atomic.table_name" +
+        s" USING foo OPTIONS (`${TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION}=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    var maybeReplacedTable = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(maybeReplacedTable === table, "Table should not have changed.")
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat_atomic.table_name" +
+        s" USING foo" +
+        s" TBLPROPERTIES (`${TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    maybeReplacedTable = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(maybeReplacedTable === table, "Table should not have changed.")
+  }
+
+  test("ReplaceTable: Erases the table contents and changes the metadata.") {
+    spark.sql(s"CREATE TABLE testcat.table_name USING $orc2 AS SELECT id, data FROM source")
 
     val testCatalog = spark.catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    assert(table.name == "testcat.table_name")
-    assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> "foo").asJava)
-    assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    spark.sql("REPLACE TABLE testcat.table_name (id bigint) USING foo")
+    val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
+        "Replaced table should have no rows after committing.")
+    assert(replaced.schema().fields.length === 1,
+        "Replaced table should have new schema.")
+    assert(replaced.schema().fields(0).name === "id",
+      "Replaced table should have new schema.")
+  }
+
+  test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
+    Seq("testcat", "testcat_atomic").foreach { catalog =>
+      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      spark.sql(
+        s"CREATE OR REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+
+      val testCatalog = spark.catalog(catalog).asTableCatalog
+      val createdTable = testCatalog.loadTable(Identifier.of(Array(), "created"))
+      val replacedTable = testCatalog.loadTable(Identifier.of(Array(), "replaced"))
+
+      assert(createdTable.asInstanceOf[InMemoryTable].rows ===
+        replacedTable.asInstanceOf[InMemoryTable].rows)
+      assert(createdTable.schema === replacedTable.schema)
+    }
+  }
+
+  test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table does not exist.") {
+    Seq("testcat", "testcat_atomic").foreach { catalog =>
+      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      intercept[CannotReplaceMissingTableException] {
+        spark.sql(s"REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+      }
+    }
+  }
+
+  test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
+    import TestInMemoryTableCatalog._
+    spark.sql(s"CREATE TABLE testcat_atomic.created USING $orc2 AS SELECT id, data FROM source")
+    intercept[CannotReplaceMissingTableException] {
+      spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
+        s" USING $orc2" +
+        s" TBLPROPERTIES (`$SIMULATE_DROP_BEFORE_REPLACE_PROPERTY`=true)" +
+        s" AS SELECT id, data FROM source")
+    }
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
