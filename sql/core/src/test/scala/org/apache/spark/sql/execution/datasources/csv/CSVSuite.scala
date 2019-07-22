@@ -37,7 +37,6 @@ import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -2089,21 +2088,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("SPARK-28431: prevent CSV datasource throw TextParsingException with large size message") {
-    withTempDir { dir =>
+    withTempPath { path =>
       val maxCharsPerCol = 10000
       val str = "a" * (maxCharsPerCol + 1)
 
-      val csvFile = new File(dir, "data.csv")
       Files.write(
-        csvFile.toPath,
-        Seq(str).asJava,
+        path.toPath,
+        str.getBytes(StandardCharsets.UTF_8),
         StandardOpenOption.CREATE, StandardOpenOption.WRITE
       )
 
       val errMsg = intercept[TextParsingException] {
         spark.read
           .option("maxCharsPerColumn", maxCharsPerCol)
-          .csv(csvFile.getAbsolutePath)
+          .csv(path.getAbsolutePath)
           .count()
       }.getMessage
 
