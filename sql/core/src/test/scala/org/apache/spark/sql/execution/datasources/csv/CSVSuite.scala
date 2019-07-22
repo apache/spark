@@ -2108,7 +2108,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       }.getMessage
 
       assert(errMsg.contains("..."),
-      s"expect the TextParsingException truncate the error content to be 1000 length.")
+        "expect the TextParsingException truncate the error content to be 1000 length.")
     }
   }
 }
