@@ -351,6 +351,7 @@ SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL;
 
 -- test constructors
 select make_date(2013, 7, 15);
+-- [SPARK-28471] Formatting dates with negative years
 select make_date(-44, 3, 15);
 -- select make_time(8, 20, 0.0);
 -- should fail
