@@ -94,7 +94,7 @@ ORDER BY cate, val;
 SELECT udf(val), cate, avg(null) OVER(PARTITION BY cate ORDER BY val) FROM testData ORDER BY cate, val;
 
 -- OrderBy not specified
-SELECT udf(val), cate, row_number() OVER(PARTITION BY cate ORDER BY val) FROM testData ORDER BY cate, udf(val);
+SELECT udf(val), cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY cate, udf(val);
 
 -- Over clause is empty
 SELECT udf(val), cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val;
