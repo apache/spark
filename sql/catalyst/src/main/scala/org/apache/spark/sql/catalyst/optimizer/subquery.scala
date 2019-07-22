@@ -331,8 +331,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           case None => Literal.default(NullType)
         }
     }
-    if (rewrittenExpr.find(_.isInstanceOf[PythonUDF]).isDefined) {
-      // SPARK-28441: `PythonUDF` can't be statically evaluated.
+    if (!rewrittenExpr.foldable) {
+      // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
+      // Needs to evaluate them on query runtime.
       Some(rewrittenExpr)
     } else {
       val exprVal = rewrittenExpr.eval()
