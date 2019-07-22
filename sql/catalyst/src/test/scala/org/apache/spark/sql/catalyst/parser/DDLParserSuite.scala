@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
+import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -47,82 +47,71 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsePlan(sql), expected, checkAnalysis = false)
   }
 
-  test("create table using - schema") {
-    val sql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
+  test("create/replace table using - schema") {
+    val createSql = "CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
+    val replaceSql = "REPLACE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      "parquet",
+      Map.empty[String, String],
+      None,
+      None)
 
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType()
-            .add("a", IntegerType, nullable = true, "test")
-            .add("b", StringType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
 
     intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
       "no viable alternative at input")
   }
 
-  test("create table - with IF NOT EXISTS") {
+  test("create/replace table - with IF NOT EXISTS") {
     val sql = "CREATE TABLE IF NOT EXISTS my_tab(a INT, b STRING) USING parquet"
-
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
-    }
+    testCreateOrReplaceDdl(
+      sql,
+      TableSpec(
+        Seq("my_tab"),
+        Some(new StructType().add("a", IntegerType).add("b", StringType)),
+        Seq.empty[Transform],
+        None,
+        Map.empty[String, String],
+        "parquet",
+        Map.empty[String, String],
+        None,
+        None),
+      expectedIfNotExists = true)
   }
 
-  test("create table - with partitioned by") {
-    val query = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
+  test("create/replace table - with partitioned by") {
+    val createSql = "CREATE TABLE my_tab(a INT comment 'test', b STRING) " +
         "USING parquet PARTITIONED BY (a)"
-
-    parsePlan(query) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType()
-            .add("a", IntegerType, nullable = true, "test")
-            .add("b", StringType))
-        assert(create.partitioning == Seq(IdentityTransform(FieldReference("a"))))
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $query")
+    val replaceSql = "REPLACE TABLE my_tab(a INT comment 'test', b STRING) " +
+      "USING parquet PARTITIONED BY (a)"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType()
+        .add("a", IntegerType, nullable = true, "test")
+        .add("b", StringType)),
+      Seq(IdentityTransform(FieldReference("a"))),
+      None,
+      Map.empty[String, String],
+      "parquet",
+      Map.empty[String, String],
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("create table - partitioned by transforms") {
-    val sql =
+  test("create/replace table - partitioned by transforms") {
+    val createSql =
       """
         |CREATE TABLE my_tab (a INT, b STRING, ts TIMESTAMP) USING parquet
         |PARTITIONED BY (
@@ -135,151 +124,148 @@ class DDLParserSuite extends AnalysisTest {
         |    foo(a, "bar", 34))
       """.stripMargin
 
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType()
-            .add("a", IntegerType)
-            .add("b", StringType)
-            .add("ts", TimestampType))
-        assert(create.partitioning == Seq(
-            IdentityTransform(FieldReference("a")),
-            BucketTransform(LiteralValue(16, IntegerType), Seq(FieldReference("b"))),
-            YearsTransform(FieldReference("ts")),
-            MonthsTransform(FieldReference("ts")),
-            DaysTransform(FieldReference("ts")),
-            HoursTransform(FieldReference("ts")),
-            ApplyTransform("foo", Seq(
-                FieldReference("a"),
-                LiteralValue(UTF8String.fromString("bar"), StringType),
-                LiteralValue(34, IntegerType)))))
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+    val replaceSql =
+      """
+        |REPLACE TABLE my_tab (a INT, b STRING, ts TIMESTAMP) USING parquet
+        |PARTITIONED BY (
+        |    a,
+        |    bucket(16, b),
+        |    years(ts),
+        |    months(ts),
+        |    days(ts),
+        |    hours(ts),
+        |    foo(a, "bar", 34))
+      """.stripMargin
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType()
+        .add("a", IntegerType)
+        .add("b", StringType)
+        .add("ts", TimestampType)),
+      Seq(
+        IdentityTransform(FieldReference("a")),
+        BucketTransform(LiteralValue(16, IntegerType), Seq(FieldReference("b"))),
+        YearsTransform(FieldReference("ts")),
+        MonthsTransform(FieldReference("ts")),
+        DaysTransform(FieldReference("ts")),
+        HoursTransform(FieldReference("ts")),
+        ApplyTransform("foo", Seq(
+          FieldReference("a"),
+          LiteralValue(UTF8String.fromString("bar"), StringType),
+          LiteralValue(34, IntegerType)))),
+      None,
+      Map.empty[String, String],
+      "parquet",
+      Map.empty[String, String],
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("create table - with bucket") {
-    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
+  test("create/replace table - with bucket") {
+    val createSql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
         "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
-    parsePlan(query) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.contains(BucketSpec(5, Seq("a"), Seq("b"))))
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
+    val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet " +
+      "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
 
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $query")
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Seq.empty[Transform],
+      Some(BucketSpec(5, Seq("a"), Seq("b"))),
+      Map.empty[String, String],
+      "parquet",
+      Map.empty[String, String],
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("create table - with comment") {
-    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
-
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.contains("abc"))
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+  test("create/replace table - with comment") {
+    val createSql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
+    val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet COMMENT 'abc'"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      "parquet",
+      Map.empty[String, String],
+      None,
+      Some("abc"))
+    Seq(createSql, replaceSql).foreach{ sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("create table - with table properties") {
-    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet TBLPROPERTIES('test' = 'test')"
-
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties == Map("test" -> "test"))
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+  test("create/replace table - with table properties") {
+    val createSql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet" +
+      " TBLPROPERTIES('test' = 'test')"
+    val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet" +
+      " TBLPROPERTIES('test' = 'test')"
+    val expectedTableSpec = TableSpec(
+      Seq("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      Seq.empty[Transform],
+      None,
+      Map("test" -> "test"),
+      "parquet",
+      Map.empty[String, String],
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("create table - with location") {
-    val sql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
-
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("my_tab"))
-        assert(create.tableSchema == new StructType().add("a", IntegerType).add("b", StringType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.contains("/tmp/file"))
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+  test("create/replace table - with location") {
+    val createSql = "CREATE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
+    val replaceSql = "REPLACE TABLE my_tab(a INT, b STRING) USING parquet LOCATION '/tmp/file'"
+    val expectedTableSpec = TableSpec(
+        Seq("my_tab"),
+        Some(new StructType().add("a", IntegerType).add("b", StringType)),
+        Seq.empty[Transform],
+        None,
+        Map.empty[String, String],
+        "parquet",
+        Map.empty[String, String],
+        Some("/tmp/file"),
+        None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("create table - byte length literal table name") {
-    val sql = "CREATE TABLE 1m.2g(a INT) USING parquet"
-
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("1m", "2g"))
-        assert(create.tableSchema == new StructType().add("a", IntegerType))
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "parquet")
-        assert(create.options.isEmpty)
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+  test("create/replace table - byte length literal table name") {
+    val createSql = "CREATE TABLE 1m.2g(a INT) USING parquet"
+    val replaceSql = "REPLACE TABLE 1m.2g(a INT) USING parquet"
+    val expectedTableSpec = TableSpec(
+      Seq("1m", "2g"),
+      Some(new StructType().add("a", IntegerType)),
+      Seq.empty[Transform],
+      None,
+      Map.empty[String, String],
+      "parquet",
+      Map.empty[String, String],
+      None,
+      None)
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = false)
     }
   }
 
-  test("Duplicate clauses - create table") {
+  test("Duplicate clauses - create/replace table") {
     def createTableHeader(duplicateClause: String): String = {
+      s"CREATE TABLE my_tab(a INT, b STRING) USING parquet $duplicateClause $duplicateClause"
+    }
+
+    def replaceTableHeader(duplicateClause: String): String = {
       s"CREATE TABLE my_tab(a INT, b STRING) USING parquet $duplicateClause $duplicateClause"
     }
 
@@ -293,31 +279,44 @@ class DDLParserSuite extends AnalysisTest {
       "Found duplicate clauses: CLUSTERED BY")
     intercept(createTableHeader("PARTITIONED BY (b)"),
       "Found duplicate clauses: PARTITIONED BY")
+
+    intercept(replaceTableHeader("TBLPROPERTIES('test' = 'test2')"),
+      "Found duplicate clauses: TBLPROPERTIES")
+    intercept(replaceTableHeader("LOCATION '/tmp/file'"),
+      "Found duplicate clauses: LOCATION")
+    intercept(replaceTableHeader("COMMENT 'a table'"),
+      "Found duplicate clauses: COMMENT")
+    intercept(replaceTableHeader("CLUSTERED BY(b) INTO 256 BUCKETS"),
+      "Found duplicate clauses: CLUSTERED BY")
+    intercept(replaceTableHeader("PARTITIONED BY (b)"),
+      "Found duplicate clauses: PARTITIONED BY")
   }
 
   test("support for other types in OPTIONS") {
-    val sql =
+    val createSql =
       """
         |CREATE TABLE table_name USING json
         |OPTIONS (a 1, b 0.1, c TRUE)
       """.stripMargin
-
-    parsePlan(sql) match {
-      case create: CreateTableStatement =>
-        assert(create.tableName == Seq("table_name"))
-        assert(create.tableSchema == new StructType)
-        assert(create.partitioning.isEmpty)
-        assert(create.bucketSpec.isEmpty)
-        assert(create.properties.isEmpty)
-        assert(create.provider == "json")
-        assert(create.options == Map("a" -> "1", "b" -> "0.1", "c" -> "true"))
-        assert(create.location.isEmpty)
-        assert(create.comment.isEmpty)
-        assert(!create.ifNotExists)
-
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTableStatement].getClass.getName} from query," +
-            s"got ${other.getClass.getName}: $sql")
+    val replaceSql =
+      """
+        |REPLACE TABLE table_name USING json
+        |OPTIONS (a 1, b 0.1, c TRUE)
+      """.stripMargin
+    Seq(createSql, replaceSql).foreach { sql =>
+      testCreateOrReplaceDdl(
+        sql,
+        TableSpec(
+          Seq("table_name"),
+          Some(new StructType),
+          Seq.empty[Transform],
+          Option.empty[BucketSpec],
+          Map.empty[String, String],
+          "json",
+          Map("a" -> "1", "b" -> "0.1", "c" -> "true"),
+          None,
+          None),
+        expectedIfNotExists = false)
     }
   }
 
@@ -352,27 +351,28 @@ class DDLParserSuite extends AnalysisTest {
         |AS SELECT * FROM src
       """.stripMargin
 
-    checkParsing(s1)
-    checkParsing(s2)
-    checkParsing(s3)
+    val s4 =
+      """
+        |REPLACE TABLE mydb.page_view
+        |USING parquet
+        |COMMENT 'This is the staging page view table'
+        |LOCATION '/user/external/page_view'
+        |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
+        |AS SELECT * FROM src
+      """.stripMargin
 
-    def checkParsing(sql: String): Unit = {
-      parsePlan(sql) match {
-        case create: CreateTableAsSelectStatement =>
-          assert(create.tableName == Seq("mydb", "page_view"))
-          assert(create.partitioning.isEmpty)
-          assert(create.bucketSpec.isEmpty)
-          assert(create.properties == Map("p1" -> "v1", "p2" -> "v2"))
-          assert(create.provider == "parquet")
-          assert(create.options.isEmpty)
-          assert(create.location.contains("/user/external/page_view"))
-          assert(create.comment.contains("This is the staging page view table"))
-          assert(create.ifNotExists)
-
-        case other =>
-          fail(s"Expected to parse ${classOf[CreateTableAsSelectStatement].getClass.getName} " +
-              s"from query, got ${other.getClass.getName}: $sql")
-      }
+    val expectedTableSpec = TableSpec(
+        Seq("mydb", "page_view"),
+        None,
+        Seq.empty[Transform],
+        None,
+        Map("p1" -> "v1", "p2" -> "v2"),
+        "parquet",
+        Map.empty[String, String],
+        Some("/user/external/page_view"),
+        Some("This is the staging page view table"))
+    Seq(s1, s2, s3, s4).foreach { sql =>
+      testCreateOrReplaceDdl(sql, expectedTableSpec, expectedIfNotExists = true)
     }
   }
 
@@ -401,6 +401,28 @@ class DDLParserSuite extends AnalysisTest {
       DropViewStatement(Seq("db", "view"), ifExists = true))
     parseCompare(s"DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
     parseCompare(s"DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
+  }
+
+  private def testCreateOrReplaceDdl(
+      sqlStatement: String,
+      tableSpec: TableSpec,
+      expectedIfNotExists: Boolean) {
+    val parsedPlan = parsePlan(sqlStatement)
+    val newTableToken = sqlStatement.split(" ")(0).trim.toUpperCase(Locale.ROOT)
+    parsedPlan match {
+      case create: CreateTableStatement if newTableToken == "CREATE" =>
+        assert(create.ifNotExists == expectedIfNotExists)
+      case ctas: CreateTableAsSelectStatement if newTableToken == "CREATE" =>
+        assert(ctas.ifNotExists == expectedIfNotExists)
+      case replace: ReplaceTableStatement if newTableToken == "REPLACE" =>
+      case replace: ReplaceTableAsSelectStatement if newTableToken == "REPLACE" =>
+      case other =>
+        fail("First token in statement does not match the expected parsed plan; CREATE TABLE" +
+          " should create a CreateTableStatement, and REPLACE TABLE should create a" +
+          s" ReplaceTableStatement. Statement: $sqlStatement, plan type:" +
+          s" ${parsedPlan.getClass.getName}.")
+    }
+    assert(TableSpec(parsedPlan) === tableSpec)
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -591,6 +613,71 @@ class DDLParserSuite extends AnalysisTest {
         AlterTableDropColumnsStatement(
           Seq("table_name"),
           Seq(Seq("x"), Seq("y"), Seq("a", "b", "c"))))
+    }
+  }
+
+  private case class TableSpec(
+      name: Seq[String],
+      schema: Option[StructType],
+      partitioning: Seq[Transform],
+      bucketSpec: Option[BucketSpec],
+      properties: Map[String, String],
+      provider: String,
+      options: Map[String, String],
+      location: Option[String],
+      comment: Option[String])
+
+  private object TableSpec {
+    def apply(plan: LogicalPlan): TableSpec = {
+      plan match {
+        case create: CreateTableStatement =>
+          TableSpec(
+            create.tableName,
+            Some(create.tableSchema),
+            create.partitioning,
+            create.bucketSpec,
+            create.properties,
+            create.provider,
+            create.options,
+            create.location,
+            create.comment)
+        case replace: ReplaceTableStatement =>
+          TableSpec(
+            replace.tableName,
+            Some(replace.tableSchema),
+            replace.partitioning,
+            replace.bucketSpec,
+            replace.properties,
+            replace.provider,
+            replace.options,
+            replace.location,
+            replace.comment)
+        case ctas: CreateTableAsSelectStatement =>
+          TableSpec(
+            ctas.tableName,
+            Some(ctas.asSelect).filter(_.resolved).map(_.schema),
+            ctas.partitioning,
+            ctas.bucketSpec,
+            ctas.properties,
+            ctas.provider,
+            ctas.options,
+            ctas.location,
+            ctas.comment)
+        case rtas: ReplaceTableAsSelectStatement =>
+          TableSpec(
+            rtas.tableName,
+            Some(rtas.asSelect).filter(_.resolved).map(_.schema),
+            rtas.partitioning,
+            rtas.bucketSpec,
+            rtas.properties,
+            rtas.provider,
+            rtas.options,
+            rtas.location,
+            rtas.comment)
+        case other =>
+          fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
+            s" from query, got ${other.getClass.getName}.")
+      }
     }
   }
 }
