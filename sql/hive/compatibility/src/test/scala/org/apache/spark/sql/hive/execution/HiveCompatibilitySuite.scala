@@ -600,7 +600,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_hash"
   )
 
-  val commonWhiteList = Seq(
+  private def commonWhiteList = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",
