@@ -1623,6 +1623,10 @@ private case class GetTimestamp(
     Examples:
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
        2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
+       NULL
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
   """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
