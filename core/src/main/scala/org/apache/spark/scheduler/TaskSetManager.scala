@@ -270,11 +270,12 @@ private[spark] class TaskSetManager(
           !(speculative && hasAttemptOnHost(index, host))) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
+        // Speculatable task should only be launched when at most one copy of the
+        // original task is running
         if (!successful(index)) {
           if (copiesRunning(index) == 0) {
             return Some(index)
           } else if (speculative && copiesRunning(index) == 1) {
-            speculatableTasks -= index
             return Some(index)
           }
         }
@@ -321,7 +322,11 @@ private[spark] class TaskSetManager(
     }
     val pendingTaskSetToUse = if (speculative) pendingSpeculatableTasks else pendingTasks
     def dequeue(list: ArrayBuffer[Int]): Option[Int] = {
-      dequeueTaskFromList(execId, host, list, speculative)
+      val task = dequeueTaskFromList(execId, host, list, speculative)
+      if (speculative && task.isDefined) {
+        speculatableTasks -= task.get
+      }
+      task
     }
 
     dequeue(pendingTaskSetToUse.forExecutor.getOrElse(execId, ArrayBuffer())).foreach { index =>
