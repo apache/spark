@@ -1618,6 +1618,12 @@ private case class GetTimestamp(
     Examples:
       > SELECT _FUNC_(2013, 7, 15);
        2013-07-15
+      > SELECT _FUNC_(2019, 13, 1);
+       NULL
+      > SELECT _FUNC_(2019, 7, NULL);
+       NULL
+      > SELECT _FUNC_(2019, 2, 30);
+       NULL
   """,
   since = "3.0.0")
 case class MakeDate(year: Expression, month: Expression, day: Expression)
