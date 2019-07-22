@@ -511,25 +511,35 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 
   override def dataType: DataType = input.dataType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(input.dataType, replace.dataType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType),
+    TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val (inputType, replaceType, posType, lenType) =
+      (input.dataType, replace.dataType, pos.dataType, len.dataType)
+    (inputType, replaceType) match {
+      case (StringType, StringType) | (BinaryType, BinaryType) =>
+      case (inputType, replaceType) => return TypeCheckResult.TypeCheckFailure(
+        s"Invalid data type $inputType and $replaceType. The result type of the input " +
+        "expression and the replace expression are either String or Byte Array.")
+    }
+    if (IntegerType.acceptsType(posType) && IntegerType.acceptsType(lenType)) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure("Pos expression and len expression must be integer type.")
+    }
+  }
+
   override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
+    val position = posEval.asInstanceOf[Int]
+    val length = lenEval.asInstanceOf[Int]
     input.dataType match {
-      case StringType =>
-        val inputStr = inputEval.asInstanceOf[UTF8String]
-        val replaceStr = replaceEval.asInstanceOf[UTF8String]
-        val position = posEval.asInstanceOf[Int]
-        val length = lenEval.asInstanceOf[Int]
-        Overlay.calculate(inputStr, replaceStr, position, length)
-      case BinaryType =>
-        val inputArr = inputEval.asInstanceOf[Array[Byte]]
-        val replaceArr = replaceEval.asInstanceOf[Array[Byte]]
-        val position = posEval.asInstanceOf[Int]
-        val length = lenEval.asInstanceOf[Int]
-        Overlay.calculate(inputArr, replaceArr, position, length)
+      case StringType => Overlay.calculate(inputEval.asInstanceOf[UTF8String],
+        replaceEval.asInstanceOf[UTF8String], position, length)
+      case BinaryType => Overlay.calculate(inputEval.asInstanceOf[Array[Byte]],
+        replaceEval.asInstanceOf[Array[Byte]], position, length)
     }
   }
 
