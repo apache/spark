@@ -489,6 +489,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       .checkInputDataTypes().isFailure)
     assert(Overlay(Literal("Spark SQL"), Literal.create(2), Literal.create(7, IntegerType),
       Literal.create(0, IntegerType)).checkInputDataTypes().isFailure)
+  }
 
   test("translate") {
     checkEvaluation(
