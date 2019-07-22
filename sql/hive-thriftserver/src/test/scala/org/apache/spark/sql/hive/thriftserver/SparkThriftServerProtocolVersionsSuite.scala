@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.Properties
 
@@ -68,53 +69,117 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
   }
 
   ThriftserverShimUtils.testedProtocalVersions.foreach { version =>
+    test(s"$version get byte value") {
+      testWithProtocolVersion(version, "SELECT cast(1 as byte)") { rs =>
+        assert(rs.next())
+        assert(rs.getByte(1) === 1.toByte)
+      }
+    }
+
+    test(s"$version get short value") {
+      testWithProtocolVersion(version, "SELECT cast(1 as short)") { rs =>
+        assert(rs.next())
+        assert(rs.getShort(1) === 1.toShort)
+      }
+    }
+
     test(s"$version get int value") {
-      testWithProtocolVersion(version, "select 1") { rs =>
+      testWithProtocolVersion(version, "SELECT 1") { rs =>
         assert(rs.next())
         assert(rs.getInt(1) === 1)
       }
     }
 
+    test(s"$version get bigint value") {
+      testWithProtocolVersion(version, "SELECT cast(1 as bigint)") { rs =>
+        assert(rs.next())
+        assert(rs.getLong(1) === 1L)
+      }
+    }
+
     test(s"$version get float value") {
-      testWithProtocolVersion(version, "select cast(1.2 as float)") { rs =>
+      testWithProtocolVersion(version, "SELECT cast(1.2 as float)") { rs =>
         assert(rs.next())
         assert(rs.getFloat(1) === 1.2F)
       }
     }
 
     test(s"$version get double value") {
-      testWithProtocolVersion(version, "select cast(1.2 as double)") { rs =>
+      testWithProtocolVersion(version, "SELECT cast(1.2 as double)") { rs =>
         assert(rs.next())
         assert(rs.getDouble(1) === 1.2D)
       }
     }
 
-    test(s"$version get string value") {
-      testWithProtocolVersion(version, "select 'str'") { rs =>
-        assert(rs.next())
-        assert(rs.getString(1) === "str")
-      }
-    }
-
     // TODO: active this test case after SPARK-28463 and SPARK-26969
     // test(s"$version get decimal value") {
-    //   testWithProtocolVersion(version, "select cast(1 as decimal(18, 2)) as c") { rs =>
+    //   testWithProtocolVersion(version, "SELECT cast(1 as decimal(18, 2)) as c") { rs =>
     //     assert(rs.next())
     //     assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.00"))
     //   }
     // }
 
+    test(s"$version get string value") {
+      testWithProtocolVersion(version, "SELECT 'str'") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === "str")
+      }
+    }
+
+    // TODO: active this test case after SPARK-28474
+    // test(s"$version get binary value") {
+    //   testWithProtocolVersion(version, "SELECT cast('ABC' as binary)") { rs =>
+    //     assert(rs.next())
+    //     assert(rs.getObject(1) === "ABC".getBytes(StandardCharsets.UTF_8))
+    //   }
+    // }
+
+    test(s"$version get boolean value") {
+      testWithProtocolVersion(version, "SELECT true") { rs =>
+        assert(rs.next())
+        assert(rs.getBoolean(1) === true)
+      }
+    }
+
     test(s"$version get date value") {
-      testWithProtocolVersion(version, "select cast('2019-07-22' as date)") { rs =>
+      testWithProtocolVersion(version, "SELECT cast('2019-07-22' as date)") { rs =>
         assert(rs.next())
         assert(rs.getDate(1) === Date.valueOf("2019-07-22"))
       }
     }
 
     test(s"$version get timestamp value") {
-      testWithProtocolVersion(version, "select cast('2019-07-22 18:14:00' as timestamp)") { rs =>
+      testWithProtocolVersion(version, "SELECT cast('2019-07-22 18:14:00' as timestamp)") { rs =>
         assert(rs.next())
         assert(rs.getTimestamp(1) === Timestamp.valueOf("2019-07-22 18:14:00"))
+      }
+    }
+
+    test(s"$version get void") {
+      testWithProtocolVersion(version, "SELECT null") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === null)
+      }
+    }
+
+    test(s"$version get array") {
+      testWithProtocolVersion(version, "SELECT array(1, 2)") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === "[1,2]")
+      }
+    }
+
+    test(s"$version get map") {
+      testWithProtocolVersion(version, "SELECT map(1, 2)") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === "{1:2}")
+      }
+    }
+
+    test(s"$version get struct") {
+      testWithProtocolVersion(version, "SELECT struct('alpha' AS A, 'beta' AS B)") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === """{"A":"alpha","B":"beta"}""")
       }
     }
   }
