@@ -2194,10 +2194,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     import IntegratedUDFTestUtils._
 
     val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
-    registerTestUDF(scalaTestUDF, spark)
-
     val pythonTestUDF = TestPythonUDF(name = "pyUDF")
-    registerTestUDF(pythonTestUDF, spark)
+    assume(shouldTestPythonUDFs)
 
     withTempView("testData") {
       sql(
@@ -2206,28 +2204,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           |(1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2), (null, 1), (3, null), (null, null)
           |AS testData(a, b)""".stripMargin)
 
-      val df = sql("SELECT scalaUDF(a + 1), scalaUDF(COUNT(b)) FROM testData " +
-        "GROUP BY scalaUDF(a + 1)")
-      val df2 = sql("SELECT pyUDF(a + 1), pyUDF(COUNT(b)) FROM testData GROUP BY pyUDF(a + 1)")
+      val base = spark.table("testData")
+
+      val df = base.groupBy(scalaTestUDF(base("a") + 1))
+        .agg(scalaTestUDF(base("a") + 1), scalaTestUDF(count(base("b"))))
+      val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
+        .agg(pythonTestUDF(base("a") + 1), pythonTestUDF(count(base("b"))))
       checkAnswer(df, df2)
 
-      val df3 = sql("SELECT scalaUDF(a + 1) + 1, scalaUDF(COUNT(b)) FROM testData " +
-        "GROUP BY scalaUDF(a + 1)")
-      val df4 = sql("SELECT pyUDF(a + 1) + 1, pyUDF(COUNT(b)) FROM testData GROUP BY pyUDF(a + 1)")
+      val df3 = base.groupBy(scalaTestUDF(base("a") + 1))
+        .agg(scalaTestUDF(base("a") + 1) + 1, scalaTestUDF(count(base("b"))))
+      val df4 = base.groupBy(pythonTestUDF(base("a") + 1))
+        .agg(pythonTestUDF(base("a") + 1) + 1, pythonTestUDF(count(base("b"))))
       checkAnswer(df3, df4)
 
       // PythonUDF in aggregate expression has grouping key in its arguments.
-      val df5 = sql("SELECT scalaUDF(scalaUDF(a + 1)), scalaUDF(COUNT(b)) FROM testData " +
-        "GROUP BY scalaUDF(a + 1)")
-      val df6 = sql("SELECT pyUDF(pyUDF(a + 1)), pyUDF(COUNT(b)) FROM testData " +
-        "GROUP BY pyUDF(a + 1)")
+      val df5 = base.groupBy(scalaTestUDF(base("a") + 1))
+        .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)), scalaTestUDF(count(base("b"))))
+      val df6 = base.groupBy(pythonTestUDF(base("a") + 1))
+        .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)), pythonTestUDF(count(base("b"))))
       checkAnswer(df5, df6)
 
       // PythonUDF over grouping key is argument to aggregate function.
-      val df7 = sql("SELECT scalaUDF(scalaUDF(a + 1)), scalaUDF(COUNT(scalaUDF(a + 1))) " +
-        "FROM testData GROUP BY scalaUDF(a + 1)")
-      val df8 = sql("SELECT pyUDF(pyUDF(a + 1)), pyUDF(COUNT(pyUDF(a + 1))) " +
-        "FROM testData GROUP BY pyUDF(a + 1)")
+      val df7 = base.groupBy(scalaTestUDF(base("a") + 1))
+        .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)),
+          scalaTestUDF(count(scalaTestUDF(base("a") + 1))))
+      val df8 = base.groupBy(pythonTestUDF(base("a") + 1))
+        .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)),
+          pythonTestUDF(count(pythonTestUDF(base("a") + 1))))
       checkAnswer(df7, df8)
     }
   }
