@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema, Type}
+import org.apache.hive.service.cli.thrift.TProtocolVersion._
 
 /**
  * Various utilities for hive-thriftserver used to upgrade the built-in Hive.
@@ -46,4 +47,11 @@ private[thriftserver] object ThriftserverShimUtils {
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
+  private[thriftserver] val testedProtocalVersions = Seq(
+    HIVE_CLI_SERVICE_PROTOCOL_V3,
+    HIVE_CLI_SERVICE_PROTOCOL_V4,
+    HIVE_CLI_SERVICE_PROTOCOL_V5,
+    HIVE_CLI_SERVICE_PROTOCOL_V6,
+    HIVE_CLI_SERVICE_PROTOCOL_V7,
+    HIVE_CLI_SERVICE_PROTOCOL_V8)
 }
