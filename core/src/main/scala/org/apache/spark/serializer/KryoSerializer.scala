@@ -182,6 +182,10 @@ class KryoSerializer(conf: SparkConf)
     // We can't load those class directly in order to avoid unnecessary jar dependencies.
     // We load them safely, ignore it if the class not found.
     Seq(
+      "org.apache.spark.sql.catalyst.expressions.UnsafeRow",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeArrayData",
+      "org.apache.spark.sql.catalyst.expressions.UnsafeMapData",
+
       "org.apache.spark.ml.feature.Instance",
       "org.apache.spark.ml.feature.LabeledPoint",
       "org.apache.spark.ml.feature.OffsetInstance",
