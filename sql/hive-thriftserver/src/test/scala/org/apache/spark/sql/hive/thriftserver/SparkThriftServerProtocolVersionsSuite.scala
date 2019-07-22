@@ -22,7 +22,6 @@ import java.util.Properties
 
 import org.apache.hive.jdbc.{HiveConnection, HiveQueryResultSet}
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.rpc.thrift.TExecuteStatementReq
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
@@ -44,7 +43,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
       val clientProtocol = new ThriftserverShimUtils.TOpenSessionReq(version)
       val openResp = client.OpenSession(clientProtocol)
       val sessHandle = openResp.getSessionHandle
-      val execReq = new TExecuteStatementReq(sessHandle, sql)
+      val execReq = new ThriftserverShimUtils.TExecuteStatementReq(sessHandle, sql)
       val execResp = client.ExecuteStatement(execReq)
       val stmtHandle = execResp.getOperationHandle
 

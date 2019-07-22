@@ -33,6 +33,8 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] type TGetSchemasReq = org.apache.hive.service.cli.thrift.TGetSchemasReq
   private[thriftserver] type TGetTablesReq = org.apache.hive.service.cli.thrift.TGetTablesReq
   private[thriftserver] type TGetColumnsReq = org.apache.hive.service.cli.thrift.TGetColumnsReq
+  private[thriftserver] type TExecuteStatementReq =
+    org.apache.hive.service.cli.thrift.TExecuteStatementReq
 
   private[thriftserver] def getConsole: SessionState.LogHelper = {
     val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
