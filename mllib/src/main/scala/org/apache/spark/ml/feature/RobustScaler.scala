@@ -165,12 +165,7 @@ class RobustScaler (override val uid: String)
       if (agg == null) {
         Iterator.empty
       } else {
-        var i = 0
-        while (i < agg.length) {
-          agg(i) = agg(i).compress()
-          i += 1
-        }
-        Iterator.single(agg)
+        Iterator.single(agg.map(_.compress))
       }
     }.treeReduce { (agg1, agg2) =>
       require(agg1.length == agg2.length)
