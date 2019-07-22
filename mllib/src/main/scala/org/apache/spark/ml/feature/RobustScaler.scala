@@ -154,7 +154,8 @@ class RobustScaler (override val uid: String)
           agg = Array.fill(vec.size)(
             new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, 0.001))
         }
-        require(vec.size == agg.length)
+        require(vec.size == agg.length,
+          s"Number of dimensions must be ${agg.length} but got ${vec.size}")
         var i = 0
         while (i < vec.size) {
           agg(i) = agg(i).insert(vec(i))
