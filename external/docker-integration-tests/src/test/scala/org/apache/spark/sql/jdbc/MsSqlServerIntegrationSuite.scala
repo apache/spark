@@ -130,7 +130,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     spark.createDataFrame(spark.sparkContext.parallelize(data),schema)
   }
 
-  test("JDBCV2 write test") {
+  test("JDBCV2 write append test") {
     // Read 1 row using JDBC. Write(append) this row using jdbcv2.
     val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
     df1.show(10)
@@ -147,6 +147,15 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df2_new = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
     df2_new.show(10)
     assert(df2_new.count == 4)
+  }
+
+  test("JDBCV2 write overwrite test") {
+    // Overwrite a existing table with a new schema and values.
+    val df1 = create_test_df()
+    // Overwrite test. Overwrite mode create a new table if it does not exist
+    df1.write.format("jdbcv2").mode("overwrite").option("url",jdbcUrl).option("dbtable","strings_numbers").save()
+    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","strings_numbers").load()
+    df2.show()
   }
 
   test("Basic test") {

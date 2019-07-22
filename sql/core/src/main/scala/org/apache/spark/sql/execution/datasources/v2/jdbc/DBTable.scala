@@ -48,9 +48,12 @@ case class DBTable (sparkSession: SparkSession,
   }
 
   override def schema: StructType = {
-    /* TODO - check why a schema request? Will this be called for every 'append'
-     *  request to get schema from DBTable. If so, schema check in append should
-     *  not be required.
+    /* TODO - check why a schema request?
+     *  1. Will this be called for every 'append' request to get schema from DBTable.
+     *  If so, schema check in append should not be required.
+     *  2. This is called in overwrite as well. What if the table does not exist. A empty
+     *     schema would be returned resulting in an exception. Should Overwrite semantics
+     *     not create a table.
      */
     logInfo("***dsv2-flows*** schema called")
     val schemaInDB = JdbcUtils.getSchemaOption(conn, userOptions)
