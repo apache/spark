@@ -93,7 +93,7 @@ private[execution] object HashedRelation {
       sizeEstimate: Int = 64,
       taskMemoryManager: TaskMemoryManager = null): HashedRelation = {
     val mm = Option(taskMemoryManager).getOrElse {
-      new TaskMemoryManager(SparkEnv.get.memoryManager, 0)
+      new TaskMemoryManager(UnifiedMemoryManager(SparkEnv.get.conf, 1), 0)
     }
 
     if (key.length == 1 && key.head.dataType == LongType) {
@@ -220,7 +220,7 @@ private[joins] class UnsafeHashedRelation(
     // This is used in Broadcast, shared by multiple tasks, so we use on-heap memory
     // TODO(josh): This needs to be revisited before we merge this patch; making this change now
     // so that tests compile:
-    val taskMemoryManager = new TaskMemoryManager(SparkEnv.get.memoryManager, 0)
+    val taskMemoryManager = new TaskMemoryManager(UnifiedMemoryManager(SparkEnv.get.conf, 1), 0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().get(BUFFER_PAGESIZE).getOrElse(16L * 1024 * 1024))
@@ -378,7 +378,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   // needed by serializer
   def this() = {
     this(
-      new TaskMemoryManager(SparkEnv.get.memoryManager, 0),
+      new TaskMemoryManager(UnifiedMemoryManager(SparkEnv.get.conf, 1), 0),
       0)
   }
 
