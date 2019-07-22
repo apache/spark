@@ -98,6 +98,28 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       expectedJVMValue = Seq("(spark.test.foo,spark.test.bar)"))
   }
 
+  test("Run SparkPi without the default exit on OOM error flag", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
+      .set("spark.kubernetes.driverEnv.DRIVER_VERBOSE", "true")
+      .set("spark.kubernetes.driverEnv.IGNORE_DEFAULT_DRIVER_JVM_OPTIONS", "true")
+
+    val output = Seq("Pi is roughly 3",
+      "(spark.driver.extraJavaOptions,-Dspark.test.foo=spark.test.bar)")
+
+    runSparkPiAndVerifyCompletion(expectedLogOnCompletion = output)
+  }
+
+  test("Run SparkPi with the default exit on OOM error flag set", k8sTestTag) {
+    sparkAppConf
+      .set("spark.driver.extraJavaOptions", "-Dspark.test.foo=spark.test.bar")
+      .set("spark.kubernetes.driverEnv.DRIVER_VERBOSE", "true")
+    val output = Seq("Pi is roughly 3",
+      "(spark.driver.extraJavaOptions,-XX:OnOutOfMemoryError=\"kill -9 %p\" " +
+        "-Dspark.test.foo=spark.test.bar)")
+    runSparkPiAndVerifyCompletion(expectedLogOnCompletion = output)
+  }
+
   test("Run SparkRemoteFileTest using a remote data file", k8sTestTag) {
     sparkAppConf
       .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)

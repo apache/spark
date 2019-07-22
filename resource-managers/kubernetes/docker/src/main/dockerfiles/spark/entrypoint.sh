@@ -60,14 +60,44 @@ if ! [ -z ${HADOOP_CONF_DIR+x} ]; then
   SPARK_CLASSPATH="$HADOOP_CONF_DIR:$SPARK_CLASSPATH";
 fi
 
+IGNORE_DEFAULT_DRIVER_JVM_OPTIONS=${IGNORE_DEFAULT_DRIVER_JVM_OPTIONS:-false}
+DRIVER_VERBOSE=${DRIVER_VERBOSE:-false}
+
+function get_verbose_flag()
+{
+  if [[ $DRIVER_VERBOSE == "true" ]]; then
+    echo "--verbose"
+  else
+    echo ""
+  fi
+}
+
+function get_args_with_defaults()
+{
+  if [[ $IGNORE_DEFAULT_DRIVER_JVM_OPTIONS == "true" ]]; then
+    echo "$@"
+  else
+    if grep -q "spark.driver.extraJavaOptions" "/opt/spark/conf/spark.properties"; then
+      sed 's/spark.driver.extraJavaOptions=/&-XX:OnOutOfMemoryError="kill -9 %p" /g' /opt/spark/conf/spark.properties > /tmp/spark.properties
+    else
+      cp /opt/spark/conf/spark.properties /tmp/spark.properties
+      echo 'spark.driver.extraJavaOptions=-XX:OnOutOfMemoryError="kill -9 %p"' >> /tmp/spark.properties
+    fi
+     echo "$@" | sed  's|/opt/spark/conf/spark.properties |/tmp/spark.properties |g'
+  fi
+}
+
 case "$1" in
   driver)
     shift 1
+    DRIVER_ARGS=$(get_args_with_defaults "$@")
+    VERBOSE_FLAG=$(get_verbose_flag)
     CMD=(
       "$SPARK_HOME/bin/spark-submit"
+      $VERBOSE_FLAG
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
-      "$@"
+      $DRIVER_ARGS
     )
     ;;
   executor)
