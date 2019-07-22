@@ -262,8 +262,9 @@ class ContinuousSuite extends ContinuousSuiteBase {
         udf.isInstanceOf[TestScalaUDF])
 
       val input = ContinuousMemoryStream[Int]
+      val df = input.toDF()
 
-      testStream(input.toDF().select(udf($"value").cast("int")))(
+      testStream(df.select(udf(df("value")).cast("int")))(
         AddData(input, 0, 1, 2),
         CheckAnswer(0, 1, 2),
         StopStream,
