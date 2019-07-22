@@ -176,7 +176,7 @@ class RobustScaler (override val uid: String)
       require(agg1.length == agg2.length)
       var i = 0
       while (i < agg1.length) {
-        agg1(i) = agg1(i).merge(agg2(i)).compress()
+        agg1(i) = agg1(i).merge(agg2(i))
         i += 1
       }
       agg1
@@ -233,8 +233,8 @@ class RobustScalerModel private[ml] (
       range.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
     } else Array.emptyDoubleArray
 
-    val func = StandardScalerModel.getTransformFunc(shift, scale,
-      $(withCentering), $(withScaling))
+    val func = StandardScalerModel.getTransformFunc(
+      shift, scale, $(withCentering), $(withScaling))
     val transformer = udf(func)
 
     dataset.withColumn($(outputCol), transformer(col($(inputCol))))

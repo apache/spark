@@ -225,9 +225,10 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
   @Since("1.6.0")
   override def load(path: String): StandardScalerModel = super.load(path)
 
-  private[spark] def transformWithBoth(shift: Array[Double],
-                                       scale: Array[Double],
-                                       values: Array[Double]): Array[Double] = {
+  private[spark] def transformWithBoth(
+      shift: Array[Double],
+      scale: Array[Double],
+      values: Array[Double]): Array[Double] = {
     var i = 0
     while (i < values.length) {
       values(i) = (values(i) - shift(i)) * scale(i)
@@ -236,8 +237,9 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     values
   }
 
-  private[spark] def transformWithShift(shift: Array[Double],
-                                        values: Array[Double]): Array[Double] = {
+  private[spark] def transformWithShift(
+      shift: Array[Double],
+      values: Array[Double]): Array[Double] = {
     var i = 0
     while (i < values.length) {
       values(i) -= shift(i)
@@ -246,8 +248,9 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     values
   }
 
-  private[spark] def transformDenseWithScale(scale: Array[Double],
-                                             values: Array[Double]): Array[Double] = {
+  private[spark] def transformDenseWithScale(
+      scale: Array[Double],
+      values: Array[Double]): Array[Double] = {
     var i = 0
     while (i < values.length) {
       values(i) *= scale(i)
@@ -256,9 +259,10 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     values
   }
 
-  private[spark] def transformSparseWithScale(scale: Array[Double],
-                                              indices: Array[Int],
-                                              values: Array[Double]): Array[Double] = {
+  private[spark] def transformSparseWithScale(
+      scale: Array[Double],
+      indices: Array[Int],
+      values: Array[Double]): Array[Double] = {
     var i = 0
     while (i < values.length) {
       values(i) *= scale(indices(i))
@@ -267,10 +271,11 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     values
   }
 
-  private[ml] def getTransformFunc(shift: Array[Double],
-                                   scale: Array[Double],
-                                   withShift: Boolean,
-                                   withScale: Boolean): Vector => Vector = {
+  private[ml] def getTransformFunc(
+      shift: Array[Double],
+      scale: Array[Double],
+      withShift: Boolean,
+      withScale: Boolean): Vector => Vector = {
     (withShift, withScale) match {
       case (true, true) =>
         vector: Vector =>
