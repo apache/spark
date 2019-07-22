@@ -175,7 +175,13 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("like expressions") {
     assertEqual("a like 'pattern%'", 'a like "pattern%")
+    assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", "#"))
+    assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", "\""))
+    intercept("a like 'pattern%' escape '##'", "Escape string must be empty or one character.")
     assertEqual("a not like 'pattern%'", !('a like "pattern%"))
+    assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", "#")))
+    assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", "\"")))
+    intercept("a not like 'pattern%' escape '\"/'", "Escape string must be empty or one character.")
     assertEqual("a rlike 'pattern%'", 'a rlike "pattern%")
     assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
     assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")

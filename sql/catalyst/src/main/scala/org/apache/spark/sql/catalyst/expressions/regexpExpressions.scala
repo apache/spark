@@ -107,9 +107,8 @@ abstract class StringRegexExpression extends BinaryExpression
 case class Like(left: Expression, right: Expression, escapeCharOpt: Option[String] = None)
   extends StringRegexExpression {
 
-  private lazy val escapeStr = escapeCharOpt.getOrElse("\\")
-
-  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeStr)
+  override def escape(v: String): String =
+    StringUtils.escapeLikeRegex(v, escapeCharOpt.getOrElse("\\"))
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
@@ -149,11 +148,11 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Strin
       val rightStr = ctx.freshName("rightStr")
       val escapeChar = escapeCharOpt.map { str =>
         if (str.equals("\"") || str.equals("\\")) {
-          s"""\\$str"""
+          s"""\\\\$str"""
         } else {
           str
         }
-      }.getOrElse("""\\""")
+      }.getOrElse("""\\\\""")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
