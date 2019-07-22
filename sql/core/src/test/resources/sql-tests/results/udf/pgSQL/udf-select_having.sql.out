@@ -130,9 +130,9 @@ struct<CAST(udf(cast(cast(udf(cast(min(cast(udf(cast(a as string)) as int)) as s
 
 
 -- !query 15
-SELECT udf(udf(min(udf(a)))), udf(udf(max(udf(a)))) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(udf(max(udf(a))))
+SELECT udf(min(udf(a))), udf(udf(max(a))) FROM test_having HAVING udf(min(a)) < udf(max(udf(a)))
 -- !query 15 schema
-struct<CAST(udf(cast(cast(udf(cast(min(cast(udf(cast(a as string)) as int)) as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(max(cast(udf(cast(a as string)) as int)) as string)) as int) as string)) AS INT):int>
+struct<CAST(udf(cast(min(cast(udf(cast(a as string)) as int)) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(max(a) as string)) as int) as string)) AS INT):int>
 -- !query 15 output
 0	9
 

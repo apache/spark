@@ -42,7 +42,7 @@ SELECT udf(c), max(udf(a)) FROM test_having
 -- Per SQL spec, these should generate 0 or 1 row, even without aggregates
 
 SELECT udf(udf(min(udf(a)))), udf(udf(max(udf(a)))) FROM test_having HAVING udf(udf(min(udf(a)))) = udf(udf(max(udf(a))));
-SELECT udf(udf(min(udf(a)))), udf(udf(max(udf(a)))) FROM test_having HAVING udf(udf(min(udf(a)))) < udf(udf(max(udf(a))));
+SELECT udf(min(udf(a))), udf(udf(max(a))) FROM test_having HAVING udf(min(a)) < udf(max(udf(a)));
 
 -- errors: ungrouped column references
 SELECT udf(a) FROM test_having HAVING udf(min(a)) < udf(max(a));
