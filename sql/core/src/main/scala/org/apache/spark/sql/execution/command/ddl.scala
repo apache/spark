@@ -910,16 +910,4 @@ object DDLUtils {
         "Cannot overwrite a path that is also being read from.")
     }
   }
-
-  def sizeInBytesFallBackToHdfs(session: SparkSession, path: Path, defaultSize: Long): Long = {
-    try {
-      val hadoopConf = session.sessionState.newHadoopConf()
-      val fs: FileSystem = path.getFileSystem(hadoopConf)
-      fs.getContentSummary(path).getLength
-    } catch {
-      case e: IOException =>
-        // Failed to get table size from hdfs. return default sizeInBytes
-        defaultSize
-    }
-  }
 }

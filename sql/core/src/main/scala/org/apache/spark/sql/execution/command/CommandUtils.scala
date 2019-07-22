@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.IOException
 import java.net.URI
 
 import scala.collection.mutable
@@ -343,5 +344,17 @@ object CommandUtils extends Logging {
 
   private def isDataPath(path: Path, stagingDir: String): Boolean = {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
+  }
+
+  def getSizeInBytesFallBackToHdfs(session: SparkSession, path: Path, defaultSize: Long): Long = {
+    try {
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val fs: FileSystem = path.getFileSystem(hadoopConf)
+      fs.getContentSummary(path).getLength
+    } catch {
+      case e: IOException =>
+        logWarning("Failed to get table size from hdfs. Returning default sizeInBytes")
+        defaultSize
+    }
   }
 }
