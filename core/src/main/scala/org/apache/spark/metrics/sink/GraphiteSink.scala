@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import com.codahale.metrics.graphite.{Graphite, GraphiteReporter, GraphiteUDP}
+
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
