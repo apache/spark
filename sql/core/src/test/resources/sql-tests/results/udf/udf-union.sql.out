@@ -19,10 +19,10 @@ struct<>
 
 
 -- !query 2
-SELECT *
-FROM   (SELECT * FROM t1
+SELECT udf(c1) as c1, udf(c2) as c2
+FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
         UNION ALL
-        SELECT * FROM t1)
+        SELECT udf(c1) as c1, udf(c2) as c2 FROM t1)
 -- !query 2 schema
 struct<c1:int,c2:string>
 -- !query 2 output
@@ -33,12 +33,12 @@ struct<c1:int,c2:string>
 
 
 -- !query 3
-SELECT *
-FROM   (SELECT * FROM t1
+SELECT udf(c1) as c1, udf(c2) as c2
+FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
         UNION ALL
-        SELECT * FROM t2
+        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2
         UNION ALL
-        SELECT * FROM t2)
+        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2)
 -- !query 3 schema
 struct<c1:decimal(11,1),c2:string>
 -- !query 3 output
@@ -51,17 +51,17 @@ struct<c1:decimal(11,1),c2:string>
 
 
 -- !query 4
-SELECT udf(a) as a
+SELECT udf(a) as a, udf(udf(a)) as a1
 FROM (SELECT udf(0) a, udf(0) b
       UNION ALL
       SELECT udf(SUM(1)) a, udf(CAST(0 AS BIGINT)) b
       UNION ALL SELECT udf(0) a, udf(0) b) T
 -- !query 4 schema
-struct<a:bigint>
+struct<a:bigint,a1:bigint>
 -- !query 4 output
-0
-0
-1
+0	0
+0	0
+1	1
 
 
 -- !query 5

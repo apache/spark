@@ -4,21 +4,21 @@ CREATE OR REPLACE TEMPORARY VIEW t1 AS VALUES (1, 'a'), (2, 'b') tbl(c1, c2);
 CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (1.0, 1), (2.0, 4) tbl(c1, c2);
 
 -- Simple Union
-SELECT *
-FROM   (SELECT * FROM t1
+SELECT udf(c1) as c1, udf(c2) as c2
+FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
         UNION ALL
-        SELECT * FROM t1);
+        SELECT udf(c1) as c1, udf(c2) as c2 FROM t1);
 
 -- Type Coerced Union
-SELECT *
-FROM   (SELECT * FROM t1
+SELECT udf(c1) as c1, udf(c2) as c2
+FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
         UNION ALL
-        SELECT * FROM t2
+        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2
         UNION ALL
-        SELECT * FROM t2);
+        SELECT udf(c1) as c1, udf(c2) as c2 FROM t2);
 
 -- Regression test for SPARK-18622
-SELECT udf(a) as a
+SELECT udf(a) as a, udf(udf(a)) as a1
 FROM (SELECT udf(0) a, udf(0) b
       UNION ALL
       SELECT udf(SUM(1)) a, udf(CAST(0 AS BIGINT)) b
