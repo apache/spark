@@ -64,11 +64,12 @@ class JDBCWriteBuilder(options: JdbcOptionsInWrite,
   override def overwrite(filters: Array[Filter]): WriteBuilder = {
     logInfo("***dsv2-flows*** overwrite called ")
     writeMode = SaveMode.Overwrite
+    for(filter <- filters) logInfo(s"***dsv2-flows*** overwrite filter is $filter")
     this
   }
 
   override def truncate(): WriteBuilder = {
-    logInfo("***dsv2-flows*** overwrite called ")
+    logInfo("***dsv2-flows*** truncate called ")
     writeMode = SaveMode.Overwrite
     isTruncate = true
     this
@@ -83,7 +84,7 @@ class JDBCWriteBuilder(options: JdbcOptionsInWrite,
 
         check filters.
     */
-    logInfo("***dsv2-flows*** Overwrite table with new schema")
+    logInfo("***dsv2-flows*** processOverwrite called")
     false
   }
 
