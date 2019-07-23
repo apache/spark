@@ -43,7 +43,12 @@ object StringUtils extends Logging {
    * @return the equivalent Java regular expression of the pattern
    */
   def escapeLikeRegex(pattern: String, escapeStr: String): String = {
-    assert(escapeStr.length == 1)
+    assert(escapeStr.length <= 1)
+    val escapeChar = if (escapeStr.length == 0) {
+      ""
+    } else {
+      escapeStr.charAt(0)
+    }
     val escapeChar = escapeStr.charAt(0)
     val in = pattern.toIterator
     val out = new StringBuilder()
