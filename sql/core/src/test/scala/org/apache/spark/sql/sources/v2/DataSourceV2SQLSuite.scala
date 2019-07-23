@@ -21,27 +21,15 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-<<<<<<< HEAD
-import org.apache.spark.sql.{QueryTest, Row}
-||||||| merged common ancestors
-import org.apache.spark.sql.QueryTest
-=======
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest}
->>>>>>> origin/master
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.v2.Identifier
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
 import org.apache.spark.sql.test.SharedSQLContext
-<<<<<<< HEAD
-import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
-||||||| merged common ancestors
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
-=======
-import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
->>>>>>> origin/master
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
 
 class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -88,11 +76,11 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       " USING foo" +
       " PARTITIONED BY (id)")
     val descriptionDf = spark.sql("DESCRIBE TABLE testcat.table_name")
-    assert(descriptionDf.schema === StructType(
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
       Seq(
-        StructField("col_name", StringType, nullable = false),
-        StructField("data_type", StringType, nullable = false),
-        StructField("comment", StringType))))
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
     val description = descriptionDf.collect()
     assert(description === Seq(
       Row("id", "bigint", ""),
@@ -105,11 +93,11 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       " PARTITIONED BY (id)" +
       " TBLPROPERTIES ('bar'='baz')")
     val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
-    assert(descriptionDf.schema === StructType(
-      Seq(
-        StructField("col_name", StringType, nullable = false),
-        StructField("data_type", StringType, nullable = false),
-        StructField("comment", StringType))))
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType))
+      === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
     assert(descriptionDf.collect()
       .map(_.toSeq)
       .map(_.toArray.map(_.toString.trim)) === Array(

@@ -69,26 +69,8 @@ class TestInMemoryTableCatalog extends TableCatalog {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
     }
-<<<<<<< HEAD
-
-    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions)
-||||||| merged common ancestors
-
-    if (partitions.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"Catalog $name: Partitioned tables are not supported")
-    }
-
-    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, properties)
-=======
     TestInMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-    if (partitions.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"Catalog $name: Partitioned tables are not supported")
-    }
-
-    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, properties)
->>>>>>> origin/master
+    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions)
 
     tables.put(ident, table)
 
@@ -100,20 +82,14 @@ class TestInMemoryTableCatalog extends TableCatalog {
       case Some(table) =>
         val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
         val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
-<<<<<<< HEAD
-        val newTable = new InMemoryTable(
-            table.name, schema, properties, table.partitioning, table.data)
-||||||| merged common ancestors
-        val newTable = new InMemoryTable(table.name, schema, properties, table.data)
-=======
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {
           throw new IllegalArgumentException(s"Cannot drop all fields")
         }
 
-        val newTable = new InMemoryTable(table.name, schema, properties, table.data)
->>>>>>> origin/master
+        val newTable = new InMemoryTable(
+          table.name, schema, properties, table.partitioning, table.data)
 
         tables.put(ident, newTable)
 
@@ -253,7 +229,7 @@ class TestStagingInMemoryCatalog
     validateStagedTable(partitions, properties)
     new TestStagedCreateTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions))
   }
 
   override def stageReplace(
@@ -264,7 +240,7 @@ class TestStagingInMemoryCatalog
     validateStagedTable(partitions, properties)
     new TestStagedReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions))
   }
 
   override def stageCreateOrReplace(
@@ -275,7 +251,7 @@ class TestStagingInMemoryCatalog
     validateStagedTable(partitions, properties)
     new TestStagedCreateOrReplaceTable(
       ident,
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions))
   }
 
   private def validateStagedTable(

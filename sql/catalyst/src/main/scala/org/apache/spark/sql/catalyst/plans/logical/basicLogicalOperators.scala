@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.sql.DescribeTableStatement
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.types._
@@ -546,9 +545,12 @@ object OverwritePartitionsDynamic {
 case class DescribeTable(
     catalog: TableCatalog,
     ident: Identifier,
+    table: NamedRelation,
     isExtended: Boolean) extends Command {
-  override lazy val output = DescribeTableSchemas.DESCRIBE_TABLE_ATTRIBUTES
-  override lazy val schema = DescribeTableSchemas.DESCRIBE_TABLE_SCHEMA
+
+  override def children: Seq[LogicalPlan] = Seq(table)
+
+  override val output = DescribeTableSchemas.describeTableAttributes()
 }
 
 /**

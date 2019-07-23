@@ -500,7 +500,7 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output = DescribeTableSchemas.DESCRIBE_TABLE_ATTRIBUTES
+  override val output = DescribeTableSchemas.describeTableAttributes()
 
   protected def describeSchema(
       schema: StructType,

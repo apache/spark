@@ -21,15 +21,11 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{MetadataBuilder, StringType, StructField, StructType}
 
 private[sql] object DescribeTableSchemas {
-  val DESCRIBE_TABLE_ATTRIBUTES = Seq(
+  def describeTableAttributes(): Seq[AttributeReference] = Seq(
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
     AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
-  )
-
-  val DESCRIBE_TABLE_SCHEMA = StructType(
-    DESCRIBE_TABLE_ATTRIBUTES.map(attr => StructField(attr.name, attr.dataType, attr.nullable)))
+      new MetadataBuilder().putString("comment", "comment of the column").build())())
 }

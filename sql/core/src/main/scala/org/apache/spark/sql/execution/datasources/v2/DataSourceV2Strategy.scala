@@ -24,15 +24,8 @@ import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalog.v2.StagingTableCatalog
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-<<<<<<< HEAD
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition}
-||||||| merged common ancestors
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition}
-=======
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect}
->>>>>>> origin/master
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
@@ -244,7 +237,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case DescribeTable(catalog, ident, isExtended) =>
+    case DescribeTable(catalog, ident, _, isExtended) =>
       DescribeTableExec(catalog, ident, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>

@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -834,6 +834,14 @@ class Analyzer(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
           Seq(TableChange.setProperty("location", newLoc)))
+
+      case describe @ DescribeTableStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), partitionSpec, isExtended) =>
+        DescribeTable(
+          v2Catalog.asTableCatalog,
+          ident,
+          UnresolvedRelation(describe.tableName),
+          isExtended)
     }
   }
 

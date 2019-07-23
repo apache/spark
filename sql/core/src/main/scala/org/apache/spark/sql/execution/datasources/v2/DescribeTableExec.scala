@@ -28,15 +28,17 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchemas
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
     catalog: TableCatalog,
     ident: Identifier,
     isExtended: Boolean) extends LeafExecNode {
 
-  import DescribeTableExec._
+  override val output: Seq[AttributeReference] =
+    DescribeTableSchemas.describeTableAttributes()
 
-  override def output: Seq[AttributeReference] = DescribeTableSchemas.DESCRIBE_TABLE_ATTRIBUTES
+  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
 
   override protected def doExecute(): RDD[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -63,7 +65,7 @@ case class DescribeTableExec(
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow], table: Table): Unit = {
-    rows += EMPTY_ROW
+    rows += emptyRow()
     rows += toCatalystRow(" Partitioning", "", "")
     rows += toCatalystRow("--------------", "", "")
     if (table.partitioning.isEmpty) {
@@ -76,21 +78,17 @@ case class DescribeTableExec(
   }
 
   private def addProperties(rows: ArrayBuffer[InternalRow], table: Table): Unit = {
-    rows += EMPTY_ROW
+    rows += emptyRow()
     rows += toCatalystRow(" Table Property", " Value", "")
     rows += toCatalystRow("----------------", "-------", "")
     rows ++= table.properties.asScala.toList.sortBy(_._1).map {
       case (key, value) => toCatalystRow(key, value, "")
     }
   }
-}
 
-private object DescribeTableExec {
-  private val ENCODER = RowEncoder(DescribeTableSchemas.DESCRIBE_TABLE_SCHEMA)
-  private val EMPTY_ROW = toCatalystRow("", "", "")
+  private def emptyRow(): InternalRow = toCatalystRow("", "", "")
 
   private def toCatalystRow(strs: String*): InternalRow = {
-    ENCODER.resolveAndBind().toRow(
-      new GenericRowWithSchema(strs.toArray, DescribeTableSchemas.DESCRIBE_TABLE_SCHEMA))
+    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
   }
 }

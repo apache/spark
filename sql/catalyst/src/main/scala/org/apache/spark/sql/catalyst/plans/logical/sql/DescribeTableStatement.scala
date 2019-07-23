@@ -25,5 +25,5 @@ case class DescribeTableStatement(
     tableName: Seq[String],
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean) extends ParsedStatement {
-  override def output: Seq[Attribute] = DescribeTableSchemas.DESCRIBE_TABLE_ATTRIBUTES
+  override def output: Seq[Attribute] = DescribeTableSchemas.describeTableAttributes()
 }
