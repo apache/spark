@@ -29,24 +29,15 @@ class HiveMvCatalog extends MvCatalog {
     this.sparkSession = sparkSession
   }
 
-  override def getMaterializedViewsOfTable(mvInfos: Seq[(String, String)]): Seq[CatalogTable] = {
-    mvInfos.map {
-      info =>
-        val db = info._1
-        val tbl = info._2
-        sparkSession.sessionState.catalog.externalCatalog.getTable(db, tbl)
-    }
-  }
-
-
   override def getMaterializedViewForTable(db: String, tblName: String): CatalogCreationData = {
     sparkSession.sessionState.catalog.externalCatalog.getMaterializedViewForTable(db, tblName)
   }
 
   override def getMaterializedViewPlan(catalogTable: CatalogTable): Option[LogicalPlan] = {
     val viewText = catalogTable.viewOriginalText
-    val plan = sparkSession.sessionState.sqlParser.parsePlan(viewText.get)
-    Some(plan)
+    // val plan = sparkSession.sessionState.sqlParser.parsePlan(viewText.get)
+    val optimizedPlan = sparkSession.sql(viewText.get).queryExecution.optimizedPlan
+    Some(optimizedPlan)
   }
 
   /* hive-3* onwards, there are simple metastore APIs to get all materialized views.

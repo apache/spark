@@ -14,23 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.mv
 
-package org.apache.spark.sql.catalyst.catalog
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryComparison, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal}
 
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
-/*
- * Interface for the catalog of MaterializedViews.
- *
- * This implementation must be thread-safe as they can be accessed
- * in multiple threads. This catalog is expected to interact with
- * external systems.
- */
-trait MvCatalog {
-
-  def getMaterializedViewPlan(catalogTable: CatalogTable): Option[LogicalPlan]
-
-  def getMaterializedViewForTable(tbl: String, db: String): CatalogCreationData
-
-  def init(sparkSession: Any): Unit
+case class AttributeExpressionLiteral(attr: AttributeReference, exp: Expression,
+                                      literal: Option[Literal]) {
+  def same: AttributeExpression[_ <:Expression] = AttributeExpression(attr, exp.getClass)
 }
+
+case class AttributeExpression[T](attributeReference: AttributeReference, expClass: Class[T])

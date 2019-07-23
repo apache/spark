@@ -22,8 +22,9 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeRefer
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.{FindDataSourceTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FindDataSourceTable, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.mv.Implies
 import org.apache.spark.util.Utils
 
 case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
@@ -69,6 +70,37 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
     val mv = mvCatalog.
       getMaterializedViewForTable(ident.database.get, ident.table)
 
+    // Currently supporting only MV on one table for substitution
+    val mvCatalogTables = getTableNodes(mv.mvDetails)
+    mvCatalogTables.foreach { mvCatalogTable =>
+      val mvRelation = getTableRelationFromIdentifier(mvCatalogTable)
+      val mvPlan = mvCatalog.getMaterializedViewPlan(mvCatalogTable).get
+      mvPlan match {
+        case op@PhysicalOperation(mvProjects: Seq[NamedExpression], mvFilters, logicalPlan) =>
+          if (projects.forall(p => mvProjects.exists(mvP => mvP.exprId == p.exprId))) {
+            logicalPlan match {
+              case HiveTableRelation(_, _, _) | LogicalRelation(_, _, _, _) =>
+                if (new Implies(filters, mvFilters).implies) {
+                  getCorrespondingMvExps(filters, mvRelation) match {
+                    case Some(correspondingFilters) =>
+                      val filterExpression = correspondingFilters.reduce(And)
+                      if (projects.isEmpty) {
+                        return Some(Filter(filterExpression, mvRelation.get))
+                      } else {
+                        val newProjectList = getCorrespondingMvExps(projects, mvRelation)
+                        return Some(Project(
+                          newProjectList.get.asInstanceOf[Seq[NamedExpression]],
+                          Filter(filterExpression, mvRelation.get)))
+                      }
+                  }
+                }
+            }
+          }
+      }
+    }
+    None
+    /* This substitutes Order By query
+    TODO: Need a neater way to integrate this.
     val attrs = filters.flatMap {
       filter =>
         filter match {
@@ -81,7 +113,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
         }
     }
 
-    val mvs = mvCatalog.getMaterializedViewsOfTable(mv.mvDetails)
+    val mvs = getTableNodes(mv.mvDetails)
 
     val table = mvs.map(table => {
       val mvPlan = mvCatalog.getMaterializedViewPlan(table).get
@@ -103,6 +135,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
       case _ =>
         None
     }
+    */
   }
 
 
@@ -119,21 +152,45 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
           )
           relation.copy(output = replaced)
         case relation: HiveTableRelation =>
-          val hiveRelation = originalLogicalPlan.asInstanceOf[HiveTableRelation]
-          val nameToAttrData = relation.dataCols.map(_.name).zip(relation.output).toMap
-          val nameToAttrPart = relation.partitionCols.map(_.name).zip(relation.output).toMap
-          val newDataCols = hiveRelation.dataCols.map {
-            col =>
-              nameToAttrData(col.name).withExprId(col.exprId)
-                .withQualifier(Seq("db", "mv"))
+          val dataColNames = relation.dataCols.map(_.name)
+          val nameToAttrData = relation.output.filter(e => dataColNames.contains(e.name))
+            .map(e => (e.name, e)).toMap
+          val partitionColNames = relation.partitionCols.map(_.name)
+          val nameToAttrPart = relation.output.filter(e => partitionColNames.contains(e.name))
+            .map(e => (e.name, e)).toMap
+          originalLogicalPlan match {
+            case LogicalRelation(hadoopRelation: HadoopFsRelation, _, _, _) =>
+              val newDataCols = originalLogicalPlan.output.filter(
+                attr => relation.dataCols.exists(attrRef => attrRef.name.equals(attr.name))).map {
+                col =>
+                  nameToAttrData(col.name).withExprId(col.exprId)
+                    .withQualifier(Seq(relation.tableMeta.database,
+                      relation.tableMeta.identifier.table))
+              }
+              val newPartCols = originalLogicalPlan.output.filter(
+                attr => relation.partitionCols.
+                  exists(attrRef => attrRef.name.equals(attr.name))).map {
+                col =>
+                  nameToAttrPart(col.name).withExprId(col.exprId)
+                    .withQualifier(Seq(relation.tableMeta.database,
+                      relation.tableMeta.identifier.table))
+              }
+              relation.copy(dataCols = newDataCols, partitionCols = newPartCols)
+            case hiveRelation: HiveTableRelation =>
+              val newDataCols = hiveRelation.dataCols.map {
+                col =>
+                  nameToAttrData(col.name).withExprId(col.exprId)
+                    .withQualifier(Seq(relation.tableMeta.database,
+                      relation.tableMeta.identifier.table))
+              }
+              val newPartCols = hiveRelation.partitionCols.map {
+                col =>
+                  nameToAttrPart(col.name).withExprId(col.exprId)
+                    .withQualifier(Seq(relation.tableMeta.database,
+                      relation.tableMeta.identifier.table))
+              }
+              relation.copy(dataCols = newDataCols, partitionCols = newPartCols)
           }
-
-          val newPartCols = hiveRelation.partitionCols.map {
-            col =>
-              nameToAttrPart(col.name).withExprId(col.exprId)
-                .withQualifier(Seq("db", "mv"))
-          }
-          relation.copy(dataCols = newDataCols, partitionCols = newPartCols)
         case _ =>
           null
       }
@@ -176,6 +233,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
             */
           val resolvedRelationWithStats = new DetermineTableStats(spark)(resolvedRelation)
           Some(RelationConversions(conf, catalog)(resolvedRelationWithStats))
+
         case _ => None
       }
     } catch {
@@ -196,7 +254,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
     spark.sqlContext.conf.mvOSEnabled
   }
 
-  /**
+   /**
     * Returns true if the Hive version is from
     * org.apache.spark.sql.hive.SubstituteMaterializedOSView#supportedHiveVersion()
     */
@@ -212,7 +270,39 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
     }
   }
 
-
+  private def getTableNodes(tblInfos: Seq[(String, String)]): Seq[CatalogTable] = {
+    tblInfos.map {
+      info =>
+        val db = info._1
+        val tbl = info._2
+        spark.sessionState.catalog.externalCatalog.getTable(db, tbl)
+    }
+  }
+  private def getCorrespondingMvExps
+  [T <: Expression](filters: Seq[T],
+                    mvRelation: Option[LogicalPlan]): Option[Seq[Expression]] = {
+    var attributeSeq: Seq[AttributeReference] = Seq.empty
+    mvRelation match {
+      case Some(rel: LogicalRelation) =>
+        attributeSeq = attributeSeq ++ rel.output
+      case Some(rel: HiveTableRelation) =>
+        attributeSeq = attributeSeq ++ rel.output
+      // Do not support other kind of Relation for now.
+      case _ => return None
+    }
+    val attributeMap = attributeSeq.map(attr => {
+      // not sure if this is enough for comparison
+      (attr.name, attr.dataType, attr.nullable, attr.metadata) -> attr
+    }).toMap
+    Some(filters.map(filter => {
+      filter transform {
+        // This should be extended to incorporate all NamedExpressions
+        case atrf: AttributeReference =>
+          attributeMap.get((atrf.name, atrf.dataType, atrf.nullable, atrf.metadata))
+            .getOrElse(return None)
+      }
+    }))
+  }
   case class CatalogTableInfo(table: CatalogTable, commonAttrsCount: Int)
 
 }

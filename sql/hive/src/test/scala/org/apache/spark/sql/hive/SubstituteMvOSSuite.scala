@@ -20,12 +20,14 @@ package org.apache.spark.sql.hive
 import java.net.URI
 
 import scala.collection.mutable
+
 import org.mockito.Mockito.when
 import org.scalatest.PrivateMethodTester
 import org.scalatest.mockito.MockitoSugar
+
 import org.apache.spark.internal.config.Tests
 import org.apache.spark.internal.config.UI.UI_ENABLED
-import org.apache.spark.sql.{QueryTest, SparkSession}
+import org.apache.spark.sql.{DataFrame, QueryTest, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
@@ -33,9 +35,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-class SubstituteMvOSSuite extends QueryTest
+class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
   with PrivateMethodTester with MockitoSugar {
 
   var spark: SparkSession = _
@@ -44,16 +47,22 @@ class SubstituteMvOSSuite extends QueryTest
 
   // Private method accessors
   private val mvConfName = SQLConf.ENABLE_MV_OS_OPTIMIZATION.key
-  private val convertOrcConfName = HiveUtils.CONVERT_METASTORE_ORC.key
+  private val convertParquetConfName = HiveUtils.CONVERT_METASTORE_PARQUET.key
 
-  private var dataSourceTable: CatalogTable = _
-  private var mvTable: CatalogTable = _
+  private var dataSourceTable1: CatalogTable = _
+  private var dataSourceTable2: CatalogTable = _
+  private var dataSourceTable3: CatalogTable = _
+  private var simpleMvTable: CatalogTable = _
+  private var mvTable1: CatalogTable = _
+  private var mvTable2: CatalogTable = _
+  private var mvTable3: CatalogTable = _
   private val tablesCreated: mutable.Seq[CatalogTable] = mutable.Seq.empty
 
   def getPlan(catalogTable: CatalogTable): Option[LogicalPlan] = {
     val viewText = catalogTable.viewOriginalText
-    val plan = spark.sessionState.sqlParser.parsePlan(viewText.get)
-    Some(plan)
+    // val plan = sparkSession.sessionState.sqlParser.parsePlan(viewText.get)
+    val optimizedPlan = sql(viewText.get).queryExecution.optimizedPlan
+    Some(optimizedPlan)
   }
 
   override protected def beforeAll(): Unit = {
@@ -74,43 +83,238 @@ class SubstituteMvOSSuite extends QueryTest
     catalog.createDatabase(newDb("db"), ignoreIfExists = true)
     var ident = TableIdentifier("tbl", Some("db"))
     catalog.dropTable(ident, ignoreIfNotExists = true, purge = true)
-    val serde = HiveSerDe.sourceToSerDe("orc")
-    dataSourceTable = CatalogTable(
+    val serde = HiveSerDe.sourceToSerDe("parquet")
+    dataSourceTable1 = CatalogTable(
       identifier = TableIdentifier("tbl", Some("db")),
       tableType = CatalogTableType.MANAGED,
       storage = getCatalogStorageFormat(serde),
       schema = new StructType()
         .add("id", "int").add("col1", "string"),
       provider = Some(DDLUtils.HIVE_PROVIDER))
-    catalog.createTable(dataSourceTable, ignoreIfExists = false)
-    tablesCreated :+ dataSourceTable
+    catalog.createTable(dataSourceTable1, ignoreIfExists = true)
+    val ds1 = catalog.getTableMetadata(TableIdentifier("tbl", Some("db")))
+    tablesCreated :+ ds1
+
+    catalog.dropTable(TableIdentifier("tbl1", Some("db")), ignoreIfNotExists = true, purge = true)
+    dataSourceTable2 = CatalogTable(
+      identifier = TableIdentifier("tbl1", Some("db")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType()
+        .add("a", "int").add("b", "string").add("c", "int"),
+      provider = Some("parquet"))
+    catalog.createTable(dataSourceTable2, ignoreIfExists = false)
+    tablesCreated :+ dataSourceTable2
+
+    catalog.dropTable(TableIdentifier("tbl2", Some("db")), ignoreIfNotExists = true, purge = true)
+    dataSourceTable3 = CatalogTable(
+      identifier = TableIdentifier("tbl2", Some("db")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat.empty,
+      schema = new StructType()
+        .add("a", "int").add("b", "string").add("c", "int"),
+      provider = Some("parquet"))
+    catalog.createTable(dataSourceTable3, ignoreIfExists = false)
+    tablesCreated :+ dataSourceTable3
 
     ident = TableIdentifier("mv", Some("db"))
     catalog.dropTable(ident, ignoreIfNotExists = true, purge = true)
-    mvTable = CatalogTable(
+    simpleMvTable = CatalogTable(
       identifier = TableIdentifier("mv", Some("db")),
       tableType = CatalogTableType.MV,
       storage = getCatalogStorageFormat(serde),
       schema = new StructType()
         .add("id", "int").add("col1", "string"),
-      viewOriginalText = Some("SELECT * FROM tbl ORDER BY id"),
-      viewText = Some("SELECT * FROM tbl ORDER BY id"))
-    catalog.createTable(mvTable, ignoreIfExists = false)
-    tablesCreated :+ mvTable
+      viewOriginalText = Some("SELECT * FROM db.tbl ORDER BY id"),
+      viewText = Some("SELECT * FROM db.tbl ORDER BY id"),
+      provider = Some(DDLUtils.HIVE_PROVIDER))
+    catalog.createTable(simpleMvTable, ignoreIfExists = false)
+    simpleMvTable = catalog.getTableMetadata(TableIdentifier("mv", Some("db")))
+    tablesCreated :+ simpleMvTable
+
+    val mvSchema = new StructType()
+      .add("a", "int").add("b", "string").add("c", "int")
+
+    catalog.dropTable(TableIdentifier("mv1", Some("db")), ignoreIfNotExists = true, purge = true)
+    mvTable1 = createMVTable(" * ", "a > 10",
+      "db.tbl1", "mv1", "db", mvSchema, catalog)
+    tablesCreated :+ mvTable1
+
+    catalog.dropTable(TableIdentifier("mv2", Some("db")), ignoreIfNotExists = true, purge = true)
+    mvTable2 = createMVTable("a, b", "a > 5",
+      "db.tbl1", "mv2", "db", mvSchema, catalog)
+    tablesCreated :+ mvTable2
+
+     /**
+      *  reduced DNF: (a > 10) or (a > 5 and b < 20) or (b < 10 and a > 10) or (b < 10)
+      */
+    catalog.dropTable(TableIdentifier("mv3", Some("db")), ignoreIfNotExists = true, purge = true)
+    mvTable3 = createMVTable("a, b, c", "(a > 5 or c < 10) and (a > 10 or c < 20)",
+      "db.tbl2", "mv3", "db", mvSchema, catalog)
+    tablesCreated :+ mvTable3
 
     when(mockCatalog.getMaterializedViewForTable("db", "tbl"))
       .thenReturn(CatalogCreationData("db", "tbl", Seq(("db", "mv"))))
 
-    when(mockCatalog.getMaterializedViewsOfTable(Seq(("db", "mv"))))
-      .thenReturn(Seq(mvTable))
+    /* when(mockCatalog.getMaterializedViewsOfTable(Seq(("db", "mv"))))
+      .thenReturn(Seq(simpleMvTable)) */
 
-    val maybePlan = getPlan(mvTable)
-    when(mockCatalog.getMaterializedViewPlan(mvTable))
+    val maybePlan = getPlan(simpleMvTable)
+    when(mockCatalog.getMaterializedViewPlan(simpleMvTable))
       .thenReturn(maybePlan)
+
+    when(mockCatalog.getMaterializedViewForTable("db", "tbl1"))
+      .thenReturn(CatalogCreationData("db", "tbl1", Seq(("db", "mv1"), ("db", "mv2"))))
+    /* when(mockCatalog.getMaterializedViewsOfTable(Seq(("db", "mv1"))))
+      .thenReturn(Seq(mvTable1))
+    when(mockCatalog.getMaterializedViewsOfTable(Seq(("db", "mv2"))))
+      .thenReturn(Seq(mvTable2)) */
+    when(mockCatalog.getMaterializedViewPlan(mvTable1))
+      .thenReturn(getPlan(mvTable1))
+    when(mockCatalog.getMaterializedViewPlan(mvTable2))
+      .thenReturn(getPlan(mvTable2))
+
+    when(mockCatalog.getMaterializedViewForTable("db", "tbl2"))
+      .thenReturn(CatalogCreationData("db", "tbl2", Seq(("db", "mv3"))))
+    /* when(mockCatalog.getMaterializedViewsOfTable(Seq(("db", "mv3"))))
+      .thenReturn(Seq(mvTable3)) */
+    when(mockCatalog.getMaterializedViewPlan(mvTable3))
+      .thenReturn(getPlan(mvTable3))
   }
 
   def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, "desc", new URI("loc"), Map())
+  }
+
+
+  test("Optimizer should substitute materialized view with non equality predicates") {
+    withSQLConf((mvConfName, "true")) {
+      // spark.sharedState.mvCatalog.init(spark) // we should move this inside session creation
+
+      val df1 = sql("select * from db.tbl1 where a > 20")
+      val df2 = sql("select * from db.mv1 where a > 20")
+      val optimized1 = Optimize.execute(df1.queryExecution.analyzed)
+      val optimized2 = Optimize.execute(df2.queryExecution.analyzed)
+
+      comparePlans(optimized1, optimized2)
+    }
+  }
+
+  test ("Check MV substitute with complex expression") {
+    val queryPredicates1 = "(a > 10 and c < 5) or (a > 20)"
+    val queryPredicates2 = "(a > 0 or c < 5)"
+    var mvDf1: DataFrame = null
+    var nonMvDf1: DataFrame = null
+    withSQLConf((mvConfName, "false")) {
+      // spark.sharedState.mvCatalog.init(spark)
+      mvDf1 = sql(s"select a, c from ${mvTable3.identifier} where $queryPredicates1 ")
+      nonMvDf1 = sql(s"select a, c from db.tbl1 where $queryPredicates2 ")
+    }
+
+    withSQLConf((mvConfName, "true")) {
+      // spark.sharedState.mvCatalog.init(spark)
+      val queryDf1 = sql(s"select a, c from db.tbl2 where $queryPredicates1 ")
+      val queryDf2 = sql(s"select a, c from db.tbl1 where $queryPredicates2 ")
+
+      comparePlans(Optimize.execute(queryDf1.queryExecution.analyzed),
+        Optimize.execute(mvDf1.queryExecution.analyzed))
+      // no substitution
+      comparePlans(Optimize.execute(queryDf2.queryExecution.analyzed),
+        Optimize.execute(nonMvDf1.queryExecution.analyzed))
+    }
+  }
+
+  test("Optimizer should substitute materialized view mv2 and not mv1") {
+    var optimized1 : LogicalPlan = null
+    withSQLConf((mvConfName, "false")) {
+      spark.sharedState.mvCatalog.init(spark)
+      val df1 = sql(s"select a from ${mvTable2.identifier} where a > 7")
+      optimized1 = Optimize.execute(df1.queryExecution.analyzed)
+    }
+
+    withSQLConf((mvConfName, "true")) {
+      val df2 = sql("select a from db.tbl1 where a > 7")
+      val optimized2 = Optimize.execute(df2.queryExecution.analyzed)
+      comparePlans(optimized1, optimized2)
+    }
+  }
+
+  test("Optimizer should not substitute materialized view due to column mismatch") {
+    // Obtain Plan without MV enabled and it should be same as plan obtained when MV enabled.
+    var optimized1 : LogicalPlan = null
+    withSQLConf((mvConfName, "false")) {
+      val df1 = sql("select * from db.tbl1 where a > 7")
+      optimized1 = Optimize.execute(df1.queryExecution.analyzed)
+    }
+
+    var optimized2 : LogicalPlan = null
+    withSQLConf((mvConfName, "true")) {
+      spark.sharedState.mvCatalog.init(spark)
+
+      val df2 = sql("select * from db.tbl1 where a > 7")
+      optimized2 = Optimize.execute(df2.queryExecution.analyzed)
+    }
+    comparePlans(optimized1, optimized2)
+  }
+
+  test("Optimizer should substitute materialized view even with aggregations without group by") {
+    var optimized1 : LogicalPlan = null
+    // var optimized2 : LogicalPlan = null
+    // var optimized3 : LogicalPlan = null
+    withSQLConf((mvConfName, "false")) {
+      val df1 = sql("select max(a) from db.mv2 where a > 7")
+      optimized1 = Optimize.execute(df1.queryExecution.analyzed)
+
+      // val df3 = sql("select count(case (c < 0) then 0 else 1) from mvdb.mv1 where a > 20")
+      // optimized3 = df3.queryExecution.optimizedPlan
+    }
+
+    withSQLConf((mvConfName, "true")) {
+      spark.sharedState.mvCatalog.init(spark)
+
+      val df1 = sql("select max(a) from db.tbl1 where a > 7")
+      val optimized4 = Optimize.execute(df1.queryExecution.analyzed)
+      comparePlans(optimized1, optimized4)
+
+      // val df3 = sql("select count(case (c < 0) then 0 else 1) from db1.tbl1 where a > 20")
+      // val optimized6 = df3.queryExecution.optimizedPlan
+      // comparePlans(optimized3, optimized6)
+    }
+  }
+
+  test("Optimizer should substitute materialized view even with aggregations with group by") {
+    var optimized1 : LogicalPlan = null
+    var optimized2 : LogicalPlan = null
+    // var optimized3 : LogicalPlan = null
+    // we can merge `false` and `true` blocks? because MVs wont be substituted
+    withSQLConf((mvConfName, "false")) {
+      val df1 = sql("select max(a) from db.mv2 where a > 7 group by b")
+      optimized1 = Optimize.execute(df1.queryExecution.analyzed)
+
+      val df2 = sql("select count(*) from db.mv1 where a > 20 group by b")
+      optimized2 = Optimize.execute(df2.queryExecution.analyzed)
+
+      // val df3 = sql("select count(case (c < 0) then 0 else 1) from mvdb.mv1 where a > 20" +
+      //  " group by b")
+      // optimized3 = df3.queryExecution.optimizedPlan
+    }
+
+    withSQLConf((mvConfName, "true")) {
+      spark.sharedState.mvCatalog.init(spark)
+
+      val df1 = sql("select max(a) from db.tbl1 where a > 7 group by b")
+      val optimized4 = Optimize.execute(df1.queryExecution.analyzed)
+      comparePlans(optimized1, optimized4)
+
+      val df2 = sql("select count(*) from db.tbl1 where a > 20 group by b")
+      val optimized5 = Optimize.execute(df2.queryExecution.analyzed)
+      comparePlans(optimized2, optimized5)
+
+      // val df3 = sql("select count(case (c < 0) then 0 else 1) from db1.tbl1 where a > 20" +
+      //  " group by b")
+      // val optimized6 = df3.queryExecution.optimizedPlan
+      // comparePlans(optimized3, optimized6)
+    }
   }
 
   override protected def afterAll(): Unit = {
@@ -132,13 +336,14 @@ class SubstituteMvOSSuite extends QueryTest
 
   test("Optimizer should substitute materialized view") {
     spark.sharedState.mvCatalog.init(spark) // we should move this inside session creation
+    var optimized1: LogicalPlan = null
+    var optimized2: LogicalPlan = null
     withSQLConf((mvConfName, "true"),
-      (convertOrcConfName, "true")) {
+      (convertParquetConfName, "true")) {
       val df1 = spark.sql("select * from db.tbl where id = 20")
+      optimized1 = Optimize.execute(df1.queryExecution.analyzed)
       val df2 = spark.sql("select * from db.mv where id = 20")
-      val optimized1 = Optimize.execute(df1.queryExecution.analyzed)
-      val optimized2 = Optimize.execute(df2.queryExecution.analyzed)
-
+      optimized2 = Optimize.execute(df2.queryExecution.analyzed)
       comparePlans(optimized1, optimized2)
     }
   }
@@ -156,18 +361,19 @@ class SubstituteMvOSSuite extends QueryTest
   }
 
   private def createMVTable(projection: String, exp: String,
-      originalTable: String, mvTable: String, schema: StructType,
+      originalTable: String, mvTable: String, mvDb: String, schema: StructType,
       catalog: SessionCatalog): CatalogTable = {
-    val serde = HiveSerDe.sourceToSerDe("orc")
+    val serde = HiveSerDe.sourceToSerDe("parquet")
     val table = CatalogTable(
-      identifier = TableIdentifier(mvTable, Some("mvdb")),
+      identifier = TableIdentifier(mvTable, Some(mvDb)),
       tableType = CatalogTableType.MV,
       storage = getCatalogStorageFormat(serde),
       schema,
       viewText = Some(s"select $projection from $originalTable where $exp"),
+      viewOriginalText = Some(s"select $projection from $originalTable where $exp"),
       provider = Some(DDLUtils.HIVE_PROVIDER))
     catalog.createTable(table, ignoreIfExists = false)
-    table
+    catalog.getTableMetadata(TableIdentifier(mvTable, Some(mvDb)))
   }
 
   private def getCatalogStorageFormat(serde: Option[HiveSerDe]): CatalogStorageFormat = {
@@ -179,7 +385,7 @@ class SubstituteMvOSSuite extends QueryTest
   }
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
-    override protected def batches = {
+    override protected def batches : Seq[Optimize.Batch] = {
       Seq(Batch("Substitute MV",
         Once,
         EliminateSubqueryAliases,

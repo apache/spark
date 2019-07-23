@@ -98,7 +98,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   }
 
 
-  /**
+   /**
     * Logical query plan optimizer.
     *
     * Note: this depends on the `conf`, `catalog` and `experimentalMethods` fields.

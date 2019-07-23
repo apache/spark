@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
+import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
+import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
-import java.util.{Locale, ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
+
+import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
@@ -35,6 +38,7 @@ import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
@@ -45,9 +49,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
-
-import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 /**
  * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
