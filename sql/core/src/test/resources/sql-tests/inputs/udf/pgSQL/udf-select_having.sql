@@ -6,6 +6,7 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select_having.sql
 --
 -- This test file was converted from inputs/pgSQL/select_having.sql
+-- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 
 -- load test data
 CREATE TABLE test_having (a int, b int, c string, d string) USING parquet;
@@ -20,11 +21,9 @@ INSERT INTO test_having VALUES (7, 4, 'cccc', 'h');
 INSERT INTO test_having VALUES (8, 4, 'CCCC', 'I');
 INSERT INTO test_having VALUES (9, 4, 'CCCC', 'j');
 
--- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(count(*)) = 1 ORDER BY udf(b), udf(c);
 
--- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 -- HAVING is effectively equivalent to WHERE in this case
 SELECT udf(b), udf(c) FROM test_having
 	GROUP BY b, c HAVING udf(b) = 3 ORDER BY udf(b), udf(c);
