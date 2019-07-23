@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchemas
@@ -52,7 +53,9 @@ case class DescribeTableExec(
       }
 
     } else {
-      rows += toCatalystRow(s"Table $ident does not exist.", "", "")
+      // Should rarely happen because the Analyzer should catch this, but the table could have been
+      // dropped between the analysis phase and the execution phase.
+      throw new NoSuchTableException(ident)
     }
     sparkContext.parallelize(rows)
   }
