@@ -244,7 +244,7 @@ To run the example,
 
 - To generate random string data to put onto the Kinesis stream, in another terminal, run the associated Kinesis data producer.
 
-		bin/run-example streaming.KinesisWordProducerASL [Kinesis stream name] [endpoint URL] 1000 10
+		./bin/run-example streaming.KinesisWordProducerASL [Kinesis stream name] [endpoint URL] 1000 10
 
 	This will push 1000 lines per second of 10 random numbers per line to the Kinesis stream.  This data should then be received and processed by the running example.
 
