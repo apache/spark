@@ -222,17 +222,17 @@ To run the example,
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 
-        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        ./bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="java" markdown="1">
 
-        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        ./bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="python" markdown="1">
 
-        bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
+        ./bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
             spark-streaming-kinesis-asl-assembly_*.jar \
             external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
             [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
