@@ -61,5 +61,4 @@ private[thriftserver] object ThriftserverShimUtils {
     HIVE_CLI_SERVICE_PROTOCOL_V8,
     HIVE_CLI_SERVICE_PROTOCOL_V9,
     HIVE_CLI_SERVICE_PROTOCOL_V10)
-
 }

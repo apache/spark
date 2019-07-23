@@ -53,6 +53,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
       val protocol = connection.getClass.getDeclaredField("protocol")
       protocol.setAccessible(true)
       protocol.set(connection, version)
+      assert(connection.getProtocol === version)
 
       rs = new HiveQueryResultSet.Builder(connection)
         .setClient(client)
@@ -111,13 +112,13 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
       }
     }
 
-    // TODO: active this test case after SPARK-28463 and SPARK-26969
-    // test(s"$version get decimal value") {
-    //   testWithProtocolVersion(version, "SELECT cast(1 as decimal(18, 2)) as c") { rs =>
-    //     assert(rs.next())
-    //     assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.00"))
-    //   }
-    // }
+    // TODO: enable this test case after SPARK-28463 and SPARK-26969
+    ignore(s"$version get decimal value") {
+      testWithProtocolVersion(version, "SELECT cast(1 as decimal(18, 2)) as c") { rs =>
+        assert(rs.next())
+        assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.00"))
+      }
+    }
 
     test(s"$version get string value") {
       testWithProtocolVersion(version, "SELECT 'str'") { rs =>
@@ -126,13 +127,13 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
       }
     }
 
-    // TODO: active this test case after SPARK-28474
-    // test(s"$version get binary value") {
-    //   testWithProtocolVersion(version, "SELECT cast('ABC' as binary)") { rs =>
-    //     assert(rs.next())
-    //     assert(rs.getObject(1) === "ABC".getBytes(StandardCharsets.UTF_8))
-    //   }
-    // }
+    // TODO: enable this test case after SPARK-28474
+    ignore(s"$version get binary value") {
+      testWithProtocolVersion(version, "SELECT cast('ABC' as binary)") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === "ABC")
+      }
+    }
 
     test(s"$version get boolean value") {
       testWithProtocolVersion(version, "SELECT true") { rs =>
@@ -158,28 +159,28 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
     test(s"$version get void") {
       testWithProtocolVersion(version, "SELECT null") { rs =>
         assert(rs.next())
-        assert(rs.getObject(1) === null)
+        assert(rs.getString(1) === null)
       }
     }
 
-    test(s"$version get array") {
+    test(s"$version get array value") {
       testWithProtocolVersion(version, "SELECT array(1, 2)") { rs =>
         assert(rs.next())
-        assert(rs.getObject(1) === "[1,2]")
+        assert(rs.getString(1) === "[1,2]")
       }
     }
 
-    test(s"$version get map") {
+    test(s"$version get map value") {
       testWithProtocolVersion(version, "SELECT map(1, 2)") { rs =>
         assert(rs.next())
-        assert(rs.getObject(1) === "{1:2}")
+        assert(rs.getString(1) === "{1:2}")
       }
     }
 
-    test(s"$version get struct") {
+    test(s"$version get struct value") {
       testWithProtocolVersion(version, "SELECT struct('alpha' AS A, 'beta' AS B)") { rs =>
         assert(rs.next())
-        assert(rs.getObject(1) === """{"A":"alpha","B":"beta"}""")
+        assert(rs.getString(1) === """{"A":"alpha","B":"beta"}""")
       }
     }
   }
