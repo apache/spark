@@ -450,6 +450,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(new Overlay(Literal("Spark的SQL"), Literal("_"),
       Literal.create(6, IntegerType)), "Spark_SQL")
     // scalastyle:on
+    // position greater than the length of input string
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(10, IntegerType)), "Spark SQL_")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(10, IntegerType), Literal.create(4, IntegerType)), "Spark SQL_")
   }
 
   test("overlay for byte array") {
@@ -473,6 +478,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
     checkEvaluation(Overlay(nullInput, Literal(Array[Byte](-1, -1, -1, -1, -1)),
       Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
+    // position greater than the length of input byte array
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
+      Literal.create(10, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)), Literal.create(10, IntegerType),
+      Literal.create(4, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
   }
 
   test("Check Overlay.checkInputDataTypes results") {
