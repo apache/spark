@@ -34,7 +34,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
 /**
@@ -65,6 +65,10 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeRegressorParams:
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLeafCol(value: String): this.type = set(leafCol, value)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -169,7 +173,7 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, impurity, lossType,
+    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
       validationIndicatorCol, validationTol)
@@ -245,12 +249,37 @@ class GBTRegressionModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLeafCol(value: String): this.type = set(leafCol, value)
+
+  @Since("3.0.0")
+  def predictLeaf(features: Vector): Vector = predictLeafImpl(features)
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
+    if ($(predictionCol).nonEmpty) {
+      val predictUDF = udf { features: Vector => predict(features) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)))
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      predictionColNames :+= $(leafCol)
+      predictionColumns :+= leafUDF(col($(featuresCol)))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
+    } else {
+      this.logWarning(s"$uid: GBTRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   override def predict(features: Vector): Double = {

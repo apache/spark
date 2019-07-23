@@ -140,8 +140,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
-      probabilityCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
-      cacheNodeIds, checkpointInterval, impurity, seed)
+      probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -219,9 +219,7 @@ class DecisionTreeClassificationModel private[ml] (
   def setLeafCol(value: String): this.type = set(leafCol, value)
 
   @Since("3.0.0")
-  def predictLeaf(features: Vector): Double = {
-    predictLeafImpl(features)
-  }
+  def predictLeaf(features: Vector): Double = predictLeafImpl(features)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(leafCol).isEmpty) {

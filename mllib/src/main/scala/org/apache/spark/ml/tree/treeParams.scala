@@ -23,6 +23,8 @@ import scala.util.Try
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.classification.ProbabilisticClassifierParams
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
@@ -226,7 +228,19 @@ private[ml] object TreeClassifierParams {
 }
 
 private[ml] trait DecisionTreeClassifierParams
-  extends DecisionTreeParams with TreeClassifierParams with ProbabilisticClassifierParams
+  extends DecisionTreeParams with TreeClassifierParams with ProbabilisticClassifierParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      schema = SchemaUtils.appendColumn(schema, $(leafCol), DoubleType)
+    }
+    schema
+  }
+}
 
 private[ml] trait HasVarianceImpurity extends Params {
   /**
@@ -276,12 +290,14 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
-    } else {
-      newSchema
+      schema = SchemaUtils.appendColumn(schema, $(varianceCol), DoubleType)
     }
+    if ($(leafCol).nonEmpty) {
+      schema = SchemaUtils.appendColumn(schema, $(leafCol), DoubleType)
+    }
+    schema
   }
 }
 
@@ -395,10 +411,34 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 }
 
 private[ml] trait RandomForestClassifierParams
-  extends RandomForestParams with TreeClassifierParams
+  extends RandomForestParams with TreeClassifierParams with ProbabilisticClassifierParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+    }
+    schema
+  }
+}
 
 private[ml] trait RandomForestRegressorParams
-  extends RandomForestParams with TreeRegressorParams
+  extends RandomForestParams with TreeRegressorParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+    }
+    schema
+  }
+}
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
@@ -468,7 +508,19 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity {
+private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity
+  with ProbabilisticClassifierParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+    }
+    schema
+  }
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -506,6 +558,17 @@ private[ml] object GBTRegressorParams {
 }
 
 private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+    }
+    schema
+  }
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)

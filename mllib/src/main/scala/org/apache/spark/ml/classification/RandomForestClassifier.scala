@@ -34,7 +34,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql.functions.{col, udf}
 
 /**
  * <a href="http://en.wikipedia.org/wiki/Random_forest">Random Forest</a> learning algorithm for
@@ -54,6 +55,10 @@ class RandomForestClassifier @Since("1.4.0") (
   // Override parameter setters from parent trait for Java API compatibility.
 
   // Parameters from TreeClassifierParams:
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLeafCol(value: String): this.type = set(leafCol, value)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -135,8 +140,9 @@ class RandomForestClassifier @Since("1.4.0") (
       super.getOldStrategy(categoricalFeatures, numClasses, OldAlgo.Classification, getOldImpurity)
 
     instr.logParams(this, labelCol, featuresCol, predictionCol, probabilityCol, rawPredictionCol,
-      impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB, minInfoGain,
-      minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds, checkpointInterval)
+      leafCol, impurity, numTrees, featureSubsetStrategy, maxDepth, maxBins, maxMemoryInMB,
+      minInfoGain, minInstancesPerNode, seed, subsamplingRate, thresholds, cacheNodeIds,
+      checkpointInterval)
 
     val trees = RandomForest
       .run(instances, strategy, getNumTrees, getFeatureSubsetStrategy, getSeed, Some(instr))
@@ -206,6 +212,39 @@ class RandomForestClassificationModel private[ml] (
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLeafCol(value: String): this.type = set(leafCol, value)
+
+  @Since("3.0.0")
+  def predictLeaf(features: Vector): Vector = predictLeafImpl(features)
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
+    if ($(predictionCol).nonEmpty) {
+      val predictUDF = udf { features: Vector => predict(features) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)))
+    }
+
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      predictionColNames :+= $(leafCol)
+      predictionColumns :+= leafUDF(col($(featuresCol)))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
+    } else {
+      this.logWarning(s"$uid: RandomForestClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
+    }
+  }
 
   override protected def predictRaw(features: Vector): Vector = {
     // TODO: When we add a generic Bagging class, handle transform there: SPARK-7128

@@ -137,8 +137,10 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 
-  private[ml] def predictLeafImpl(features: Vector): Vector =
-    Vectors.dense(trees.map(_.predictLeafImpl(features)))
+  private[ml] def predictLeafImpl(features: Vector): Vector = {
+    val indices = trees.map(_.predictLeafImpl(features))
+    Vectors.dense(indices)
+  }
 }
 
 private[ml] object TreeEnsembleModel {
