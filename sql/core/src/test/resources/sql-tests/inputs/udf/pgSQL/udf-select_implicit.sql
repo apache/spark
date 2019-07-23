@@ -1,4 +1,4 @@
--- This test file was converted from select_implicit.sql
+--
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 --
@@ -9,6 +9,9 @@
 -- - thomas 1998-07-09
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/select_implicit.sql
 --
+-- This test file was converted from pgSQL/select_implicit.sql
+-- [SPARK-28445] Inconsistency between Scala and Python/Panda udfs when groupby with udf() is used
+-- TODO: We should add UDFs in GROUP BY clause when [SPARK-28445] is resolved.
 
 -- load test data
 CREATE TABLE test_missing_target (a int, b int, c string, d string) using parquet;
