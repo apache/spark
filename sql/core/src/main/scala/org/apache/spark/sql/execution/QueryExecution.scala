@@ -67,10 +67,14 @@ class QueryExecution(
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     assertSupported()
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
     sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
   }
 
   lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
     sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
   }
 
@@ -78,12 +82,15 @@ class QueryExecution(
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
+    // Clone the logical plan here, in case the planner rules change the states of the logical plan.
     planner.plan(ReturnAnswer(optimizedPlan.clone())).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
     prepareForExecution(sparkPlan.clone())
   }
 

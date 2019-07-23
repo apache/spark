@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution
 
 import scala.io.Source
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, FastOperator}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -143,11 +143,10 @@ class QueryExecutionSuite extends SharedSQLContext {
     spark.experimental.extraStrategies = Nil
   }
 
-  test("SPARK-28346: clone the query plan between analyzer, optimizer and planner") {
+  test("SPARK-28346: clone the query plan between different stages") {
     val tag1 = new TreeNodeTag[String]("a")
     val tag2 = new TreeNodeTag[String]("b")
     val tag3 = new TreeNodeTag[String]("c")
-    val tag4 = new TreeNodeTag[String]("d")
 
     def assertNoTag(tag: TreeNodeTag[String], plans: QueryPlan[_]*): Unit = {
       plans.foreach { plan =>
@@ -157,20 +156,39 @@ class QueryExecutionSuite extends SharedSQLContext {
 
     val df = spark.range(10)
     val analyzedPlan = df.queryExecution.analyzed
+    val cachedPlan = df.queryExecution.withCachedData
     val optimizedPlan = df.queryExecution.optimizedPlan
-    val physicalPlan = df.queryExecution.sparkPlan
-    val finalPlan = df.queryExecution.executedPlan
 
     analyzedPlan.setTagValue(tag1, "v")
-    assertNoTag(tag1, optimizedPlan, physicalPlan, finalPlan)
+    assertNoTag(tag1, cachedPlan, optimizedPlan)
 
-    optimizedPlan.setTagValue(tag2, "v")
-    assertNoTag(tag2, analyzedPlan, physicalPlan, finalPlan)
+    cachedPlan.setTagValue(tag2, "v")
+    assertNoTag(tag2, analyzedPlan, optimizedPlan)
 
-    physicalPlan.setTagValue(tag3, "v")
-    assertNoTag(tag3, analyzedPlan, optimizedPlan, finalPlan)
+    optimizedPlan.setTagValue(tag3, "v")
+    assertNoTag(tag3, analyzedPlan, cachedPlan)
 
-    finalPlan.setTagValue(tag4, "v")
-    assertNoTag(tag4, analyzedPlan, optimizedPlan, physicalPlan)
+    val tag4 = new TreeNodeTag[String]("d")
+    try {
+      spark.experimental.extraStrategies = Seq(new SparkStrategy() {
+        override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+          plan.foreach {
+            case r: org.apache.spark.sql.catalyst.plans.logical.Range =>
+              r.setTagValue(tag4, "v")
+            case _ =>
+          }
+          Seq(FastOperator(plan.output))
+        }
+      })
+      // trigger planning
+      df.queryExecution.sparkPlan
+      assert(optimizedPlan.getTagValue(tag4).isEmpty)
+    } finally {
+      spark.experimental.extraStrategies = Nil
+    }
+
+    val tag5 = new TreeNodeTag[String]("e")
+    df.queryExecution.executedPlan.setTagValue(tag5, "v")
+    assertNoTag(tag5, df.queryExecution.sparkPlan)
   }
 }
