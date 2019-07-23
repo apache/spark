@@ -608,12 +608,8 @@ class SparseVector @Since("2.0.0") (
       throw new IndexOutOfBoundsException(s"Index $i out of bounds [0, $size)")
     }
 
-    if (indices.isEmpty || i < indices(0) || i > indices(indices.length - 1)) {
-      0.0
-    } else {
-      val j = util.Arrays.binarySearch(indices, i)
-      if (j < 0) 0.0 else values(j)
-    }
+    val j = util.Arrays.binarySearch(indices, i)
+    if (j < 0) 0.0 else values(j)
   }
 
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
