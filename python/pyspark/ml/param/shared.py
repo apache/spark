@@ -765,23 +765,11 @@ class DecisionTreeParams(Params):
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
 
-    def setMaxDepth(self, value):
-        """
-        Sets the value of :py:attr:`maxDepth`.
-        """
-        return self._set(maxDepth=value)
-
     def getMaxDepth(self):
         """
         Gets the value of maxDepth or its default value.
         """
         return self.getOrDefault(self.maxDepth)
-
-    def setMaxBins(self, value):
-        """
-        Sets the value of :py:attr:`maxBins`.
-        """
-        return self._set(maxBins=value)
 
     def getMaxBins(self):
         """
@@ -789,23 +777,11 @@ class DecisionTreeParams(Params):
         """
         return self.getOrDefault(self.maxBins)
 
-    def setMinInstancesPerNode(self, value):
-        """
-        Sets the value of :py:attr:`minInstancesPerNode`.
-        """
-        return self._set(minInstancesPerNode=value)
-
     def getMinInstancesPerNode(self):
         """
         Gets the value of minInstancesPerNode or its default value.
         """
         return self.getOrDefault(self.minInstancesPerNode)
-
-    def setMinInfoGain(self, value):
-        """
-        Sets the value of :py:attr:`minInfoGain`.
-        """
-        return self._set(minInfoGain=value)
 
     def getMinInfoGain(self):
         """
@@ -813,23 +789,11 @@ class DecisionTreeParams(Params):
         """
         return self.getOrDefault(self.minInfoGain)
 
-    def setMaxMemoryInMB(self, value):
-        """
-        Sets the value of :py:attr:`maxMemoryInMB`.
-        """
-        return self._set(maxMemoryInMB=value)
-
     def getMaxMemoryInMB(self):
         """
         Gets the value of maxMemoryInMB or its default value.
         """
         return self.getOrDefault(self.maxMemoryInMB)
-
-    def setCacheNodeIds(self, value):
-        """
-        Sets the value of :py:attr:`cacheNodeIds`.
-        """
-        return self._set(cacheNodeIds=value)
 
     def getCacheNodeIds(self):
         """
