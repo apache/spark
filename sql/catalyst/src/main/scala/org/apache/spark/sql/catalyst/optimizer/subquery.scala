@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -322,6 +322,26 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   }
 
   /**
+   * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
+   * If not, returns the original expression without evaluation.
+   */
+  private def getEvalOrExpr(expr: Expression): Option[Expression] = {
+    // Removes Alias over given expression, because Alias is not foldable.
+    if (!removeAlias(expr).foldable) {
+      // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
+      // Needs to evaluate them on query runtime.
+      Some(expr)
+    } else {
+      val exprVal = expr.eval()
+      if (exprVal == null) {
+        None
+      } else {
+        Some(Literal.create(exprVal, expr.dataType))
+      }
+    }
+  }
+
+  /**
    * Statically evaluate an expression containing zero or more placeholders, given a set
    * of bindings for placeholder values, if the expression is evaluable. If it is not,
    * bind statically evaluated expression results to an expression.
@@ -337,19 +357,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         }
     }
 
-    // Removes Alias over given expression, because Alias is not foldable.
-    if (!removeAlias(rewrittenExpr).foldable) {
-      // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
-      // Needs to evaluate them on query runtime.
-      Some(rewrittenExpr)
-    } else {
-      val exprVal = rewrittenExpr.eval()
-      if (exprVal == null) {
-        None
-      } else {
-        Some(Literal.create(exprVal, expr.dataType))
-      }
-    }
+    getEvalOrExpr(rewrittenExpr)
   }
 
   /**
@@ -366,19 +374,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       case _: AttributeReference => Literal.default(NullType)
     }
 
-    // Removes Alias over given expression, because Alias is not foldable.
-    if (!removeAlias(rewrittenExpr).foldable) {
-      // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
-      // Needs to evaluate them on query runtime.
-      Some(rewrittenExpr)
-    } else {
-      val exprVal = rewrittenExpr.eval()
-      if (exprVal == null) {
-        None
-      } else {
-        Some(Literal.create(exprVal, expr.dataType))
-      }
-    }
+    getEvalOrExpr(rewrittenExpr)
   }
 
   /**
@@ -525,7 +521,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
           if (havingNode.isEmpty) {
             // CASE 2: Subquery with no HAVING clause
-            // The added Alias column uses expr id of original output.
 
             // We replace original expression id with a new one. The added Alias column
             // must use expr id of original output. If we don't replace old expr id in the
