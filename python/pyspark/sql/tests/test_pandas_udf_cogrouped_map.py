@@ -122,6 +122,41 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         assert_frame_equal(expected, result, check_column_type=_check_column_type)
 
+    def test_empty_group_by(self):
+        left = self.data1
+        right = self.data2
+
+        @pandas_udf('id long, k int, v int, v2 int', PandasUDFType.COGROUPED_MAP)
+        def merge_pandas(l, r):
+            return pd.merge(l, r, on=['id', 'k'])
+
+        result = left.groupby().cogroup(right.groupby())\
+            .apply(merge_pandas) \
+            .sort(['id', 'k']) \
+            .toPandas()
+
+        left = left.toPandas()
+        right = right.toPandas()
+
+        expected = pd \
+            .merge(left, right, on=['id', 'k']) \
+            .sort_values(by=['id', 'k'])
+
+        assert_frame_equal(expected, result, check_column_type=_check_column_type)
+
+    def test_mixed_scalar_udfs_followed_by_cogrouby_apply(self):
+        df = self.spark.range(0, 10).toDF('v1')
+        df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
+            .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))
+
+        result = df.groupby().cogroup(df.groupby())\
+            .apply(pandas_udf(lambda x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]),
+                              'sum1 int, sum2 int',
+                              PandasUDFType.COGROUPED_MAP)).collect()
+
+        self.assertEquals(result[0]['sum1'], 165)
+        self.assertEquals(result[0]['sum2'], 165)
+
     def test_with_key_left(self):
         self._test_with_key(self.data1, self.data1, isLeft=True)
 
