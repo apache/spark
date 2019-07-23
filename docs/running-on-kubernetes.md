@@ -121,7 +121,7 @@ $ ./bin/docker-image-tool.sh -r <repo> -t my-tag -R ./kubernetes/dockerfiles/spa
 To launch Spark Pi in cluster mode,
 
 ```bash
-$ bin/spark-submit \
+$ ./bin/spark-submit \
     --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
     --deploy-mode cluster \
     --name spark-pi \
