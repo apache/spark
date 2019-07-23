@@ -951,6 +951,5 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DoubleType)), null)
     checkEvaluation(makeTimestampExpr.copy(sec = Literal(70.5)), null)
-
   }
 }
