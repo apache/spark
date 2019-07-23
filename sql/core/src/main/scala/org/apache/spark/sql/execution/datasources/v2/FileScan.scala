@@ -22,7 +22,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD
+import org.apache.spark.internal.config.IO_LOAD_LARGE_FILE_WARNING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.PartitionedFileUtil
@@ -47,7 +47,7 @@ abstract class FileScan(
   }
 
   def getFileUnSplittableReason(path: Path): String = {
-    "Unknown"
+    "Undefined"
   }
 
   override def description(): String = {
@@ -100,9 +100,9 @@ abstract class FileScan(
 
     if (splitFiles.length == 1) {
       val path = new Path(splitFiles(0).filePath)
-      if (isSplitable(path) && splitFiles(0).length >
-        sparkSession.sparkContext.getConf.get(IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD)) {
-        logWarning(s"Loading one large unsplittable File ${path.toString} with only one " +
+      if (!isSplitable(path) && splitFiles(0).length >
+        sparkSession.sparkContext.getConf.get(IO_LOAD_LARGE_FILE_WARNING_THRESHOLD)) {
+        logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
           s"partition, the reason is: ${getFileUnSplittableReason(path)}")
       }
     }

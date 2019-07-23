@@ -1180,11 +1180,11 @@ package object config {
       .intConf
       .createWithDefault(1)
 
-  private[spark] val IO_FILE_UNSPLITTABLE_WARNING_THRESHOLD =
-    ConfigBuilder("spark.io.file.unsplittable.warning.threshold")
+  private[spark] val IO_LOAD_LARGE_FILE_WARNING_THRESHOLD =
+    ConfigBuilder("spark.io.loadLargeFile.warning.threshold")
       .internal()
-      .doc("When spark loading one single large unsplittable file, if file size exceed this " +
-        "threshold, then log warning.")
+      .doc("When spark loading one single large file, if file size exceed this " +
+        "threshold, then log warning with possible reasons.")
       .longConf
       .createWithDefault(1024 * 1024 * 1024)
 

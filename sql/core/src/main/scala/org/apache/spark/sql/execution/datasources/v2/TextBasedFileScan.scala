@@ -43,7 +43,7 @@ abstract class TextBasedFileScan(
     if (!isSplitable(path)) {
       "the file is compressed by unsplittable compression codec"
     } else {
-      throw new UnsupportedOperationException("Undefined method getFileUnSplittableReason")
+      null
     }
   }
 }
