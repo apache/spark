@@ -30,22 +30,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.NextIterator
 
-
-/** Offset range that one partition of the KafkaSourceRDD has to read */
-private[kafka010] case class KafkaSourceRDDOffsetRange(
-    topicPartition: TopicPartition,
-    fromOffset: Long,
-    untilOffset: Long,
-    preferredLoc: Option[String]) {
-  def topic: String = topicPartition.topic
-  def partition: Int = topicPartition.partition
-  def size: Long = untilOffset - fromOffset
-}
-
-
 /** Partition of the KafkaSourceRDD */
 private[kafka010] case class KafkaSourceRDDPartition(
-  index: Int, offsetRange: KafkaSourceRDDOffsetRange) extends Partition
+  index: Int, offsetRange: KafkaOffsetRange) extends Partition
 
 
 /**
@@ -61,7 +48,7 @@ private[kafka010] case class KafkaSourceRDDPartition(
 private[kafka010] class KafkaSourceRDD(
     sc: SparkContext,
     executorKafkaParams: ju.Map[String, Object],
-    offsetRanges: Seq[KafkaSourceRDDOffsetRange],
+    offsetRanges: Seq[KafkaOffsetRange],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
     reuseKafkaConsumer: Boolean)
@@ -134,7 +121,7 @@ private[kafka010] class KafkaSourceRDD(
     }
   }
 
-  private def resolveRange(consumer: KafkaDataConsumer, range: KafkaSourceRDDOffsetRange) = {
+  private def resolveRange(consumer: KafkaDataConsumer, range: KafkaOffsetRange) = {
     if (range.fromOffset < 0 || range.untilOffset < 0) {
       // Late bind the offset range
       val availableOffsetRange = consumer.getAvailableOffsetRange()
@@ -152,7 +139,7 @@ private[kafka010] class KafkaSourceRDD(
       } else {
         range.untilOffset
       }
-      KafkaSourceRDDOffsetRange(range.topicPartition,
+      KafkaOffsetRange(range.topicPartition,
         fromOffset, untilOffset, range.preferredLoc)
     } else {
       range

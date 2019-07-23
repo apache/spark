@@ -29,7 +29,9 @@ import scala.util.control.NonFatal
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
@@ -93,6 +95,22 @@ private[kafka010] class KafkaOffsetReader(
 
   private val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
+
+  /**
+   * Number of partitions to read from Kafka. If this value is greater than the number of Kafka
+   * topicPartitions, we will not use the CachedConsumer.
+   */
+  val minPartitions =
+    readerOptions.get(KafkaSourceProvider.MIN_PARTITIONS_OPTION_KEY).map(_.toInt)
+
+  val rangeCalculator = new KafkaOffsetRangeCalculator(minPartitions)
+
+  /**
+   * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
+   */
+  def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
+    minPartitions.map(_ > numTopicPartitions).getOrElse(false)
+  }
 
   private def nextGroupId(): String = {
     groupId = driverGroupIdPrefix + "-" + nextId
@@ -335,6 +353,113 @@ private[kafka010] class KafkaOffsetReader(
         }
       }
     }
+  }
+
+  def getOffsetRanges(
+      startingOffsets: KafkaOffsetRangeLimit,
+      endingOffsets: KafkaOffsetRangeLimit): Seq[KafkaOffsetRange] = {
+    val fromPartitionOffsets = fetchPartitionOffsets(startingOffsets)
+    val untilPartitionOffsets = fetchPartitionOffsets(endingOffsets)
+
+    // Obtain topicPartitions in both from and until partition offset, ignoring
+    // topic partitions that were added and/or deleted between the two above calls.
+    if (fromPartitionOffsets.keySet != untilPartitionOffsets.keySet) {
+      implicit val topicOrdering: Ordering[TopicPartition] = Ordering.by(t => t.topic())
+      val fromTopics = fromPartitionOffsets.keySet.toList.sorted.mkString(",")
+      val untilTopics = untilPartitionOffsets.keySet.toList.sorted.mkString(",")
+      throw new IllegalStateException("different topic partitions " +
+        s"for starting offsets topics[${fromTopics}] and " +
+        s"ending offsets topics[${untilTopics}]")
+    }
+
+    // Calculate offset ranges
+    val offsetRangesBase = untilPartitionOffsets.keySet.map { tp =>
+      val fromOffset = fromPartitionOffsets.get(tp).getOrElse {
+        // This should not happen since topicPartitions contains all partitions not in
+        // fromPartitionOffsets
+        throw new IllegalStateException(s"$tp doesn't have a from offset")
+      }
+      val untilOffset = untilPartitionOffsets(tp)
+      KafkaOffsetRange(tp, fromOffset, untilOffset, None)
+    }.toSeq
+
+    if (shouldDivvyUpLargePartitions(offsetRangesBase.size)) {
+      val fromOffsetsMap =
+        offsetRangesBase.map(range => (range.topicPartition, range.fromOffset)).toMap
+      val untilOffsetsMap =
+        offsetRangesBase.map(range => (range.topicPartition, range.untilOffset)).toMap
+
+      // No need to report data loss here
+      val resolvedFromOffsets = fetchSpecificOffsets(fromOffsetsMap, _ => ()).partitionToOffsets
+      val resolvedUntilOffsets = fetchSpecificOffsets(untilOffsetsMap, _ => ()).partitionToOffsets
+      val ranges = offsetRangesBase.map(_.topicPartition).map { tp =>
+        KafkaOffsetRange(tp, resolvedFromOffsets(tp), resolvedUntilOffsets(tp), preferredLoc = None)
+      }
+      rangeCalculator.splitRanges(ranges)
+    } else {
+      offsetRangesBase
+    }
+  }
+
+  private def getSortedExecutorList(): Array[String] = {
+    def compare(a: ExecutorCacheTaskLocation, b: ExecutorCacheTaskLocation): Boolean = {
+      if (a.host == b.host) {
+        a.executorId > b.executorId
+      } else {
+        a.host > b.host
+      }
+    }
+
+    val bm = SparkEnv.get.blockManager
+    bm.master.getPeers(bm.blockManagerId).toArray
+      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
+      .sortWith(compare)
+      .map(_.toString)
+  }
+
+  def getOffsetRangesFromResolvedOffsets(
+      fromPartitionOffsets: PartitionOffsetMap,
+      untilPartitionOffsets: PartitionOffsetMap,
+      reportDataLoss: String => Unit): Seq[KafkaOffsetRange] = {
+    // Find the new partitions, and get their earliest offsets
+    val newPartitions = untilPartitionOffsets.keySet.diff(fromPartitionOffsets.keySet)
+    val newPartitionInitialOffsets = fetchEarliestOffsets(newPartitions.toSeq)
+    if (newPartitionInitialOffsets.keySet != newPartitions) {
+      // We cannot get from offsets for some partitions. It means they got deleted.
+      val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
+      reportDataLoss(
+        s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
+    }
+    logInfo(s"Partitions added: $newPartitionInitialOffsets")
+    newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
+      reportDataLoss(
+        s"Added partition $p starts from $o instead of 0. Some data may have been missed")
+    }
+
+    val deletedPartitions = fromPartitionOffsets.keySet.diff(untilPartitionOffsets.keySet)
+    if (deletedPartitions.nonEmpty) {
+      val message = if (driverKafkaParams.containsKey(ConsumerConfig.GROUP_ID_CONFIG)) {
+        s"$deletedPartitions are gone. ${KafkaSourceProvider.CUSTOM_GROUP_ID_ERROR_MESSAGE}"
+      } else {
+        s"$deletedPartitions are gone. Some data may have been missed."
+      }
+      reportDataLoss(message)
+    }
+
+    // Use the until partitions to calculate offset ranges to ignore partitions that have
+    // been deleted
+    val topicPartitions = untilPartitionOffsets.keySet.filter { tp =>
+      // Ignore partitions that we don't know the from offsets.
+      newPartitionInitialOffsets.contains(tp) || fromPartitionOffsets.contains(tp)
+    }.toSeq
+    logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
+
+    val fromOffsets = fromPartitionOffsets ++ newPartitionInitialOffsets
+    val untilOffsets = untilPartitionOffsets
+    val ranges = topicPartitions.map { tp =>
+      KafkaOffsetRange(tp, fromOffsets(tp), untilOffsets(tp), preferredLoc = None)
+    }
+    rangeCalculator.splitRanges(ranges, getSortedExecutorList)
   }
 
   /**
