@@ -29,7 +29,9 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 
-
+/**
+ * Base functionality for plans which execute grouped python udfs.
+ */
 abstract class BasePandasGroupExec(func: Expression,
                                    output: Seq[Attribute]) extends SparkPlan {
 
@@ -60,7 +62,6 @@ abstract class BasePandasGroupExec(func: Expression,
       flattenedBatch.setNumRows(batch.numRows())
       flattenedBatch.rowIterator.asScala
     }.map(unsafeProj)
-
   }
 
   protected def groupAndDedup(
@@ -129,5 +130,4 @@ abstract class BasePandasGroupExec(func: Expression,
     val dedupSchema = StructType.fromAttributes(dedupAttributes)
     (dedupSchema, dedupAttributes, argOffsets)
   }
-
 }

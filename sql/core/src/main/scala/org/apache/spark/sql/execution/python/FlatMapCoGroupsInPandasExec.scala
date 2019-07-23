@@ -86,9 +86,6 @@ case class FlatMapCoGroupsInPandasExec(
         pythonRunnerConf)
 
       executePython(data, runner)
-
     }
-
   }
-
 }
