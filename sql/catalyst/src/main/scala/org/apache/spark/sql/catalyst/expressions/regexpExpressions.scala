@@ -91,7 +91,9 @@ abstract class StringRegexExpression extends BinaryExpression
           enabled, the pattern to match "\abc" should be "\abc".
       * escape - a optional string. The default escape character is the '\' . If an escape character
           precedes a special symbol or another escape character, the following character is matched
-          literally. It is invalid to escape any other character.
+          literally. It is invalid to escape any other character. You can specify '' as escape
+          character so that disables the escape mechanism, which makes it impossible to turn off
+          the special meaning of underscore and percent signs in the pattern.
   """,
   examples = """
     Examples:
