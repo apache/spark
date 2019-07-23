@@ -49,7 +49,6 @@ object StringUtils extends Logging {
     } else {
       escapeStr.charAt(0)
     }
-    val escapeChar = escapeStr.charAt(0)
     val in = pattern.toIterator
     val out = new StringBuilder()
 
