@@ -215,8 +215,9 @@ class HadoopRDD[K, V](
         val path = fileSplit.getPath
         if (fileSplit.getLength > conf.get(IO_LOAD_LARGE_FILE_WARNING_THRESHOLD)) {
           if (Utils.isFileSplittable(path, codecFactory)) {
-            logWarning("Loading one large file by one partition is slow, we can increase " +
-              "partition numbers by the `minPartitions` argument in method `sc.textFile`")
+            logWarning(s"Loading one large file ${path.toString} with only one partition, " +
+              s"we can increase partition numbers by the `minPartitions` argument in method " +
+              "`sc.textFile`")
           } else {
             logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
               s"partition, because the file is compressed by unsplittable compression codec.")
