@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.Properties
 
@@ -70,42 +69,42 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
   }
 
   ThriftserverShimUtils.testedProtocalVersions.foreach { version =>
-    test(s"$version get byte value") {
+    test(s"$version get byte type") {
       testWithProtocolVersion(version, "SELECT cast(1 as byte)") { rs =>
         assert(rs.next())
         assert(rs.getByte(1) === 1.toByte)
       }
     }
 
-    test(s"$version get short value") {
+    test(s"$version get short type") {
       testWithProtocolVersion(version, "SELECT cast(1 as short)") { rs =>
         assert(rs.next())
         assert(rs.getShort(1) === 1.toShort)
       }
     }
 
-    test(s"$version get int value") {
+    test(s"$version get int type") {
       testWithProtocolVersion(version, "SELECT 1") { rs =>
         assert(rs.next())
         assert(rs.getInt(1) === 1)
       }
     }
 
-    test(s"$version get bigint value") {
+    test(s"$version get bigint type") {
       testWithProtocolVersion(version, "SELECT cast(1 as bigint)") { rs =>
         assert(rs.next())
         assert(rs.getLong(1) === 1L)
       }
     }
 
-    test(s"$version get float value") {
+    test(s"$version get float type") {
       testWithProtocolVersion(version, "SELECT cast(1.2 as float)") { rs =>
         assert(rs.next())
         assert(rs.getFloat(1) === 1.2F)
       }
     }
 
-    test(s"$version get double value") {
+    test(s"$version get double type") {
       testWithProtocolVersion(version, "SELECT cast(1.2 as double)") { rs =>
         assert(rs.next())
         assert(rs.getDouble(1) === 1.2D)
@@ -113,71 +112,93 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
     }
 
     // TODO: enable this test case after SPARK-28463 and SPARK-26969
-    ignore(s"$version get decimal value") {
+    ignore(s"$version get decimal type") {
       testWithProtocolVersion(version, "SELECT cast(1 as decimal(18, 2)) as c") { rs =>
         assert(rs.next())
         assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.00"))
       }
     }
 
-    test(s"$version get string value") {
+    test(s"$version get string type") {
       testWithProtocolVersion(version, "SELECT 'str'") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "str")
       }
     }
 
+    test(s"$version get char type") {
+      testWithProtocolVersion(version, "SELECT cast('char-str' as char(10))") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === "char-str")
+      }
+    }
+
+    test(s"$version get varchar type") {
+      testWithProtocolVersion(version, "SELECT cast('varchar-str' as varchar(10))") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === "varchar-str")
+      }
+    }
+
     // TODO: enable this test case after SPARK-28474
-    ignore(s"$version get binary value") {
+    ignore(s"$version get binary type") {
       testWithProtocolVersion(version, "SELECT cast('ABC' as binary)") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "ABC")
       }
     }
 
-    test(s"$version get boolean value") {
+    test(s"$version get boolean type") {
       testWithProtocolVersion(version, "SELECT true") { rs =>
         assert(rs.next())
         assert(rs.getBoolean(1) === true)
       }
     }
 
-    test(s"$version get date value") {
+    test(s"$version get date type") {
       testWithProtocolVersion(version, "SELECT cast('2019-07-22' as date)") { rs =>
         assert(rs.next())
         assert(rs.getDate(1) === Date.valueOf("2019-07-22"))
       }
     }
 
-    test(s"$version get timestamp value") {
+    test(s"$version get timestamp type") {
       testWithProtocolVersion(version, "SELECT cast('2019-07-22 18:14:00' as timestamp)") { rs =>
         assert(rs.next())
         assert(rs.getTimestamp(1) === Timestamp.valueOf("2019-07-22 18:14:00"))
       }
     }
 
-    test(s"$version get void") {
+    // TODO: enable this test case after port HIVE-10646
+    ignore(s"$version get void") {
       testWithProtocolVersion(version, "SELECT null") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === null)
       }
     }
 
-    test(s"$version get array value") {
+    // We do not fully support interval type
+    ignore(s"$version get interval type") {
+      testWithProtocolVersion(version, "SELECT interval '1' year '2' day") { rs =>
+        assert(rs.next())
+      }
+    }
+
+    test(s"$version get array type") {
       testWithProtocolVersion(version, "SELECT array(1, 2)") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "[1,2]")
       }
     }
 
-    test(s"$version get map value") {
+    test(s"$version get map type") {
       testWithProtocolVersion(version, "SELECT map(1, 2)") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "{1:2}")
       }
     }
 
-    test(s"$version get struct value") {
+    test(s"$version get struct type") {
       testWithProtocolVersion(version, "SELECT struct('alpha' AS A, 'beta' AS B)") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === """{"A":"alpha","B":"beta"}""")
