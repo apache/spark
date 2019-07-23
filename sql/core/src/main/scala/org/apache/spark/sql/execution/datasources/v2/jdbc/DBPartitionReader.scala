@@ -19,57 +19,50 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import java.io.IOException
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{StructType}
 
-class DBPartitionReader(schema : StructType) extends PartitionReader[InternalRow] with Logging {
-  var dummyRows = 0
-  /*
-   * Note : Read implementation is dummy as of now.
-   * It returns a hard coded schema and rows.
-   */
+/*
+ * Provides basic read implementation.
+ * TODO : multi executor paritition scenario
+ * TODO : Optimal JDBC connection parameters usage
+ */
+class DBPartitionReader(options: JDBCOptions, schema : StructType,
+                        filters: Array[Filter], prunedCols: StructType)
+  extends PartitionReader[InternalRow] with Logging {
+  var retrievedRows = 0
+  val sqlSelectStmtWithFilters = s"SELECT $prunedCols from ${options.tableOrQuery} $filters"
+  val sqlSelectStmt = s"SELECT * from ${options.tableOrQuery}"
+  val tc = TaskContext.get
+  val inputMetrics = tc.taskMetrics().inputMetrics
+  val conn = JdbcUtils.createConnectionFactory(options)()
+  val stmt = conn.prepareStatement(sqlSelectStmt)
+  val rs = stmt.executeQuery()
+  val itrRowIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
+
+  logInfo("***dsv2-flows*** DBPartitionReader created")
+  logInfo(s"***dsv2-flows*** DBPartitionReader SQL stmt $sqlSelectStmt")
+  logInfo(s"***dsv2-flows*** DBPartitionReader SQLWithFilters stmt is $sqlSelectStmtWithFilters")
 
   @throws[IOException]
   def next(): Boolean = {
-
     logInfo("***dsv2-flows*** next() called")
-    if(dummyRows <2) {
-      dummyRows = dummyRows + 1
-      true
-    } else {
-      false
-    }
+    itrRowIterator.hasNext
   }
 
   def get: InternalRow = {
-
-    logInfo("***dsv2-flows*** get() called for row " + dummyRows)
-
-    // Value for row1
-    var v_name = "somename"
-    var v_rollnum = "38"
-    var v_occupation = "worker"
-
-    if(dummyRows == 2) {
-      // Values for row2
-      v_name = "someone"
-      v_rollnum = "39"
-      v_occupation = "manager"
-    }
-
-    val values = schema.map(_.name).map {
-      case "name" => UTF8String.fromString(v_name)
-      case "rollnum" => UTF8String.fromString(v_rollnum)
-      case "occupation" => UTF8String.fromString(v_occupation)
-      case _ => UTF8String.fromString("anything")
-    }
-    InternalRow.fromSeq(values)
+    logInfo("***dsv2-flows*** get() called for row ")
+    retrievedRows = retrievedRows + 1
+    itrRowIterator.next()
   }
 
   @throws[IOException]
   override def close(): Unit = {
+    logInfo(s"***dsv2-flows*** close called. number of rows retrieved is $retrievedRows")
   }
 }

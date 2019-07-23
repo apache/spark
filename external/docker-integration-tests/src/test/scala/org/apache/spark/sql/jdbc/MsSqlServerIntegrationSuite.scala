@@ -158,6 +158,16 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df2.show()
   }
 
+  test("JDBCV2 read test") {
+    // Read table with JDBCV2
+    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","strings_numbers").load()
+    val numberOfRows = df1.count
+    val df2 = spark.read.format("jdbcv2").option("url",jdbcUrl).option("dbtable","strings_numbers").load()
+    df2.show(10)
+    df2.select("i").show(10)
+    assert(df2.count == numberOfRows)
+  }
+
   test("Basic test") {
     val df = spark.read.jdbc(jdbcUrl, "tbl", new Properties)
     val rows = df.collect()

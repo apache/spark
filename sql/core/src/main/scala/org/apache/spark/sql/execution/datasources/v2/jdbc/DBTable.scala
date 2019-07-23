@@ -72,7 +72,7 @@ case class DBTable (sparkSession: SparkSession,
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     logInfo("***dsv2-flows*** newScanBuilder called")
-    new JDBCScanBuilder()
+    new JDBCScanBuilder(new JDBCOptions(options.asScala.toMap), userSchema)
   }
 }
 
