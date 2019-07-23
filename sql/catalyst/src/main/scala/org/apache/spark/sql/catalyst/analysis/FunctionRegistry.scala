@@ -414,6 +414,7 @@ object FunctionRegistry {
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
+    expression[MakeDate]("make_date"),
 
     // collection functions
     expression[CreateArray]("array"),
