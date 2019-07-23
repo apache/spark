@@ -40,6 +40,16 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   with HasCheckpointInterval with HasSeed with HasWeightCol {
 
   /**
+   * Leaf indices column name.
+   * Predicted leaf index of each instance in each tree by preorder.
+   * (default = "")
+   * @group param
+   */
+  final val leafCol: Param[String] =
+    new Param[String](this, "leafCol", "Leaf indices column name. " +
+      "Predicted leaf index of each instance in each tree by preorder")
+
+  /**
    * Maximum depth of the tree (nonnegative).
    * E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
    * (default = 5)
@@ -122,9 +132,12 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
-  setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
+  setDefault(leafCol -> "", maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1,
     minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
     cacheNodeIds -> false, checkpointInterval -> 10)
+
+  /** @group getParam */
+  final def getLeafCol: String = $(leafCol)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
@@ -213,7 +226,7 @@ private[ml] object TreeClassifierParams {
 }
 
 private[ml] trait DecisionTreeClassifierParams
-  extends DecisionTreeParams with TreeClassifierParams
+  extends DecisionTreeParams with TreeClassifierParams with ProbabilisticClassifierParams
 
 private[ml] trait HasVarianceImpurity extends Params {
   /**

@@ -34,8 +34,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -54,6 +54,10 @@ class DecisionTreeClassifier @Since("1.4.0") (
   def this() = this(Identifiable.randomUID("dtc"))
 
   // Override parameter setters from parent trait for Java API compatibility.
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLeafCol(value: String): this.type = set(leafCol, value)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -208,6 +212,25 @@ class DecisionTreeClassificationModel private[ml] (
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
+  }
+
+  /** @group setParam */
+  @Since("3.0.0")
+  def setLeafCol(value: String): this.type = set(leafCol, value)
+
+  @Since("3.0.0")
+  def predictLeaf(features: Vector): Double = {
+    predictLeafImpl(features)
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    if ($(leafCol).isEmpty) {
+      super.transform(dataset)
+    } else {
+      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
+      super.transform(dataset)
+        .withColumn($(leafCol), leafUDF(col($(featuresCol))))
+    }
   }
 
   override protected def predictRaw(features: Vector): Vector = {
