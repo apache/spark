@@ -21,7 +21,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
 
 
@@ -56,7 +56,9 @@ case class FlatMapCoGroupsInPandasExec(
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
+    val leftDist = if (leftGroup.isEmpty) AllTuples else ClusteredDistribution(leftGroup)
+    val rightDist = if (rightGroup.isEmpty) AllTuples else ClusteredDistribution(rightGroup)
+    leftDist :: rightDist :: Nil
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
