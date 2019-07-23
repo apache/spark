@@ -187,51 +187,52 @@ SELECT sum(unique1) over (rows between 2 preceding and 2 following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude no others),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (rows between 2 preceding and 2 following exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT first(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT first(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT first(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT last(unique1) over (ORDER BY four rows between current row and 2 following exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT last(unique1) over (ORDER BY four rows between current row and 2 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT last(unique1) over (ORDER BY four rows between current row and 2 following exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
@@ -248,22 +249,22 @@ SELECT sum(unique1) over (rows between unbounded preceding and 1 following),
 unique1, four
 FROM tenk1 WHERE unique1 < 10;
 
---mismatched input '('
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (w range between current row and unbounded following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- mismatched input '('
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- mismatched input '('
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- mismatched input '('
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
@@ -288,41 +289,40 @@ FROM range(1, 10) i;
 
 SELECT * FROM v_window;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- CREATE OR REPLACE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude current row) as sum_rows FROM range(1, 10) i;
 
 SELECT * FROM v_window;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- CREATE OR REPLACE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude group) as sum_rows FROM range(1, 10) i;
 
 SELECT * FROM v_window;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- CREATE OR REPLACE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude ties) as sum_rows FROM generate_series(1, 10) i;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- CREATE OR REPLACE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude no others) as sum_rows FROM generate_series(1, 10) i;
 
 SELECT * FROM v_window;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- CREATE OR REPLACE TEMP VIEW v_window AS
--- SELECT i, sum(i) over (order by i groups between 1 preceding and 1 following) as sum_rows FROM range(1, 10) i;
---
--- SELECT * FROM v_window;
+CREATE OR REPLACE TEMP VIEW v_window AS
+SELECT i.id, sum(i.id) over (order by i.id range between 1 preceding and 1 following) as sum_rows FROM range(1, 10) i;
+
+SELECT * FROM v_window;
 
 DROP VIEW v_window;
 
--- cannot resolve '(current_timestamp() + CAST('100 days' AS DOUBLE))' due to data type mismatch: differing types in '(current_timestamp() + CAST('100 days' AS DOUBLE))' (timestamp and double).;
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
 -- CREATE TEMP VIEW v_window AS
 -- SELECT i, min(i) over (order by i range between '1 day' preceding and '10 days' following) as min_i
 --   FROM range(now(), now()+'100 days', '1 hour') i;
@@ -335,32 +335,32 @@ SELECT sum(unique1) over (order by four desc range between 2 preceding and 1 pre
 unique1, four
 FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding exclude no others),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding exclude current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four range between 2 preceding and 6 following exclude ties),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (order by four range between 2 preceding and 6 following exclude group),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
@@ -369,32 +369,32 @@ SELECT sum(unique1) over (partition by four order by unique1 range between 5 pre
 unique1, four
 FROM tenk1 WHERE unique1 < 10;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (partition by four order by unique1 range between 5 preceding and 6 following
 --   exclude current row),unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- cannot resolve 'RANGE BETWEEN CAST('1 year' AS DOUBLE) PRECEDING AND '1 year' FOLLOWING' due to data type mismatch: The data type of the upper bound 'string' does not match the expected data type '(numeric or calendarinterval)'.;
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
 -- select sum(salary) over (order by enroll_date range between '1 year' preceding and '1 year' following),
 -- salary, enroll_date from empsalary;
 
--- cannot resolve 'RANGE BETWEEN CAST('1 year' AS DOUBLE) PRECEDING AND '1 year' FOLLOWING' due to data type mismatch: The data type of the upper bound 'string' does not match the expected data type '(numeric or calendarinterval)'.;
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
 -- select sum(salary) over (order by enroll_date desc range between '1 year' preceding and '1 year' following),
 -- salary, enroll_date from empsalary;
 
--- cannot resolve 'RANGE BETWEEN '1 year' FOLLOWING AND '1 year' FOLLOWING' due to data type mismatch: The data type of the lower bound 'string' does not match the expected data type '(numeric or calendarinterval)'.;
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
 -- select sum(salary) over (order by enroll_date desc range between '1 year' following and '1 year' following),
 -- salary, enroll_date from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select sum(salary) over (order by enroll_date range between '1 year' preceding and '1 year' following
 --   exclude current row), salary, enroll_date from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select sum(salary) over (order by enroll_date range between '1 year' preceding and '1 year' following
 --   exclude group), salary, enroll_date from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select sum(salary) over (order by enroll_date range between '1 year' preceding and '1 year' following
 --   exclude ties), salary, enroll_date from empsalary;
 
@@ -417,40 +417,39 @@ FROM tenk1 WHERE unique1 < 10;
 --   exclude ties),
 -- salary from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select last(salary) over(order by salary range between 1000 following and 3000 following
 --   exclude group),
 -- lag(salary) over(order by salary range between 1000 following and 3000 following exclude group),
 -- salary from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select first(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude ties),
 -- last(salary) over(order by enroll_date range between unbounded preceding and '1 year' following),
 -- salary, enroll_date from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select first(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude ties),
 -- last(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude ties),
 -- salary, enroll_date from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select first(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude group),
 -- last(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude group),
 -- salary, enroll_date from empsalary;
 
--- missing ')' at 'exclude'
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- select first(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude current row),
 -- last(salary) over(order by enroll_date range between unbounded preceding and '1 year' following
 --   exclude current row),
 -- salary, enroll_date from empsalary;
 
--- in Spark, x is ambiguous for the following queries
 select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
@@ -509,84 +508,75 @@ from range(9223372036854775804, 9223372036854775806) x;
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
 from range(-9223372036854775806, -9223372036854775804) x;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
+SELECT sum(unique1) over (order by four range between unbounded preceding and current row),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+SELECT sum(unique1) over (order by four range between unbounded preceding and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+SELECT sum(unique1) over (order by four range between current row and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+SELECT sum(unique1) over (order by four range between 1 preceding and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+SELECT sum(unique1) over (order by four range between 1 following and unbounded following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+SELECT sum(unique1) over (order by four range between unbounded preceding and 2 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- SELECT sum(unique1) over (order by four range between 2 preceding and 1 following),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
+SELECT sum(unique1) over (order by four range between 0 preceding and 0 following),
+unique1, four
+FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between current row and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- SELECT sum(unique1) over (order by four range between 2 preceding and 1 following
 --   exclude current row), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- SELECT sum(unique1) over (order by four range between 2 preceding and 1 following
 --   exclude group), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- SELECT sum(unique1) over (order by four range between 2 preceding and 1 following
 --   exclude ties), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
+SELECT sum(unique1) over (partition by ten
+  order by four range between 0 preceding and 0 following),unique1, four, ten
+FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (partition by ten
---   order by four groups between 0 preceding and 0 following),unique1, four, ten
+--   order by four range between 0 preceding and 0 following exclude current row), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (partition by ten
---   order by four groups between 0 preceding and 0 following exclude current row), unique1, four, ten
+--   order by four range between 0 preceding and 0 following exclude group), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
+-- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (partition by ten
---   order by four groups between 0 preceding and 0 following exclude group), unique1, four, ten
--- FROM tenk1 WHERE unique1 < 10;
-
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- SELECT sum(unique1) over (partition by ten
---   order by four groups between 0 preceding and 0 following exclude ties), unique1, four, ten
+--   order by four range between 0 preceding and 0 following exclude ties), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
@@ -595,9 +585,9 @@ from range(-9223372036854775806, -9223372036854775804) x;
 -- nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- select last(salary) over(order by enroll_date groups between 1 preceding and 1 following),
--- lag(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+-- Window Frame specifiedwindowframe(RangeFrame, -1, 1) must match the required frame specifiedwindowframe(RowFrame, -1, -1);
+-- select last(salary) over(order by enroll_date range between 1 preceding and 1 following),
+-- lag(salary) over(order by enroll_date range between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
@@ -608,10 +598,10 @@ from range(-9223372036854775806, -9223372036854775804) x;
 --   exclude ties),
 -- salary, enroll_date from empsalary;
 
--- mismatched input 'groups' expecting {')', ',', 'RANGE', 'ROWS'}
--- select last(salary) over(order by enroll_date groups between 1 following and 3 following
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select last(salary) over(order by enroll_date range between 1 following and 3 following
 --   exclude group),
--- lag(salary) over(order by enroll_date groups between 1 following and 3 following exclude group),
+-- lag(salary) over(order by enroll_date range between 1 following and 3 following exclude group),
 -- salary, enroll_date from empsalary;
 
 WITH cte (x) AS (
@@ -666,18 +656,17 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SEL
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
 
--- broken - costs not available
--- select f1, sum(f1) over (partition by f1
---                          range between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1
+                         range between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
--- explain (costs off)
--- select f1, sum(f1) over (partition by f1 order by f2
--- range between 1 preceding and 1 following)
--- from t1 where f1 = f2;
--- select f1, sum(f1) over (partition by f1 order by f2
---                          range between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+explain
+select f1, sum(f1) over (partition by f1 order by f2
+range between 1 preceding and 1 following)
+from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1 order by f2
+                         range between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
 select f1, sum(f1) over (partition by f1, f1 order by f2
 range between 2 preceding and 1 preceding)
@@ -687,31 +676,27 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2;
 
--- mismatched input 'groups' expecting {')', ',', 'ORDER', 'RANGE', 'ROWS', 'SORT'}
+-- cannot resolve '(PARTITION BY default.t1.`f1` RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.
 -- select f1, sum(f1) over (partition by f1
--- groups between 1 preceding and 1 following)
+-- range between 1 preceding and 1 following)
 -- from t1 where f1 = f2;
 
--- explain(costs off) not available
--- explain (costs off)
--- select f1, sum(f1) over (partition by f1 order by f2
--- groups between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+explain
+select f1, sum(f1) over (partition by f1 order by f2
+range between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
--- mismatched input 'groups' expecting {')', ',', 'ORDER', 'RANGE', 'ROWS', 'SORT'}
--- select f1, sum(f1) over (partition by f1 order by f2
--- groups between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1 order by f2
+range between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
--- mismatched input 'groups' expecting {')', ',', 'ORDER', 'RANGE', 'ROWS', 'SORT'}
--- select f1, sum(f1) over (partition by f1, f1 order by f2
--- groups between 2 preceding and 1 preceding)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1, f1 order by f2
+range between 2 preceding and 1 preceding)
+from t1 where f1 = f2;
  
--- mismatched input 'groups' expecting {')', ',', 'ORDER', 'RANGE', 'ROWS', 'SORT'}
--- select f1, sum(f1) over (partition by f1, f2 order by f2
--- groups between 1 following and 2 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1, f2 order by f2
+range between 1 following and 2 following)
+from t1 where f1 = f2;
 
 SELECT rank() OVER (ORDER BY length('abc'));
 
@@ -759,39 +744,35 @@ SELECT rank() OVER (ORDER BY length('abc'));
 --     depname
 -- FROM empsalary GROUP BY depname;
 
--- explain (costs off) not available
--- EXPLAIN (COSTS OFF)
--- SELECT * FROM
--- (SELECT depname,
--- sum(salary) OVER (PARTITION BY depname) depsalary,
--- min(salary) OVER (PARTITION BY depname || 'A', depname) depminsalary
--- FROM empsalary) emp
--- WHERE depname = 'sales';
+EXPLAIN
+SELECT * FROM
+(SELECT depname,
+sum(salary) OVER (PARTITION BY depname) depsalary,
+min(salary) OVER (PARTITION BY depname || 'A', depname) depminsalary
+FROM empsalary) emp
+WHERE depname = 'sales';
 
--- explain (costs off) not available
--- EXPLAIN (COSTS OFF)
--- SELECT * FROM
--- (SELECT depname,
--- sum(salary) OVER (PARTITION BY enroll_date) enroll_salary,
--- min(salary) OVER (PARTITION BY depname) depminsalary
--- FROM empsalary) emp
--- WHERE depname = 'sales';
+EXPLAIN
+SELECT * FROM
+(SELECT depname,
+sum(salary) OVER (PARTITION BY enroll_date) enroll_salary,
+min(salary) OVER (PARTITION BY depname) depminsalary
+FROM empsalary) emp
+WHERE depname = 'sales';
 
--- explain (costs off) not available
--- EXPLAIN (COSTS OFF)
--- SELECT * FROM
--- (SELECT depname,
--- sum(salary) OVER (PARTITION BY depname order by empno) depsalary,
--- min(salary) OVER (PARTITION BY depname, empno order by enroll_date) depminsalary
--- FROM empsalary) emp
--- WHERE depname = 'sales';
+EXPLAIN
+SELECT * FROM
+(SELECT depname,
+sum(salary) OVER (PARTITION BY depname order by empno) depsalary,
+min(salary) OVER (PARTITION BY depname, empno order by enroll_date) depminsalary
+FROM empsalary) emp
+WHERE depname = 'sales';
 
--- explain (costs off) not available
--- EXPLAIN (COSTS OFF)
--- SELECT
--- lead(1) OVER (PARTITION BY depname ORDER BY salary, enroll_date),
--- lag(1) OVER (PARTITION BY depname ORDER BY salary,enroll_date,empno)
--- FROM empsalary;
+EXPLAIN
+SELECT
+lead(1) OVER (PARTITION BY depname ORDER BY salary, enroll_date),
+lag(1) OVER (PARTITION BY depname ORDER BY salary,enroll_date,empno)
+FROM empsalary;
 
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
@@ -921,7 +902,6 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 --   FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
 --   WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
 
--- cleanup
 drop table empsalary;
 drop table t1;
 drop view int4_tbl;
