@@ -56,24 +56,18 @@ object StringUtils extends Logging {
       s"the pattern '$pattern' is invalid, $message")
 
     while (in.hasNext) {
-      val cur = in.next
-      if (cur == escapeChar) {
-        if (in.hasNext) {
+      in.next match {
+        case c1 if c1 == escapeChar && in.hasNext =>
           val c = in.next
-          if (c == '_' || c == '%' || c == escapeChar) {
-            out ++= Pattern.quote(Character.toString(c))
-          } else {
-            fail(s"the escape character is not allowed to precede '$c'")
+          c match {
+            case '_' | '%' => out ++= Pattern.quote(Character.toString(c))
+            case c if c == escapeChar => out ++= Pattern.quote(Character.toString(c))
+            case _ => fail(s"the escape character is not allowed to precede '$c'")
           }
-        } else {
-          fail("it is not allowed to end with the escape character")
-        }
-      } else if (cur == '_') {
-        out ++= "."
-      } else if (cur == '%') {
-        out ++= ".*"
-      } else {
-        out ++= Pattern.quote(Character.toString(cur))
+        case c if c == escapeChar => fail("it is not allowed to end with the escape character")
+        case '_' => out ++= "."
+        case '%' => out ++= ".*"
+        case c => out ++= Pattern.quote(Character.toString(c))
       }
     }
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
