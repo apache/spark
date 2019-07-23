@@ -18,37 +18,36 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.SupportsRead
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
 
-class JDBCScanBuilder extends ScanBuilder with
-  SupportsPushDownFilters with SupportsPushDownRequiredColumns
+class JDBCScanBuilder(options: JDBCOptions,
+                      userSchema: Option[StructType])
+  extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns
   with Logging {
-
   var specifiedFilters: Array[Filter] = Array.empty
+  var prunedCols: StructType = _
 
   def build: Scan = {
     logInfo("***dsv2-flows*** Scan called")
-  new DBTableScan()
-
+  new DBTableScan(options, specifiedFilters, prunedCols)
   }
 
   def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    logInfo("***dsv2-flows*** PushDown filters called")
+    logInfo(s"***dsv2-flows*** PushDown filters called filters as $filters")
     specifiedFilters = filters
     filters
   }
 
   def pruneColumns(requiredSchema: StructType): Unit = {
-    logInfo("***dsv2-flows*** pruneColumns called")
-
+    logInfo(s"***dsv2-flows*** pruneColumns called with $requiredSchema")
+    prunedCols = requiredSchema
   }
 
   def pushedFilters: Array[Filter] = {
-    logInfo("***dsv2-flows*** pushedFilters called")
+    logInfo(s"***dsv2-flows*** pushedFilters called")
     specifiedFilters
   }
-
 }

@@ -18,38 +18,37 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReaderFactory, Scan}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{StructType}
 
-class DBTableScan extends Scan with Batch with Logging {
-
-  /*
-   * Note : Read implementation is dummy as of now.
-   * It returns a hard coded schema and rows.
-   */
-
-  val table_schema = StructType(Seq(
-    StructField("name", StringType, true),
-    StructField("rollnum", StringType, true),
-    StructField("occupation", StringType, true)))
+class DBTableScan(options: JDBCOptions,
+                  filters: Array[Filter],
+                  prunedCols: StructType)
+  extends Scan with Batch with Logging {
+  val conn = JdbcUtils.createConnectionFactory(options)()
+  val table_schema = JdbcUtils.getSchemaOption(conn, options)
 
   def readSchema: StructType = {
     logInfo("***dsv2-flows*** readSchema called")
-    table_schema
-
+    table_schema.getOrElse(StructType(Nil))
   }
 
   override def toBatch() : Batch = {
+    logInfo("***dsv2-flows*** toBatch()")
     this
   }
 
   def planInputPartitions: Array[InputPartition] = {
+    logInfo("***dsv2-flows*** planInputPartitions")
     Array(PartitionScheme)
   }
 
   def createReaderFactory: PartitionReaderFactory = {
     logInfo("***dsv2-flows*** createReaderFactory called")
-    new DBPartitionReaderFactory(table_schema)
+    new DBPartitionReaderFactory(options, table_schema.getOrElse(StructType(Nil)),
+      filters, prunedCols)
   }
 }
 
