@@ -1512,4 +1512,59 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
   }
+
+  test("SPARK-28441: COUNT bug with non-foldable expression") {
+    // Case 1: Canonical example of the COUNT bug
+    checkAnswer(
+      sql("select l.a from l where (select count(*) + cast(rand() as int) from r " +
+        "where l.a = r.c) < l.a"),
+      Row(1) :: Row(1) :: Row(3) :: Row(6) :: Nil)
+    // Case 2: count(*) = 0; could be rewritten to NOT EXISTS but currently uses
+    // a rewrite that is vulnerable to the COUNT bug
+    checkAnswer(
+      sql("select l.a from l where (select count(*) + cast(rand() as int) from r " +
+        "where l.a = r.c) = 0"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+    // Case 3: COUNT bug without a COUNT aggregate
+    checkAnswer(
+      sql("select l.a from l where (select sum(r.d) is null from r " +
+        "where l.a = r.c)"),
+      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug in subquery in subquery in subquery with non-foldable expr") {
+    checkAnswer(
+      sql("""select l.a from l
+            |where (
+            |    select cntPlusOne + 1 as cntPlusTwo from (
+            |        select cnt + 1 as cntPlusOne from (
+            |            select sum(r.c) s, (count(*) + cast(rand() as int)) cnt from r
+            |                where l.a = r.c having cnt = 0
+            |        )
+            |    )
+            |) = 2""".stripMargin),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-28441: COUNT bug with non-foldable expression in Filter condition") {
+    val df = sql("""select l.a from l
+          |where (
+          |    select cntPlusOne + 1 as cntPlusTwo from (
+          |        select cnt + 1 as cntPlusOne from (
+          |            select sum(r.c) s, count(*) cnt from r
+          |                where l.a = r.c having cnt > 0
+          |        )
+          |    )
+          |) = 2""".stripMargin)
+    val df2 = sql("""select l.a from l
+          |where (
+          |    select cntPlusOne + 1 as cntPlusTwo from (
+          |        select cnt + 1 as cntPlusOne from (
+          |            select sum(r.c) s, count(*) cnt from r
+          |                where l.a = r.c having (cnt + cast(rand() as int)) > 0
+          |        )
+          |    )
+          |) = 2""".stripMargin)
+    checkAnswer(df, df2)
+  }
 }

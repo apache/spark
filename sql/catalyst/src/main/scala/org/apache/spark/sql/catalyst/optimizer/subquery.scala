@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
@@ -316,6 +316,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     newExpression.asInstanceOf[E]
   }
 
+  private def removeAlias(expr: Expression): Expression = expr match {
+    case Alias(c, _) => removeAlias(c)
+    case _ => expr
+  }
+
   /**
    * Statically evaluate an expression containing zero or more placeholders, given a set
    * of bindings for placeholder values, if the expression is evaluable. If it is not,
@@ -331,7 +336,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           case None => Literal.default(NullType)
         }
     }
-    if (!rewrittenExpr.foldable) {
+
+    // Removes Alias over given expression, because Alias is not foldable.
+    if (!removeAlias(rewrittenExpr).foldable) {
       // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
       // Needs to evaluate them on query runtime.
       Some(rewrittenExpr)
@@ -348,7 +355,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   /**
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
-  private def evalAggOnZeroTups(expr: Expression) : Option[Any] = {
+  private def evalAggOnZeroTups(expr: Expression) : Option[Expression] = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
@@ -358,7 +365,20 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
       case _: AttributeReference => Literal.default(NullType)
     }
-    Option(rewrittenExpr.eval())
+
+    // Removes Alias over given expression, because Alias is not foldable.
+    if (!removeAlias(rewrittenExpr).foldable) {
+      // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
+      // Needs to evaluate them on query runtime.
+      Some(rewrittenExpr)
+    } else {
+      val exprVal = rewrittenExpr.eval()
+      if (exprVal == null) {
+        None
+      } else {
+        Some(Literal.create(exprVal, expr.dataType))
+      }
+    }
   }
 
   /**
@@ -375,7 +395,25 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Expression]] = lp match {
       case SubqueryAlias(_, child) => evalPlan(child)
       case Filter(condition, child) =>
-        evalPlan(child)
+        val bindings = evalPlan(child)
+        if (bindings.isEmpty) {
+          bindings
+        } else {
+          val bindExpr = bindingExpr(condition, bindings)
+            .getOrElse(Literal.create(false, BooleanType))
+
+          if (!bindExpr.foldable) {
+            // We can't evaluate the condition. Evaluate it in query runtime.
+            bindings.map { case (id, expr) =>
+              val newExpr = expr.map(e => If(bindExpr, e, Literal.create(null, e.dataType)))
+              (id, newExpr)
+            }
+          } else {
+            // The bound condition can be evaluated.
+            val exprResult = bindExpr.eval().asInstanceOf[Boolean]
+            if (exprResult) bindings else Map.empty
+          }
+        }
 
       case Project(projectList, child) =>
         val bindings = evalPlan(child)
@@ -392,13 +430,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         aggExprs.map {
           case ref: AttributeReference => (ref.exprId, None)
           case alias @ Alias(_: AttributeReference, _) => (alias.exprId, None)
-          case ne =>
-            val aggEval = evalAggOnZeroTups(ne)
-            if (aggEval.isEmpty) {
-              (ne.exprId, None)
-            } else {
-              (ne.exprId, Some(Literal.create(evalAggOnZeroTups(ne).get, ne.dataType)))
-            }
+          case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
       case _ =>
@@ -446,6 +478,18 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     sys.error("This line should be unreachable")
   }
 
+  /**
+   * This replaces original expression id used in attributes and aliases in expression.
+   */
+  private def replaceOldExprId(
+      orgExprId: ExprId,
+      newExprId: ExprId): PartialFunction[Expression, Expression] = {
+    case a: AttributeReference if a.exprId == orgExprId =>
+      a.withExprId(newExprId)
+    case a: Alias if a.exprId == orgExprId =>
+      Alias(child = a.child, name = a.name)(exprId = newExprId)
+  }
+
   // Name of generated column used in rewrite below
   val ALWAYS_TRUE_COLNAME = "alwaysTrue"
 
@@ -479,19 +523,34 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
             BooleanType)(exprId = alwaysTrueExprId)
 
-          val aggValRef = query.output.head
-
           if (havingNode.isEmpty) {
             // CASE 2: Subquery with no HAVING clause
+            // The added Alias column uses expr id of original output.
+
+            // We replace original expression id with a new one. The added Alias column
+            // must use expr id of original output. If we don't replace old expr id in the
+            // query, the added Project in potential Project-Filter-Project can be removed
+            // by removeProjectBeforeFilter in ColumnPruning.
+            val newExprId = NamedExpression.newExprId
+            val newQuery =
+              query.transformExpressions(replaceOldExprId(origOutput.exprId, newExprId))
+
+            val result = resultWithZeroTups.get
+              .transform(replaceOldExprId(origOutput.exprId, newExprId))
+
+            val newCondition =
+              conditions.map(_.transform(replaceOldExprId(origOutput.exprId, newExprId)))
+
+            val newExpr = Alias(
+              If(IsNull(alwaysTrueRef),
+                result,
+                newQuery.output.head), origOutput.name)(exprId = origOutput.exprId)
+
             Project(
-              currentChild.output :+
-                Alias(
-                  If(IsNull(alwaysTrueRef),
-                    resultWithZeroTups.get,
-                    aggValRef), origOutput.name)(exprId = origOutput.exprId),
+              currentChild.output :+ newExpr,
               Join(currentChild,
-                Project(query.output :+ alwaysTrueExpr, query),
-                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+                Project(newQuery.output :+ alwaysTrueExpr, newQuery),
+                LeftOuter, newCondition.reduceOption(And), JoinHint.NONE))
 
           } else {
             // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
@@ -508,21 +567,34 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
+            // We replace original expression id with a new one. The added Alias column
+            // must use expr id of original output. If we don't replace old expr id in the
+            // query, the added Project in potential Project-Filter-Project can be removed
+            // by removeProjectBeforeFilter in ColumnPruning.
+            val newExprId = NamedExpression.newExprId
+            val newQuery =
+              subqueryRoot.transformExpressions(replaceOldExprId(origOutput.exprId, newExprId))
+
+            val result = resultWithZeroTups.get
+              .transform(replaceOldExprId(origOutput.exprId, newExprId))
+
+            val newCondition =
+              conditions.map(_.transform(replaceOldExprId(origOutput.exprId, newExprId)))
+
             // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
             //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
             //      ELSE (aggregate value) END AS (original column name)
             val caseExpr = Alias(CaseWhen(Seq(
-              (IsNull(alwaysTrueRef), resultWithZeroTups.get),
-              (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
-              aggValRef),
+              (IsNull(alwaysTrueRef), result),
+              (Not(havingNode.get.condition), Literal.create(null, newQuery.output.head.dataType))),
+              newQuery.output.head),
               origOutput.name)(exprId = origOutput.exprId)
 
             Project(
               currentChild.output :+ caseExpr,
               Join(currentChild,
-                Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
-                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
-
+                Project(newQuery.output :+ alwaysTrueExpr, newQuery),
+                LeftOuter, newCondition.reduceOption(And), JoinHint.NONE))
           }
         }
     }
