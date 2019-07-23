@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableCommand, CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
@@ -396,14 +396,35 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 /**
  * SPARK-28443: Spark sql add exception when create field type NullType
  */
-object CreateTableCheck extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan match {
+object DDLCheck extends (LogicalPlan => Unit) {
+
+  def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
+
+  override def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
       case ct: CreateTable if ct.tableDesc.schema.exists { f =>
         DataTypes.NullType.sameType(f.dataType)
       } =>
-        throw new AnalysisException("DataType NullType is not supported for create table")
-      case _ => plan
+        failAnalysis("DataType NullType is not supported for create table ")
+
+      case ct2: CreateV2Table if ct2.tableSchema.exists { f =>
+        DataTypes.NullType.sameType(f.dataType)
+      } =>
+        failAnalysis("DataType NullType is not supported for create table")
+
+      // DataSourceStrategy will convert CreateTable to CreateDataSourceTableCommand before check
+      case cdstc: CreateDataSourceTableCommand if cdstc.table.schema.exists { f =>
+        DataTypes.NullType.sameType(f.dataType)
+      } =>
+        failAnalysis("DataType NullType is not supported for create table")
+
+      // HiveAnalysis will convert CreateTable to CreateTableCommand before check
+      case ctc: CreateTableCommand if ctc.table.schema.exists { f =>
+        DataTypes.NullType.sameType(f.dataType)
+      } =>
+        failAnalysis("DataType NullType is not supported for create table")
+
+      case _ => // OK
     }
   }
 }

@@ -70,8 +70,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    */
   override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      CreateTableCheck +:
-        new ResolveHiveSerdeTable(session) +:
+      new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
@@ -88,7 +87,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
-      PreWriteCheck +:
+      DDLCheck +:
+        PreWriteCheck +:
         PreReadCheck +:
         V2WriteSupportCheck +:
         V2StreamingScanSupportCheck +:

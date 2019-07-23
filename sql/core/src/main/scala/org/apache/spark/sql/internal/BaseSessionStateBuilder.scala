@@ -167,8 +167,7 @@ abstract class BaseSessionStateBuilder(
    */
   protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
-      CreateTableCheck +:
-        new FindDataSourceTable(session) +:
+      new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         DataSourceResolution(conf, session.catalog(_)) +:
@@ -181,7 +180,8 @@ abstract class BaseSessionStateBuilder(
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
-      PreWriteCheck +:
+      DDLCheck +:
+        PreWriteCheck +:
         PreReadCheck +:
         HiveOnlyCheck +:
         V2WriteSupportCheck +:
