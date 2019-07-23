@@ -414,20 +414,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def floor: Decimal = if (scale == 0) this else {
     val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
-    val res = toPrecision(newPrecision, 0, ROUND_FLOOR)
-    if (res == null) {
-      throw new AnalysisException(s"Overflow when setting precision to $newPrecision")
-    }
-    res
+    toPrecision(newPrecision, 0, ROUND_FLOOR, nullOnOverflow = false)
   }
 
   def ceil: Decimal = if (scale == 0) this else {
     val newPrecision = DecimalType.bounded(precision - scale + 1, 0).precision
-    val res = toPrecision(newPrecision, 0, ROUND_CEILING)
-    if (res == null) {
-      throw new AnalysisException(s"Overflow when setting precision to $newPrecision")
-    }
-    res
+    toPrecision(newPrecision, 0, ROUND_CEILING, nullOnOverflow = false)
   }
 }
 

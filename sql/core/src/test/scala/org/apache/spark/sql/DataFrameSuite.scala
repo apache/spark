@@ -585,14 +585,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df2, testData.selectExpr("value"))
       assert(df2.schema.map(_.name) === Seq("value"))
     }
-
-    // With SQL config caseSensitive ON, AnalysisException should be thrown
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val e = intercept[AnalysisException] {
-        testData("KEY")
-      }.getMessage
-      assert(e.contains("Cannot resolve column name"))
-    }
   }
 
   test("drop unknown column (no-op) with column reference") {
@@ -1672,7 +1664,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reuse exchange") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
       val df = spark.range(100).toDF()
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan

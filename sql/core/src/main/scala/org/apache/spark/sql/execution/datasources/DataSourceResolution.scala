@@ -27,8 +27,16 @@ import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
+<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
+||||||| merged common ancestors
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType}
+=======
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+>>>>>>> origin/master
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand}
 import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
@@ -94,6 +102,7 @@ case class DataSourceResolution(
           convertCTAS(v2SessionCatalog.asTableCatalog, identifier, create)
       }
 
+<<<<<<< HEAD
     case DescribeColumnStatement(
         AsTableIdentifier(tableName), colName, isExtended) =>
       DescribeColumnCommand(tableName, colName, isExtended)
@@ -113,6 +122,41 @@ case class DataSourceResolution(
       }
       DescribeTable(catalog.asTableCatalog, ident, isExtended)
 
+||||||| merged common ancestors
+=======
+    case ReplaceTableStatement(
+        AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
+        V1WriteProvider(provider), options, location, comment, orCreate) =>
+        throw new AnalysisException(
+          s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
+            s" API. Write provider name: $provider, identifier: $table.")
+
+    case ReplaceTableAsSelectStatement(
+        AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
+        V1WriteProvider(provider), options, location, comment, orCreate) =>
+      throw new AnalysisException(
+        s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
+          s" API. Write provider name: $provider, identifier: $table.")
+
+    case replace: ReplaceTableStatement =>
+      // the provider was not a v1 source, convert to a v2 plan
+      val CatalogObjectIdentifier(maybeCatalog, identifier) = replace.tableName
+      val catalog = maybeCatalog.orElse(defaultCatalog)
+        .getOrElse(throw new AnalysisException(
+          s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
+        .asTableCatalog
+      convertReplaceTable(catalog, identifier, replace)
+
+    case rtas: ReplaceTableAsSelectStatement =>
+      // the provider was not a v1 source, convert to a v2 plan
+      val CatalogObjectIdentifier(maybeCatalog, identifier) = rtas.tableName
+      val catalog = maybeCatalog.orElse(defaultCatalog)
+        .getOrElse(throw new AnalysisException(
+          s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
+        .asTableCatalog
+      convertRTAS(catalog, identifier, rtas)
+
+>>>>>>> origin/master
     case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _) =>
       DropTable(catalog.asTableCatalog, ident, ifExists)
 
@@ -243,6 +287,43 @@ case class DataSourceResolution(
       partitioning,
       properties,
       ignoreIfExists = create.ifNotExists)
+  }
+
+  private def convertRTAS(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      rtas: ReplaceTableAsSelectStatement): ReplaceTableAsSelect = {
+    // convert the bucket spec and add it as a transform
+    val partitioning = rtas.partitioning ++ rtas.bucketSpec.map(_.asTransform)
+    val properties = convertTableProperties(
+      rtas.properties, rtas.options, rtas.location, rtas.comment, rtas.provider)
+
+    ReplaceTableAsSelect(
+      catalog,
+      identifier,
+      partitioning,
+      rtas.asSelect,
+      properties,
+      writeOptions = rtas.options.filterKeys(_ != "path"),
+      orCreate = rtas.orCreate)
+  }
+
+  private def convertReplaceTable(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      replace: ReplaceTableStatement): ReplaceTable = {
+    // convert the bucket spec and add it as a transform
+    val partitioning = replace.partitioning ++ replace.bucketSpec.map(_.asTransform)
+    val properties = convertTableProperties(
+      replace.properties, replace.options, replace.location, replace.comment, replace.provider)
+
+    ReplaceTable(
+      catalog,
+      identifier,
+      replace.tableSchema,
+      partitioning,
+      properties,
+      orCreate = replace.orCreate)
   }
 
   private def convertTableProperties(

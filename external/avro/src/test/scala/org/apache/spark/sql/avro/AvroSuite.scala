@@ -50,7 +50,7 @@ abstract class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUti
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set("spark.sql.files.maxPartitionBytes", 1024)
+    spark.conf.set(SQLConf.FILES_MAX_PARTITION_BYTES.key, 1024)
   }
 
   def checkReloadMatchesSaved(originalFile: String, newFile: String): Unit = {
@@ -1001,14 +1001,14 @@ abstract class AvroSuite extends QueryTest with SharedSQLContext with SQLTestUti
         sql("select interval 1 days").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.contains("Cannot save interval data type into external storage.") ||
-        msg.contains("AVRO data source does not support calendarinterval data type."))
+        msg.contains("AVRO data source does not support interval data type."))
 
       msg = intercept[AnalysisException] {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"avro data source does not support calendarinterval data type."))
+        .contains(s"avro data source does not support interval data type."))
     }
   }
 
