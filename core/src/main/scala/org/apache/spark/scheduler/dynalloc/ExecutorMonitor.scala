@@ -510,7 +510,7 @@ private[spark] class ExecutorMonitor(
       }
     }
 
-    def nonEmpty: Boolean = ids.nonEmpty
+    def nonEmpty: Boolean = ids != null && ids.nonEmpty
 
     override def toString(): String = {
       ids.mkString(",") + (if (excess > 0) s" (and $excess more)" else "")
