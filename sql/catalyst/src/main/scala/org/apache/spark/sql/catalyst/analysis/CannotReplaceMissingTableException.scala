@@ -15,32 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
 
-import org.apache.spark.annotation.Stable
+package org.apache.spark.sql.catalyst.analysis
 
-/**
- * The data type representing calendar time intervals. The calendar time interval is stored
- * internally in two components: number of months the number of microseconds.
- *
- * Please use the singleton `DataTypes.CalendarIntervalType`.
- *
- * @note Calendar intervals are not comparable.
- *
- * @since 1.5.0
- */
-@Stable
-class CalendarIntervalType private() extends DataType {
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.Identifier
 
-  override def defaultSize: Int = 16
-
-  override def simpleString: String = "interval"
-
-  private[spark] override def asNullable: CalendarIntervalType = this
-}
-
-/**
- * @since 1.5.0
- */
-@Stable
-case object CalendarIntervalType extends CalendarIntervalType
+class CannotReplaceMissingTableException(
+    tableIdentifier: Identifier,
+    cause: Option[Throwable] = None)
+  extends AnalysisException(
+    s"Table $tableIdentifier cannot be replaced as it did not exist." +
+    s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)
