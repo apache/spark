@@ -1004,6 +1004,49 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("Assignable cast") {
+    import DataTypeTestUtils.numericTypes
+
+    numericTypes.foreach { from =>
+      assert(!Cast.canAssign(StringType, from))
+      assert(!Cast.canAssign(ArrayType(StringType), ArrayType(from)))
+      assert(!Cast.canAssign(MapType(from, StringType), MapType(from, from)))
+      assert(!Cast.canAssign(MapType(StringType, from), MapType(from, from)))
+      assert(!Cast.canAssign(StructType(Seq(new StructField("f", StringType))),
+        StructType(Seq(new StructField("f", from)))))
+      numericTypes.foreach { to =>
+        assert(Cast.canAssign(from, to))
+        assert(Cast.canAssign(ArrayType(from), ArrayType(to)))
+        assert(Cast.canAssign(MapType(from, to), MapType(to, from)))
+        assert(Cast.canAssign(StructType(Seq(new StructField("f", from))),
+          StructType(Seq(new StructField("f", to)))))
+      }
+    }
+
+    val dataTypes = Seq(IntegerType, BinaryType, CalendarIntervalType, ArrayType(LongType),
+      MapType(StringType, StringType), StructType(Seq(new StructField("f", DoubleType))))
+
+    dataTypes.foreach { from =>
+      assert(Cast.canAssign(NullType, from))
+      from match {
+        case _: AtomicType => assert(Cast.canAssign(from, StringType))
+        case _ => assert(!Cast.canAssign(from, StringType))
+      }
+      dataTypes.foreach { to =>
+        if (from == to) {
+          assert(Cast.canAssign(from, to))
+        } else {
+          assert(!Cast.canAssign(from, to))
+        }
+      }
+    }
+
+    assert(Cast.canAssign(DateType, TimestampType))
+    assert(Cast.canAssign(TimestampType, DateType))
+    assert(Cast.canAssign(TimestampType, LongType))
+    assert(Cast.canAssign(LongType, TimestampType))
+  }
+
   test("SPARK-27671: cast from nested null type in struct") {
     import DataTypeTestUtils._
 

@@ -154,6 +154,39 @@ object Cast {
     case _ => false
   }
 
+  /**
+   * Returns true iff we can assign the `from` type to `to` type according to the store assignment
+   * rules of ANSI SQL. For example, string -> int, array -> string are not assignable cast.
+   */
+  def canAssign(from: DataType, to: DataType): Boolean = (from, to) match {
+    case _ if from == to => true
+
+    case (_: NumericType, _: NumericType) => true
+    case (_: AtomicType, StringType) => true
+    case (NullType, _) => true
+    case (DateType, TimestampType) => true
+    case (TimestampType, DateType) => true
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
+    case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      resolvableNullability(fn, tn) && canAssign(fromType, toType)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      resolvableNullability(fn, tn) && canAssign(fromKey, toKey) && canAssign(fromValue, toValue)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (f1, f2) =>
+            resolvableNullability(f1.nullable, f2.nullable) && canAssign(f1.dataType, f2.dataType)
+        }
+
+    case _ => false
+  }
+
   private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
@@ -1404,6 +1437,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
  * truncate, e.g. long -> int, timestamp -> data.
  */
 case class UpCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
+  extends UnaryExpression with Unevaluable {
+  override lazy val resolved = false
+}
+
+/**
+ * Cast the child expression to the target data type, but will throw error if the cast violates
+ * the store assignment rules of ANSI SQL, e.g. string -> int, array -> string.
+ */
+case class AssignableCast(child: Expression, dataType: DataType, walkedTypePath: Seq[String] = Nil)
   extends UnaryExpression with Unevaluable {
   override lazy val resolved = false
 }
