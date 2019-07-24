@@ -126,13 +126,13 @@ object ImageFileFormat {
    */
   private[image] val columnSchema = StructType(
     StructField("origin", StringType, true) ::
-    StructField("height", IntegerType, false) ::
-    StructField("width", IntegerType, false) ::
-    StructField("nChannels", IntegerType, false) ::
+    StructField("height", IntegerType, true) ::
+    StructField("width", IntegerType, true) ::
+    StructField("nChannels", IntegerType, true) ::
     // OpenCV-compatible type: CV_8UC3 in most cases
-    StructField("mode", IntegerType, false) ::
+    StructField("mode", IntegerType, true) ::
     // Bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField("data", BinaryType, false) :: Nil)
+    StructField("data", BinaryType, true) :: Nil)
 
   private[image] val imageFields: Array[String] = columnSchema.fieldNames
 
