@@ -53,7 +53,7 @@ class GraphiteSinkSuite extends SparkFunSuite {
     val props = new Properties
     props.put("host", "127.0.0.1")
     props.put("port", "54321")
-    props.put("regex", "streaming")
+    props.put("regex", "local-[0-9]+.driver.(CodeGenerator|BlockManager)")
     val registry = new MetricRegistry
     val securityMgr = new SecurityManager(new SparkConf(false))
 
@@ -65,10 +65,20 @@ class GraphiteSinkSuite extends SparkFunSuite {
     sink.registry.register("gauge", gauge)
     sink.registry.register("anothergauge", gauge)
     sink.registry.register("streaminggauge", gauge)
+    sink.registry.register("local-1563838109260.driver.CodeGenerator.generatedMethodSize", gauge)
+    sink.registry.register("local-1563838109260.driver.BlockManager.disk.diskSpaceUsed_MB", gauge)
+    sink.registry.register("local-1563813796998.driver.spark.streaming.nicklocal.latency", gauge)
+    sink.registry.register("myapp.driver.CodeGenerator.generatedMethodSize", gauge)
+    sink.registry.register("myapp.driver.BlockManager.disk.diskSpaceUsed_MB", gauge)
 
     val metricKeys = sink.registry.getGauges(sink.filter).keySet.asScala
 
-    assert(metricKeys.equals(Set("streaminggauge")),
+    val filteredMetricKeys = Set(
+      "local-1563838109260.driver.CodeGenerator.generatedMethodSize",
+      "local-1563838109260.driver.BlockManager.disk.diskSpaceUsed_MB"
+    )
+
+    assert(metricKeys.equals(filteredMetricKeys),
       "Should contain only metrics matches regex filter")
   }
 }
