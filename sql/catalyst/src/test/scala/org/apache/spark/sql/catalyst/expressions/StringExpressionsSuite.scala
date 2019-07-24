@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
@@ -453,8 +454,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // position greater than the length of input string
     checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
       Literal.create(10, IntegerType)), "Spark SQL_")
-    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
       Literal.create(10, IntegerType), Literal.create(4, IntegerType)), "Spark SQL_")
+    // invalid position
+    val invalidZeroPos = intercept[AnalysisException] {
+      evaluateWithoutCodegen(new Overlay(Literal("Spark SQL"), Literal("_"),
+        Literal.create(0, IntegerType)))
+    }
+    assert(invalidZeroPos.getMessage.contains("it must be a positive whole number."))
+    val invalidNegativePos = intercept[AnalysisException] {
+      evaluateWithoutCodegen(Overlay(Literal("Spark SQL"), Literal("_"),
+        Literal.create(-1, IntegerType), Literal.create(4, IntegerType)))
+    }
+    assert(invalidNegativePos.getMessage.contains("it must be a positive whole number."))
   }
 
   test("overlay for byte array") {
@@ -481,8 +493,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // position greater than the length of input byte array
     checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)),
       Literal.create(10, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
-    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1)), Literal.create(10, IntegerType),
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1)), Literal.create(10, IntegerType),
       Literal.create(4, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    // invalid position
+    val invalidZeroPos = intercept[AnalysisException] {
+      evaluateWithoutCodegen(new Overlay(input, Literal(Array[Byte](-1)),
+        Literal.create(0, IntegerType)))
+    }
+    assert(invalidZeroPos.getMessage.contains("it must be a positive whole number."))
+    val invalidNegativePos = intercept[AnalysisException] {
+      evaluateWithoutCodegen(Overlay(input, Literal(Array[Byte](-1)),
+        Literal.create(-1, IntegerType), Literal.create(4, IntegerType)))
+    }
+    assert(invalidNegativePos.getMessage.contains("it must be a positive whole number."))
   }
 
   test("Check Overlay.checkInputDataTypes results") {

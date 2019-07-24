@@ -26,6 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -457,8 +458,14 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
+  private def validate(pos: Int) = {
+    if (pos < 1) {
+      throw new AnalysisException("If you specify `pos`, it must be a positive whole number.")
+    }
+  }
+
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
-    assert(pos > 0, "If you specify `pos`, it must be a positive whole number.")
+    validate(pos)
     val builder = new UTF8StringBuilder
     builder.append(input.substringSQL(1, pos - 1))
     builder.append(replace)
@@ -475,7 +482,7 @@ object Overlay {
   }
 
   def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
-    assert(pos > 0, "If you specify `pos`, it must be a positive whole number.")
+    validate(pos)
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
     // The default value for length is the length of replace.
@@ -523,9 +530,10 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
       (input.dataType, replace.dataType, pos.dataType, len.dataType)
     (inputType, replaceType) match {
       case (StringType, StringType) | (BinaryType, BinaryType) =>
-      case (inputType, replaceType) => return TypeCheckResult.TypeCheckFailure(
-        s"Invalid data type $inputType and $replaceType. The result type of the input " +
-        "expression and the replace expression are either String or Byte Array.")
+      case (inputType, replaceType) =>
+        return TypeCheckResult.TypeCheckFailure(s"Invalid data type ${inputType.simpleString}" +
+          s" and ${replaceType.simpleString}. The result type of the input expression and the" +
+          "replace expression are either String or Byte Array.")
     }
     if (IntegerType.acceptsType(posType) && IntegerType.acceptsType(lenType)) {
       TypeCheckResult.TypeCheckSuccess
