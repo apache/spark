@@ -442,19 +442,34 @@ object DataType {
         fieldCompatible
 
       case (w: AtomicType, r: AtomicType) =>
-        if (!Cast.canUpCast(w, r)) {
-          addError(s"Cannot safely cast '$context': $w to $r")
+        if (!canWriteAtomicType(w, r)) {
+          addError(s"Cannot assign '$context': $w to $r")
           false
         } else {
           true
         }
 
-      case (w, r) if w.sameType(r) && !w.isInstanceOf[NullType] =>
+      case (NullType, _) => true
+
+      case (w, r) if w.sameType(r) =>
         true
 
       case (w, r) =>
         addError(s"Cannot write '$context': $w is incompatible with $r")
         false
     }
+  }
+
+  private def canWriteAtomicType(from: AtomicType, to: AtomicType): Boolean = {
+    case _ if from == to => true
+    case (_: NumericType, _: NumericType) => true
+    case (_, StringType) => true
+    case (DateType, TimestampType) => true
+    case (TimestampType, DateType) => true
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
+    case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
+    case _ => false
   }
 }

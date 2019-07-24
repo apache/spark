@@ -174,7 +174,6 @@ class Analyzer(
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
-      ResolveAssignableCast ::
       ResolveGroupingAnalytics ::
       ResolvePivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
@@ -2455,7 +2454,7 @@ class Analyzer(
       } else {
         // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
         Some(Alias(
-          AssignableCast(queryExpr, tableAttr.dataType), tableAttr.name
+          Cast(queryExpr, tableAttr.dataType), tableAttr.name
         )(
           explicitMetadata = Option(tableAttr.metadata)
         ))
@@ -2663,38 +2662,6 @@ class Analyzer(
           fail(child, dataType, walkedTypePath)
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
-      }
-    }
-  }
-
-  /**
-   * Replace the [[AssignableCast]] expression by [[Cast]], and throw exceptions if the cast is
-   * not assignable.
-   */
-  object ResolveAssignableCast extends Rule[LogicalPlan] {
-    private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-      val fromStr = from match {
-        case l: LambdaVariable => "array element"
-        case e => e.sql
-      }
-      throw new AnalysisException(s"Cannot assign $fromStr from " +
-        s"${from.dataType.catalogString} to ${to.catalogString}.\n" +
-        "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
-        "You can add an explicit cast to the input data.")
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case p if !p.childrenResolved => p
-      case p if p.resolved => p
-
-      case p => p transformExpressions {
-        case u @ AssignableCast(child, _, _) if !child.resolved => u
-
-        case AssignableCast(child, dataType, walkedTypePath)
-          if !Cast.canAssign(child.dataType, dataType) =>
-          fail(child, dataType, walkedTypePath)
-
-        case AssignableCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
     }
   }
