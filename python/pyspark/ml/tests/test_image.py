@@ -18,7 +18,7 @@ import unittest
 
 import py4j
 
-from pyspark.ml.image import ImageSchema
+from pyspark.ml.image import ImageUtils
 from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase
 from pyspark.sql import HiveContext, Row
 from pyspark.testing.utils import QuietTest
@@ -28,37 +28,40 @@ class ImageReaderTest(SparkSessionTestCase):
 
     def test_read_images(self):
         data_path = 'data/mllib/images/origin/kittens'
-        df = ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        df = self.spark.read.format("image") \
+            .option("dropInvalid", True) \
+            .option("recursiveFileLookup", True) \
+            .load(data_path)
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
-        array = ImageSchema.toNDArray(first_row)
+        array = ImageUtils.toNDArray(first_row)
         self.assertEqual(len(array), first_row[1])
-        self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
-        self.assertEqual(df.schema, ImageSchema.imageSchema)
-        self.assertEqual(df.schema["image"].dataType, ImageSchema.columnSchema)
+        self.assertEqual(ImageUtils.toImage(array, origin=first_row[0]), first_row)
+        self.assertEqual(df.schema, ImageUtils.imageSchema)
+        self.assertEqual(df.schema["image"].dataType, ImageUtils.columnSchema)
         expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
-        self.assertEqual(ImageSchema.ocvTypes, expected)
+        self.assertEqual(ImageUtils.ocvTypes, expected)
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
-        self.assertEqual(ImageSchema.imageFields, expected)
-        self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
+        self.assertEqual(ImageUtils.imageFields, expected)
+        self.assertEqual(ImageUtils.undefinedImageType, "Undefined")
 
         with QuietTest(self.sc):
             self.assertRaisesRegexp(
                 TypeError,
                 "image argument should be pyspark.sql.types.Row; however",
-                lambda: ImageSchema.toNDArray("a"))
+                lambda: ImageUtils.toNDArray("a"))
 
         with QuietTest(self.sc):
             self.assertRaisesRegexp(
                 ValueError,
                 "image argument should have attributes specified in",
-                lambda: ImageSchema.toNDArray(Row(a=1)))
+                lambda: ImageUtils.toNDArray(Row(a=1)))
 
         with QuietTest(self.sc):
             self.assertRaisesRegexp(
                 TypeError,
                 "array argument should be numpy.ndarray; however, it got",
-                lambda: ImageSchema.toImage("a"))
+                lambda: ImageUtils.toImage("a"))
 
 
 class ImageReaderTest2(PySparkTestCase):
@@ -95,8 +98,11 @@ class ImageReaderTest2(PySparkTestCase):
         # This test case is to check if `ImageSchema.readImages` tries to
         # initiate Hive client multiple times. See SPARK-22651.
         data_path = 'data/mllib/images/origin/kittens'
-        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
-        ImageSchema.readImages(data_path, recursive=True, dropImageFailures=True)
+        for _ in range(2):
+            self.spark.read.format("image") \
+                .option("dropInvalid", True) \
+                .option("recursiveFileLookup", True) \
+                .load(data_path)
 
 
 if __name__ == "__main__":

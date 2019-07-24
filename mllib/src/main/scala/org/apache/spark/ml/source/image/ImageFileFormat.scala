@@ -22,23 +22,23 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
-import org.apache.spark.ml.image.ImageSchema
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeRow}
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory,
+  PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 private[image] class ImageFileFormat extends FileFormat with DataSourceRegister {
+  import ImageFileFormat._
 
   override def inferSchema(
       sparkSession: SparkSession,
       options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = Some(ImageSchema.imageSchema)
+      files: Seq[FileStatus]): Option[StructType] = Some(schema)
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -81,11 +81,11 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
         } finally {
           Closeables.close(stream, true)
         }
-        val resultOpt = ImageSchema.decode(origin, bytes)
+        val resultOpt = ImageUtils.decode(origin, bytes)
         val filteredResult = if (imageSourceOptions.dropInvalid) {
           resultOpt.toIterator
         } else {
-          Iterator(resultOpt.getOrElse(ImageSchema.invalidImageRow(origin)))
+          Iterator(resultOpt.getOrElse(invalidImageRow(origin)))
         }
 
         if (requiredSchema.isEmpty) {
@@ -97,4 +97,36 @@ private[image] class ImageFileFormat extends FileFormat with DataSourceRegister 
       }
     }
   }
+}
+
+object ImageFileFormat {
+  /**
+   * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
+   */
+  private[image] val columnSchema = StructType(
+    StructField("origin", StringType, true) ::
+    StructField("height", IntegerType, false) ::
+    StructField("width", IntegerType, false) ::
+    StructField("nChannels", IntegerType, false) ::
+    // OpenCV-compatible type: CV_8UC3 in most cases
+    StructField("mode", IntegerType, false) ::
+    // Bytes in OpenCV-compatible order: row-wise BGR in most cases
+    StructField("data", BinaryType, false) :: Nil)
+
+  private[image] val imageFields: Array[String] = columnSchema.fieldNames
+
+  /**
+   * DataFrame with a single column of images named "image" (nullable)
+   */
+  val schema = StructType(StructField("image", columnSchema, true) :: Nil)
+
+  /**
+   * Default values for the invalid image
+   *
+   * @param origin Origin of the invalid image
+   * @return Row with the default values
+   */
+  private[image] def invalidImageRow(origin: String): Row =
+    Row(Row(origin, -1, -1, -1, ImageUtils.ocvTypes(ImageUtils.undefinedImageType),
+      Array.ofDim[Byte](0)))
 }

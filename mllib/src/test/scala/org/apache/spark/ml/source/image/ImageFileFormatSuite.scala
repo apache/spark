@@ -21,7 +21,7 @@ import java.net.URI
 import java.nio.file.Paths
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.image.ImageSchema._
+import org.apache.spark.ml.source.image.ImageUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.{col, substring_index}
@@ -67,7 +67,7 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(new URI(resultOrigin) === Paths.get(filePath).toAbsolutePath().normalize().toUri())
 
     // Compare other columns in the row to be the same with the `invalidImageRow`
-    assert(result === invalidImageRow(resultOrigin))
+    assert(result === ImageFileFormat.invalidImageRow(resultOrigin))
   }
 
   test("image datasource partition test") {
