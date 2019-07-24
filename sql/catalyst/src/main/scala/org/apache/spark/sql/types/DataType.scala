@@ -460,7 +460,7 @@ object DataType {
     }
   }
 
-  private def canWriteAtomicType(from: AtomicType, to: AtomicType): Boolean = {
+  private def canWriteAtomicType(from: AtomicType, to: AtomicType): Boolean = (from, to) match {
     case _ if from == to => true
     case (_: NumericType, _: NumericType) => true
     case (_, StringType) => true
