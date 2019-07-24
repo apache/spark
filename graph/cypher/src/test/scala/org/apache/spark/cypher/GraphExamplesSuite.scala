@@ -27,7 +27,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
   test("create PropertyGraph from single NodeFrame") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
     val nodeFrame: NodeFrame = NodeFrame.create(df = nodeData, "id", Set("Person"))
-    val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeFrame), Seq.empty)
     val result: CypherResult = graph.cypher("MATCH (n) RETURN n")
     result.df.show()
   }

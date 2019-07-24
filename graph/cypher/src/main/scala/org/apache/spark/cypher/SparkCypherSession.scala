@@ -72,7 +72,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     RelationalGraphAdapter(this, normalizedNodes, normalizedRelationships)
   }
 
-  def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty)
+  def cypher(graph: PropertyGraph, query: String): CypherResult = cypher(graph, query, Map.empty[String, Object])
 
   override def cypher(graph: PropertyGraph, query: String, parameters: Map[String, Any]): CypherResult = {
     val relationalGraph = toRelationalGraph(graph)

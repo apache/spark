@@ -13,28 +13,35 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.spark.graph.api
 
 /**
-  * Describes the structure of a [[PropertyGraph]].
-  */
+ * Describes the structure of a [[PropertyGraph]].
+ *
+ * @since 3.0.0
+ */
 trait PropertyGraphType {
+
   /**
-    * Returns all labels occurring on any node in the graph.
-    */
+   * Returns all labels occurring on any node in the graph.
+   *
+   * @since 3.0.0
+   */
   def labels: Set[String] = labelSets.flatten
 
   /**
-    * Returns all distinct label sets occurring on nodes in the graph.
-    */
+   * Returns all distinct label sets occurring on nodes in the graph.
+   *
+   * @since 3.0.0
+   */
   def labelSets: Set[Set[String]]
 
   /**
-    * Returns all relationship types occurring on relationships in the graph.
-    */
+   * Returns all relationship types occurring on relationships in the graph.
+   *
+   * @since 3.0.0
+   */
   def relationshipTypes: Set[String]
-
 }
