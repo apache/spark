@@ -33,6 +33,7 @@ class SparkOptimizer(
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromAggregate,
+      // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
       ExtractPythonUDFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
@@ -46,7 +47,7 @@ class SparkOptimizer(
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
-    ExtractPythonUDFFromAggregate.ruleName :+
+    ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
     ExtractPythonUDFs.ruleName
 
   /**
