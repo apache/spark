@@ -22,10 +22,9 @@ import java.sql.Connection
 import scala.collection.JavaConverters._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{SparkSession}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions.JDBC_TABLE_NAME
-import org.apache.spark.sql.execution.streaming.MetadataLogFileIndex
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.TableCapability.{BATCH_READ, BATCH_WRITE, OVERWRITE_BY_FILTER, TRUNCATE}
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
