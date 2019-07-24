@@ -285,7 +285,7 @@ The configuration properties for mounting volumes into the executor pods use pre
 
 ## Local Storage
 
-Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should be set with `spark-local-dir` prefix and mount path should be set in the `spark.local.dir`, for example:
+Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should starts with `spark-local-dir-` and the mount path should be set in the spark configuration `spark.local.dir` or in the pod environment variable `SPARK_LOCAL_DIRS`, for example:
 
 ```
 --conf spark.kubernetes.driver.volumes.[VolumeType].spark-local-dir-[VolumeName].mount.path=<mount path>
@@ -294,7 +294,7 @@ Spark supports using volumes to spill data during shuffles and other operations.
 ```
 
 
-If no volume is set as local storage, Spark uses temporary scratch space to spill data to disk during shuffles and other operations.  When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `SPARK_LOCAL_DIRS`.  If no directories are explicitly specified then a default directory is created and configured appropriately.
+If none volume is set as local storage, Spark uses temporary scratch space to spill data to disk during shuffles and other operations. When using Kubernetes as the resource manager the pods will be created with an [emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir) volume mounted for each directory listed in `SPARK_LOCAL_DIRS`.  If no directories are explicitly specified then a default directory is created and configured appropriately.
 
 `emptyDir` volumes use the ephemeral storage feature of Kubernetes and do not persist beyond the life of the pod.
 
