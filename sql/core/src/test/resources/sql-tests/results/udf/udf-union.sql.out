@@ -51,17 +51,17 @@ struct<c1:decimal(11,1),c2:string>
 
 
 -- !query 4
-SELECT udf(a) as a, udf(udf(a)) as a1
+SELECT udf(udf(a)) as a
 FROM (SELECT udf(0) a, udf(0) b
       UNION ALL
       SELECT udf(SUM(1)) a, udf(CAST(0 AS BIGINT)) b
       UNION ALL SELECT udf(0) a, udf(0) b) T
 -- !query 4 schema
-struct<a:bigint,a1:bigint>
+struct<a:bigint>
 -- !query 4 output
-0	0
-0	0
-1	1
+0
+0
+1
 
 
 -- !query 5

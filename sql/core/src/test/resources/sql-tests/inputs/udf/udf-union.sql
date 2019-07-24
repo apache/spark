@@ -18,7 +18,7 @@ FROM   (SELECT udf(c1) as c1, udf(c2) as c2 FROM t1
         SELECT udf(c1) as c1, udf(c2) as c2 FROM t2);
 
 -- Regression test for SPARK-18622
-SELECT udf(a) as a, udf(udf(a)) as a1
+SELECT udf(udf(a)) as a
 FROM (SELECT udf(0) a, udf(0) b
       UNION ALL
       SELECT udf(SUM(1)) a, udf(CAST(0 AS BIGINT)) b
