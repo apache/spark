@@ -117,12 +117,13 @@ class BarrierTaskContext private[spark] (
     timer.schedule(timerTask, 60000, 60000)
 
     try {
-      barrierCoordinator.askSync[Unit](
+      barrierCoordinator.askSyncWithInterruptCheck[Unit](
         message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
-        timeout = new RpcTimeout(365.days, "barrierTimeout"))
+        timeout = new RpcTimeout(365.days, "barrierTimeout"),
+        interruptCheck = () => killTaskIfInterrupted())
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +

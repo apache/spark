@@ -92,4 +92,18 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
     timeout.awaitResult(future)
   }
 
+  def askSyncWithInterruptCheck[T: ClassTag](
+      message: Any,
+      timeout: RpcTimeout,
+      interruptCheck: () => Unit): T = {
+    val future = ask[T](message, timeout)
+    while(!future.isCompleted) {
+      interruptCheck()
+      Thread.sleep(10)
+    }
+    future.value.get match {
+      case scala.util.Success(v) => v
+      case scala.util.Failure(exception) => throw exception
+    }
+  }
 }
