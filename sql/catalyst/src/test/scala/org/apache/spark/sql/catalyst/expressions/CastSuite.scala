@@ -1004,7 +1004,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     numericTypes.foreach { dt =>
       makeComplexTypes(dt, true).foreach { complexType =>
-        assert(!Cast.canUpCast(dt, StringType))
+        assert(!Cast.canUpCast(complexType, StringType))
       }
     }
   }
