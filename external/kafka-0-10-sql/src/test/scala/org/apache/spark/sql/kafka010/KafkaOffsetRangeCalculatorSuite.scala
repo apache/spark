@@ -141,7 +141,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp2, 14, 21, None)))
   }
 
-  testWithMinPartitions("never drop offsets", 6) { calc =>
+  testWithMinPartitions("SPARK-28489: never drop offsets", 6) { calc =>
     assert(
       calc.getRanges(
         fromOffsets = Map(tp1 -> 0, tp2 -> 0, tp3 -> 0),
