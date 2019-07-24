@@ -325,7 +325,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
    * If not, returns the original expression without evaluation.
    */
-  private def getEvalOrExpr(expr: Expression): Option[Expression] = {
+  private def tryEvalExpr(expr: Expression): Option[Expression] = {
     // Removes Alias over given expression, because Alias is not foldable.
     if (!removeAlias(expr).foldable) {
       // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
@@ -357,7 +357,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         }
     }
 
-    getEvalOrExpr(rewrittenExpr)
+    tryEvalExpr(rewrittenExpr)
   }
 
   /**
@@ -374,7 +374,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       case _: AttributeReference => Literal.default(NullType)
     }
 
-    getEvalOrExpr(rewrittenExpr)
+    tryEvalExpr(rewrittenExpr)
   }
 
   /**
@@ -478,11 +478,11 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * This replaces original expression id used in attributes and aliases in expression.
    */
   private def replaceOldExprId(
-      orgExprId: ExprId,
+      oldExprId: ExprId,
       newExprId: ExprId): PartialFunction[Expression, Expression] = {
-    case a: AttributeReference if a.exprId == orgExprId =>
+    case a: AttributeReference if a.exprId == oldExprId =>
       a.withExprId(newExprId)
-    case a: Alias if a.exprId == orgExprId =>
+    case a: Alias if a.exprId == oldExprId =>
       Alias(child = a.child, name = a.name)(exprId = newExprId)
   }
 
