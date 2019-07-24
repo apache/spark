@@ -197,8 +197,6 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
-  @transient private lazy val codecFactory = new CompressionCodecFactory(getJobConf())
-
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
@@ -213,7 +211,8 @@ class HadoopRDD[K, V](
       if (inputSplits.length == 1 && inputSplits(0).isInstanceOf[FileSplit]) {
         val fileSplit = inputSplits(0).asInstanceOf[FileSplit]
         val path = fileSplit.getPath
-        if (fileSplit.getLength > conf.get(IO_LOAD_LARGE_FILE_WARNING_THRESHOLD)) {
+        if (fileSplit.getLength > conf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+          val codecFactory = new CompressionCodecFactory(jobConf)
           if (Utils.isFileSplittable(path, codecFactory)) {
             logWarning(s"Loading one large file ${path.toString} with only one partition, " +
               s"we can increase partition numbers by the `minPartitions` argument in method " +

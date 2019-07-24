@@ -1180,8 +1180,8 @@ package object config {
       .intConf
       .createWithDefault(1)
 
-  private[spark] val IO_LOAD_LARGE_FILE_WARNING_THRESHOLD =
-    ConfigBuilder("spark.io.loadLargeFile.warning.threshold")
+  private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
+    ConfigBuilder("spark.io.warning.largeFileThreshold")
       .internal()
       .doc("When spark loading one single large file, if file size exceed this " +
         "threshold, then log warning with possible reasons.")
