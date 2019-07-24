@@ -41,15 +41,14 @@ private[spark] class LocalDirsFeatureStep(
   private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
+    val prefix = "spark-local-dir-"
     val localDirVolumes = resolvedLocalDirs
       .zipWithIndex
-      .map { case (localDir, index) =>
-        val name = s"spark-local-dir-${index + 1}"
-        findVolume(pod, name) match {
-          case Some(volume) => volume
+      .map { case (localDir, index) => findVolumeMount(pod, prefix, localDir) match {
+          case Some(volumeMount) => findVolume(pod, volumeMount.getName).get
           case None =>
             new VolumeBuilder()
-              .withName(s"spark-local-dir-${index + 1}")
+              .withName(s"$prefix${index + 1}")
               .withNewEmptyDir()
               .withMedium(if (useLocalDirTmpFs) "Memory" else null)
               .endEmptyDir()
@@ -84,12 +83,14 @@ private[spark] class LocalDirsFeatureStep(
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
   }
 
+
   def findVolume(pod: SparkPod, name: String): Option[Volume] = {
     pod.pod.getSpec.getVolumes.asScala.find(v => v.getName.equals(name))
   }
 
-  def findVolumeMount(pod: SparkPod, name: String, path: String): Option[VolumeMount] = {
+  def findVolumeMount(pod: SparkPod, prefix: String, path: String): Option[VolumeMount] = {
     pod.container.getVolumeMounts.asScala
-      .find(m => m.getName.equals(name) && m.getMountPath.equals(path))
+      .find(m => m.getName.startsWith(prefix) && m.getMountPath.equals(path))
   }
+
 }
