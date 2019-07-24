@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import java.util.UUID
 
 import collection.JavaConverters._
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, PodBuilder, Volume, VolumeBuilder, VolumeMount, VolumeMountBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
@@ -44,7 +44,8 @@ private[spark] class LocalDirsFeatureStep(
     val prefix = "spark-local-dir-"
     val localDirVolumes = resolvedLocalDirs
       .zipWithIndex
-      .map { case (localDir, index) => findVolumeMount(pod, prefix, localDir) match {
+      .map {
+        case (localDir, index) => findVolumeMount(pod, prefix, localDir) match {
           case Some(volumeMount) => findVolume(pod, volumeMount.getName).get
           case None =>
             new VolumeBuilder()
@@ -83,7 +84,6 @@ private[spark] class LocalDirsFeatureStep(
     SparkPod(podWithLocalDirVolumes, containerWithLocalDirVolumeMounts)
   }
 
-
   def findVolume(pod: SparkPod, name: String): Option[Volume] = {
     pod.pod.getSpec.getVolumes.asScala.find(v => v.getName.equals(name))
   }
@@ -92,5 +92,4 @@ private[spark] class LocalDirsFeatureStep(
     pod.container.getVolumeMounts.asScala
       .find(m => m.getName.startsWith(prefix) && m.getMountPath.equals(path))
   }
-
 }
