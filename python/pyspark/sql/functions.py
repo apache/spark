@@ -36,6 +36,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
 # Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
+from pyspark.sql.utils import to_str
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can be always both Column or string,
@@ -113,6 +114,10 @@ def _create_window_function(name, doc=''):
     _.__name__ = name
     _.__doc__ = 'Window function: ' + doc
     return _
+
+
+def _options_to_str(options):
+    return {key: to_str(value) for (key, value) in options.items()}
 
 _lit_doc = """
     Creates a :class:`Column` of literal value.
@@ -2343,7 +2348,7 @@ def from_json(col, schema, options={}):
         schema = schema.json()
     elif isinstance(schema, Column):
         schema = _to_java_column(schema)
-    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, _options_to_str(options))
     return Column(jc)
 
 
@@ -2384,7 +2389,7 @@ def to_json(col, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.to_json(_to_java_column(col), options)
+    jc = sc._jvm.functions.to_json(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
 
@@ -2415,7 +2420,7 @@ def schema_of_json(json, options={}):
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_json(col, options)
+    jc = sc._jvm.functions.schema_of_json(col, _options_to_str(options))
     return Column(jc)
 
 
@@ -2442,7 +2447,7 @@ def schema_of_csv(csv, options={}):
         raise TypeError("schema argument should be a column or string")
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.schema_of_csv(col, options)
+    jc = sc._jvm.functions.schema_of_csv(col, _options_to_str(options))
     return Column(jc)
 
 
@@ -2464,7 +2469,7 @@ def to_csv(col, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.to_csv(_to_java_column(col), options)
+    jc = sc._jvm.functions.to_csv(_to_java_column(col), _options_to_str(options))
     return Column(jc)
 
 
@@ -2693,7 +2698,10 @@ def array_repeat(col, count):
     [Row(r=[u'ab', u'ab', u'ab'])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.array_repeat(_to_java_column(col), count))
+    return Column(sc._jvm.functions.array_repeat(
+        _to_java_column(col),
+        _to_java_column(count) if isinstance(count, Column) else count
+    ))
 
 
 @since(2.4)
@@ -2775,6 +2783,11 @@ def from_csv(col, schema, options={}):
     >>> value = data[0][0]
     >>> df.select(from_csv(df.value, schema_of_csv(value)).alias("csv")).collect()
     [Row(csv=Row(_c0=1, _c1=2, _c2=3))]
+    >>> data = [("   abc",)]
+    >>> df = spark.createDataFrame(data, ("value",))
+    >>> options = {'ignoreLeadingWhiteSpace': True}
+    >>> df.select(from_csv(df.value, "s string", options).alias("csv")).collect()
+    [Row(csv=Row(s=u'abc'))]
     """
 
     sc = SparkContext._active_spark_context
@@ -2785,7 +2798,7 @@ def from_csv(col, schema, options={}):
     else:
         raise TypeError("schema argument should be a column or string")
 
-    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, options)
+    jc = sc._jvm.functions.from_csv(_to_java_column(col), schema, _options_to_str(options))
     return Column(jc)
 
 

@@ -21,10 +21,10 @@ struct<>
 
 
 -- !query 1
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
-ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY udf(val) ROWS CURRENT ROW) FROM testData
+ORDER BY cate, udf(val)
 -- !query 1 schema
-struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW):bigint>
+struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY CAST(udf(cast(val as string)) AS INT) ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CURRENT ROW):bigint>
 -- !query 1 output
 NULL	NULL	0
 3	NULL	1
@@ -38,10 +38,10 @@ NULL	a	0
 
 
 -- !query 2
-SELECT udf(val), cate, sum(val) OVER(PARTITION BY cate ORDER BY val
-ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, sum(val) OVER(PARTITION BY cate ORDER BY udf(val)
+ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query 2 schema
-struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint>
+struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,sum(val) OVER (PARTITION BY cate ORDER BY CAST(udf(cast(val as string)) AS INT) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING):bigint>
 -- !query 2 output
 NULL	NULL	3
 3	NULL	3
@@ -55,27 +55,20 @@ NULL	a	1
 
 
 -- !query 3
-SELECT val_long, udf(cate), sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
-ROWS BETWEEN CURRENT ROW AND CAST(2147483648 AS int) FOLLOWING) FROM testData ORDER BY cate, val_long
+SELECT val_long, udf(cate), sum(val_long) OVER(PARTITION BY cate ORDER BY udf(val_long)
+ROWS BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY udf(cate), val_long
 -- !query 3 schema
-struct<val_long:bigint,CAST(udf(cast(cate as string)) AS STRING):string,sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST ROWS BETWEEN CURRENT ROW AND CAST(2147483648 AS INT) FOLLOWING):bigint>
+struct<>
 -- !query 3 output
-NULL	NULL	1
-1	NULL	1
-1	a	2147483654
-1	a	2147483653
-2	a	2147483652
-2147483650	a	2147483650
-NULL	b	2147483653
-3	b	2147483653
-2147483650	b	2147483650
+org.apache.spark.sql.AnalysisException
+cannot resolve 'ROWS BETWEEN CURRENT ROW AND 2147483648L FOLLOWING' due to data type mismatch: The data type of the upper bound 'bigint' does not match the expected data type 'int'.; line 1 pos 46
 
 
 -- !query 4
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY val RANGE 1 PRECEDING) FROM testData
-ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY val RANGE 1 PRECEDING) FROM testData
+ORDER BY cate, udf(val)
 -- !query 4 schema
-struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,count(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
+struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,count(val) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW):bigint>
 -- !query 4 output
 NULL	NULL	0
 3	NULL	1
@@ -89,10 +82,10 @@ NULL	a	0
 
 
 -- !query 5
-SELECT val, udf(cate), sum(val) OVER(PARTITION BY cate ORDER BY val
-RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
+SELECT val, udf(cate), sum(val) OVER(PARTITION BY udf(cate) ORDER BY val
+RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY udf(cate), val
 -- !query 5 schema
-struct<val:int,CAST(udf(cast(cate as string)) AS STRING):string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
+struct<val:int,CAST(udf(cast(cate as string)) AS STRING):string,sum(val) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING):bigint>
 -- !query 5 output
 NULL	NULL	NULL
 3	NULL	3
@@ -106,10 +99,10 @@ NULL	a	NULL
 
 
 -- !query 6
-SELECT val_long, udf(cate), sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
-RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, val_long
+SELECT val_long, udf(cate), sum(val_long) OVER(PARTITION BY udf(cate) ORDER BY val_long
+RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY udf(cate), val_long
 -- !query 6 schema
-struct<val_long:bigint,CAST(udf(cast(cate as string)) AS STRING):string,sum(val_long) OVER (PARTITION BY cate ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING):bigint>
+struct<val_long:bigint,CAST(udf(cast(cate as string)) AS STRING):string,sum(val_long) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val_long ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING):bigint>
 -- !query 6 output
 NULL	NULL	NULL
 1	NULL	1
@@ -123,10 +116,10 @@ NULL	b	NULL
 
 
 -- !query 7
-SELECT val_double, udf(cate), sum(val_double) OVER(PARTITION BY cate ORDER BY val_double
-RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING) FROM testData ORDER BY cate, val_double
+SELECT val_double, udf(cate), sum(val_double) OVER(PARTITION BY udf(cate) ORDER BY val_double
+RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING) FROM testData ORDER BY udf(cate), val_double
 -- !query 7 schema
-struct<val_double:double,CAST(udf(cast(cate as string)) AS STRING):string,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(2.5 AS DOUBLE) FOLLOWING):double>
+struct<val_double:double,CAST(udf(cast(cate as string)) AS STRING):string,sum(val_double) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(2.5 AS DOUBLE) FOLLOWING):double>
 -- !query 7 output
 NULL	NULL	NULL
 1.0	NULL	1.0
@@ -140,10 +133,10 @@ NULL	NULL	NULL
 
 
 -- !query 8
-SELECT val_date, udf(cate), max(val_date) OVER(PARTITION BY cate ORDER BY val_date
-RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY cate, val_date
+SELECT val_date, udf(cate), max(val_date) OVER(PARTITION BY udf(cate) ORDER BY val_date
+RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY udf(cate), val_date
 -- !query 8 schema
-struct<val_date:date,CAST(udf(cast(cate as string)) AS STRING):string,max(val_date) OVER (PARTITION BY cate ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING):date>
+struct<val_date:date,CAST(udf(cast(cate as string)) AS STRING):string,max(val_date) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val_date ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING):date>
 -- !query 8 output
 NULL	NULL	NULL
 2017-08-01	NULL	2017-08-01
@@ -157,11 +150,11 @@ NULL	NULL	NULL
 
 
 -- !query 9
-SELECT val_timestamp, udf(cate), avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
+SELECT val_timestamp, udf(cate), avg(val_timestamp) OVER(PARTITION BY udf(cate) ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
-ORDER BY cate, val_timestamp
+ORDER BY udf(cate), val_timestamp
 -- !query 9 schema
-struct<val_timestamp:timestamp,CAST(udf(cast(cate as string)) AS STRING):string,avg(CAST(val_timestamp AS DOUBLE)) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND interval 3 weeks 2 days 4 hours FOLLOWING):double>
+struct<val_timestamp:timestamp,CAST(udf(cast(cate as string)) AS STRING):string,avg(CAST(val_timestamp AS DOUBLE)) OVER (PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND interval 3 weeks 2 days 4 hours FOLLOWING):double>
 -- !query 9 output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -192,48 +185,48 @@ NULL	a	NULL
 
 
 -- !query 11
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate
-ROWS BETWEEN UNBOUNDED FOLLOWING AND CAST(1 as int) FOLLOWING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate)
+ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query 11 schema
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'ROWS BETWEEN UNBOUNDED FOLLOWING AND CAST(1 AS INT) FOLLOWING' due to data type mismatch: Window frame upper bound 'cast(1 as int)' does not follow the lower bound 'unboundedfollowing$()'.; line 1 pos 38
+cannot resolve 'ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING' due to data type mismatch: Window frame upper bound '1' does not follow the lower bound 'unboundedfollowing$()'.; line 1 pos 38
 
 
 -- !query 12
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate)
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query 12 schema
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.`cate` RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 38
+cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.; line 1 pos 38
 
 
 -- !query 13
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY val, cate
-RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY udf(val), cate
+RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query 13 schema
 struct<>
 -- !query 13 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.`cate` ORDER BY testdata.`val` ASC NULLS FIRST, testdata.`cate` ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame with value boundaries cannot be used in a window specification with multiple order by expressions: val#x ASC NULLS FIRST,cate#x ASC NULLS FIRST; line 1 pos 38
+cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY CAST(udf(cast(val as string)) AS INT) ASC NULLS FIRST, testdata.`cate` ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: A range window frame with value boundaries cannot be used in a window specification with multiple order by expressions: cast(udf(cast(val#x as string)) as int) ASC NULLS FIRST,cate#x ASC NULLS FIRST; line 1 pos 38
 
 
 -- !query 14
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY current_timestamp
-RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY current_timestamp
+RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, udf(val)
 -- !query 14 schema
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.`cate` ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'int' which is used in the range frame.; line 1 pos 38
+cannot resolve '(PARTITION BY CAST(udf(cast(cate as string)) AS STRING) ORDER BY current_timestamp() ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING)' due to data type mismatch: The data type 'timestamp' used in the order specification does not match the data type 'int' which is used in the range frame.; line 1 pos 38
 
 
 -- !query 15
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY val
-RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY val
+RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY udf(cate), val
 -- !query 15 schema
 struct<>
 -- !query 15 output
@@ -242,8 +235,8 @@ cannot resolve 'RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING' due to data type mism
 
 
 -- !query 16
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY val
-RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY udf(val)
+RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val(val)
 -- !query 16 schema
 struct<>
 -- !query 16 output
@@ -252,46 +245,46 @@ org.apache.spark.sql.catalyst.parser.ParseException
 Frame bound value must be a literal.(line 2, pos 30)
 
 == SQL ==
-SELECT udf(val), cate, count(val) OVER(PARTITION BY cate ORDER BY val
-RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val
+SELECT udf(val), cate, count(val) OVER(PARTITION BY udf(cate) ORDER BY udf(val)
+RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val(val)
 ------------------------------^^^
 
 
 -- !query 17
 SELECT udf(val), cate,
-max(val) OVER w AS max,
-min(val) OVER w AS min,
-min(val) OVER w AS min,
-count(val) OVER w AS count,
-sum(val) OVER w AS sum,
-avg(val) OVER w AS avg,
-stddev(val) OVER w AS stddev,
-first_value(val) OVER w AS first_value,
-first_value(val, true) OVER w AS first_value_ignore_null,
-first_value(val, false) OVER w AS first_value_contain_null,
-last_value(val) OVER w AS last_value,
-last_value(val, true) OVER w AS last_value_ignore_null,
-last_value(val, false) OVER w AS last_value_contain_null,
+max(udf(val)) OVER w AS max,
+min(udf(val)) OVER w AS min,
+min(udf(val)) OVER w AS min,
+count(udf(val)) OVER w AS count,
+sum(udf(val)) OVER w AS sum,
+avg(udf(val)) OVER w AS avg,
+stddev(udf(val)) OVER w AS stddev,
+first_value(udf(val)) OVER w AS first_value,
+first_value(udf(val), true) OVER w AS first_value_ignore_null,
+first_value(udf(val), false) OVER w AS first_value_contain_null,
+last_value(udf(val)) OVER w AS last_value,
+last_value(udf(val), true) OVER w AS last_value_ignore_null,
+last_value(udf(val), false) OVER w AS last_value_contain_null,
 rank() OVER w AS rank,
 dense_rank() OVER w AS dense_rank,
 cume_dist() OVER w AS cume_dist,
 percent_rank() OVER w AS percent_rank,
 ntile(2) OVER w AS ntile,
 row_number() OVER w AS row_number,
-var_pop(val) OVER w AS var_pop,
-var_samp(val) OVER w AS var_samp,
-approx_count_distinct(val) OVER w AS approx_count_distinct,
-covar_pop(val, val_long) OVER w AS covar_pop,
-corr(val, val_long) OVER w AS corr,
-stddev_samp(val) OVER w AS stddev_samp,
-stddev_pop(val) OVER w AS stddev_pop,
-collect_list(val) OVER w AS collect_list,
-collect_set(val) OVER w AS collect_set,
-skewness(val_double) OVER w AS skewness,
-kurtosis(val_double) OVER w AS kurtosis
+var_pop(udf(val)) OVER w AS var_pop,
+var_samp(udf(val)) OVER w AS var_samp,
+approx_count_distinct(udf(val)) OVER w AS approx_count_distinct,
+covar_pop(udf(val), udf(val_long)) OVER w AS covar_pop,
+corr(udf(val), udf(val_long)) OVER w AS corr,
+stddev_samp(udf(val)) OVER w AS stddev_samp,
+stddev_pop(udf(val)) OVER w AS stddev_pop,
+collect_list(udf(val)) OVER w AS collect_list,
+collect_set(udf(val)) OVER w AS collect_set,
+skewness(udf(val_double)) OVER w AS skewness,
+kurtosis(udf(val_double)) OVER w AS kurtosis
 FROM testData
-WINDOW w AS (PARTITION BY cate ORDER BY val)
-ORDER BY cate, val
+WINDOW w AS (PARTITION BY udf(cate) ORDER BY udf(val))
+ORDER BY cate, udf(val)
 -- !query 17 schema
 struct<CAST(udf(cast(val as string)) AS INT):int,cate:string,max:int,min:int,min:int,count:bigint,sum:bigint,avg:double,stddev:double,first_value:int,first_value_ignore_null:int,first_value_contain_null:int,last_value:int,last_value_ignore_null:int,last_value_contain_null:int,rank:int,dense_rank:int,cume_dist:double,percent_rank:double,ntile:int,row_number:int,var_pop:double,var_samp:double,approx_count_distinct:bigint,covar_pop:double,corr:double,stddev_samp:double,stddev_pop:double,collect_list:array<int>,collect_set:array<int>,skewness:double,kurtosis:double>
 -- !query 17 output

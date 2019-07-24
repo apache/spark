@@ -23,11 +23,11 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingTableCatalog, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
@@ -38,7 +38,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class TestInMemoryTableCatalog extends TableCatalog {
   import CatalogV2Implicits._
 
-  private val tables: util.Map[Identifier, InMemoryTable] =
+  protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
   private var _name: Option[String] = None
 
@@ -66,11 +66,10 @@ class TestInMemoryTableCatalog extends TableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
     }
-
+    TestInMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
     if (partitions.nonEmpty) {
       throw new UnsupportedOperationException(
         s"Catalog $name: Partitioned tables are not supported")
@@ -104,7 +103,9 @@ class TestInMemoryTableCatalog extends TableCatalog {
     }
   }
 
-  override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
+  override def dropTable(ident: Identifier): Boolean = {
+    Option(tables.remove(ident)).isDefined
+  }
 
   def clearTables(): Unit = {
     tables.clear()
@@ -114,7 +115,7 @@ class TestInMemoryTableCatalog extends TableCatalog {
 /**
  * A simple in-memory table. Rows are stored as a buffered group produced by each output task.
  */
-private class InMemoryTable(
+class InMemoryTable(
     val name: String,
     val schema: StructType,
     override val properties: util.Map[String, String])
@@ -155,6 +156,7 @@ private class InMemoryTable(
   }
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+    TestInMemoryTableCatalog.maybeSimulateFailedTableWrite(options)
     new WriteBuilder with SupportsTruncate {
       private var shouldTruncate: Boolean = false
 
@@ -196,7 +198,142 @@ private class InMemoryTable(
   }
 }
 
-private class BufferedRows extends WriterCommitMessage with InputPartition with Serializable {
+object TestInMemoryTableCatalog {
+  val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
+  val SIMULATE_FAILED_CREATE_PROPERTY = "spark.sql.test.simulateFailedCreate"
+  val SIMULATE_DROP_BEFORE_REPLACE_PROPERTY = "spark.sql.test.simulateDropBeforeReplace"
+
+  def maybeSimulateFailedTableCreation(tableProperties: util.Map[String, String]): Unit = {
+    if ("true".equalsIgnoreCase(
+      tableProperties.get(TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY))) {
+      throw new IllegalStateException("Manual create table failure.")
+    }
+  }
+
+  def maybeSimulateFailedTableWrite(tableOptions: CaseInsensitiveStringMap): Unit = {
+    if (tableOptions.getBoolean(
+      TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION, false)) {
+      throw new IllegalStateException("Manual write to table failure.")
+    }
+  }
+}
+
+class TestStagingInMemoryCatalog
+  extends TestInMemoryTableCatalog with StagingTableCatalog {
+  import CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.sources.v2.TestInMemoryTableCatalog._
+
+  override def stageCreate(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    validateStagedTable(partitions, properties)
+    new TestStagedCreateTable(
+      ident,
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+  }
+
+  override def stageReplace(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    validateStagedTable(partitions, properties)
+    new TestStagedReplaceTable(
+      ident,
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+  }
+
+  override def stageCreateOrReplace(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): StagedTable = {
+    validateStagedTable(partitions, properties)
+    new TestStagedCreateOrReplaceTable(
+      ident,
+      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
+  }
+
+  private def validateStagedTable(
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Unit = {
+    if (partitions.nonEmpty) {
+      throw new UnsupportedOperationException(
+        s"Catalog $name: Partitioned tables are not supported")
+    }
+
+    maybeSimulateFailedTableCreation(properties)
+  }
+
+  private abstract class TestStagedTable(
+      ident: Identifier,
+      delegateTable: InMemoryTable)
+    extends StagedTable with SupportsWrite with SupportsRead {
+
+    override def abortStagedChanges(): Unit = {}
+
+    override def name(): String = delegateTable.name
+
+    override def schema(): StructType = delegateTable.schema
+
+    override def capabilities(): util.Set[TableCapability] = delegateTable.capabilities
+
+    override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+      delegateTable.newWriteBuilder(options)
+    }
+
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      delegateTable.newScanBuilder(options)
+    }
+  }
+
+  private class TestStagedCreateTable(
+    ident: Identifier,
+    delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+
+    override def commitStagedChanges(): Unit = {
+      val maybePreCommittedTable = tables.putIfAbsent(ident, delegateTable)
+      if (maybePreCommittedTable != null) {
+        throw new TableAlreadyExistsException(
+          s"Table with identifier $ident and name $name was already created.")
+      }
+    }
+  }
+
+  private class TestStagedReplaceTable(
+    ident: Identifier,
+    delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+
+    override def commitStagedChanges(): Unit = {
+      maybeSimulateDropBeforeCommit()
+      val maybePreCommittedTable = tables.replace(ident, delegateTable)
+      if (maybePreCommittedTable == null) {
+        throw new CannotReplaceMissingTableException(ident)
+      }
+    }
+
+    private def maybeSimulateDropBeforeCommit(): Unit = {
+      if ("true".equalsIgnoreCase(
+        delegateTable.properties.get(SIMULATE_DROP_BEFORE_REPLACE_PROPERTY))) {
+        tables.remove(ident)
+      }
+    }
+  }
+
+  private class TestStagedCreateOrReplaceTable(
+    ident: Identifier,
+    delegateTable: InMemoryTable) extends TestStagedTable(ident, delegateTable) {
+
+    override def commitStagedChanges(): Unit = {
+      tables.put(ident, delegateTable)
+    }
+  }
+}
+
+
+class BufferedRows extends WriterCommitMessage with InputPartition with Serializable {
   val rows = new mutable.ArrayBuffer[InternalRow]()
 }
 

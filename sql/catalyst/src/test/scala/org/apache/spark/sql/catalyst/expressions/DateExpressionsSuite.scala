@@ -918,4 +918,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
   }
+
+  test("creating values of DateType via make_date") {
+    checkEvaluation(MakeDate(Literal(2013), Literal(7), Literal(15)), Date.valueOf("2013-7-15"))
+    checkEvaluation(MakeDate(Literal.create(null, IntegerType), Literal(7), Literal(15)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal.create(null, IntegerType), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal.create(null, IntegerType)), null)
+    checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
+    checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+  }
 }

@@ -367,6 +367,26 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     assert(monitor.timedOutExecutors(idleDeadline).toSet === Set("1", "2"))
   }
 
+  test("SPARK-28455: avoid overflow in timeout calculation") {
+    conf
+      .set(DYN_ALLOCATION_SHUFFLE_TIMEOUT, Long.MaxValue)
+      .set(DYN_ALLOCATION_SHUFFLE_TRACKING, true)
+      .set(SHUFFLE_SERVICE_ENABLED, false)
+    monitor = new ExecutorMonitor(conf, client, null, clock)
+
+    // Generate events that will make executor 1 be idle, while still holding shuffle data.
+    // The executor should not be eligible for removal since the timeout is basically "infinite".
+    val stage = stageInfo(1, shuffleId = 0)
+    monitor.onJobStart(SparkListenerJobStart(1, clock.getTimeMillis(), Seq(stage)))
+    clock.advance(1000L)
+    monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", null))
+    monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1), null))
+    monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
+
+    assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
+  }
+
   private def idleDeadline: Long = clock.getTimeMillis() + idleTimeoutMs + 1
   private def storageDeadline: Long = clock.getTimeMillis() + storageTimeoutMs + 1
   private def shuffleDeadline: Long = clock.getTimeMillis() + shuffleTimeoutMs + 1
