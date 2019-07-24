@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -931,8 +931,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("creating values of TimestampType via make_timestamp") {
     val makeTimestampExpr = MakeTimestamp(
-      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15), Literal(23.5))
-    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2013-7-15 8:15:23.5"))
+      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15), Literal(23.5),
+      Some(Literal(ZoneId.systemDefault().getId)))
+    val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
+    checkEvaluation(makeTimestampExpr, expected)
+    checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
     checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
     checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)

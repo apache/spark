@@ -1669,12 +1669,15 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       * hour - the hour-of-day to represent, from 0 to 23
       * minute - the minute-of-hour to represent, from 0 to 59
       * second - the second-of-minute and its micro-fraction to represent, from
-      *         0 to 59.999999
+                 0 to 59.999999
+      * timezone - optional time zone identifier. For example, CET, UTC and etc.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
        2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
+       2014-12-28 10:30:45.887
       > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
@@ -1689,8 +1692,9 @@ case class MakeTimestamp(
     hour: Expression,
     min: Expression,
     sec: Expression,
+    timezone: Option[Expression] = None,
     timeZoneId: Option[String] = None)
-  extends SenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
+  extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(
       year: Expression,
@@ -1699,17 +1703,47 @@ case class MakeTimestamp(
       hour: Expression,
       min: Expression,
       sec: Expression) = {
-    this(year, month, day, hour, min, sec, None)
+    this(year, month, day, hour, min, sec, None, None)
   }
 
-  override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression,
+      timezone: Expression) = {
+    this(year, month, day, hour, min, sec, Some(timezone), None)
+  }
+
+  override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DoubleType)
+    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DoubleType) ++
+    timezone.map(_ => StringType)
   override def dataType: DataType = TimestampType
   override def nullable: Boolean = true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  private def toMicros(
+      year: Int,
+      month: Int,
+      day: Int,
+      hour: Int,
+      min: Int,
+      secAndNanos: Double,
+      zoneId: ZoneId): Any = {
+    try {
+      val seconds = secAndNanos.toInt
+      val nanos = ((secAndNanos - seconds) * NANOS_PER_SECOND).toInt
+      val ldt = LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
+      instantToMicros(ldt.atZone(zoneId).toInstant)
+    } catch {
+      case _: java.time.DateTimeException => null
+    }
+  }
 
   override def nullSafeEval(
       year: Any,
@@ -1717,37 +1751,33 @@ case class MakeTimestamp(
       day: Any,
       hour: Any,
       min: Any,
-      sec: Any): Any = {
-    try {
-      val secAndNanos = sec.asInstanceOf[Double]
-      val seconds = secAndNanos.toInt
-      val nanos = ((secAndNanos - seconds) * NANOS_PER_SECOND).toInt
-      val ldt = LocalDateTime.of(
-        year.asInstanceOf[Int],
-        month.asInstanceOf[Int],
-        day.asInstanceOf[Int],
-        hour.asInstanceOf[Int],
-        min.asInstanceOf[Int],
-        seconds,
-        nanos
-      )
-      instantToMicros(ldt.atZone(zoneId).toInstant)
-    } catch {
-      case _: java.time.DateTimeException => null
-    }
+      sec: Any,
+      timezone: Option[Any]): Any = {
+    val zid = timezone
+      .map(tz => DateTimeUtils.getZoneId(tz.asInstanceOf[UTF8String].toString))
+      .getOrElse(zoneId)
+    toMicros(
+      year.asInstanceOf[Int],
+      month.asInstanceOf[Int],
+      day.asInstanceOf[Int],
+      hour.asInstanceOf[Int],
+      min.asInstanceOf[Int],
+      sec.asInstanceOf[Double],
+      zid)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos) => {
+    nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
+      val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
       s"""
       try {
         int seconds = (int)$secAndNanos;
         int nanos = (int)(($secAndNanos - seconds) * 1000000000L);
         java.time.LocalDateTime ldt = java.time.LocalDateTime.of(
           $year, $month, $day, $hour, $min, seconds, nanos);
-        java.time.Instant instant = ldt.atZone($zid).toInstant();
+        java.time.Instant instant = ldt.atZone($zoneId).toInstant();
         ${ev.value} = $dtu.instantToMicros(instant);
       } catch (java.time.DateTimeException e) {
         ${ev.isNull} = true;
