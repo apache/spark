@@ -129,4 +129,47 @@ object ImageFileFormat {
   private[image] def invalidImageRow(origin: String): Row =
     Row(Row(origin, -1, -1, -1, ImageUtils.ocvTypes(ImageUtils.undefinedImageType),
       Array.ofDim[Byte](0)))
+
+  /**
+   * Gets the origin of the image
+   *
+   * @return The origin of the image
+   */
+  def getOrigin(row: Row): String = row.getString(0)
+
+  /**
+   * Gets the height of the image
+   *
+   * @return The height of the image
+   */
+  def getHeight(row: Row): Int = row.getInt(1)
+
+  /**
+   * Gets the width of the image
+   *
+   * @return The width of the image
+   */
+  def getWidth(row: Row): Int = row.getInt(2)
+
+  /**
+   * Gets the number of channels in the image
+   *
+   * @return The number of channels in the image
+   */
+  def getNChannels(row: Row): Int = row.getInt(3)
+
+  /**
+   * Gets the OpenCV representation as an int
+   *
+   * @return The OpenCV representation as an int
+   */
+  def getMode(row: Row): Int = row.getInt(4)
+
+  /**
+   * Gets the image data
+   *
+   * @return The image data
+   */
+  def getData(row: Row): Array[Byte] = row.getAs[Array[Byte]](5)
+
 }
