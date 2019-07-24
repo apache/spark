@@ -34,8 +34,7 @@ case class PrimitiveData(
     floatField: Float,
     shortField: Short,
     byteField: Byte,
-    booleanField: Boolean,
-    intervalField: CalendarInterval)
+    booleanField: Boolean)
 
 case class NullableData(
     intField: java.lang.Integer,
@@ -177,8 +176,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("shortField", ShortType, nullable = false),
         StructField("byteField", ByteType, nullable = false),
         StructField("booleanField", BooleanType, nullable = false))),
-      nullable = true),
-        StructField("intervalField", CalendarIntervalType, nullable = false))
+      nullable = true))
   }
 
   test("nullable data") {
@@ -286,7 +284,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("convert PrimitiveData to catalyst") {
-    val data = PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))
+    val data = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val convertedData = InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true,
       new CalendarInterval(2, 0))
     val dataType = schemaFor[PrimitiveData].dataType
@@ -294,7 +292,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("convert Option[Product] to catalyst") {
-    val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))
+    val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
       Some(primitiveData), Some(new CalendarInterval(2, 0)))
     val dataType = schemaFor[OptionalData].dataType

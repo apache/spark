@@ -108,6 +108,14 @@ object RowEncoder {
         createSerializerForSqlDate(inputObject)
       }
 
+    case CalendarIntervalType =>
+      StaticInvoke(
+        classOf[CalendarInterval],
+        CalendarIntervalType,
+        "fromString",
+        inputObject :: Nil,
+        returnNullable = false)
+
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
         Decimal.getClass,

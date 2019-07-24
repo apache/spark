@@ -203,11 +203,11 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
-  productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0)))
+  productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(
     OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))),
+      Some(PrimitiveData(1, 1, 1, 1, 1, 1, true)),
       Some(new CalendarInterval(2, 0))))
 
   productTest(OptionalData(None, None, None, None, None, None, None, None, None))
@@ -219,10 +219,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   productTest(BoxedData(null, null, null, null, null, null, null))
 
-  productTest(RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true,
-    new CalendarInterval(2, 0)) :: Nil))
+  productTest(RepeatedStruct(PrimitiveData(1, 1, 1, 1, 1, 1, true) :: Nil))
 
-  productTest((1, "test", PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))))
+  productTest((1, "test", PrimitiveData(1, 1, 1, 1, 1, 1, true)))
 
   productTest(
     RepeatedData(
@@ -230,7 +229,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       Seq(Integer.valueOf(1), null, Integer.valueOf(2)),
       Map(1 -> 2L),
       Map(1 -> null),
-      PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))))
+      PrimitiveData(1, 1, 1, 1, 1, 1, true)))
 
   productTest(NestedArray(Array(Array(1, -2, 3), null, Array(4, 5, -6))))
 
@@ -278,17 +277,17 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[Long]))
 
   encodeDecodeTest(
-    (PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0)), (3, 30L)),
+    (PrimitiveData(1, 1, 1, 1, 1, 1, true), (3, 30L)),
     "tuple with 2 product encoders")(
     ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[(Int, Long)]))
 
   encodeDecodeTest(
-    (PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0)), 3),
+    (PrimitiveData(1, 1, 1, 1, 1, 1, true), 3),
     "tuple with flat encoder and product encoder")(
     ExpressionEncoder.tuple(ExpressionEncoder[PrimitiveData], ExpressionEncoder[Int]))
 
   encodeDecodeTest(
-    (3, PrimitiveData(1, 1, 1, 1, 1, 1, true, new CalendarInterval(2, 0))),
+    (3, PrimitiveData(1, 1, 1, 1, 1, 1, true)),
     "tuple with product encoder and flat encoder")(
     ExpressionEncoder.tuple(ExpressionEncoder[Int], ExpressionEncoder[PrimitiveData]))
 
