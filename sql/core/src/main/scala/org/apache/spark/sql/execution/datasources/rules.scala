@@ -400,29 +400,27 @@ object DDLCheck extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
+  def throwWhenExistsNullType(schema: StructType): Unit = {
+    if (schema.exists(f => DataTypes.NullType.sameType(f.dataType))) {
+      failAnalysis("DataType NullType is not supported for create table ")
+    }
+  }
+
   override def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case ct: CreateTable if ct.tableDesc.schema.exists { f =>
-        DataTypes.NullType.sameType(f.dataType)
-      } =>
-        failAnalysis("DataType NullType is not supported for create table ")
+      case ct: CreateTable =>
+        throwWhenExistsNullType(ct.tableDesc.schema)
 
-      case ct2: CreateV2Table if ct2.tableSchema.exists { f =>
-        DataTypes.NullType.sameType(f.dataType)
-      } =>
-        failAnalysis("DataType NullType is not supported for create table")
+      case ct2: CreateV2Table =>
+        throwWhenExistsNullType(ct2.tableSchema)
 
       // DataSourceStrategy will convert CreateTable to CreateDataSourceTableCommand before check
-      case cdstc: CreateDataSourceTableCommand if cdstc.table.schema.exists { f =>
-        DataTypes.NullType.sameType(f.dataType)
-      } =>
-        failAnalysis("DataType NullType is not supported for create table")
+      case cdstc: CreateDataSourceTableCommand =>
+        throwWhenExistsNullType(cdstc.table.schema)
 
       // HiveAnalysis will convert CreateTable to CreateTableCommand before check
-      case ctc: CreateTableCommand if ctc.table.schema.exists { f =>
-        DataTypes.NullType.sameType(f.dataType)
-      } =>
-        failAnalysis("DataType NullType is not supported for create table")
+      case ctc: CreateTableCommand =>
+        throwWhenExistsNullType(ctc.table.schema)
 
       case _ => // OK
     }
