@@ -32,7 +32,6 @@ import org.apache.spark.util.Utils
 class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
 
-  protected override lazy val sql = spark.sql _
   private var originalDefaultSource: String = null
   private var path: File = null
   private var df: DataFrame = null

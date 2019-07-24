@@ -30,20 +30,19 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobEnd}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Uuid
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-import org.apache.spark.sql.test.SQLTestData.{NullStrings, TestData2}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSessionWithFreshCopy}
+import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest with SharedSQLContext {
+class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
@@ -477,22 +476,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("withColumns: case sensitive") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val df = testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
-        Seq(col("key") + 1, col("key") + 2))
-      checkAnswer(
-        df,
-        testData.collect().map { case Row(key: Int, value: String) =>
-          Row(key, value, key + 1, key + 2)
-        }.toSeq)
-      assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCOL1"))
+    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, true)
+    val data = Seq(0, 1).toDF("key")
+    val df = data.withColumns(Seq("newCol1", "newCOL1"),
+      Seq(col("key") + 1, col("key") + 2))
+    checkAnswer(df, Row(0, 1, 2) :: Row(1, 2, 3) :: Nil)
+    assert(df.schema.map(_.name) === Seq("key", "newCol1", "newCOL1"))
 
-      val err = intercept[AnalysisException] {
-        testData.toDF().withColumns(Seq("newCol1", "newCol1"),
-          Seq(col("key") + 1, col("key") + 2))
-      }
-      assert(err.getMessage.contains("Found duplicate column(s)"))
+    val err = intercept[AnalysisException] {
+      data.toDF().withColumns(Seq("newCol1", "newCol1"),
+        Seq(col("key") + 1, col("key") + 2))
     }
+    assert(err.getMessage.contains("Found duplicate column(s)"))
   }
 
   test("withColumns: given metadata") {
@@ -574,17 +569,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-28189 drop column using drop with column reference with case-insensitive names") {
     // With SQL config caseSensitive OFF, case insensitive column name should work
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val col1 = testData("KEY")
-      val df1 = testData.drop(col1)
-      checkAnswer(df1, testData.selectExpr("value"))
-      assert(df1.schema.map(_.name) === Seq("value"))
+    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    val col1 = testData("KEY")
+    val df1 = testData.drop(col1)
+    checkAnswer(df1, testData.selectExpr("value"))
+    assert(df1.schema.map(_.name) === Seq("value"))
 
-      val col2 = testData("Key")
-      val df2 = testData.drop(col2)
-      checkAnswer(df2, testData.selectExpr("value"))
-      assert(df2.schema.map(_.name) === Seq("value"))
-    }
+    val col2 = testData("Key")
+    val df2 = testData.drop(col2)
+    checkAnswer(df2, testData.selectExpr("value"))
+    assert(df2.schema.map(_.name) === Seq("value"))
   }
 
   test("drop unknown column (no-op) with column reference") {
@@ -778,24 +772,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("inputFiles") {
     Seq("csv", "").foreach { useV1List =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1List) {
-        withTempDir { dir =>
-          val df = Seq((1, 22)).toDF("a", "b")
+      spark.sessionState.conf.setConf(SQLConf.USE_V1_SOURCE_READER_LIST, useV1List)
+      withTempDir { dir =>
+        val df = Seq((1, 22)).toDF("a", "b")
 
-          val parquetDir = new File(dir, "parquet").getCanonicalPath
-          df.write.parquet(parquetDir)
-          val parquetDF = spark.read.parquet(parquetDir)
-          assert(parquetDF.inputFiles.nonEmpty)
+        val parquetDir = new File(dir, "parquet").getCanonicalPath
+        df.write.parquet(parquetDir)
+        val parquetDF = spark.read.parquet(parquetDir)
+        assert(parquetDF.inputFiles.nonEmpty)
 
-          val csvDir = new File(dir, "csv").getCanonicalPath
-          df.write.json(csvDir)
-          val csvDF = spark.read.json(csvDir)
-          assert(csvDF.inputFiles.nonEmpty)
+        val csvDir = new File(dir, "csv").getCanonicalPath
+        df.write.json(csvDir)
+        val csvDF = spark.read.json(csvDir)
+        assert(csvDF.inputFiles.nonEmpty)
 
-          val unioned = csvDF.union(parquetDF).inputFiles.sorted
-          val allFiles = (csvDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
-          assert(unioned === allFiles)
-        }
+        val unioned = csvDF.union(parquetDF).inputFiles.sorted
+        val allFiles = (csvDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
+        assert(unioned === allFiles)
       }
     }
   }
@@ -1188,31 +1181,30 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
-      val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
-      checkAnswer(
-        df.select(df("`a.b`.c.`d..e`.`f`")),
-        Row(1)
-      )
+    spark.sessionState.conf.setConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME, false)
+    val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
+    checkAnswer(
+      df.select(df("`a.b`.c.`d..e`.`f`")),
+      Row(1)
+    )
 
-      val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
-      checkAnswer(
-        df2.select(df2("`a  b`.c.d  e.f")),
-        Row(1)
-      )
+    val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
+    checkAnswer(
+      df2.select(df2("`a  b`.c.d  e.f")),
+      Row(1)
+    )
 
-      def checkError(testFun: => Unit): Unit = {
-        val e = intercept[org.apache.spark.sql.AnalysisException] {
-          testFun
-        }
-        assert(e.getMessage.contains("syntax error in attribute name:"))
+    def checkError(testFun: => Unit): Unit = {
+      val e = intercept[org.apache.spark.sql.AnalysisException] {
+        testFun
       }
-
-      checkError(df("`abc.`c`"))
-      checkError(df("`abc`..d"))
-      checkError(df("`a`.b."))
-      checkError(df("`a.b`.c.`d"))
+      assert(e.getMessage.contains("syntax error in attribute name:"))
     }
+
+    checkError(df("`abc.`c`"))
+    checkError(df("`abc`..d"))
+    checkError(df("`a`.b."))
+    checkError(df("`a.b`.c.`d"))
   }
 
   test("SPARK-7324 dropDuplicates") {
@@ -1454,12 +1446,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      withTempPath { path =>
-        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
-        val df = spark.read.parquet(path.getAbsolutePath)
-        checkAnswer(df.filter($"yEAr" > 2000).select($"val"), Row("a"))
-      }
+    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    withTempPath { path =>
+      Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
+      val df = spark.read.parquet(path.getAbsolutePath)
+      checkAnswer(df.filter($"yEAr" > 2000).select($"val"), Row("a"))
     }
   }
 
@@ -1576,27 +1567,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("fix case sensitivity of partition by") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      withTempPath { path =>
-        val p = path.getAbsolutePath
-        Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
-        checkAnswer(spark.read.parquet(p).select("YeaR"), Row(2012))
-      }
+    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    withTempPath { path =>
+      val p = path.getAbsolutePath
+      Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
+      checkAnswer(spark.read.parquet(p).select("YeaR"), Row(2012))
     }
   }
 
   // This test case is to verify a bug when making a new instance of LogicalRDD.
   test("SPARK-11633: LogicalRDD throws TreeNode Exception: Failed to Copy Node") {
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
-      val df = spark.createDataFrame(
-        rdd,
-        new StructType().add("f1", IntegerType).add("f2", IntegerType))
-        .select($"F1", $"f2".as("f2"))
-      val df1 = df.as("a")
-      val df2 = df.as("b")
-      checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
-    }
+    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
+    val df = spark.createDataFrame(
+      rdd,
+      new StructType().add("f1", IntegerType).add("f2", IntegerType))
+      .select($"F1", $"f2".as("f2"))
+    val df1 = df.as("a")
+    val df2 = df.as("b")
+    checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
   }
 
   test("SPARK-10656: completely support special chars") {
@@ -1664,26 +1653,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reuse exchange") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
-      val df = spark.range(100).toDF()
-      val join = df.join(df, "id")
-      val plan = join.queryExecution.executedPlan
-      checkAnswer(join, df)
-      assert(
-        join.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size === 1)
-      assert(
-        join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
-      val broadcasted = broadcast(join)
-      val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
-      checkAnswer(join2, df)
-      assert(
-        join2.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size == 1)
-      assert(
-        join2.queryExecution.executedPlan
-          .collect { case e: BroadcastExchangeExec => true }.size === 1)
-      assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size == 4)
-    }
+    spark.sessionState.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 2L)
+    val df = spark.range(100).toDF()
+    val join = df.join(df, "id")
+    val plan = join.queryExecution.executedPlan
+    checkAnswer(join, df)
+    assert(
+      join.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size === 1)
+    assert(
+      join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
+    val broadcasted = broadcast(join)
+    val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
+    checkAnswer(join2, df)
+    assert(
+      join2.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size == 1)
+    assert(
+      join2.queryExecution.executedPlan
+        .collect { case e: BroadcastExchangeExec => true }.size === 1)
+    assert(
+      join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size == 4)
   }
 
   test("sameResult() on aggregate") {
@@ -1799,19 +1787,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
     withTable("bar") {
-      withTempView("foo") {
-        withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
-          sql("select 0 as id").createOrReplaceTempView("foo")
-          val df = sql("select * from foo group by id")
-          // If we optimize the query in CTAS more than once, the following saveAsTable will fail
-          // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
-          df.write.mode("overwrite").saveAsTable("bar")
-          checkAnswer(spark.table("bar"), Row(0) :: Nil)
-          val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
-          assert(tableMetadata.provider == Some("json"),
-            "the expected table is a data source table using json")
-        }
-      }
+      spark.sessionState.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "json")
+      sql("select 0 as id").createOrReplaceTempView("foo")
+      val df = sql("select * from foo group by id")
+      // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+      // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+      df.write.mode("overwrite").saveAsTable("bar")
+      checkAnswer(spark.table("bar"), Row(0) :: Nil)
+      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+      assert(tableMetadata.provider == Some("json"),
+        "the expected table is a data source table using json")
+
     }
   }
 
@@ -1886,13 +1872,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-17957: outer join + na.fill") {
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
-      val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
-      val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
-      val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
-      val df3 = Seq((3, 1)).toDF("a", "d")
-      checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
-    }
+    spark.sessionState.conf.setConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME, false)
+    val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
+    val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
+    val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+    val df3 = Seq((3, 1)).toDF("a", "d")
+    checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
   }
 
   test("SPARK-18070 binary operator should not consider nullability when comparing input types") {
@@ -1937,26 +1922,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val filter = (0 until N)
       .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
 
-    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "true") {
-      df.filter(filter).count()
-    }
+    spark.sessionState.conf.setConf(SQLConf.CODEGEN_FALLBACK, true)
+    df.filter(filter).count()
 
-    withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "false") {
-      val e = intercept[SparkException] {
-        df.filter(filter).count()
-      }.getMessage
-      assert(e.contains("grows beyond 64 KiB"))
-    }
+    spark.sessionState.conf.setConf(SQLConf.CODEGEN_FALLBACK, false)
+    val e = intercept[SparkException] {
+      df.filter(filter).count()
+    }.getMessage
+    assert(e.contains("grows beyond 64 KiB"))
   }
 
   test("SPARK-20897: cached self-join should not fail") {
     // force to plan sort merge join
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      val df = Seq(1 -> "a").toDF("i", "j")
-      val df1 = df.as("t1")
-      val df2 = df.as("t2")
-      assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
-    }
+    spark.sessionState.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 0L)
+    val df = Seq(1 -> "a").toDF("i", "j")
+    val df1 = df.as("t1")
+    val df2 = df.as("t2")
+    assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
   }
 
   test("order-by ordinal.") {
@@ -2061,17 +2043,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-24781: Using a reference not in aggregation in Filter/Sort") {
-     withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
-      val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
+    spark.sessionState.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
 
-      val aggPlusSort1 = df.groupBy(df("name")).agg(count(df("name"))).orderBy(df("name"))
-      val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
-      checkAnswer(aggPlusSort1, aggPlusSort2.collect())
+    val aggPlusSort1 = df.groupBy(df("name")).agg(count(df("name"))).orderBy(df("name"))
+    val aggPlusSort2 = df.groupBy(col("name")).agg(count(col("name"))).orderBy(col("name"))
+    checkAnswer(aggPlusSort1, aggPlusSort2.collect())
 
-      val aggPlusFilter1 = df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === 0)
-      val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
-      checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
-    }
+    val aggPlusFilter1 = df.groupBy(df("name")).agg(count(df("name"))).filter(df("name") === 0)
+    val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
+    checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {
@@ -2109,12 +2090,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-25714 Null handling in BooleanSimplification") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ConvertToLocalRelation.ruleName) {
-      val df = Seq(("abc", 1), (null, 3)).toDF("col1", "col2")
-      checkAnswer(
-        df.filter("col1 = 'abc' OR (col1 != 'abc' AND col2 == 3)"),
-        Row ("abc", 1))
-    }
+    val df = Seq(("abc", 1), (null, 3)).toDF("col1", "col2")
+    checkAnswer(
+      df.filter("col1 = 'abc' OR (col1 != 'abc' AND col2 == 3)"),
+      Row("abc", 1))
   }
 
   test("SPARK-25816 ResolveReferences works with nested extractors") {
@@ -2125,28 +2104,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26057: attribute deduplication on already analyzed plans") {
-    withTempView("a", "b", "v") {
-      val df1 = Seq(("1-1", 6)).toDF("id", "n")
-      df1.createOrReplaceTempView("a")
-      val df3 = Seq("1-1").toDF("id")
-      df3.createOrReplaceTempView("b")
-      spark.sql(
-        """
-          |SELECT a.id, n as m
-          |FROM a
-          |WHERE EXISTS(
-          |  SELECT 1
-          |  FROM b
-          |  WHERE b.id = a.id)
-        """.stripMargin).createOrReplaceTempView("v")
-      val res = spark.sql(
-        """
-          |SELECT a.id, n, m
-          |  FROM a
-          |  LEFT OUTER JOIN v ON v.id = a.id
-        """.stripMargin)
-      checkAnswer(res, Row("1-1", 6, 6))
-    }
+    val df1 = Seq(("1-1", 6)).toDF("id", "n")
+    df1.createOrReplaceTempView("a")
+    val df3 = Seq("1-1").toDF("id")
+    df3.createOrReplaceTempView("b")
+    spark.sql(
+      """
+        |SELECT a.id, n as m
+        |FROM a
+        |WHERE EXISTS(
+        |  SELECT 1
+        |  FROM b
+        |  WHERE b.id = a.id)
+      """.stripMargin).createOrReplaceTempView("v")
+    val res = spark.sql(
+      """
+        |SELECT a.id, n, m
+        |  FROM a
+        |  LEFT OUTER JOIN v ON v.id = a.id
+      """.stripMargin)
+    checkAnswer(res, Row("1-1", 6, 6))
   }
 
   test("SPARK-27671: Fix analysis exception when casting null in nested field in struct") {
@@ -2159,26 +2136,24 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-27439: Explain result should match collected result after view change") {
-    withTempView("test", "test2", "tmp") {
-      spark.range(10).createOrReplaceTempView("test")
-      spark.range(5).createOrReplaceTempView("test2")
-      spark.sql("select * from test").createOrReplaceTempView("tmp")
-      val df = spark.sql("select * from tmp")
-      spark.sql("select * from test2").createOrReplaceTempView("tmp")
+    spark.range(10).createOrReplaceTempView("test")
+    spark.range(5).createOrReplaceTempView("test2")
+    spark.sql("select * from test").createOrReplaceTempView("tmp")
+    val df = spark.sql("select * from tmp")
+    spark.sql("select * from test2").createOrReplaceTempView("tmp")
 
-      val captured = new ByteArrayOutputStream()
-      Console.withOut(captured) {
-        df.explain(extended = true)
-      }
-      checkAnswer(df, spark.range(10).toDF)
-      val output = captured.toString
-      assert(output.contains(
-        """== Parsed Logical Plan ==
-          |'Project [*]
-          |+- 'UnresolvedRelation [tmp]""".stripMargin))
-      assert(output.contains(
-        """== Physical Plan ==
-          |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      df.explain(extended = true)
     }
+    checkAnswer(df, spark.range(10).toDF)
+    val output = captured.toString
+    assert(output.contains(
+      """== Parsed Logical Plan ==
+        |'Project [*]
+        |+- 'UnresolvedRelation [tmp]""".stripMargin))
+    assert(output.contains(
+      """== Physical Plan ==
+        |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
   }
 }

@@ -19,12 +19,16 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf, WithTestConf}
+import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SharedState, SQLConf, WithTestConf}
 
 /**
  * A special `SparkSession` prepared for testing.
  */
-private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
+private[spark] class TestSparkSession(
+    sc: SparkContext,
+    existingSharedState: Option[SharedState] = None)
+  extends SparkSession(sc, existingSharedState) { self =>
+
   def this(sparkConf: SparkConf) {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
@@ -45,6 +49,10 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
   // Needed for Java tests
   def loadTestData(): Unit = {
     testData.loadTestData()
+  }
+
+  override def newSession(): TestSparkSession = {
+    new TestSparkSession(sparkContext, Some(sharedState))
   }
 
   private object testData extends SQLTestData {

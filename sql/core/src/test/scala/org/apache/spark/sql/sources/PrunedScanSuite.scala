@@ -54,7 +54,6 @@ case class SimplePrunedScan(from: Int, to: Int)(@transient val sparkSession: Spa
 }
 
 class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

@@ -87,6 +87,13 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  private[sql] def this(sc: SparkContext, existingSharedState: Option[SharedState]) {
+    this(sc, existingSharedState, None,
+      SparkSession.applyExtensions(
+        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
+        new SparkSessionExtensions))
+  }
+
   /**
    * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
    * which otherwise only occurs during getOrCreate. We cannot add this to the default constructor
@@ -94,10 +101,7 @@ class SparkSession private(
    * running extensions.
    */
   private[sql] def this(sc: SparkContext) {
-    this(sc, None, None,
-      SparkSession.applyExtensions(
-        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-        new SparkSessionExtensions))
+    this(sc, None)
   }
 
   sparkContext.assertNotStopped()

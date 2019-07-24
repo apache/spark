@@ -134,8 +134,6 @@ object ColumnsRequired {
 }
 
 class FilteredScanSuite extends DataSourceTest with SharedSQLContext with PredicateHelper {
-  protected override lazy val sql = spark.sql _
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql(

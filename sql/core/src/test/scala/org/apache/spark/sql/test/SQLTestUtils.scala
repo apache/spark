@@ -212,8 +212,8 @@ private[sql] trait SQLTestUtilsBase
 
   protected def sparkContext = spark.sparkContext
 
-  // Shorthand for running a query using our SQLContext
-  protected lazy val sql = spark.sql _
+  // Shorthand for running a query using our SparkSession
+  protected def sql(sqlText: String) = spark.sql(sqlText)
 
   /**
    * A helper object for importing SQL implicits.

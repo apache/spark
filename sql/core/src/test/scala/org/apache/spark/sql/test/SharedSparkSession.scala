@@ -57,7 +57,7 @@ trait SharedSparkSession
    * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
    * mode with the default test configurations.
    */
-  private var _spark: TestSparkSession = null
+  protected var _spark: TestSparkSession = null
 
   /**
    * The [[TestSparkSession]] to use for all tests in this suite.
