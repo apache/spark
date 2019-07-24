@@ -39,8 +39,8 @@ __all__ = ["ImageUtils"]
 
 class _ImageUtils(object):
     """
-    Internal class for `pyspark.ml.image.ImageSchema` attribute. Meant to be private and
-    not to be instantized. Use `pyspark.ml.image.ImageSchema` attribute to access the
+    Internal class for `pyspark.ml.image.ImageUtils` attribute. Meant to be private and
+    not to be instantized. Use `pyspark.ml.image.ImageUtils` attribute to access the
     APIs of this class.
     """
 
@@ -211,7 +211,7 @@ ImageUtils = _ImageUtils()
 
 # Monkey patch to disallow instantiation of this class.
 def _disallow_instance(_):
-    raise RuntimeError("Creating instance of _ImageSchema class is disallowed.")
+    raise RuntimeError("Creating instance of _ImageUtils class is disallowed.")
 
 
 _ImageUtils.__init__ = _disallow_instance
