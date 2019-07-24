@@ -325,19 +325,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
    * If not, returns the original expression without evaluation.
    */
-  private def tryEvalExpr(expr: Expression): Option[Expression] = {
+  private def tryEvalExpr(expr: Expression): Expression = {
     // Removes Alias over given expression, because Alias is not foldable.
     if (!removeAlias(expr).foldable) {
       // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
       // Needs to evaluate them on query runtime.
-      Some(expr)
+      expr
     } else {
-      val exprVal = expr.eval()
-      if (exprVal == null) {
-        None
-      } else {
-        Some(Literal.create(exprVal, expr.dataType))
-      }
+      Literal.create(expr.eval(), expr.dataType)
     }
   }
 
@@ -348,13 +343,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def bindingExpr(
       expr: Expression,
-      bindings: Map[ExprId, Option[Expression]]): Option[Expression] = {
+      bindings: Map[ExprId, Expression]): Expression = {
     val rewrittenExpr = expr transform {
       case r: AttributeReference =>
-        bindings(r.exprId) match {
-          case Some(v) => v
-          case None => Literal.default(NullType)
-        }
+        bindings.getOrElse(r.exprId, Literal.default(NullType))
     }
 
     tryEvalExpr(rewrittenExpr)
@@ -363,7 +355,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   /**
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
-  private def evalAggOnZeroTups(expr: Expression) : Option[Expression] = {
+  private def evalAggOnZeroTups(expr: Expression) : Expression = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
@@ -388,7 +380,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // Inputs to this method will start with a chain of zero or more SubqueryAlias
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
-    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Expression]] = lp match {
+    def evalPlan(lp : LogicalPlan) : Map[ExprId, Expression] = lp match {
       case SubqueryAlias(_, child) => evalPlan(child)
       case Filter(condition, child) =>
         val bindings = evalPlan(child)
@@ -396,18 +388,20 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           bindings
         } else {
           val bindExpr = bindingExpr(condition, bindings)
-            .getOrElse(Literal.create(false, BooleanType))
 
           if (!bindExpr.foldable) {
             // We can't evaluate the condition. Evaluate it in query runtime.
             bindings.map { case (id, expr) =>
-              val newExpr = expr.map(e => If(bindExpr, e, Literal.create(null, e.dataType)))
+              val newExpr = If(bindExpr, expr, Literal.create(null, expr.dataType))
               (id, newExpr)
             }
           } else {
             // The bound condition can be evaluated.
-            val exprResult = bindExpr.eval().asInstanceOf[Boolean]
-            if (exprResult) bindings else Map.empty
+            bindExpr.eval() match {
+              // For filter condition, null is the same as false.
+              case null | false => Map.empty
+              case true => bindings
+            }
           }
         }
 
@@ -424,8 +418,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         // for joining with the outer query block. Fill those expressions in with
         // nulls and statically evaluate the remainder.
         aggExprs.map {
-          case ref: AttributeReference => (ref.exprId, None)
-          case alias @ Alias(_: AttributeReference, _) => (alias.exprId, None)
+          case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
+          case alias @ Alias(_: AttributeReference, _) =>
+            (alias.exprId, Literal.create(null, alias.dataType))
           case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
@@ -436,7 +431,10 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     val resultMap = evalPlan(plan)
 
     // By convention, the scalar subquery result is the leftmost field.
-    resultMap.getOrElse(plan.output.head.exprId, None)
+    resultMap.get(plan.output.head.exprId) match {
+      case Some(Literal(null, _)) | None => None
+      case o => o
+    }
   }
 
   /**
