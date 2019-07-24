@@ -517,33 +517,20 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           val alwaysTrueRef = AttributeReference(ALWAYS_TRUE_COLNAME,
             BooleanType)(exprId = alwaysTrueExprId)
 
+          val aggValRef = query.output.head
+
           if (havingNode.isEmpty) {
             // CASE 2: Subquery with no HAVING clause
 
-            // We replace original expression id with a new one. The added Alias column
-            // must use expr id of original output. If we don't replace old expr id in the
-            // query, the added Project in potential Project-Filter-Project can be removed
-            // by removeProjectBeforeFilter in ColumnPruning.
-            val newExprId = NamedExpression.newExprId
-            val newQuery =
-              query.transformExpressions(replaceOldExprId(origOutput.exprId, newExprId))
-
-            val result = resultWithZeroTups.get
-              .transform(replaceOldExprId(origOutput.exprId, newExprId))
-
-            val newCondition =
-              conditions.map(_.transform(replaceOldExprId(origOutput.exprId, newExprId)))
-
-            val newExpr = Alias(
-              If(IsNull(alwaysTrueRef),
-                result,
-                newQuery.output.head), origOutput.name)(exprId = origOutput.exprId)
-
             Project(
-              currentChild.output :+ newExpr,
+              currentChild.output :+
+                Alias(
+                  If(IsNull(alwaysTrueRef),
+                    resultWithZeroTups.get,
+                    aggValRef), origOutput.name)(exprId = origOutput.exprId),
               Join(currentChild,
-                Project(newQuery.output :+ alwaysTrueExpr, newQuery),
-                LeftOuter, newCondition.reduceOption(And), JoinHint.NONE))
+                Project(query.output :+ alwaysTrueExpr, query),
+                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
 
           } else {
             // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
@@ -560,34 +547,20 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               case op => sys.error(s"Unexpected operator $op in corelated subquery")
             }
 
-            // We replace original expression id with a new one. The added Alias column
-            // must use expr id of original output. If we don't replace old expr id in the
-            // query, the added Project in potential Project-Filter-Project can be removed
-            // by removeProjectBeforeFilter in ColumnPruning.
-            val newExprId = NamedExpression.newExprId
-            val newQuery =
-              subqueryRoot.transformExpressions(replaceOldExprId(origOutput.exprId, newExprId))
-
-            val result = resultWithZeroTups.get
-              .transform(replaceOldExprId(origOutput.exprId, newExprId))
-
-            val newCondition =
-              conditions.map(_.transform(replaceOldExprId(origOutput.exprId, newExprId)))
-
             // CASE WHEN alwaysTrue IS NULL THEN resultOnZeroTups
             //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
             //      ELSE (aggregate value) END AS (original column name)
             val caseExpr = Alias(CaseWhen(Seq(
-              (IsNull(alwaysTrueRef), result),
-              (Not(havingNode.get.condition), Literal.create(null, newQuery.output.head.dataType))),
-              newQuery.output.head),
+              (IsNull(alwaysTrueRef), resultWithZeroTups.get),
+              (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
+              aggValRef),
               origOutput.name)(exprId = origOutput.exprId)
 
             Project(
               currentChild.output :+ caseExpr,
               Join(currentChild,
-                Project(newQuery.output :+ alwaysTrueExpr, newQuery),
-                LeftOuter, newCondition.reduceOption(And), JoinHint.NONE))
+                Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
+                LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
           }
         }
     }
