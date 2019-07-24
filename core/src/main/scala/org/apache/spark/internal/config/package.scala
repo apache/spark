@@ -813,7 +813,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val SHUFFLE_IO_PLUGIN_CLASS =
-    ConfigBuilder("spark.shuffle.io.plugin.class")
+    ConfigBuilder("spark.shuffle.sort.io.plugin.class")
       .doc("Name of the class to use for shuffle IO.")
       .stringConf
       .createWithDefault(classOf[LocalDiskShuffleDataIO].getName)

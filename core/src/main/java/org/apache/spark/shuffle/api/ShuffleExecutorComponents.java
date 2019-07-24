@@ -17,7 +17,9 @@
 
 package org.apache.spark.shuffle.api;
 
+import java.io.IOException;
 import org.apache.spark.annotation.Private;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 
 /**
  * :: Private ::
@@ -35,11 +37,26 @@ public interface ShuffleExecutorComponents {
   void initializeExecutor(String appId, String execId);
 
   /**
-   * Returns the modules that are responsible for persisting shuffle data to the backing
-   * store.
-   * <p>
-   * This may be called multiple times on each executor. Implementations should not make
-   * any assumptions about the lifetime of the returned module.
+   * Called once per map task to create a writer that will be responsible for persisting all the
+   * partitioned bytes written by that map task.
+   *
+   * @param shuffleId Unique identifier for the shuffle the map task is a part of
+   * @param mapId Within the shuffle, the identifier of the map task
+   * @param mapTaskAttemptId Identifier of the task attempt. Multiple attempts of the same map task
+   *                         with the same (shuffleId, mapId) pair can be distinguished by the
+   *                         different values of mapTaskAttemptId.
+   * @param numPartitions The number of partitions that will be written by the map task. Some of
+   *                      these partitions may be empty.
+   * @param mapTaskWriteMetrics The map task's write metrics, which can be updated by the returned
+   *                            writer. The updates that are posted to this reporter are listed in
+   *                            the Spark UI. Note that the caller will update the total write time
+   *                            at the end of the map task, so implementations should not call
+   *                            {@link ShuffleWriteMetricsReporter#incWriteTime(long)}.
    */
-  ShuffleWriteSupport writes();
+  ShuffleMapOutputWriter createMapOutputWriter(
+      int shuffleId,
+      int mapId,
+      long mapTaskAttemptId,
+      int numPartitions,
+      ShuffleWriteMetricsReporter mapTaskWriteMetrics) throws IOException;
 }

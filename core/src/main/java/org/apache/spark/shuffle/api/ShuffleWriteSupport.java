@@ -35,8 +35,8 @@ public interface ShuffleWriteSupport {
    * Called once per map task to create a writer that will be responsible for persisting all the
    * partitioned bytes written by that map task.
    *
-   * @param shuffleId Unique identifier for the shuffle stage of the map task
-   * @param mapId Within the shuffle stage, the identifier of the map task
+   * @param shuffleId Unique identifier for the shuffle the map task is a part of
+   * @param mapId Within the shuffle, the identifier of the map task
    * @param mapTaskAttemptId Identifier of the task attempt. Multiple attempts of the same map task
    *                         with the same (shuffleId, mapId) pair can be distinguished by the
    *                         different values of mapTaskAttemptId.

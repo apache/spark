@@ -44,9 +44,6 @@ public interface ShuffleDataIO {
   /**
    * Called once on executor processes to bootstrap the shuffle data storage modules that
    * are only invoked on the executors.
-   * <p>
-   * At this point, this module is responsible for reading and writing shuffle data bytes
-   * from the backing store.
    */
   ShuffleExecutorComponents executor();
 }

@@ -18,11 +18,10 @@
 package org.apache.spark.shuffle.sort
 
 import java.io.File
-import java.util.{Properties, UUID}
+import java.util.UUID
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
@@ -36,8 +35,8 @@ import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
-import org.apache.spark.shuffle.api.ShuffleWriteSupport
-import org.apache.spark.shuffle.sort.io.LocalDiskShuffleWriteSupport
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -52,7 +51,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
   private var taskMetrics: TaskMetrics = _
   private var tempDir: File = _
   private var outputFile: File = _
-  private var writeSupport: ShuffleWriteSupport = _
+  private var shuffleExecutorComponents: ShuffleExecutorComponents = _
   private val conf: SparkConf = new SparkConf(loadDefaults = false)
     .set("spark.app.id", "sampleApp")
   private val temporaryFilesCreated: mutable.Buffer[File] = new ArrayBuffer[File]()
@@ -121,8 +120,8 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     val memoryManager = new TestMemoryManager(conf)
     val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
-
-    writeSupport = new LocalDiskShuffleWriteSupport(conf, blockResolver)
+    shuffleExecutorComponents = new LocalDiskShuffleExecutorComponents(
+      conf, blockManager, blockResolver)
   }
 
   override def afterEach(): Unit = {
@@ -144,7 +143,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       0L, // MapTaskAttemptId
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
-      writeSupport)
+      shuffleExecutorComponents)
 
     writer.write(Iterator.empty)
     writer.stop( /* success = */ true)
@@ -171,8 +170,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
         0L,
         transferConf,
         taskContext.taskMetrics().shuffleWriteMetrics,
-        writeSupport
-      )
+        shuffleExecutorComponents)
       writer.write(records)
       writer.stop( /* success = */ true)
       assert(temporaryFilesCreated.nonEmpty)
@@ -208,8 +206,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       0L,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
-      writeSupport
-    )
+      shuffleExecutorComponents)
 
     intercept[SparkException] {
       writer.write(records)
@@ -231,8 +228,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
       0L,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics,
-      writeSupport
-    )
+      shuffleExecutorComponents)
     intercept[SparkException] {
       writer.write((0 until 100000).iterator.map(i => {
         if (i == 99990) {

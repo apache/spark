@@ -23,6 +23,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,9 +31,8 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
-import org.apache.spark.shuffle.api.TransferrableWritableByteChannel;
+import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.internal.config.package$;
-import org.apache.spark.shuffle.sort.DefaultTransferrableWritableByteChannel;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.storage.TimeTrackingOutputStream;
@@ -40,8 +40,8 @@ import org.apache.spark.util.Utils;
 
 /**
  * Implementation of {@link ShuffleMapOutputWriter} that replicates the functionality of shuffle
- * persisting shuffle data to local disk alongside index files, identical to Spark's shuffle
- * storage mechanism from Spark 2.4 and earlier.
+ * persisting shuffle data to local disk alongside index files, identical to Spark's historic
+ * canonical shuffle storage mechanism.
  */
 public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
@@ -171,7 +171,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
 
     @Override
-    public TransferrableWritableByteChannel openTransferrableChannel() throws IOException {
+    public WritableByteChannelWrapper openChannelWrapper() throws IOException {
       if (partChannel == null) {
         if (partStream != null) {
           throw new IllegalStateException("Requested an output stream for a previous write but" +
@@ -241,18 +241,22 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
   }
 
-  private class PartitionWriterChannel extends DefaultTransferrableWritableByteChannel {
+  private class PartitionWriterChannel implements WritableByteChannelWrapper {
 
     private final int partitionId;
 
     PartitionWriterChannel(int partitionId) {
-      super(outputFileChannel);
       this.partitionId = partitionId;
     }
 
     public long getCount() throws IOException {
       long writtenPosition = outputFileChannel.position();
       return writtenPosition - currChannelPosition;
+    }
+
+    @Override
+    public WritableByteChannel channel() {
+      return outputFileChannel;
     }
 
     @Override

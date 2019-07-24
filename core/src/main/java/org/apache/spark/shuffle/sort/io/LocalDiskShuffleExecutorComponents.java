@@ -17,10 +17,13 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
-import org.apache.spark.shuffle.api.ShuffleWriteSupport;
+import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
 import org.apache.spark.storage.BlockManager;
 
@@ -34,6 +37,16 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
     this.sparkConf = sparkConf;
   }
 
+  @VisibleForTesting
+  public LocalDiskShuffleExecutorComponents(
+      SparkConf sparkConf,
+      BlockManager blockManager,
+      IndexShuffleBlockResolver blockResolver) {
+    this.sparkConf = sparkConf;
+    this.blockManager = blockManager;
+    this.blockResolver = blockResolver;
+  }
+
   @Override
   public void initializeExecutor(String appId, String execId) {
     blockManager = SparkEnv.get().blockManager();
@@ -44,11 +57,17 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
   }
 
   @Override
-  public ShuffleWriteSupport writes() {
+  public ShuffleMapOutputWriter createMapOutputWriter(
+      int shuffleId,
+      int mapId,
+      long mapTaskAttemptId,
+      int numPartitions,
+      ShuffleWriteMetricsReporter mapTaskWriteMetrics) {
     if (blockResolver == null) {
       throw new IllegalStateException(
-        "Executor components must be initialized before getting writers.");
+          "Executor components must be initialized before getting writers.");
     }
-    return new LocalDiskShuffleWriteSupport(sparkConf, blockResolver);
+    return new LocalDiskShuffleMapOutputWriter(
+        shuffleId, mapId, numPartitions, mapTaskWriteMetrics, blockResolver, sparkConf);
   }
 }

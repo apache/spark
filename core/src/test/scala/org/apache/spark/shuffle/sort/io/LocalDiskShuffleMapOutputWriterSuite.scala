@@ -18,13 +18,14 @@
 package org.apache.spark.shuffle.sort.io
 
 import java.io.{File, FileInputStream, FileOutputStream}
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.util.Arrays
 
 import org.mockito.Answers.RETURNS_SMART_NULLS
-import org.mockito.ArgumentMatchers.{any, anyInt, anyLong}
+import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mock
-import org.mockito.Mockito.{doAnswer, doNothing, when}
+import org.mockito.Mockito.when
 import org.mockito.MockitoAnnotations
 import org.scalatest.BeforeAndAfterEach
 
@@ -42,13 +43,11 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   private var shuffleWriteMetrics: ShuffleWriteMetrics = _
 
   private val NUM_PARTITIONS = 4
-  private val data: Array[Array[Byte]] = (0 until NUM_PARTITIONS).map {
-    p => {
-      if (p == 3) {
-        Array.emptyByteArray
-      } else {
-        (0 to p * 10).map(_ + p).map(_.toByte).toArray
-      }
+  private val data: Array[Array[Byte]] = (0 until NUM_PARTITIONS).map { p =>
+    if (p == 3) {
+      Array.emptyByteArray
+    } else {
+      (0 to p * 10).map(_ + p).map(_.toByte).toArray
     }
   }.toArray
 
@@ -71,7 +70,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
 
   override def beforeEach(): Unit = {
     MockitoAnnotations.initMocks(this)
-    tempDir = Utils.createTempDir(null, "test")
+    tempDir = Utils.createTempDir()
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir)
     tempFile = File.createTempFile("tempfile", "", tempDir)
     partitionSizesInMergedFile = null
@@ -79,19 +78,17 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       .set("spark.app.id", "example.spark.app")
       .set("spark.shuffle.unsafe.file.output.buffer", "16k")
     when(blockResolver.getDataFile(anyInt, anyInt)).thenReturn(mergedOutputFile)
-
-    doNothing().when(shuffleWriteMetrics).incWriteTime(anyLong)
-
-    doAnswer { invocationOnMock =>
-      partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
-      val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
-      if (tmp != null) {
-        mergedOutputFile.delete
-        tmp.renameTo(mergedOutputFile)
+    when(blockResolver.writeIndexFileAndCommit(
+      anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File])))
+      .thenAnswer { invocationOnMock =>
+        partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
+        val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
+        if (tmp != null) {
+          mergedOutputFile.delete()
+          tmp.renameTo(mergedOutputFile)
+        }
+        null
       }
-      null
-    }.when(blockResolver)
-      .writeIndexFileAndCommit(anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File]))
     mapOutputWriter = new LocalDiskShuffleMapOutputWriter(
       0,
       0,
@@ -123,13 +120,17 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       outputTempFileStream.write(data(p))
       outputTempFileStream.close()
       val tempFileInput = new FileInputStream(outputTempFile)
-      val channel = writer.openTransferrableChannel()
+      val channel = writer.openChannelWrapper()
       Utils.tryWithResource(new FileInputStream(outputTempFile)) { tempFileInput =>
-        Utils.tryWithResource(writer.openTransferrableChannel()) { channel =>
-          channel.transferFrom(tempFileInput.getChannel, 0L, data(p).length)
+        Utils.tryWithResource(writer.openChannelWrapper()) { channelWrapper =>
+          assert(channelWrapper.channel().isInstanceOf[FileChannel],
+            "Underlying channel should be a file channel")
+          Utils.copyFileStreamNIO(
+            tempFileInput.getChannel, channelWrapper.channel(), 0L, data(p).length)
         }
       }
-      assert(writer.getNumBytesWritten === data(p).length)
+      assert(writer.getNumBytesWritten === data(p).length,
+        s"Partition $p does not have the correct number of bytes.")
     }
     verifyWrittenRecords()
   }

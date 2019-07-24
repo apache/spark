@@ -19,10 +19,10 @@ package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
 import java.io.OutputStream;
-
 import java.nio.channels.Channels;
+
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.sort.DefaultTransferrableWritableByteChannel;
+import org.apache.spark.shuffle.sort.io.DefaultWritableByteChannelWrapper;
 
 /**
  * :: Private ::
@@ -56,7 +56,7 @@ public interface ShufflePartitionWriter {
   OutputStream openStream() throws IOException;
 
   /**
-   * Opens and returns a {@link TransferrableWritableByteChannel} for transferring bytes from
+   * Opens and returns a {@link WritableByteChannelWrapper} for transferring bytes from
    * input byte channels to the underlying shuffle data store.
    * <p>
    * This method will only be called once on this partition writer in the map task, to write the
@@ -67,7 +67,7 @@ public interface ShufflePartitionWriter {
    * Implementations that intend on combining the bytes for all the partitions written by this
    * map task should reuse the same channel instance across all the partition writers provided
    * by the parent {@link ShuffleMapOutputWriter}. If one does so, ensure that
-   * {@link TransferrableWritableByteChannel#close()} does not close the resource, since it
+   * {@link WritableByteChannelWrapper#close()} does not close the resource, since it
    * will be reused across partition writes. The underlying resources should be cleaned up in
    * {@link ShuffleMapOutputWriter#commitAllPartitions()} and
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
@@ -78,14 +78,13 @@ public interface ShufflePartitionWriter {
    * The default implementation should be sufficient for most situations. Only override this
    * method if there is a very specific optimization that needs to be built.
    */
-  default TransferrableWritableByteChannel openTransferrableChannel() throws IOException {
-    return new DefaultTransferrableWritableByteChannel(
-        Channels.newChannel(openStream()));
+  default WritableByteChannelWrapper openChannelWrapper() throws IOException {
+    return new DefaultWritableByteChannelWrapper(Channels.newChannel(openStream()));
   }
 
   /**
    * Returns the number of bytes written either by this writer's output stream opened by
-   * {@link #openStream()} or the byte channel opened by {@link #openTransferrableChannel()}.
+   * {@link #openStream()} or the byte channel opened by {@link #openChannelWrapper()}.
    * <p>
    * This can be different from the number of bytes given by the caller. For example, the
    * stream might compress or encrypt the bytes before persisting the data to the backing
