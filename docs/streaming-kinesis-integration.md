@@ -222,17 +222,17 @@ To run the example,
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 
-        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        ./bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="java" markdown="1">
 
-        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        ./bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="python" markdown="1">
 
-        bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
+        ./bin/spark-submit --jars external/kinesis-asl/target/scala-*/\
             spark-streaming-kinesis-asl-assembly_*.jar \
             external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
             [Kinesis app name] [Kinesis stream name] [endpoint URL] [region name]
@@ -244,7 +244,7 @@ To run the example,
 
 - To generate random string data to put onto the Kinesis stream, in another terminal, run the associated Kinesis data producer.
 
-		bin/run-example streaming.KinesisWordProducerASL [Kinesis stream name] [endpoint URL] 1000 10
+		./bin/run-example streaming.KinesisWordProducerASL [Kinesis stream name] [endpoint URL] 1000 10
 
 	This will push 1000 lines per second of 10 random numbers per line to the Kinesis stream.  This data should then be received and processed by the running example.
 

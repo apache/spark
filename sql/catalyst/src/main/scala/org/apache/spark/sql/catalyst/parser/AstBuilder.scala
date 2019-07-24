@@ -1926,6 +1926,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
       case ("decimal", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
+      case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
         throw new ParseException(s"DataType $dtStr is not supported.", ctx)
