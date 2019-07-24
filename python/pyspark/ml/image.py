@@ -64,7 +64,7 @@ class _ImageUtils(object):
 
         if self._imageSchema is None:
             ctx = SparkContext._active_spark_context
-            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
+            jschema = ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.schema()
             self._imageSchema = _parse_datatype_json_string(jschema.json())
         return self._imageSchema
 
@@ -80,7 +80,8 @@ class _ImageUtils(object):
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
-            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
+            self._ocvTypes = dict(
+                ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.javaOcvTypes())
         return self._ocvTypes
 
     @property
@@ -96,7 +97,7 @@ class _ImageUtils(object):
 
         if self._columnSchema is None:
             ctx = SparkContext._active_spark_context
-            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.columnSchema()
+            jschema = ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.columnSchema()
             self._columnSchema = _parse_datatype_json_string(jschema.json())
         return self._columnSchema
 
@@ -112,7 +113,8 @@ class _ImageUtils(object):
 
         if self._imageFields is None:
             ctx = SparkContext._active_spark_context
-            self._imageFields = list(ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageFields())
+            self._imageFields = list(
+                ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.imageFields())
         return self._imageFields
 
     @property
@@ -126,7 +128,7 @@ class _ImageUtils(object):
         if self._undefinedImageType is None:
             ctx = SparkContext._active_spark_context
             self._undefinedImageType = \
-                ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
+                ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.undefinedImageType()
         return self._undefinedImageType
 
     def toNDArray(self, image):
