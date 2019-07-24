@@ -35,7 +35,7 @@ import org.apache.spark.annotation.Private;
  * consistent throughout most of Spark's history.
  * <p>
  * Alternative implementations of shuffle data storage can be loaded via setting
- * spark.shuffle.io.plugin.class.
+ * <code>spark.shuffle.sort.io.plugin.class</code>.
  * @since 3.0.0
  */
 @Private
