@@ -880,11 +880,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // columns. Here we Lowercase the column names before passing the partition spec to Hive
       // client, to satisfy Hive.
       // scalastyle:off caselocale
-      partition.keys.foreach { partColName =>
-        if (partColName.toLowerCase == colName.toLowerCase()) {
-          orderedPartitionSpec.put(colName.toLowerCase, partition(partColName))
-        }
-      }
+      orderedPartitionSpec.put(colName.toLowerCase, partition(colName))
       // scalastyle:on caselocale
     }
 
