@@ -276,7 +276,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- FROM tenk1 WHERE unique1 < 10
 -- WINDOW w AS (order by four range between current row and unbounded following);
 
--- Frame bound value must be a literal.
+-- [SPARK-28501] Frame bound value must be a literal.
 -- SELECT sum(unique1) over
 -- (order by unique1
 --   rows (SELECT unique1 FROM tenk1 ORDER BY unique1 LIMIT 1) + 1 PRECEDING),
@@ -585,9 +585,9 @@ FROM tenk1 WHERE unique1 < 10;
 -- nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
 
--- Window Frame specifiedwindowframe(RangeFrame, -1, 1) must match the required frame specifiedwindowframe(RowFrame, -1, -1);
+-- [SPARK-28508] Support for range frame+row frame in the same query
 -- select last(salary) over(order by enroll_date range between 1 preceding and 1 following),
--- lag(salary) over(order by enroll_date range between 1 preceding and 1 following),
+-- lag(salary)         over(order by enroll_date range between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
@@ -618,13 +618,12 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
--- mismatched input 'WINDOW' expecting {<EOF>, 'LIMIT'}
--- WITH cte (x) AS (
---         SELECT * FROM range(1, 35, 2)
--- )
--- SELECT x, (sum(x) over w)
--- FROM cte
--- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+WITH cte (x) AS (
+        SELECT * FROM range(1, 35, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
@@ -642,21 +641,20 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
--- mismatched input 'WINDOW' expecting {<EOF>, 'LIMIT'}
--- WITH cte (x) AS (
---         select 1 union all select 1 union all select 1 union all
---         SELECT * FROM range(5, 49, 2)
--- )
--- SELECT x, (sum(x) over w)
--- FROM cte
--- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
+WITH cte (x) AS (
+        select 1 union all select 1 union all select 1 union all
+        SELECT * FROM range(5, 49, 2)
+)
+SELECT x, (sum(x) over w)
+FROM cte
+WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
 
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
 
-select f1, sum(f1) over (partition by f1
+select f1, sum(f1) over (partition by f1 order by f1
                          range between 1 preceding and 1 following)
 from t1 where f1 = f2;
 
@@ -676,10 +674,9 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2;
 
--- cannot resolve '(PARTITION BY default.t1.`f1` RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING)' due to data type mismatch: A range window frame cannot be used in an unordered window specification.
--- select f1, sum(f1) over (partition by f1
--- range between 1 preceding and 1 following)
--- from t1 where f1 = f2;
+select f1, sum(f1) over (partition by f1,
+f1 order by f2 range between 1 preceding and 1 following)
+from t1 where f1 = f2;
 
 explain
 select f1, sum(f1) over (partition by f1 order by f2
@@ -703,15 +700,14 @@ SELECT rank() OVER (ORDER BY length('abc'));
 -- [SPARK-28086] Adds `random()` to Spark
 -- SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
 
--- It is not allowed to use window functions inside WHERE and HAVING clauses;
--- SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10;
+select * from
+(select row_number() over (order by salary) rn from empsalary) ss
+where rn < 10;
 
--- The query operator `Join` contains one or more unsupported
--- expression types Aggregate, Window or Generate.
+-- [SPARK-28506] not handling usage of group function and window function at some conditions
 -- SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
 
--- The query operator `Aggregate` contains one or more unsupported
--- expression types Aggregate, Window or Generate.
+-- [SPARK-28506] not handling usage of group function and window function at some conditions
 -- SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
 
 -- [SPARK-28086] Adds `random()` to Spark
@@ -726,22 +722,16 @@ SELECT rank() OVER (ORDER BY length('abc'));
 -- Output not being truncated
 -- SELECT count() OVER () FROM tenk1;
 
--- Ok, first I migrated a call to `generate_series()`, given by Postgres, to
--- the equivalent Spark function, called `range()`. But `range()` seems less
--- flexible than `generate_series()`
--- SELECT range(1, 101) OVER () FROM empsalary;
-
--- cannot resolve 'ntile(0)' due to data type mismatch: Buckets expression must be positive, but got: 0;
+-- [SPARK-28065] ntile only accepting positive (>0) values
 -- SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
--- mismatched input 'FILTER'
+-- [SPARK-28500] Adds support for `filter` clause
 -- SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
 --     sum(salary) FILTER (WHERE enroll_date > '2007-01-01')
--- ) FILTER (WHERE depname <> 'sales') OVER (ORDER BY depname DESC) AS "filtered_sum",
---     depname
+-- )
 -- FROM empsalary GROUP BY depname;
 
 EXPLAIN
