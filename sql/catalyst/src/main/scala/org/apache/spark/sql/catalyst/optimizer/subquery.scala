@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -316,18 +317,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     newExpression.asInstanceOf[E]
   }
 
-  private def removeAlias(expr: Expression): Expression = expr match {
-    case Alias(c, _) => removeAlias(c)
-    case _ => expr
-  }
-
   /**
    * Checks if given expression is foldable. Evaluates it and returns it as literal, if yes.
    * If not, returns the original expression without evaluation.
    */
   private def tryEvalExpr(expr: Expression): Expression = {
     // Removes Alias over given expression, because Alias is not foldable.
-    if (!removeAlias(expr).foldable) {
+    if (!CleanupAliases.trimAliases(expr).foldable) {
       // SPARK-28441: Some expressions, like PythonUDF, can't be statically evaluated.
       // Needs to evaluate them on query runtime.
       expr
@@ -387,17 +383,17 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
         if (bindings.isEmpty) {
           bindings
         } else {
-          val bindExpr = bindingExpr(condition, bindings)
+          val bindCondition = bindingExpr(condition, bindings)
 
-          if (!bindExpr.foldable) {
+          if (!bindCondition.foldable) {
             // We can't evaluate the condition. Evaluate it in query runtime.
             bindings.map { case (id, expr) =>
-              val newExpr = If(bindExpr, expr, Literal.create(null, expr.dataType))
+              val newExpr = If(bindCondition, expr, Literal.create(null, expr.dataType))
               (id, newExpr)
             }
           } else {
             // The bound condition can be evaluated.
-            bindExpr.eval() match {
+            bindCondition.eval() match {
               // For filter condition, null is the same as false.
               case null | false => Map.empty
               case true => bindings
@@ -472,18 +468,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     sys.error("This line should be unreachable")
   }
 
-  /**
-   * This replaces original expression id used in attributes and aliases in expression.
-   */
-  private def replaceOldExprId(
-      oldExprId: ExprId,
-      newExprId: ExprId): PartialFunction[Expression, Expression] = {
-    case a: AttributeReference if a.exprId == oldExprId =>
-      a.withExprId(newExprId)
-    case a: Alias if a.exprId == oldExprId =>
-      Alias(child = a.child, name = a.name)(exprId = newExprId)
-  }
-
   // Name of generated column used in rewrite below
   val ALWAYS_TRUE_COLNAME = "alwaysTrue"
 
@@ -521,7 +505,6 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
           if (havingNode.isEmpty) {
             // CASE 2: Subquery with no HAVING clause
-
             Project(
               currentChild.output :+
                 Alias(
@@ -561,6 +544,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
               Join(currentChild,
                 Project(subqueryRoot.output :+ alwaysTrueExpr, subqueryRoot),
                 LeftOuter, conditions.reduceOption(And), JoinHint.NONE))
+
           }
         }
     }
