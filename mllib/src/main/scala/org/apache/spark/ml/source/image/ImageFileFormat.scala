@@ -22,11 +22,12 @@ import java.awt.color.ColorSpace
 import java.io.ByteArrayInputStream
 import javax.imageio.ImageIO
 
+import scala.collection.JavaConverters._
+
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
-import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{BinaryType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 private[image] class ImageFileFormat extends FileFormat with DataSourceRegister {

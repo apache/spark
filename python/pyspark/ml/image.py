@@ -16,11 +16,11 @@
 #
 
 """
-.. attribute:: ImageSchema
+.. attribute:: ImageUtils
 
-    An attribute of this module that contains the instance of :class:`_ImageSchema`.
+    An attribute of this module that contains the instance of :class:`_ImageUtils`.
 
-.. autoclass:: _ImageSchema
+.. autoclass:: _ImageUtils
    :members:
 """
 
