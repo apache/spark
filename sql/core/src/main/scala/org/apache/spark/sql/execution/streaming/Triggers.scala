@@ -23,7 +23,7 @@ import scala.concurrent.duration.Duration
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.streaming.Trigger
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.sql.types.CalendarInterval
 
 private object Triggers {
   def validate(intervalMs: Long): Unit = {
