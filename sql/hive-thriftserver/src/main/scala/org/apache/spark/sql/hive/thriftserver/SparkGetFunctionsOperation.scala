@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.sql.DatabaseMetaData
 import java.util.UUID
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -24,8 +25,8 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetFunctionsOperation
+import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
-import org.apache.thrift.TException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
@@ -61,20 +62,15 @@ private[hive] class SparkGetFunctionsOperation(
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     val catalog = sqlContext.sessionState.catalog
+    // If no database is specified, we will return the functions in the current database.
+    val schemaPattern = if (null == schemaName || "".equals(schemaName)) {
+      catalog.getCurrentDatabase
+    } else {
+      convertSchemaPattern(schemaName)
+    }
+    val matchingDbs: Seq[String] = catalog.listDatabases(schemaPattern)
 
     if (isAuthV2Enabled) {
-      // get databases for schema pattern
-      val schemaPattern = convertSchemaPattern(schemaName)
-      var matchingDbs: Seq[String] = null
-      try {
-        matchingDbs = catalog.listDatabases(schemaPattern)
-      } catch {
-        case e: TException =>
-          setState(OperationState.ERROR)
-          HiveThriftServer2.listener.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          throw new HiveSQLException(e)
-      }
       // authorize this call on the schema objects
       val privObjs =
         HivePrivilegeObjectUtils.getHivePrivDbObjects(seqAsJavaListConverter(matchingDbs).asJava)
@@ -90,17 +86,16 @@ private[hive] class SparkGetFunctionsOperation(
 
     try {
       val functionPattern = CLIServiceUtils.patternToRegex(functionName)
-      if ((null == catalogName || "".equals(catalogName))
-        && (null == schemaName || "".equals(schemaName))) {
+      matchingDbs.foreach { schema =>
         catalog.listFunctions(catalog.getCurrentDatabase, functionPattern).foreach {
           case (functionIdentifier, _) =>
             val rowData = Array[AnyRef](
-              null, // FUNCTION_CAT
-              null, // FUNCTION_SCHEM
+              DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
+              schema, // FUNCTION_SCHEM
               functionIdentifier.funcName, // FUNCTION_NAME
               "", // REMARKS
-              1.asInstanceOf[AnyRef], // FUNCTION_TYPE
-              "")
+              DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
+              "") // SPECIFIC_NAME
             rowSet.addRow(rowData);
         }
       }

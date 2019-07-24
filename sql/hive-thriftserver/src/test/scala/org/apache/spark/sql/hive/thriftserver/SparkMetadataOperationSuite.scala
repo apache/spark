@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.ResultSet
+import java.sql.{DatabaseMetaData, ResultSet}
 
 class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
@@ -184,12 +184,23 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
   }
 
   test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
+    def checkResult(rs: ResultSet, functionName: Seq[String]): Unit = {
+      for (i <- functionName.indices) {
+        assert(rs.next())
+        assert(rs.getString("FUNCTION_NAME") === functionName(i))
+        assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       // Hive does not have an overlay function, we use overlay to test.
-      val rs = metaData.getFunctions(null, "", "overlay")
-      assert(rs.next())
-      assert(rs.getString("FUNCTION_NAME") === "overlay")
+      checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "default", "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
     }
   }
 }
