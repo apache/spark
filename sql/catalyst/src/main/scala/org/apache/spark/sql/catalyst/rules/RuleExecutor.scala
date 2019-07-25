@@ -47,7 +47,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    */
   abstract class Strategy { def maxIterations: Int }
 
-  /** A strategy that is idempotent. */
+  /** A strategy that is run once and idempotent. */
   case object Once extends Strategy { val maxIterations = 1 }
 
   /**
