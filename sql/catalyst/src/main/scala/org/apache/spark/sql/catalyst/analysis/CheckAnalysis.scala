@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -298,6 +299,48 @@ trait CheckAnalysis extends PredicateHelper {
                     """.stripMargin.replace("\n", " ").trim())
                 }
               }
+            }
+
+          // If the view output doesn't have the same number of columns neither with the child
+          // output, nor with the query column names, throw an AnalysisException.
+          // If the view's child output can't up cast to the view output,
+          // throw an AnalysisException, too.
+          case v @ View(desc, output, child) if child.resolved && output != child.output =>
+            val queryColumnNames = desc.viewQueryColumnNames
+            val queryOutput = if (queryColumnNames.nonEmpty) {
+              if (output.length != queryColumnNames.length) {
+                // If the view output doesn't have the same number of columns with the query column
+                // names, throw an AnalysisException.
+                throw new AnalysisException(
+                  s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
+                    "number of columns with the query column names " +
+                    s"${queryColumnNames.mkString("[", ",", "]")}")
+              }
+              val resolver = SQLConf.get.resolver
+              queryColumnNames.map { colName =>
+                child.output.find { attr =>
+                  resolver(attr.name, colName)
+                }.getOrElse(throw new AnalysisException(
+                  s"Attribute with name '$colName' is not found in " +
+                    s"'${child.output.map(_.name).mkString("(", ",", ")")}'"))
+              }
+            } else {
+              child.output
+            }
+
+            output.zip(queryOutput).foreach {
+              case (attr, originAttr) if !attr.dataType.sameType(originAttr.dataType) =>
+                // The dataType of the output attributes may be not the same with that of the view
+                // output, so we should cast the attribute to the dataType of the view output
+                // attribute. Will throw an AnalysisException if the cast can't be performed or
+                // might truncate.
+                if (Cast.mayTruncate(originAttr.dataType, attr.dataType) ||
+                  !Cast.canCast(originAttr.dataType, attr.dataType)) {
+                  throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
+                    s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} " +
+                    "as it may truncate\n")
+                }
+              case _ =>
             }
 
           case _ => // Fallbacks to the following checks
