@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.StructField;
@@ -42,11 +43,14 @@ import static org.apache.spark.sql.types.DataTypes.LongType;
 
 public abstract class JavaPropertyGraphSuite implements Serializable {
   private transient TestSparkSession spark;
-  private transient CypherSession cypherSession = null;
+  private transient CypherSession cypherSession;
+
+  abstract CypherSession getCypherSession(SparkSession sparkSession);
 
   @Before
   public void setUp() {
     spark = new TestSparkSession();
+    cypherSession = getCypherSession(spark);
   }
 
   @After
@@ -83,7 +87,7 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
         Lists.newArrayList(personNodeFrame),
         Lists.newArrayList(knowsRelFrame));
     List<Row> result = graph.nodes().collectAsList();
-    Assert.assertEquals(1, result.size());
+    Assert.assertEquals(2, result.size());
   }
 
   private StructType createSchema(List<String> fieldNames, List<DataType> dataTypes) {
