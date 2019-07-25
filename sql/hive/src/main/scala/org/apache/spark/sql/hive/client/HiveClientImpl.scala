@@ -197,7 +197,7 @@ private[hive] class HiveClientImpl(
     val ugi = HiveUtils.getUGI
     ugi.getShortUserName
   } catch {
-    case e: LoginException => throw new IOException(e)
+    case _: LoginException => throw new IOException("Can not get login user.")
   }
 
   override def getConf(key: String, defaultValue: String): String = {
