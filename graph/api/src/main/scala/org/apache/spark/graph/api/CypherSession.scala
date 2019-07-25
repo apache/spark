@@ -192,9 +192,12 @@ trait CypherSession extends Logging {
 
     val nodeFrames = labelSets.map { labelSet =>
       val predicate = labelColumns
-        .map {
-          case labelColumn if labelSet.contains(labelColumn) => nodes.col(labelColumn)
-          case labelColumn => !nodes.col(labelColumn)
+        .map { labelColumn =>
+          if (labelSet.contains(labelColumn)) {
+            nodes.col(labelColumn)
+          } else {
+            !nodes.col(labelColumn)
+          }
         }
         .reduce(_ && _)
 
