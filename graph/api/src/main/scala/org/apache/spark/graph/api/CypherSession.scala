@@ -13,7 +13,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  */
 
 package org.apache.spark.graph.api
@@ -71,9 +70,9 @@ trait CypherSession extends Logging {
    * @since 3.0.0
    */
   def cypher(
-      graph: PropertyGraph,
-      query: String,
-      parameters: java.util.Map[String, Object]): CypherResult = {
+              graph: PropertyGraph,
+              query: String,
+              parameters: java.util.Map[String, Object]): CypherResult = {
     cypher(graph, query, parameters.asScala.toMap)
   }
 
@@ -102,8 +101,8 @@ trait CypherSession extends Logging {
    * @since 3.0.0
    */
   def createGraph(
-      nodes: java.util.List[NodeFrame],
-      relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
+                   nodes: java.util.List[NodeFrame],
+                   relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
     createGraph(nodes.asScala, relationships.asScala)
   }
 
@@ -123,6 +122,9 @@ trait CypherSession extends Logging {
    *     Property columns: `{Property_Key}` (nodes and relationships)
    * }}}
    *
+   * @note It is recommended to cache the input DataFrames if they represent multiple label sets and
+   *       relationship types.
+   *
    * @see [[CypherSession]]
    * @param nodes         node DataFrame
    * @param relationships relationship DataFrame
@@ -140,7 +142,8 @@ trait CypherSession extends Logging {
 
     val labelCount = labelColumns.size
     if (labelCount > 5) {
-      log.warn(s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
+      log.warn(
+        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
       if (labelCount > 10) {
         throw new IllegalArgumentException(
           s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
