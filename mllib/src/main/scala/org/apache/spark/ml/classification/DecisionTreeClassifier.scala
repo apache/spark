@@ -222,6 +222,7 @@ class DecisionTreeClassificationModel private[ml] (
   def predictLeaf(features: Vector): Double = predictLeafImpl(features)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     if ($(leafCol).isEmpty) {
       super.transform(dataset)
     } else {

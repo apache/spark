@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -313,6 +313,50 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  test("model support predict leaf index") {
+    val leaf0 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2 = new LeafNode(0.0, Double.NaN, null)
+    val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, leaf1,
+      new ContinuousSplit(0, 0.0), null)
+    val node0 = new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
+      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
+
+    /**
+     *                       root=node0
+     *                      /         \
+     *             x1 in [0, 2]   otherwise
+     *                    /            \
+     *               node1           leaf2
+     *               /    \
+     *          x0 <= 0  x0 > 0
+     *             /       \
+     *          leaf0      leaf1
+     */
+    val model = new DecisionTreeClassificationModel("dtc", node0, 3, 2)
+    model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
+
+    val data = Array((2.0, Vectors.dense(0, 1, 3)),
+      (0.0, Vectors.dense(-1, 2, 1)),
+      (1.0, Vectors.dense(1, 0, 2)),
+      (2.0, Vectors.dense(2, 1, 9)),
+      (0.0, Vectors.dense(0, 2, 6)))
+
+    data.foreach { case (leafId, vec) =>
+      assert(leafId === model.predictLeaf(vec))
+    }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect().foreach {
+      case Row(leafId: Double, predictedLeafId: Double) =>
+        assert(leafId === predictedLeafId)
+    }
   }
 
   test("should support all NumericType labels and not support other types") {

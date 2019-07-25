@@ -222,27 +222,12 @@ class RandomForestClassificationModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
-
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
-    }
-
-    if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
-      predictionColNames :+= $(leafCol)
-      predictionColumns :+= leafUDF(col($(featuresCol)))
-    }
-
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
+    if ($(leafCol).isEmpty) {
+      super.transform(dataset)
     } else {
-      this.logWarning(s"$uid: RandomForestClassificationModel.transform() does nothing" +
-        " because no output columns were set.")
-      dataset.toDF()
+      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
+      super.transform(dataset)
+        .withColumn($(leafCol), leafUDF(col($(featuresCol))))
     }
   }
 

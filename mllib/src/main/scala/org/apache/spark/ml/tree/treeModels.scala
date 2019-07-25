@@ -90,12 +90,11 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
-  @transient private[ml] lazy val leafIndices: Map[LeafNode, Int] =
+  @transient private lazy val leafIndices: Map[LeafNode, Int] =
     leafIterator(rootNode).zipWithIndex.toMap
 
-  private[ml] def predictLeafImpl(features: Vector): Double = {
+  private[ml] def predictLeafImpl(features: Vector): Double =
     leafIndices(rootNode.predictImpl(features)).toDouble
-  }
 }
 
 /**

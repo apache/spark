@@ -20,6 +20,7 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -125,6 +126,59 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
 
     sc.checkpointDir = None
     Utils.deleteRecursively(tempDir)
+  }
+
+  test("model support predict leaf index") {
+    val leaf0_0 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1_0 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2_0 = new LeafNode(0.0, Double.NaN, null)
+    val node1_0 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0_0, leaf1_0,
+      new ContinuousSplit(0, 0.0), null)
+    val node0_0 = new InternalNode(0.0, Double.NaN, Double.NaN, node1_0, leaf2_0,
+      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
+
+    val leaf0_1 = new LeafNode(0.0, Double.NaN, null)
+    val leaf1_1 = new LeafNode(1.0, Double.NaN, null)
+    val leaf2_1 = new LeafNode(0.0, Double.NaN, null)
+    val node1_1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf1_1, leaf2_1,
+      new CategoricalSplit(1, Array(0.0, 1.0), 3), null)
+    val node0_1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0_1, node1_1,
+      new ContinuousSplit(2, 1.0), null)
+
+    /**
+     *                          tree_0                            tree_1
+     *                       root=node0_0                    root=node0_1
+     *                      /         \                       /         \
+     *             x1 in [0, 2]   otherwise               x3 <= 1      x3 > 1
+     *                    /            \                    /            \
+     *               node1_0         leaf2_0           leaf_0_1        node1_1
+     *               /    \                                             /    \
+     *          x0 <= 0  x0 > 0                               x1 in [0, 1]   otherwise
+     *             /       \                                          /       \
+     *         leaf0_0   leaf1_0                                  leaf1_1   leaf2_1
+     */
+    val model0 = new DecisionTreeRegressionModel("dtc", node0_0, 3)
+    val model1 = new DecisionTreeRegressionModel("dtc", node0_1, 3)
+    val model = new GBTRegressionModel("gbtr", Array(model0, model1), Array(1.0, 1.0), 3)
+    model.setLeafCol("predictedLeafId")
+      .setPredictionCol("")
+
+    val data = Array((Vectors.dense(2, 1), Vectors.dense(0, 1, 3)),
+      (Vectors.dense(0, 0), Vectors.dense(-1, 2, 1)),
+      (Vectors.dense(1, 1), Vectors.dense(1, 0, 2)),
+      (Vectors.dense(2, 1), Vectors.dense(2, 1, 9)),
+      (Vectors.dense(0, 2), Vectors.dense(0, 2, 6)))
+
+    data.foreach { case (leafId, vec) =>
+      assert(leafId === model.predictLeaf(vec))
+    }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect().foreach {
+      case Row(leafId: Vector, predictedLeafId: Vector) =>
+        assert(leafId === predictedLeafId)
+    }
   }
 
   test("should support all NumericType labels and not support other types") {

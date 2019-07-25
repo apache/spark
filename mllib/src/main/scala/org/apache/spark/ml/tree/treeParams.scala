@@ -234,11 +234,11 @@ private[ml] trait DecisionTreeClassifierParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(leafCol), DoubleType)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), DoubleType)
     }
-    schema
+    outputSchema
   }
 }
 
@@ -290,14 +290,14 @@ private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(varianceCol), DoubleType)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(varianceCol), DoubleType)
     }
     if ($(leafCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(leafCol), DoubleType)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), DoubleType)
     }
-    schema
+    outputSchema
   }
 }
 
@@ -417,11 +417,11 @@ private[ml] trait RandomForestClassifierParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
     }
-    schema
+    outputSchema
   }
 }
 
@@ -432,11 +432,11 @@ private[ml] trait RandomForestRegressorParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
     }
-    schema
+    outputSchema
   }
 }
 
@@ -515,11 +515,11 @@ private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
     }
-    schema
+    outputSchema
   }
 
   /**
@@ -563,11 +563,11 @@ private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams 
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    var schema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
     if ($(leafCol).nonEmpty) {
-      schema = SchemaUtils.appendColumn(schema, $(leafCol), new VectorUDT)
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
     }
-    schema
+    outputSchema
   }
 
   /**
