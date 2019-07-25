@@ -49,7 +49,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   override protected val blacklistedOnceBatches: Set[String] =
     Set("Pullup Correlated Expressions",
-        "Join Reorder"
+      "Join Reorder",
+      "Subquery",
+      "Extract Python UDFs"
     )
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
@@ -167,7 +169,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
-    Batch("Join Reorder", FixedPoint(1),
+    Batch("Join Reorder", Once,
       CostBasedJoinReorder) :+
     Batch("Remove Redundant Sorts", Once,
       RemoveRedundantSorts) :+
