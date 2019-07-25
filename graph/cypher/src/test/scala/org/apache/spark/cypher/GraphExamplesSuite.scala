@@ -27,7 +27,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
   test("create PropertyGraph from single NodeFrame") {
     val nodeData: DataFrame = spark.createDataFrame(Seq(0 -> "Alice", 1 -> "Bob")).toDF("id", "name")
     val nodeFrame: NodeFrame = NodeFrame.create(df = nodeData, "id", Set("Person"))
-    val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeFrame), Seq.empty)
+    val graph: PropertyGraph = cypherSession.createGraph(Array(nodeFrame), Array.empty[RelationshipFrame])
     val result: CypherResult = graph.cypher("MATCH (n) RETURN n")
     result.df.show()
   }
@@ -37,7 +37,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     val relationshipData: DataFrame = spark.createDataFrame(Seq((0, 0, 1))).toDF("id", "source", "target")
     val nodeFrame: NodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
     val relationshipFrame: RelationshipFrame = RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
-    val graph: PropertyGraph = cypherSession.createGraph(Seq(nodeFrame), Seq(relationshipFrame))
+    val graph: PropertyGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
     val result: CypherResult = graph.cypher(
       """
         |MATCH (a:Person)-[r:KNOWS]->(:Person)
@@ -58,7 +58,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     val knowsRF: RelationshipFrame = RelationshipFrame.create(knowsDF, "id", "source", "target", "KNOWS")
     val teachesRF: RelationshipFrame = RelationshipFrame.create(teachesDF, "id", "source", "target", "TEACHES")
 
-    val graph: PropertyGraph = cypherSession.createGraph(Seq(studentNF, teacherNF), Seq(knowsRF, teachesRF))
+    val graph: PropertyGraph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
     val result: CypherResult = graph.cypher("MATCH (n)-[r]->(m) RETURN n, r, m")
     result.df.show()
   }
@@ -76,7 +76,7 @@ class GraphExamplesSuite extends SparkFunSuite with SharedCypherContext {
     val knowsRF: RelationshipFrame = RelationshipFrame(knowsDF, "id", "source", "target", "KNOWS", Map("since" -> "col_since"))
     val teachesRF: RelationshipFrame = RelationshipFrame.create(teachesDF, "id", "source", "target", "TEACHES")
 
-    val graph: PropertyGraph = cypherSession.createGraph(Seq(studentNF, teacherNF), Seq(knowsRF, teachesRF))
+    val graph: PropertyGraph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
     val result: CypherResult = graph.cypher("MATCH (n)-[r]->(m) RETURN n, r, m")
     result.df.show()
   }

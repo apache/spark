@@ -61,10 +61,10 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
     throw UnsupportedOperationException("Graph construction with `CONSTRUCT` is not supported in Cypher 9")
   }
 
-  override def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame] = Seq.empty): PropertyGraph = {
-    require(nodes.groupBy(_.labelSet).forall(_._2.size == 1),
+  override def createGraph(nodes: Array[NodeFrame], relationships: Array[RelationshipFrame]): PropertyGraph = {
+    require(nodes.groupBy(_.labelSet).forall(_._2.length == 1),
       "There can be at most one NodeFrame per label set")
-    require(relationships.groupBy(_.relationshipType).forall(_._2.size == 1),
+    require(relationships.groupBy(_.relationshipType).forall(_._2.length == 1),
       "There can be at most one RelationshipFrame per relationship type")
 
     val normalizedNodes = nodes.map(nf => nf.copy(df = normalizeDf(nf)))
@@ -83,7 +83,7 @@ private[spark] class SparkCypherSession(override val sparkSession: SparkSession)
 
   override def load(path: String): PropertyGraph = {
     val graphImporter = GraphImporter(sparkSession, path, DEFAULT_FORMAT)
-    createGraph(graphImporter.nodeFrames, graphImporter.relationshipFrames)
+    createGraph(graphImporter.nodeFrames.toArray, graphImporter.relationshipFrames.toArray)
   }
 
   def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit = {

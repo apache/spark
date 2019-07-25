@@ -143,24 +143,7 @@ trait CypherSession extends Logging {
    * @param relationships RelationshipFrames that define the relationships in the graph
    * @since 3.0.0
    */
-  def createGraph(nodes: Seq[NodeFrame], relationships: Seq[RelationshipFrame]): PropertyGraph
-
-  /**
-   * Creates a [[PropertyGraph]] from a sequence of [[NodeFrame]]s and [[RelationshipFrame]]s.
-   * At least one [[NodeFrame]] has to be provided.
-   *
-   * For each label set and relationship type there can be at most one [[NodeFrame]] and at most one
-   * [[RelationshipFrame]], respectively.
-   *
-   * @param nodes         NodeFrames that define the nodes in the graph
-   * @param relationships RelationshipFrames that define the relationships in the graph
-   * @since 3.0.0
-   */
-  def createGraph(
-      nodes: java.util.List[NodeFrame],
-      relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
-    createGraph(nodes.asScala, relationships.asScala)
-  }
+  def createGraph(nodes: Array[NodeFrame], relationships: Array[RelationshipFrame]): PropertyGraph
 
   /**
    * Creates a [[PropertyGraph]] from nodes and relationships.
@@ -234,7 +217,7 @@ trait CypherSession extends Logging {
         relProperties)
     }
 
-    createGraph(nodeFrames.toSeq, relFrames.toSeq)
+    createGraph(nodeFrames.toArray, relFrames.toArray)
   }
 
   /**

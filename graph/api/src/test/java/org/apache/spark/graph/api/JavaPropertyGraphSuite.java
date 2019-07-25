@@ -83,8 +83,8 @@ public abstract class JavaPropertyGraphSuite implements Serializable {
                 .create(knowsDf, "id", "source", "target", "KNOWS");
 
         PropertyGraph graph = cypherSession.createGraph(
-                Lists.newArrayList(personNodeFrame),
-                Lists.newArrayList(knowsRelFrame));
+                new NodeFrame[]{personNodeFrame},
+                new RelationshipFrame[]{knowsRelFrame});
         List<Row> result = graph.nodes().collectAsList();
         Assert.assertEquals(2, result.size());
     }

@@ -56,7 +56,7 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
   private lazy val relationshipFrame: RelationshipFrame = RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
 
   test("save and load a graph") {
-    val graph = cypherSession.createGraph(Seq(nodeDataFrame), Seq(relationshipFrame))
+    val graph = cypherSession.createGraph(Array(nodeDataFrame), Array(relationshipFrame))
     graph.save(basePath)
 
     val readGraph = cypherSession.load(basePath)
@@ -75,7 +75,7 @@ class PropertyGraphReadWrite extends QueryTest with SharedCypherContext with Bef
     val relationshipFrame =
       RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
 
-    val writeGraph = cypherSession.createGraph(Seq(nodeFrame), Seq(relationshipFrame))
+    val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
     withTempDir(file => {
       cypherSession.save(writeGraph, file.getAbsolutePath, SaveMode.Overwrite)
