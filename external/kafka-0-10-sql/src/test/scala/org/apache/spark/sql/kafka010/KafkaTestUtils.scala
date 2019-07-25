@@ -488,4 +488,3 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     }
   }
 }
-
