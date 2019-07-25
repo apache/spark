@@ -18,9 +18,9 @@
 package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.types.{BooleanType, StructType}
 
 /**
  * Contains constants used for convention based column naming.
@@ -169,11 +169,21 @@ trait CypherSession extends Logging {
    * @since 3.0.0
    */
   def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
+    def validateLabelColumns(schema: StructType, columns: Set[String]): Unit = {
+      schema.fields.filter(f => columns.contains(f.name)).foreach(field => {
+        if (field.dataType != BooleanType) {
+          throw new IllegalArgumentException(s"Column ${field.name} must be of type BooleanType.")
+        }
+      })
+    }
+
     val idColumn = CypherSession.ID_COLUMN
     val sourceIdColumn = CypherSession.SOURCE_ID_COLUMN
     val targetIdColumn = CypherSession.TARGET_ID_COLUMN
 
     val labelColumns = nodes.columns.filter(_.startsWith(CypherSession.LABEL_COLUMN_PREFIX)).toSet
+    validateLabelColumns(nodes.schema, labelColumns)
+
     val nodeProperties = (nodes.columns.toSet - idColumn -- labelColumns)
       .map(col => col -> col)
       .toMap
@@ -206,6 +216,7 @@ trait CypherSession extends Logging {
 
     val relColumns = relationships.columns.toSet
     val relTypeColumns = relColumns.filter(_.startsWith(CypherSession.LABEL_COLUMN_PREFIX))
+    validateLabelColumns(relationships.schema, relTypeColumns)
     val propertyColumns = relColumns - idColumn - sourceIdColumn - targetIdColumn -- relTypeColumns
     val relProperties = propertyColumns.map(col => col -> col).toMap
     val relFrames = relTypeColumns.map { relTypeColumn =>
