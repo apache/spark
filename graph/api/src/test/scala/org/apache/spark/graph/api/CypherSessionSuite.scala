@@ -36,7 +36,7 @@ abstract class CypherSessionSuite extends QueryTest with SharedSparkSession with
     val relationshipFrame =
       RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
 
-    val writeGraph = cypherSession.createGraph(Seq(nodeFrame), Seq(relationshipFrame))
+    val writeGraph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
     withTempDir(file => {
       cypherSession.save(writeGraph, file.getAbsolutePath, SaveMode.Overwrite)

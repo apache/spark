@@ -34,7 +34,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
   test("create graph from NodeFrame") {
     val nodeData = spark.createDataFrame(Seq(0L -> "Alice", 1L -> "Bob")).toDF("id", "name")
     val nodeFrame = NodeFrame.create(nodeData, "id", Set("Person"))
-    val graph = cypherSession.createGraph(Seq(nodeFrame), Seq.empty)
+    val graph = cypherSession.createGraph(Array(nodeFrame), Array.empty[RelationshipFrame])
 
     val expectedDf = spark
       .createDataFrame(Seq((convertId(0L), true, "Alice"), (convertId(1L), true, "Bob")))
@@ -53,7 +53,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
     val relationshipFrame =
       RelationshipFrame.create(relationshipData, "id", "source", "target", "KNOWS")
 
-    val graph = cypherSession.createGraph(Seq(nodeFrame), Seq(relationshipFrame))
+    val graph = cypherSession.createGraph(Array(nodeFrame), Array(relationshipFrame))
 
     val expectedNodeDf = spark
       .createDataFrame(Seq((convertId(0L), true, "Alice"), (convertId(1L), true, "Bob")))
@@ -88,7 +88,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
     val knowsRF = RelationshipFrame.create(knowsDF, "id", "source", "target", "KNOWS")
     val teachesRF = RelationshipFrame.create(teachesDF, "id", "source", "target", "TEACHES")
 
-    val graph = cypherSession.createGraph(Seq(studentNF, teacherNF), Seq(knowsRF, teachesRF))
+    val graph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
 
     val expectedNodeDf = spark
       .createDataFrame(
@@ -155,7 +155,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
       Map("since" -> "col_since"))
     val teachesRF = RelationshipFrame.create(teachesDF, "id", "source", "target", "TEACHES")
 
-    val graph = cypherSession.createGraph(Seq(studentNF, teacherNF), Seq(knowsRF, teachesRF))
+    val graph = cypherSession.createGraph(Array(studentNF, teacherNF), Array(knowsRF, teachesRF))
 
     val expectedNodeDf = spark
       .createDataFrame(
