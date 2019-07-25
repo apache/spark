@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.Instance
