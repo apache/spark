@@ -876,6 +876,7 @@ This example shows a list of Spark configuration parameters for a Graphite sink:
 "spark.metrics.conf.*.sink.graphite.period"=10
 "spark.metrics.conf.*.sink.graphite.unit"=seconds
 "spark.metrics.conf.*.sink.graphite.prefix"="optional_prefix"
+"spark.metrics.conf.*.sink.graphite.regex"="optional_regex_to_send_matching_metrics"
 ```
 
 Default values of the Spark metrics configuration are as follows:

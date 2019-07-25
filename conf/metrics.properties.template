@@ -121,6 +121,7 @@
 #   unit      seconds       Unit of the poll period
 #   prefix    EMPTY STRING  Prefix to prepend to every metric's name
 #   protocol  tcp           Protocol ("tcp" or "udp") to use
+#   regex     NONE          Optional filter to send only metrics matching this regex string
 
 # org.apache.spark.metrics.sink.StatsdSink
 #   Name:     Default:      Description:
