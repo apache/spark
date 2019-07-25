@@ -199,33 +199,11 @@ class EncoderResolutionSuite extends PlanTest {
   test("SPARK-28497: complex type is not compatible with string encoder schema") {
     val encoder = ExpressionEncoder[String]
 
-    {
-      val attrs = Seq('a.struct('x.long))
+    Seq('a.struct('x.long), 'a.array(StringType), 'a.map(StringType, StringType)).foreach { attr =>
+      val attrs = Seq(attr)
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         s"""
-           |Cannot up cast `a` from struct<x:bigint> to string.
-           |The type path of the target object is:
-           |- root class: "java.lang.String"
-           |You can either add an explicit cast to the input data or choose a higher precision type
-        """.stripMargin.trim + " of the field in the target object")
-    }
-
-    {
-      val attrs = Seq('a.array(StringType))
-      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-        s"""
-           |Cannot up cast `a` from array<string> to string.
-           |The type path of the target object is:
-           |- root class: "java.lang.String"
-           |You can either add an explicit cast to the input data or choose a higher precision type
-        """.stripMargin.trim + " of the field in the target object")
-    }
-
-    {
-      val attrs = Seq('a.map(StringType, StringType))
-      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
-        s"""
-           |Cannot up cast `a` from map<string,string> to string.
+           |Cannot up cast `a` from ${attr.dataType.catalogString} to string.
            |The type path of the target object is:
            |- root class: "java.lang.String"
            |You can either add an explicit cast to the input data or choose a higher precision type
