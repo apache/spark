@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryExecNode, CoGroupedIterator, SparkPlan}
+import org.apache.spark.sql.types.StructType
 
 
 /**
@@ -68,13 +69,13 @@ case class FlatMapCoGroupsInPandasExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
 
-    val (schemaLeft, leftDedup, leftArgOffsets) = createSchema(left, leftGroup)
-    val (schemaRight, rightDedup, rightArgOffsets) = createSchema(right, rightGroup)
+    val (leftDedup, leftArgOffsets) = resolveArgOffsets(left, leftGroup)
+    val (rightDedup, rightArgOffsets) = resolveArgOffsets(right, rightGroup)
 
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
 
-      val leftGrouped = groupAndDedup(leftData, leftGroup, left.output, leftDedup)
-      val rightGrouped = groupAndDedup(rightData, rightGroup, right.output, rightDedup)
+      val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
+      val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)
       val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
         .map{case (_, l, r) => (l, r)}
 
@@ -82,8 +83,8 @@ case class FlatMapCoGroupsInPandasExec(
         chainedFunc,
         PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
         Array(leftArgOffsets ++ rightArgOffsets),
-        schemaLeft,
-        schemaRight,
+        StructType.fromAttributes(leftDedup),
+        StructType.fromAttributes(rightDedup),
         sessionLocalTimeZone,
         pythonRunnerConf)
 

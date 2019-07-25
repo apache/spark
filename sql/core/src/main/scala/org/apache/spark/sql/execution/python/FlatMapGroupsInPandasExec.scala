@@ -71,19 +71,19 @@ case class FlatMapGroupsInPandasExec(
   override protected def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
-    val (dedupSchema, dedupAttributes, argOffsets) = createSchema(child, groupingAttributes)
+    val (dedupAttributes, argOffsets) = resolveArgOffsets(child, groupingAttributes)
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
 
-      val data = groupAndDedup(iter, groupingAttributes, child.output, dedupAttributes)
+      val data = groupAndProject(iter, groupingAttributes, child.output, dedupAttributes)
         .map{case(_, x) => x}
 
       val runner = new ArrowPythonRunner(
         chainedFunc,
         PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
         Array(argOffsets),
-        dedupSchema,
+        StructType.fromAttributes(dedupAttributes),
         sessionLocalTimeZone,
         pythonRunnerConf)
 

@@ -386,6 +386,7 @@ def read_udfs(pickleSer, infile, eval_type):
     # group[1]: length of key indexes
     # group[2.. group[1] +2]: key attributes
     # group[group[1] +3 group[0]]: value attributes
+    # See BasePandasGroupExec.resolveArgOffsets for equivalent scala code
     def extract_key_value_indexes():
         parsed = []
         i = 0

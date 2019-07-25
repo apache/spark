@@ -435,7 +435,7 @@ class PandasCogroupSerializer(ArrowStreamPandasUDFSerializer):
 
     def load_stream(self, stream):
         """
-        Deserialize Cogroupes ArrowRecordBatches to a tuple of Arrow tables and return as a two
+        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and return as a two
         lists of pandas.Series.
         """
         reader = InterleavedArrowReader(stream)

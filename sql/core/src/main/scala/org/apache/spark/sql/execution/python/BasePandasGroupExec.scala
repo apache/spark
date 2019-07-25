@@ -45,7 +45,10 @@ abstract class BasePandasGroupExec(func: Expression,
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
-
+  /**
+   * passes the data to the python runner and coverts the resulting
+   * columnarbatch into internal rows.
+   */
   protected def executePython[T](
       data: Iterator[T],
       runner: BasePythonRunner[T, ColumnarBatch]): Iterator[InternalRow] = {
@@ -64,7 +67,10 @@ abstract class BasePandasGroupExec(func: Expression,
     }.map(unsafeProj)
   }
 
-  protected def groupAndDedup(
+  /**
+   * groups according to grouping attributes and then projects into the deduplicated schema
+   */
+  protected def groupAndProject(
       input: Iterator[InternalRow],
       groupingAttributes: Seq[Attribute],
       inputSchema: Seq[Attribute],
@@ -76,21 +82,26 @@ abstract class BasePandasGroupExec(func: Expression,
     }
   }
 
-  protected def createSchema(
-    child: SparkPlan,
-    groupingAttributes: Seq[Attribute]): (StructType, Seq[Attribute], Array[Int]) = {
-
-    // Deduplicate the grouping attributes.
-    // If a grouping attribute also appears in data attributes, then we don't need to send the
-    // grouping attribute to Python worker. If a grouping attribute is not in data attributes,
-    // then we need to send this grouping attribute to python worker.
-    //
-    // We use argOffsets to distinguish grouping attributes and data attributes as following:
-    //
-    // argOffsets[0] is the length of the argOffsets array
-    // argOffsets[1] is the length of grouping attributes
-    // argOffsets[2 .. argOffsets[0]+2] is the arg offsets for grouping attributes
-    // argOffsets[argOffsets[0]+2 .. ] is the arg offsets for data attributes
+  /**
+   * Returns a the deduplicated attributes of the spark plan and the arg offsets of the
+   * keys and values.
+   *
+   * The deduplicated attributes are needed because the spark plan may contain an attribute
+   * twice; once in the key and once in the value.  For any such attribute we need to
+   * deduplicate.
+   *
+   * The arg offsets are used to distinguish grouping grouping attributes and data attributes
+   * as following:
+   *
+   * argOffsets[0] is the length of the argOffsets array
+   *
+   * argOffsets[1] is the length of grouping attribute
+   * argOffsets[2 .. argOffsets[0]+2] is the arg offsets for grouping attributes
+   *
+   * argOffsets[argOffsets[0]+2 .. ] is the arg offsets for data attributes
+   */
+  protected def resolveArgOffsets(
+    child: SparkPlan, groupingAttributes: Seq[Attribute]): (Seq[Attribute], Array[Int]) = {
 
     val dataAttributes = child.output.drop(groupingAttributes.length)
     val groupingIndicesInData = groupingAttributes.map { attribute =>
@@ -100,13 +111,6 @@ abstract class BasePandasGroupExec(func: Expression,
     val groupingArgOffsets = new ArrayBuffer[Int]
     val nonDupGroupingAttributes = new ArrayBuffer[Attribute]
     val nonDupGroupingSize = groupingIndicesInData.count(_ == -1)
-
-    // Non duplicate grouping attributes are added to nonDupGroupingAttributes and
-    // their offsets are 0, 1, 2 ...
-    // Duplicate grouping attributes are NOT added to nonDupGroupingAttributes and
-    // their offsets are n + index, where n is the total number of non duplicate grouping
-    // attributes and index is the index in the data attributes that the grouping attribute
-    // is a duplicate of.
 
     groupingAttributes.zip(groupingIndicesInData).foreach {
       case (attribute, index) =>
@@ -127,7 +131,6 @@ abstract class BasePandasGroupExec(func: Expression,
 
     // Attributes after deduplication
     val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
-    val dedupSchema = StructType.fromAttributes(dedupAttributes)
-    (dedupSchema, dedupAttributes, argOffsets)
+    (dedupAttributes, argOffsets)
   }
 }
