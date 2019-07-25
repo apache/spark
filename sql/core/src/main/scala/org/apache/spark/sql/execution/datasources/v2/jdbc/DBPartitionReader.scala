@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import java.io.IOException
+import java.sql.ResultSet
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
@@ -25,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader.PartitionReader
-import org.apache.spark.sql.types.{StructType}
+import org.apache.spark.sql.types.StructType
 
 /*
  * Provides basic read implementation.
@@ -36,18 +37,10 @@ class DBPartitionReader(options: JDBCOptions, schema : StructType,
                         filters: Array[Filter], prunedCols: StructType)
   extends PartitionReader[InternalRow] with Logging {
   var retrievedRows = 0
-  val sqlSelectStmtWithFilters = s"SELECT $prunedCols from ${options.tableOrQuery} $filters"
-  val sqlSelectStmt = s"SELECT * from ${options.tableOrQuery}"
-  val tc = TaskContext.get
-  val inputMetrics = tc.taskMetrics().inputMetrics
-  val conn = JdbcUtils.createConnectionFactory(options)()
-  val stmt = conn.prepareStatement(sqlSelectStmt)
-  val rs = stmt.executeQuery()
-  val itrRowIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 
-  logInfo("***dsv2-flows*** DBPartitionReader created")
-  logInfo(s"***dsv2-flows*** DBPartitionReader SQL stmt $sqlSelectStmt")
-  logInfo(s"***dsv2-flows*** DBPartitionReader SQLWithFilters stmt is $sqlSelectStmtWithFilters")
+  logInfo(s"***dsv2-flows*** passed pruned cols : $prunedCols and filters : $filters")
+
+  var itrRowIterator = Utils.executeSelect(options, prunedCols, filters, schema)
 
   @throws[IOException]
   def next(): Boolean = {

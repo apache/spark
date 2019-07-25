@@ -5,7 +5,7 @@
 |-----------------------------------------------| ----------- | ------ |
 | Batch write ( append, overwrite, truncate)    | shivsood    | WIP    |
 | Streaming write                               | TBD         |        |
-| Read path implementation                      | TBD         |        |
+| Read path implementation                      | shivsood    | WIP    |
 | Streaming read                                | TBD         |        |
 | ??                                            | TBD         |        |
 

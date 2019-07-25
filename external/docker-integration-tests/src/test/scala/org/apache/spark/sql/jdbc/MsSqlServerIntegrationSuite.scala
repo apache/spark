@@ -103,16 +103,17 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       """.stripMargin).executeUpdate()
     conn.prepareStatement(
       """
-        |CREATE TABLE strings_numbers (
-        |i NVarChar(10),
+        |CREATE TABLE dsv2testTbl (
+        |i NVarChar(20),
         |j INT,
         |k NVarChar(20))
       """.stripMargin).executeUpdate()
     conn.prepareStatement(
       """
-        |INSERT INTO strings_numbers VALUES (
-        |'string',38,
-        |'big string')
+        |INSERT INTO dsv2testTbl VALUES (
+        |'The number',
+        |1,
+        |'Rocks!')
       """.stripMargin).executeUpdate()
   }
 
@@ -130,21 +131,31 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     spark.createDataFrame(spark.sparkContext.parallelize(data),schema)
   }
 
+  test("JDBCV2 read test") {
+    // Read table with JDBCV2
+    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","dsv2testTbl").load()
+    val numberOfRows = df1.count
+    df1.show(10)
+    val df2 = spark.read.format("jdbcv2").option("url",jdbcUrl).option("dbtable","dsv2testTbl").load()
+    df2.show(10)
+    assert(df2.count == numberOfRows)
+  }
+
   test("JDBCV2 write append test") {
     // Read 1 row using JDBC. Write(append) this row using jdbcv2.
-    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
+    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").load()
     df1.show(10)
     assert(df1.count == 1)
-    df1.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "strings_numbers").save()
-    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
+    df1.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").save()
+    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").load()
     df2.show(10)
     assert(df2.count == 2)
 
     // Create a df with diffirent schema and append this to existing table. No convinced why this
     // is passing. writing a dataframe with diffirent schema should fail.
     val df_new = create_test_df()
-    df_new.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "strings_numbers").save()
-    val df2_new = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "strings_numbers").load()
+    df_new.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").save()
+    val df2_new = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").load()
     df2_new.show(10)
     assert(df2_new.count == 4)
   }
@@ -153,19 +164,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     // Overwrite a existing table with a new schema and values.
     val df1 = create_test_df()
     // Overwrite test. Overwrite mode create a new table if it does not exist
-    df1.write.format("jdbcv2").mode("overwrite").option("url",jdbcUrl).option("dbtable","strings_numbers").save()
-    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","strings_numbers").load()
+    df1.write.format("jdbcv2").mode("overwrite").option("url",jdbcUrl).option("dbtable","dsv2testTbl").save()
+    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","dsv2testTbl").load()
     df2.show()
-  }
-
-  test("JDBCV2 read test") {
-    // Read table with JDBCV2
-    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","strings_numbers").load()
-    val numberOfRows = df1.count
-    val df2 = spark.read.format("jdbcv2").option("url",jdbcUrl).option("dbtable","strings_numbers").load()
-    df2.show(10)
-    df2.select("i").show(10)
-    assert(df2.count == numberOfRows)
   }
 
   test("Basic test") {
