@@ -183,18 +183,13 @@ class MinMaxScalerModel private[ml] (
     val minValue = $(min)
 
     // transformed value for constant cols
-    val constantOutput = 0.5 * scale + minValue
+    val constantOutput = ($(min) + $(max)) / 2
     val minArray = originalMin.toArray
 
-    val scaleArray = new Array[Double](numFeatures)
-    var i = 0
-    while (i < numFeatures) {
-      // scaleArray(i) == 0 iff i-th col is constant
+    val scaleArray = Array.tabulate(numFeatures) { i =>
       val range = originalMax(i) - originalMin(i)
-      if (range != 0) {
-        scaleArray(i) = scale / range
-      }
-      i += 1
+      // scaleArray(i) == 0 iff i-th col is constant (range == 0)
+      if (range != 0) scale / range else 0.0
     }
 
     val transformer = udf { vector: Vector =>
