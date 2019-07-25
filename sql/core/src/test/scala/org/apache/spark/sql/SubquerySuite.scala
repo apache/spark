@@ -1600,5 +1600,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
                     |       )
                     |   ) = 2""".stripMargin)
     checkAnswer(df, df2)
+    checkAnswer(df, Nil)
   }
 }
