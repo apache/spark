@@ -60,6 +60,7 @@ trait CypherSession extends Logging {
    * Executes a Cypher query on the given input graph.
    *
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
    * @param graph [[PropertyGraph]] on which the query is executed
    * @param query Cypher query to execute
    * @since 3.0.0
@@ -70,6 +71,7 @@ trait CypherSession extends Logging {
    * Executes a Cypher query on the given input graph.
    *
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
    * @param graph      [[PropertyGraph]] on which the query is executed
    * @param query      Cypher query to execute
    * @param parameters parameters used by the Cypher query
@@ -81,6 +83,7 @@ trait CypherSession extends Logging {
    * Executes a Cypher query on the given input graph.
    *
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
    * @param graph      [[PropertyGraph]] on which the query is executed
    * @param query      Cypher query to execute
    * @param parameters parameters used by the Cypher query
