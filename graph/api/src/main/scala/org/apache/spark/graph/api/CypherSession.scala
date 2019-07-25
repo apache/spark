@@ -45,9 +45,8 @@ object CypherSession {
 }
 
 /**
- * The entry point for using property graphs in Spark.
- *
- * Provides factory methods for creating [[PropertyGraph]] instances.
+ * A CypherSession allows for creating, storing and loading [[PropertyGraph]] instances as well as
+ * executing Cypher queries on them.
  *
  * Wraps a [[org.apache.spark.sql.SparkSession]].
  *
