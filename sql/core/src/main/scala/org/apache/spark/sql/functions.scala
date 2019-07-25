@@ -24,7 +24,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.api.java.function._
+import org.apache.spark.api.java.function.{Function => JavaFunction, Function2 => JavaFunction2, Function3 => JavaFunction3}
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
@@ -3338,20 +3338,20 @@ object functions {
     LambdaFunction(function, Seq(x, y, z))
   }
 
-  private def createLambda(f: Function[Column, Column]) = {
+  private def createLambda(f: JavaFunction[Column, Column]) = {
     val x = UnresolvedNamedLambdaVariable(Seq("x"))
     val function = f.call(Column(x)).expr
     LambdaFunction(function, Seq(x))
   }
 
-  private def createLambda(f: Function2[Column, Column, Column]) = {
+  private def createLambda(f: JavaFunction2[Column, Column, Column]) = {
     val x = UnresolvedNamedLambdaVariable(Seq("x"))
     val y = UnresolvedNamedLambdaVariable(Seq("y"))
     val function = f.call(Column(x), Column(y)).expr
     LambdaFunction(function, Seq(x, y))
   }
 
-  private def createLambda(f: Function3[Column, Column, Column, Column]) = {
+  private def createLambda(f: JavaFunction3[Column, Column, Column, Column]) = {
     val x = UnresolvedNamedLambdaVariable(Seq("x"))
     val y = UnresolvedNamedLambdaVariable(Seq("y"))
     val z = UnresolvedNamedLambdaVariable(Seq("z"))
@@ -3479,7 +3479,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def transform(column: Column, f: Function[Column, Column]): Column = withExpr {
+  def transform(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayTransform(column.expr, createLambda(f))
   }
 
@@ -3489,7 +3489,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def transform(column: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+  def transform(column: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     ArrayTransform(column.expr, createLambda(f))
   }
 
@@ -3498,7 +3498,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def exists(column: Column, f: Function[Column, Column]): Column = withExpr {
+  def exists(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayExists(column.expr, createLambda(f))
   }
 
@@ -3507,7 +3507,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def filter(column: Column, f: Function[Column, Column]): Column = withExpr {
+  def filter(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayFilter(column.expr, createLambda(f))
   }
 
@@ -3518,8 +3518,8 @@ object functions {
    *
    * @group collection_funcs
    */
-  def aggregate(expr: Column, zero: Column, merge: Function2[Column, Column, Column],
-                finish: Function[Column, Column]): Column = withExpr {
+  def aggregate(expr: Column, zero: Column, merge: JavaFunction2[Column, Column, Column],
+                finish: JavaFunction[Column, Column]): Column = withExpr {
     ArrayAggregate(
       expr.expr,
       zero.expr,
@@ -3534,8 +3534,9 @@ object functions {
    *
    * @group collection_funcs
    */
-  def aggregate(expr: Column, zero: Column, merge: Function2[Column, Column, Column]): Column =
-    aggregate(expr, zero, merge, new Function[Column, Column] { def call(c: Column): Column = c })
+  def aggregate(expr: Column, zero: Column, merge: JavaFunction2[Column, Column, Column]): Column =
+    aggregate(
+      expr, zero, merge, new JavaFunction[Column, Column] { def call(c: Column): Column = c })
 
   /**
    * (Java-specific) Merge two given arrays, element-wise, into a signle array using a function.
@@ -3544,7 +3545,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def zip_with(left: Column, right: Column, f: Function2[Column, Column, Column]): Column =
+  def zip_with(left: Column, right: Column, f: JavaFunction2[Column, Column, Column]): Column =
     withExpr {
       ZipWith(left.expr, right.expr, createLambda(f))
     }
@@ -3555,7 +3556,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def transform_keys(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+  def transform_keys(expr: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     TransformKeys(expr.expr, createLambda(f))
   }
 
@@ -3565,7 +3566,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def transform_values(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+  def transform_values(expr: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     TransformValues(expr.expr, createLambda(f))
   }
 
@@ -3574,7 +3575,7 @@ object functions {
    *
    * @group collection_funcs
    */
-  def map_filter(expr: Column, f: Function2[Column, Column, Column]): Column = withExpr {
+  def map_filter(expr: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     MapFilter(expr.expr, createLambda(f))
   }
 
@@ -3584,7 +3585,7 @@ object functions {
    * @group collection_funcs
    */
   def map_zip_with(left: Column, right: Column,
-                   f: Function3[Column, Column, Column, Column]): Column = withExpr {
+                   f: JavaFunction3[Column, Column, Column, Column]): Column = withExpr {
     MapZipWith(left.expr, right.expr, createLambda(f))
   }
 
