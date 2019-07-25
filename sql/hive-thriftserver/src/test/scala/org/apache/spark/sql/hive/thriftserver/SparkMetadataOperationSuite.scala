@@ -199,8 +199,9 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       // Hive does not have an overlay function, we use overlay to test.
       checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"))
-      checkResult(metaData.getFunctions(null, "default", "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
+      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq.empty)
     }
   }
 }
