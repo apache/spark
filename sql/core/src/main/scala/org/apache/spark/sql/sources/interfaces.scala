@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.sources
 
+import java.util
+
 import org.apache.spark.annotation._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalog.v2.TableCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.sources.v2.{Table, TableCapability}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -312,4 +315,28 @@ trait InsertableRelation {
 @Unstable
 trait CatalystScan {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
+}
+
+/**
+ * A special `TableCatalog` which returns `DataSourceV1Table`.
+ *
+ * @since 3.0.0
+ */
+@Experimental
+@Unstable
+trait DataSourceV1TableCatalog extends TableCatalog
+
+/**
+ * A special Data Source V2 `Table`, which doesn't need to implement the read/write capabilities.
+ * Spark will fallback the read/write requests to the v1 relation.
+ *
+ * @since 3.0.0
+ */
+@Experimental
+@Unstable
+trait DataSourceV1Table extends Table {
+
+  override def capabilities(): util.Set[TableCapability] = util.Collections.emptySet()
+
+  def v1Relation: BaseRelation
 }

@@ -183,7 +183,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }

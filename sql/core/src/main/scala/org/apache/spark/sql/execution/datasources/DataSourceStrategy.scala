@@ -34,10 +34,11 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoDir, InsertIntoTable, LogicalPlan, OverwriteByExpression, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -240,6 +241,12 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
     })
   }
 
+  private def fallbackToV1Relation(
+      t: DataSourceV1Table,
+      existingOutput: Seq[AttributeReference]): LogicalRelation = {
+    LogicalRelation(t.v1Relation, existingOutput, catalogTable = None, isStreaming = false)
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
@@ -253,6 +260,16 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
     case UnresolvedCatalogRelation(tableMeta) =>
       DDLUtils.readHiveTable(tableMeta)
+
+    case AppendData(DataSourceV2Relation(t: DataSourceV1Table, output, _), query, false) =>
+      InsertIntoDataSourceCommand(fallbackToV1Relation(t, output), query, overwrite = false)
+
+    case OverwriteByExpression(
+        DataSourceV2Relation(t: DataSourceV1Table, output, _), Literal(true, _), query, false) =>
+      InsertIntoDataSourceCommand(fallbackToV1Relation(t, output), query, overwrite = true)
+
+    case DataSourceV2Relation(t: DataSourceV1Table, output, _) =>
+      fallbackToV1Relation(t, output)
   }
 }
 

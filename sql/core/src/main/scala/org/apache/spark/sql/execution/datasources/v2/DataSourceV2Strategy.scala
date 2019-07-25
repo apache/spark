@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.DataSourceV1TableCatalog
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -170,6 +171,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(
             staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+        case v1Catalog: DataSourceV1TableCatalog =>
+          CreateV1TableAsSelectExec(
+            v1Catalog, ident, parts, query, props, writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(
             catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil

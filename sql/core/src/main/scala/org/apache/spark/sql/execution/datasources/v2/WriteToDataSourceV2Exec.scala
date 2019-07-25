@@ -26,14 +26,15 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
+import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.sources.{AlwaysTrue, DataSourceV1Table, DataSourceV1TableCatalog, Filter, InsertableRelation}
 import org.apache.spark.sql.sources.v2.{StagedTable, SupportsWrite}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -48,6 +49,43 @@ case class WriteToDataSourceV2(batchWrite: BatchWrite, query: LogicalPlan)
   extends LogicalPlan {
   override def children: Seq[LogicalPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
+}
+
+case class CreateV1TableAsSelectExec(
+    catalog: DataSourceV1TableCatalog,
+    ident: Identifier,
+    partitioning: Seq[Transform],
+    query: LogicalPlan,
+    properties: Map[String, String],
+    writeOptions: CaseInsensitiveStringMap,
+    ifNotExists: Boolean) extends LeafExecNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    if (catalog.tableExists(ident)) {
+      if (ifNotExists) {
+        return sparkContext.emptyRDD[InternalRow]
+      }
+
+      throw new TableAlreadyExistsException(ident)
+    }
+
+    Utils.tryWithSafeFinallyAndFailureCallbacks({
+      catalog.createTable(
+        ident, query.schema, partitioning.toArray, properties.asJava) match {
+        case table: DataSourceV1Table =>
+          table.v1Relation.asInstanceOf[InsertableRelation].insert(
+            Dataset.ofRows(sqlContext.sparkSession, query), overwrite = false)
+          sparkContext.emptyRDD[InternalRow]
+
+        case _ =>
+          throw new SparkException(s"DataSourceV1TableCatalog must create DataSourceV1Table.")
+      }
+    })(catchBlock = {
+      catalog.dropTable(ident)
+    })
+  }
 }
 
 /**
