@@ -29,7 +29,7 @@ import org.apache.spark.sql.DataFrame
  *
  * @since 3.0.0
  */
-abstract class GraphElementFrame {
+sealed abstract class GraphElementFrame {
 
   /**
    * Initial DataFrame that can still contain unmapped, arbitrarily ordered columns.
@@ -93,10 +93,10 @@ object NodeFrame {
    * @since 3.0.0
    */
   def create(
-              df: DataFrame,
-              idColumn: String,
-              labelSet: Set[String],
-              properties: Map[String, String]): NodeFrame = {
+      df: DataFrame,
+      idColumn: String,
+      labelSet: Set[String],
+      properties: Map[String, String]): NodeFrame = {
     NodeFrame(df, idColumn, labelSet, properties)
   }
 
@@ -126,10 +126,10 @@ object NodeFrame {
    * @since 3.0.0
    */
   def create(
-              df: DataFrame,
-              idColumn: String,
-              labelSet: java.util.Set[String],
-              properties: java.util.Map[String, String]): NodeFrame = {
+      df: DataFrame,
+      idColumn: String,
+      labelSet: java.util.Set[String],
+      properties: java.util.Map[String, String]): NodeFrame = {
     val scalaLabelSet = labelSet.asScala.toSet
     val scalaProperties = properties.asScala.toMap
     NodeFrame(df, idColumn, scalaLabelSet, scalaProperties)
@@ -150,11 +150,11 @@ object NodeFrame {
  * @since 3.0.0
  */
 case class NodeFrame private[graph] (
-                                      df: DataFrame,
-                                      idColumn: String,
-                                      labelSet: Set[String],
-                                      properties: Map[String, String])
-  extends GraphElementFrame
+    df: DataFrame,
+    idColumn: String,
+    labelSet: Set[String],
+    properties: Map[String, String])
+    extends GraphElementFrame
 
 object RelationshipFrame {
 
@@ -171,11 +171,11 @@ object RelationshipFrame {
    * @since 3.0.0
    */
   def create(
-              df: DataFrame,
-              idColumn: String,
-              sourceIdColumn: String,
-              targetIdColumn: String,
-              relationshipType: String): RelationshipFrame = {
+      df: DataFrame,
+      idColumn: String,
+      sourceIdColumn: String,
+      targetIdColumn: String,
+      relationshipType: String): RelationshipFrame = {
     val properties = (df.columns.toSet - idColumn - sourceIdColumn - targetIdColumn)
       .map(columnName => columnName -> columnName)
       .toMap
@@ -195,12 +195,12 @@ object RelationshipFrame {
    * @since 3.0.0
    */
   def create(
-              df: DataFrame,
-              idColumn: String,
-              sourceIdColumn: String,
-              targetIdColumn: String,
-              relationshipType: String,
-              properties: Map[String, String]): RelationshipFrame = {
+      df: DataFrame,
+      idColumn: String,
+      sourceIdColumn: String,
+      targetIdColumn: String,
+      relationshipType: String,
+      properties: Map[String, String]): RelationshipFrame = {
     RelationshipFrame(df, idColumn, sourceIdColumn, targetIdColumn, relationshipType, properties)
   }
 
@@ -216,12 +216,12 @@ object RelationshipFrame {
    * @since 3.0.0
    */
   def create(
-              df: DataFrame,
-              idColumn: String,
-              sourceIdColumn: String,
-              targetIdColumn: String,
-              relationshipType: String,
-              properties: java.util.Map[String, String]): RelationshipFrame = {
+      df: DataFrame,
+      idColumn: String,
+      sourceIdColumn: String,
+      targetIdColumn: String,
+      relationshipType: String,
+      properties: java.util.Map[String, String]): RelationshipFrame = {
     RelationshipFrame(
       df,
       idColumn,
@@ -247,13 +247,13 @@ object RelationshipFrame {
  * @since 3.0.0
  */
 case class RelationshipFrame private[graph] (
-                                              df: DataFrame,
-                                              idColumn: String,
-                                              sourceIdColumn: String,
-                                              targetIdColumn: String,
-                                              relationshipType: String,
-                                              properties: Map[String, String])
-  extends GraphElementFrame {
+    df: DataFrame,
+    idColumn: String,
+    sourceIdColumn: String,
+    targetIdColumn: String,
+    relationshipType: String,
+    properties: Map[String, String])
+    extends GraphElementFrame {
 
   override def idColumns: Seq[String] = Seq(idColumn, sourceIdColumn, targetIdColumn)
 
