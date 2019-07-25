@@ -87,6 +87,7 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
+  // A constructor for tests.
   private[sql] def this(sc: SparkContext, existingSharedState: Option[SharedState]) {
     this(sc, existingSharedState, None,
       SparkSession.applyExtensions(

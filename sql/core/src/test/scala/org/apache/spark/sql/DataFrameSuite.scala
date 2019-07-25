@@ -476,7 +476,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("withColumns: case sensitive") {
-    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, true)
+    setConf(SQLConf.CASE_SENSITIVE, true)
     val data = Seq(0, 1).toDF("key")
     val df = data.withColumns(Seq("newCol1", "newCOL1"),
       Seq(col("key") + 1, col("key") + 2))
@@ -569,7 +569,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
 
   test("SPARK-28189 drop column using drop with column reference with case-insensitive names") {
     // With SQL config caseSensitive OFF, case insensitive column name should work
-    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    setConf(SQLConf.CASE_SENSITIVE, false)
     val col1 = testData("KEY")
     val df1 = testData.drop(col1)
     checkAnswer(df1, testData.selectExpr("value"))
@@ -772,7 +772,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
 
   test("inputFiles") {
     Seq("csv", "").foreach { useV1List =>
-      spark.sessionState.conf.setConf(SQLConf.USE_V1_SOURCE_READER_LIST, useV1List)
+      setConf(SQLConf.USE_V1_SOURCE_READER_LIST, useV1List)
       withTempDir { dir =>
         val df = Seq((1, 22)).toDF("a", "b")
 
@@ -1181,7 +1181,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    spark.sessionState.conf.setConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME, false)
+    setConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME, false)
     val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
     checkAnswer(
       df.select(df("`a.b`.c.`d..e`.`f`")),
@@ -1446,7 +1446,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
-    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    setConf(SQLConf.CASE_SENSITIVE, false)
     withTempPath { path =>
       Seq(2012 -> "a").toDF("year", "val").write.partitionBy("year").parquet(path.getAbsolutePath)
       val df = spark.read.parquet(path.getAbsolutePath)
@@ -1567,7 +1567,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("fix case sensitivity of partition by") {
-    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    setConf(SQLConf.CASE_SENSITIVE, false)
     withTempPath { path =>
       val p = path.getAbsolutePath
       Seq(2012 -> "a").toDF("year", "val").write.partitionBy("yEAr").parquet(p)
@@ -1577,7 +1577,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
 
   // This test case is to verify a bug when making a new instance of LogicalRDD.
   test("SPARK-11633: LogicalRDD throws TreeNode Exception: Failed to Copy Node") {
-    spark.sessionState.conf.setConf(SQLConf.CASE_SENSITIVE, false)
+    setConf(SQLConf.CASE_SENSITIVE, false)
     val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
     val df = spark.createDataFrame(
       rdd,
@@ -1653,7 +1653,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("reuse exchange") {
-    spark.sessionState.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 2L)
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 2L)
     val df = spark.range(100).toDF()
     val join = df.join(df, "id")
     val plan = join.queryExecution.executedPlan
@@ -1787,7 +1787,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
     withTable("bar") {
-      spark.sessionState.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "json")
+      setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "json")
       sql("select 0 as id").createOrReplaceTempView("foo")
       val df = sql("select * from foo group by id")
       // If we optimize the query in CTAS more than once, the following saveAsTable will fail
@@ -1797,7 +1797,6 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
       val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
       assert(tableMetadata.provider == Some("json"),
         "the expected table is a data source table using json")
-
     }
   }
 
@@ -1872,7 +1871,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("SPARK-17957: outer join + na.fill") {
-    spark.sessionState.conf.setConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME, false)
+    setConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME, false)
     val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
     val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
     val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
@@ -1922,10 +1921,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
     val filter = (0 until N)
       .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
 
-    spark.sessionState.conf.setConf(SQLConf.CODEGEN_FALLBACK, true)
+    setConf(SQLConf.CODEGEN_FALLBACK, true)
     df.filter(filter).count()
 
-    spark.sessionState.conf.setConf(SQLConf.CODEGEN_FALLBACK, false)
+    setConf(SQLConf.CODEGEN_FALLBACK, false)
     val e = intercept[SparkException] {
       df.filter(filter).count()
     }.getMessage
@@ -1934,7 +1933,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
 
   test("SPARK-20897: cached self-join should not fail") {
     // force to plan sort merge join
-    spark.sessionState.conf.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 0L)
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 0L)
     val df = Seq(1 -> "a").toDF("i", "j")
     val df1 = df.as("t1")
     val df2 = df.as("t2")
@@ -2043,7 +2042,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
   }
 
   test("SPARK-24781: Using a reference not in aggregation in Filter/Sort") {
-    spark.sessionState.conf.setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
+    setConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS, false)
     val df = Seq(("test1", 0), ("test2", 1)).toDF("name", "id")
 
     val aggPlusSort1 = df.groupBy(df("name")).agg(count(df("name"))).orderBy(df("name"))

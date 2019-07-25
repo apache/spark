@@ -23,7 +23,7 @@ import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{DebugFilesystem, SparkConf}
-import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
+import org.apache.spark.internal.config.{ConfigEntry, UNSAFE_EXCEPTION_ON_MEMORY_LEAK}
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -68,6 +68,10 @@ trait SharedSparkSession
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
+
+  def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
+    spark.sessionState.conf.setConf(entry, value)
+  }
 
   protected def createSparkSession: TestSparkSession = {
     SparkSession.cleanupAnyExistingSession()
