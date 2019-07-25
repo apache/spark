@@ -1425,7 +1425,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     registerTestUDF(pythonTestUDF, spark)
 
     checkAnswer(
-      sql("""SELECT
+      sql("""
+            |SELECT
             |  l.a AS grp_a
             |FROM l GROUP BY l.a
             |HAVING
@@ -1443,7 +1444,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     registerTestUDF(pythonTestUDF, spark)
 
     checkAnswer(
-      sql("""SELECT
+      sql("""
+            |SELECT
             |  l.a AS aval,
             |  sum(
             |    (
@@ -1470,7 +1472,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(2) :: Row(2) :: Row(3) :: Row(6) :: Nil)
     // Case 3: COUNT inside aggregate expression but no COUNT bug.
     checkAnswer(
-      sql("""SELECT
+      sql("""
+            |SELECT
             |  l.a
             |FROM l WHERE
             |  (
@@ -1487,7 +1490,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     registerTestUDF(pythonTestUDF, spark)
 
     checkAnswer(
-      sql("""SELECT l.a FROM l
+      sql("""
+            |SELECT l.a FROM l
             |WHERE (
             |    SELECT cntPlusOne + 1 AS cntPlusTwo FROM (
             |        SELECT cnt + 1 AS cntPlusOne FROM (
@@ -1506,7 +1510,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     registerTestUDF(pythonTestUDF, spark)
 
     checkAnswer(
-      sql("""SELECT
+      sql("""
+            |SELECT
             |  l.a
             |FROM l WHERE
             |  (
@@ -1559,7 +1564,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-28441: COUNT bug in nested subquery with non-foldable expr") {
     checkAnswer(
-      sql("""SELECT l.a FROM l
+      sql("""
+            |SELECT l.a FROM l
             |WHERE (
             |    SELECT cntPlusOne + 1 AS cntPlusTwo FROM (
             |        SELECT cnt + 1 AS cntPlusOne FROM (
@@ -1572,7 +1578,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-28441: COUNT bug with non-foldable expression in Filter condition") {
-    val df = sql("""SELECT
+    val df = sql("""
+                   |SELECT
                    |  l.a
                    |  FROM l WHERE
                    |  (
@@ -1584,7 +1591,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
                    |      )
                    |    )
                    |  ) = 2""".stripMargin)
-    val df2 = sql("""SELECT
+    val df2 = sql("""
+                    |SELECT
                     |  l.a
                     |FROM l WHERE
                     |  (
