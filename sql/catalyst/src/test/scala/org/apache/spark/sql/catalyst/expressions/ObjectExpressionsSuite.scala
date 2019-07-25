@@ -124,7 +124,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Return null when null argument is passed with propagateNull = true
     val stringCls = classOf[java.lang.String]
     checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
-      Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = true),
+      Seq(BoundReference(0, ObjectType(classOf[Object]), true))),
       null, InternalRow.fromSeq(Seq(null)))
     checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
       Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = false),
@@ -330,9 +330,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case null =>
           assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
         case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
-          assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
+          assert(result.asInstanceOf[java.util.List[_]].asScala == expected)
         case s if classOf[Seq[_]].isAssignableFrom(s) =>
-          assert(result.asInstanceOf[Seq[_]].toSeq == expected)
+          assert(result.asInstanceOf[Seq[_]] == expected)
         case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
           assert(result.asInstanceOf[scala.collection.Set[_]] == expected.toSet)
       }
@@ -424,7 +424,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("LambdaVariable should support interpreted execution") {
     def genSchema(dt: DataType): Seq[StructType] = {
       Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
-        StructType(StructField("col_1", dt, nullable = true) :: Nil))
+        StructType(StructField("col_1", dt) :: Nil))
     }
 
     val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
@@ -438,7 +438,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     val structTypes = elementTypes.flatMap { elementType =>
       Seq(StructType(StructField("col1", elementType, false) :: Nil),
-        StructType(StructField("col1", elementType, true) :: Nil))
+        StructType(StructField("col1", elementType) :: Nil))
     }
 
     val testTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
@@ -531,8 +531,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private def scalaMapSerializerFor[T: TypeTag, U: TypeTag](inputObject: Expression): Expression = {
     import org.apache.spark.sql.catalyst.ScalaReflection._
-
-    val curId = new java.util.concurrent.atomic.AtomicInteger()
 
     def kvSerializerFor[V: TypeTag](inputObject: Expression): Expression =
          localTypeOf[V].dealias match {
