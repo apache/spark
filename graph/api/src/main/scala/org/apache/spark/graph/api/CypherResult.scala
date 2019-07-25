@@ -27,6 +27,8 @@ import org.apache.spark.sql.DataFrame
  * @since 3.0.0
  */
 trait CypherResult {
+  // Note that representing the CypherResult as a trait allows for future extensions
+  // (e.g. returning graphs in addition to tables).
 
   /**
    * Contains the result rows.
