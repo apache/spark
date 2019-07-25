@@ -121,6 +121,9 @@ trait CypherSession extends Logging{
    *     Property columns: `{Property_Key}` (nodes and relationships)
    * }}}
    *
+   * @note It is recommended to cache the input DataFrames if they represent multiple label sets and
+   *       relationship types.
+   *
    * @see [[CypherSession]]
    * @param nodes         node DataFrame
    * @param relationships relationship DataFrame
