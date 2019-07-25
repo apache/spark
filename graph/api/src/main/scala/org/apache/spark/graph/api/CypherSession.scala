@@ -38,7 +38,7 @@ object CypherSession {
  *
  * @since 3.0.0
  */
-trait CypherSession extends Logging{
+trait CypherSession extends Logging {
 
   def sparkSession: SparkSession
 
@@ -69,9 +69,10 @@ trait CypherSession extends Logging{
    * @param parameters parameters used by the Cypher query
    * @since 3.0.0
    */
-  def cypher(graph: PropertyGraph,
-             query: String,
-             parameters: java.util.Map[String, Object]): CypherResult = {
+  def cypher(
+      graph: PropertyGraph,
+      query: String,
+      parameters: java.util.Map[String, Object]): CypherResult = {
     cypher(graph, query, parameters.asScala.toMap)
   }
 
@@ -141,7 +142,8 @@ trait CypherSession extends Logging{
 
     val labelCount = labelColumns.size
     if (labelCount > 5) {
-      log.warn(s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
+      log.warn(
+        s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
       if (labelCount > 10) {
         throw new IllegalArgumentException(
           s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
