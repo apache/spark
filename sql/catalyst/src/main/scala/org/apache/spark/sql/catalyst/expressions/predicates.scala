@@ -842,49 +842,62 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
 
-object BooleanTest {
-  // Check the argument of boolean test is valid.
-  def checkBooleanTestArgs(v: Any): Unit = {
-    if (v != null && !v.isInstanceOf[Boolean]) {
-      throw new AnalysisException("argument of Boolean Test must be boolean or null, " +
-        s"not type $v")
-    }
-  }
-
-  def calculate(v: Any, booleanValue: Boolean): Boolean = {
-    checkBooleanTestArgs(v)
-    booleanValue match {
-      case true => v == true
-      case false => v == false
-    }
-  }
-}
-
-/**
- * Test the value of an expression is true, false, or unknown.
- */
-case class BooleanTest(child: Expression, booleanOpt: Option[Boolean])
-  extends UnaryExpression with Predicate {
+abstract class BooleanTest(boolValue: Boolean, whenNull: Boolean)
+  extends UnaryExpression with Predicate with ExpectsInputTypes {
 
   override def nullable: Boolean = false
+  override def inputTypes: Seq[DataType] = Seq(BooleanType)
 
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
-    booleanOpt match {
-      case None =>
-        value == null
-      case other =>
-        BooleanTest.calculate(value, booleanOpt.get)
+    Option(value) match {
+      case None => whenNull
+      case other => value == boolValue
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, input => booleanOpt match {
-      case None => s"$input == null"
-      case other => "org.apache.spark.sql.catalyst.expressions.BooleanTest" +
-        s".calculate($input, ${booleanOpt.get});"
-    })
+    val eval = child.genCode(ctx)
+    val boolVar = if (boolValue) "true" else "false"
+    val nagationPrefix = if (!whenNull) "!" else ""
+    ev.copy(code = code"""
+      ${eval.code}
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      ${ev.value} = $nagationPrefix${eval.isNull} && ${eval.value} == $boolVar;""",
+      isNull = FalseLiteral)
   }
+}
 
-  override def sql: String = s"""(${child.sql} IS ${booleanOpt.getOrElse("UNKNOWN")})"""
+case class IsTrue(child: Expression) extends BooleanTest(true, false) {
+  override def sql: String = s"(${child.sql} IS TRUE)"
+}
+
+case class IsNotTrue(child: Expression) extends BooleanTest(true, true) {
+  override def sql: String = s"(${child.sql} IS NOT TRUE)"
+}
+
+case class IsFalse(child: Expression) extends BooleanTest(false, false) {
+  override def sql: String = s"(${child.sql} IS FALSE)"
+}
+
+case class IsNotFalse(child: Expression) extends BooleanTest(false, true) {
+  override def sql: String = s"(${child.sql} IS NOT FALSE)"
+}
+
+object IsUnknown {
+  def apply(child: Expression): Predicate = {
+    new IsNull(child) with ExpectsInputTypes {
+      override def inputTypes: Seq[DataType] = Seq(BooleanType)
+      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+    }
+  }
+}
+
+object IsNotUnknown {
+  def apply(child: Expression): Predicate = {
+    new IsNotNull(child) with ExpectsInputTypes {
+      override def inputTypes: Seq[DataType] = Seq(BooleanType)
+      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+    }
+  }
 }
