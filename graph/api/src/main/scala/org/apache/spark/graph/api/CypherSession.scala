@@ -20,6 +20,7 @@ package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
 object CypherSession {
@@ -38,7 +39,7 @@ object CypherSession {
  *
  * @since 3.0.0
  */
-trait CypherSession {
+trait CypherSession extends Logging {
 
   def sparkSession: SparkSession
 
@@ -137,7 +138,17 @@ trait CypherSession {
       .map(col => col -> col)
       .toMap
 
-    val labelSets = labelColumns.subsets().toSet + Set.empty
+    val labelCount = labelColumns.size
+    if (labelCount > 5) {
+      log.warn(s"$labelCount label columns will result in ${Math.pow(labelCount, 2)} node frames.")
+      if (labelCount > 10) {
+        throw new IllegalArgumentException(
+          s"Expected number of label columns to be less than or equal to 10, was $labelCount.")
+      }
+    }
+
+    val labelSets = labelColumns.subsets().toSet
+
     val nodeFrames = labelSets.map { labelSet =>
       val predicate = labelColumns
         .map {
