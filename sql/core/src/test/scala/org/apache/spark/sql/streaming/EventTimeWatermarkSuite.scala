@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
@@ -304,7 +305,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   test("update mode") {
     val inputData = MemoryStream[Int]
-    spark.conf.set("spark.sql.shuffle.partitions", "10")
+    spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "10")
 
     val windowedAggregation = inputData.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))

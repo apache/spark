@@ -21,6 +21,8 @@ import java.io.{ByteArrayOutputStream, FileNotFoundException, FilterInputStream,
 import java.net.{URI, URL, URLEncoder}
 import java.nio.channels.Channels
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.xbean.asm7._
 import org.apache.xbean.asm7.Opcodes._
@@ -106,7 +108,17 @@ class ExecutorClassLoader(
         parentLoader.loadClass(name)
       } catch {
         case e: ClassNotFoundException =>
-          val classOption = findClassLocally(name)
+          val classOption = try {
+            findClassLocally(name)
+          } catch {
+            case e: RemoteClassLoaderError =>
+              throw e
+            case NonFatal(e) =>
+              // Wrap the error to include the class name
+              // scalastyle:off throwerror
+              throw new RemoteClassLoaderError(name, e)
+              // scalastyle:on throwerror
+          }
           classOption match {
             case None => throw new ClassNotFoundException(name, e)
             case Some(a) => a
@@ -115,13 +127,14 @@ class ExecutorClassLoader(
     }
   }
 
+  // See org.apache.spark.network.server.TransportRequestHandler.processStreamRequest.
+  private val STREAM_NOT_FOUND_REGEX = s"Stream '.*' was not found.".r.pattern
+
   private def getClassFileInputStreamFromSparkRPC(path: String): InputStream = {
-    val channel = env.rpcEnv.openChannel(s"$classUri/$path")
+    val channel = env.rpcEnv.openChannel(s"$classUri/${urlEncode(path)}")
     new FilterInputStream(Channels.newInputStream(channel)) {
 
       override def read(): Int = toClassNotFound(super.read())
-
-      override def read(b: Array[Byte]): Int = toClassNotFound(super.read(b))
 
       override def read(b: Array[Byte], offset: Int, len: Int) =
         toClassNotFound(super.read(b, offset, len))
@@ -130,8 +143,15 @@ class ExecutorClassLoader(
         try {
           fn
         } catch {
-          case e: Exception =>
+          case e: RuntimeException if e.getMessage != null
+            && STREAM_NOT_FOUND_REGEX.matcher(e.getMessage).matches() =>
+            // Convert a stream not found error to ClassNotFoundException.
+            // Driver sends this explicit acknowledgment to tell us that the class was missing.
             throw new ClassNotFoundException(path, e)
+          case NonFatal(e) =>
+            // scalastyle:off throwerror
+            throw new RemoteClassLoaderError(path, e)
+            // scalastyle:on throwerror
         }
       }
     }
@@ -163,7 +183,12 @@ class ExecutorClassLoader(
       case e: Exception =>
         // Something bad happened while checking if the class exists
         logError(s"Failed to check existence of class $name on REPL class server at $uri", e)
-        None
+        if (userClassPathFirst) {
+          // Allow to try to load from "parentLoader"
+          None
+        } else {
+          throw e
+        }
     } finally {
       if (inputStream != null) {
         try {
@@ -237,3 +262,11 @@ extends ClassVisitor(ASM7, cv) {
     }
   }
 }
+
+/**
+ * An error when we cannot load a class due to exceptions. We don't know if this class exists, so
+ * throw a special one that's neither [[LinkageError]] nor [[ClassNotFoundException]] to make JVM
+ * retry to load this class later.
+ */
+private[repl] class RemoteClassLoaderError(className: String, cause: Throwable)
+  extends Error(className, cause)

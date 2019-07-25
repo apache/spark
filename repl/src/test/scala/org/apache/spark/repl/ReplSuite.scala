@@ -18,41 +18,45 @@
 package org.apache.spark.repl
 
 import java.io._
-import java.net.URLClassLoader
 
-import scala.collection.mutable.ArrayBuffer
 import scala.tools.nsc.interpreter.SimpleReader
 
 import org.apache.log4j.{Level, LogManager}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class ReplSuite extends SparkFunSuite {
+class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
+
+  private var originalClassLoader: ClassLoader = null
+
+  override def beforeAll(): Unit = {
+    originalClassLoader = Thread.currentThread().getContextClassLoader
+  }
+
+  override def afterAll(): Unit = {
+    if (originalClassLoader != null) {
+      // Reset the class loader to not affect other suites. REPL will set its own class loader but
+      // doesn't reset it.
+      Thread.currentThread().setContextClassLoader(originalClassLoader)
+    }
+  }
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
 
-    val in = new BufferedReader(new StringReader(input + "\n"))
-    val out = new StringWriter()
-    val cl = getClass.getClassLoader
-    var paths = new ArrayBuffer[String]
-    if (cl.isInstanceOf[URLClassLoader]) {
-      val urlLoader = cl.asInstanceOf[URLClassLoader]
-      for (url <- urlLoader.getURLs) {
-        if (url.getProtocol == "file") {
-          paths += url.getFile
-        }
-      }
-    }
-    val classpath = paths.map(new File(_).getAbsolutePath).mkString(File.pathSeparator)
-
     val oldExecutorClasspath = System.getProperty(CONF_EXECUTOR_CLASSPATH)
+    val classpath = System.getProperty("java.class.path")
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
+
     Main.sparkContext = null
     Main.sparkSession = null // causes recreation of SparkContext for each test.
     Main.conf.set("spark.master", master)
+
+    val in = new BufferedReader(new StringReader(input + "\n"))
+    val out = new StringWriter()
     Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
     if (oldExecutorClasspath != null) {
@@ -60,7 +64,8 @@ class ReplSuite extends SparkFunSuite {
     } else {
       System.clearProperty(CONF_EXECUTOR_CLASSPATH)
     }
-    return out.toString
+
+    out.toString
   }
 
   // Simulate the paste mode in Scala REPL.

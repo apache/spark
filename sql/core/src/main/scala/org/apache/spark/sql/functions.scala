@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{SparkUserDefinedFunction, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -358,9 +358,10 @@ object functions {
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column = {
-    withAggregateFunction(Count.apply((expr +: exprs).map(_.expr)), isDistinct = true)
-  }
+  def countDistinct(expr: Column, exprs: Column*): Column =
+    // For usage like countDistinct("*"), we should let analyzer expand star and
+    // resolve function.
+    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
@@ -1045,7 +1046,7 @@ object functions {
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
     Dataset[T](df.sparkSession,
-      ResolvedHint(df.logicalPlan, HintInfo(broadcast = true)))(df.exprEnc)
+      ResolvedHint(df.logicalPlan, HintInfo(strategy = Some(BROADCAST))))(df.exprEnc)
   }
 
   /**
@@ -2167,6 +2168,19 @@ object functions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+   * Calculates the hash code of given columns using the 64-bit
+   * variant of the xxHash algorithm, and returns the result as a long
+   * column.
+   *
+   * @group misc_funcs
+   * @since 3.0.0
+   */
+  @scala.annotation.varargs
+  def xxhash64(cols: Column*): Column = withExpr {
+    new XxHash64(cols.map(_.expr))
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2500,6 +2514,28 @@ object functions {
    */
   def substring_index(str: Column, delim: String, count: Int): Column = withExpr {
     SubstringIndex(str.expr, lit(delim).expr, lit(count).expr)
+  }
+
+  /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
+    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  }
+
+  /**
+   * Overlay the specified portion of `src` with `replaceString`,
+   *  starting from byte position `pos` of `inputString`.
+   *
+   * @group string_funcs
+   * @since 3.0.0
+   */
+  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
+    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
   }
 
   /**
@@ -2929,8 +2965,8 @@ object functions {
    *
    * @param date A date, timestamp or string. If a string, the data must be in a format that can be
    *             cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
-   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *               or 'month', 'mon', 'mm' for truncate by month
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
+   *               or 'month', 'mon', 'mm' to truncate by month
    *
    * @return A date, or null if `date` was a string that could not be cast to a date or `format`
    *         was an invalid value
@@ -2944,11 +2980,11 @@ object functions {
   /**
    * Returns timestamp truncated to the unit specified by the format.
    *
-   * For example, `date_tunc("2018-11-19 12:01:19", "year")` returns 2018-01-01 00:00:00
+   * For example, `date_trunc("year", "2018-11-19 12:01:19")` returns 2018-01-01 00:00:00
    *
-   * @param format: 'year', 'yyyy', 'yy' for truncate by year,
-   *                'month', 'mon', 'mm' for truncate by month,
-   *                'day', 'dd' for truncate by day,
+   * @param format: 'year', 'yyyy', 'yy' to truncate by year,
+   *                'month', 'mon', 'mm' to truncate by month,
+   *                'day', 'dd' to truncate by day,
    *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
    * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
    *                  can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
@@ -2975,6 +3011,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     FromUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -2986,6 +3023,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def from_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     FromUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3004,6 +3042,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: String): Column = withExpr {
     ToUTCTimestamp(ts.expr, Literal(tz))
   }
@@ -3015,6 +3054,7 @@ object functions {
    * @group datetime_funcs
    * @since 2.4.0
    */
+  @deprecated("This function is deprecated and will be removed in future versions.", "3.0.0")
   def to_utc_timestamp(ts: Column, tz: Column): Column = withExpr {
     ToUTCTimestamp(ts.expr, tz.expr)
   }
@@ -3305,6 +3345,8 @@ object functions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
    *
    * @group collection_funcs
    * @since 1.3.0
@@ -3313,6 +3355,8 @@ object functions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   * Uses the default column name `col` for elements in the array and
+   * `key` and `value` for elements in the map unless specified otherwise.
    * Unlike explode, if the array/map is null or empty then null is produced.
    *
    * @group collection_funcs
@@ -3322,6 +3366,8 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
    *
    * @group collection_funcs
    * @since 2.1.0
@@ -3330,6 +3376,8 @@ object functions {
 
   /**
    * Creates a new row for each element with position in the given array or map column.
+   * Uses the default column name `pos` for position, and `col` for elements in the array
+   * and `key` and `value` for elements in the map unless specified otherwise.
    * Unlike posexplode, if the array/map is null or empty then the row (null, null) is produced.
    *
    * @group collection_funcs
@@ -3884,7 +3932,7 @@ object functions {
     val anyTypeArgs = (0 to i).map(_ => "Any").mkString(", ")
     val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
     val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
-    val funcCall = if (i == 0) "() => func" else "func"
+    val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
     println(s"""
       |/**
       | * Defines a Java UDF$i instance as user-defined function (UDF).
@@ -3896,8 +3944,8 @@ object functions {
       | * @since 2.3.0
       | */
       |def udf(f: UDF$i[$extTypeArgs], returnType: DataType): UserDefinedFunction = {
-      |  val func = f$anyCast.call($anyParams)
-      |  SparkUserDefinedFunction($funcCall, returnType, inputSchemas = Seq.fill($i)(None))
+      |  val func = $funcCall
+      |  SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill($i)(None))
       |}""".stripMargin)
   }
 
@@ -4097,8 +4145,8 @@ object functions {
    * @since 2.3.0
    */
   def udf(f: UDF0[_], returnType: DataType): UserDefinedFunction = {
-    val func = f.asInstanceOf[UDF0[Any]].call()
-    SparkUserDefinedFunction(() => func, returnType, inputSchemas = Seq.fill(0)(None))
+    val func = () => f.asInstanceOf[UDF0[Any]].call()
+    SparkUserDefinedFunction(func, returnType, inputSchemas = Seq.fill(0)(None))
   }
 
   /**

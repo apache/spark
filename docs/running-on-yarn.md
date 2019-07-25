@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Running Spark on YARN
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -127,20 +142,20 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.resource.{resource-type}</code></td>
+  <td><code>spark.yarn.am.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
   <td>
     Amount of resource to use for the YARN Application Master in client mode.
-    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;</code> instead.
+    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;.amount</code> instead.
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
     Example: 
-    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu</code>
+    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.driver.resource.{resource-type}</code></td>
+  <td><code>spark.yarn.driver.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
   <td>
     Amount of resource to use for the YARN Application Master in cluster mode.
@@ -148,11 +163,11 @@ To use a custom metrics.properties for the application master and executors, upd
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
     Example: 
-    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu</code>
+    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu.amount</code>
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.resource.{resource-type}</code></td>
+  <td><code>spark.yarn.executor.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
  <td>
      Amount of resource to use per executor process.
@@ -160,7 +175,7 @@ To use a custom metrics.properties for the application master and executors, upd
      For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
      <p/>
      Example: 
-     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu</code>
+     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu.amount</code>
  </td>
 </tr>
 <tr>
@@ -460,6 +475,13 @@ To use a custom metrics.properties for the application master and executors, upd
   Flag to enable blacklisting of nodes having YARN resource allocation problems.
   The error limit for blacklisting can be configured by
   <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.exclude.nodes</code></td>
+  <td>(none)</td>
+  <td>
+  Comma-separated list of YARN node names which are excluded from resource allocation.
   </td>
 </tr>
 <tr>

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
@@ -135,6 +135,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       structDf.select(hash($"a", $"*")),
       structDf.select(hash($"a", $"record.*")))
+  }
+
+  test("Star Expansion - xxhash64") {
+    val structDf = testData2.select("a", "b").as("record")
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(min(xxhash64($"a", $"*"))),
+      structDf.groupBy($"a", $"b").agg(min(xxhash64($"a", $"a", $"b"))))
+
+    checkAnswer(
+      structDf.groupBy($"a", $"b").agg(xxhash64($"a", $"*")),
+      structDf.groupBy($"a", $"b").agg(xxhash64($"a", $"a", $"b")))
+
+    checkAnswer(
+      structDf.select(xxhash64($"*")),
+      structDf.select(xxhash64($"record.*")))
+
+    checkAnswer(
+      structDf.select(xxhash64($"a", $"*")),
+      structDf.select(xxhash64($"a", $"record.*")))
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
@@ -553,6 +572,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("value"))
   }
 
+  test("SPARK-28189 drop column using drop with column reference with case-insensitive names") {
+    // With SQL config caseSensitive OFF, case insensitive column name should work
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val col1 = testData("KEY")
+      val df1 = testData.drop(col1)
+      checkAnswer(df1, testData.selectExpr("value"))
+      assert(df1.schema.map(_.name) === Seq("value"))
+
+      val col2 = testData("Key")
+      val df2 = testData.drop(col2)
+      checkAnswer(df2, testData.selectExpr("value"))
+      assert(df2.schema.map(_.name) === Seq("value"))
+    }
+  }
+
   test("drop unknown column (no-op) with column reference") {
     val col = Column("random")
     val df = testData.drop(col)
@@ -743,22 +777,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("inputFiles") {
-    withTempDir { dir =>
-      val df = Seq((1, 22)).toDF("a", "b")
+    Seq("csv", "").foreach { useV1List =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          val df = Seq((1, 22)).toDF("a", "b")
 
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-      df.write.parquet(parquetDir)
-      val parquetDF = spark.read.parquet(parquetDir)
-      assert(parquetDF.inputFiles.nonEmpty)
+          val parquetDir = new File(dir, "parquet").getCanonicalPath
+          df.write.parquet(parquetDir)
+          val parquetDF = spark.read.parquet(parquetDir)
+          assert(parquetDF.inputFiles.nonEmpty)
 
-      val jsonDir = new File(dir, "json").getCanonicalPath
-      df.write.json(jsonDir)
-      val jsonDF = spark.read.json(jsonDir)
-      assert(parquetDF.inputFiles.nonEmpty)
+          val csvDir = new File(dir, "csv").getCanonicalPath
+          df.write.json(csvDir)
+          val csvDF = spark.read.json(csvDir)
+          assert(csvDF.inputFiles.nonEmpty)
 
-      val unioned = jsonDF.union(parquetDF).inputFiles.sorted
-      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
-      assert(unioned === allFiles)
+          val unioned = csvDF.union(parquetDF).inputFiles.sorted
+          val allFiles = (csvDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
+          assert(unioned === allFiles)
+        }
+      }
     }
   }
 
@@ -1553,8 +1591,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
       val df = spark.createDataFrame(
         rdd,
-        new StructType().add("f1", IntegerType).add("f2", IntegerType),
-        needsConversion = false).select($"F1", $"f2".as("f2"))
+        new StructType().add("f1", IntegerType).add("f2", IntegerType))
+        .select($"F1", $"f2".as("f2"))
       val df1 = df.as("a")
       val df2 = df.as("b")
       checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
@@ -1626,7 +1664,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reuse exchange") {
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
       val df = spark.range(100).toDF()
       val join = df.join(df, "id")
       val plan = join.queryExecution.executedPlan
@@ -1755,7 +1793,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val size = 201L
     val rdd = sparkContext.makeRDD(Seq(Row.fromSeq(Seq.range(0, size))))
     val schemas = List.range(0, size).map(a => StructField("name" + a, LongType, true))
-    val df = spark.createDataFrame(rdd, StructType(schemas), false)
+    val df = spark.createDataFrame(rdd, StructType(schemas))
     assert(df.persist.take(1).apply(0).toSeq(100).asInstanceOf[Long] == 100)
   }
 
@@ -2108,6 +2146,39 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           |  LEFT OUTER JOIN v ON v.id = a.id
         """.stripMargin)
       checkAnswer(res, Row("1-1", 6, 6))
+    }
+  }
+
+  test("SPARK-27671: Fix analysis exception when casting null in nested field in struct") {
+    val df = sql("SELECT * FROM VALUES (('a', (10, null))), (('b', (10, 50))), " +
+      "(('c', null)) AS tab(x, y)")
+    checkAnswer(df, Row("a", Row(10, null)) :: Row("b", Row(10, 50)) :: Row("c", null) :: Nil)
+
+    val cast = sql("SELECT cast(struct(1, null) AS struct<a:int,b:int>)")
+    checkAnswer(cast, Row(Row(1, null)) :: Nil)
+  }
+
+  test("SPARK-27439: Explain result should match collected result after view change") {
+    withTempView("test", "test2", "tmp") {
+      spark.range(10).createOrReplaceTempView("test")
+      spark.range(5).createOrReplaceTempView("test2")
+      spark.sql("select * from test").createOrReplaceTempView("tmp")
+      val df = spark.sql("select * from tmp")
+      spark.sql("select * from test2").createOrReplaceTempView("tmp")
+
+      val captured = new ByteArrayOutputStream()
+      Console.withOut(captured) {
+        df.explain(extended = true)
+      }
+      checkAnswer(df, spark.range(10).toDF)
+      val output = captured.toString
+      assert(output.contains(
+        """== Parsed Logical Plan ==
+          |'Project [*]
+          |+- 'UnresolvedRelation [tmp]""".stripMargin))
+      assert(output.contains(
+        """== Physical Plan ==
+          |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
   }
 }

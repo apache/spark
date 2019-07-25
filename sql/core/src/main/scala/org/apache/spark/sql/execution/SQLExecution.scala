@@ -20,9 +20,12 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.internal.StaticSQLConf.SQL_EVENT_TRUNCATE_LENGTH
+import org.apache.spark.util.Utils
 
 object SQLExecution {
 
@@ -71,13 +74,23 @@ object SQLExecution {
       // streaming queries would give us call site like "run at <unknown>:0"
       val callSite = sc.getCallSite()
 
+      val truncateLength = sc.conf.get(SQL_EVENT_TRUNCATE_LENGTH)
+
+      val desc = Option(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+        .filter(_ => truncateLength > 0)
+        .map { sqlStr =>
+          val redactedStr = Utils
+            .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
+          redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
+        }.getOrElse(callSite.shortForm)
+
       withSQLConfPropagated(sparkSession) {
         var ex: Option[Exception] = None
         val startTime = System.nanoTime()
         try {
           sc.listenerBus.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
-            description = callSite.shortForm,
+            description = desc,
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.toString,
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception

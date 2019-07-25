@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
@@ -146,11 +146,7 @@ private[sql] class SharedState(
     val wrapped = new ExternalCatalogWithListener(externalCatalog)
 
     // Make sure we propagate external catalog events to the spark listener bus
-    wrapped.addListener(new ExternalCatalogEventListener {
-      override def onEvent(event: ExternalCatalogEvent): Unit = {
-        sparkContext.listenerBus.post(event)
-      }
-    })
+    wrapped.addListener((event: ExternalCatalogEvent) => sparkContext.listenerBus.post(event))
 
     wrapped
   }
@@ -162,7 +158,7 @@ private[sql] class SharedState(
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
-    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE).toLowerCase(Locale.ROOT)
+    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +
@@ -217,15 +213,4 @@ object SharedState extends Logging {
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
     }
   }
-}
-
-
-/**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
- * This class loader cannot be closed (its `close` method is a no-op).
- */
-private[sql] class NonClosableMutableURLClassLoader(parent: ClassLoader)
-  extends MutableURLClassLoader(Array.empty, parent) {
-
-  override def close(): Unit = {}
 }

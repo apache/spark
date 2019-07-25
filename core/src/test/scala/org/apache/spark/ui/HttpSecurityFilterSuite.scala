@@ -46,16 +46,8 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val conf = new SparkConf()
     val filter = new HttpSecurityFilter(conf, new SecurityManager(conf))
 
-    def newRequest(): HttpServletRequest = {
-      val req = mock(classOf[HttpServletRequest])
-      when(req.getParameterMap()).thenReturn(Map.empty[String, Array[String]].asJava)
-      req
-    }
-
     def doRequest(k: String, v: String): HttpServletRequest = {
-      val req = newRequest()
-      when(req.getParameterMap()).thenReturn(Map(k -> Array(v)).asJava)
-
+      val req = mockRequest(params = Map(k -> Array(v)))
       val chain = mock(classOf[FilterChain])
       val res = mock(classOf[HttpServletResponse])
       filter.doFilter(req, res, chain)
@@ -97,7 +89,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       .set(UI_VIEW_ACLS, Seq("alice"))
     val secMgr = new SecurityManager(conf)
 
-    val req = mockEmptyRequest()
+    val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])
     val chain = mock(classOf[FilterChain])
 
@@ -128,7 +120,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
       .set(UI_X_CONTENT_TYPE_OPTIONS, true)
       .set(UI_STRICT_TRANSPORT_SECURITY, "tsec")
     val secMgr = new SecurityManager(conf)
-    val req = mockEmptyRequest()
+    val req = mockRequest()
     val res = mock(classOf[HttpServletResponse])
     val chain = mock(classOf[FilterChain])
 
@@ -147,8 +139,43 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     }
   }
 
-  private def mockEmptyRequest(): HttpServletRequest = {
-    val params: Map[String, Array[String]] = Map.empty
+  test("doAs impersonation") {
+    val conf = new SparkConf(false)
+      .set(ACLS_ENABLE, true)
+      .set(ADMIN_ACLS, Seq("admin"))
+      .set(UI_VIEW_ACLS, Seq("proxy"))
+
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+    val filter = new HttpSecurityFilter(conf, secMgr)
+
+    // First try with a non-admin so that the admin check is verified. This ensures that
+    // the admin check is setting the expected error, since the impersonated user would
+    // have permissions to process the request.
+    when(req.getParameter("doAs")).thenReturn("proxy")
+    when(req.getRemoteUser()).thenReturn("bob")
+    filter.doFilter(req, res, chain)
+    verify(res, times(1)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
+
+    when(req.getRemoteUser()).thenReturn("admin")
+    filter.doFilter(req, res, chain)
+    verify(chain, times(1)).doFilter(any(), any())
+
+    // Check that impersonation was actually performed by checking the wrapped request.
+    val captor = ArgumentCaptor.forClass(classOf[HttpServletRequest])
+    verify(chain).doFilter(captor.capture(), any())
+    val wrapped = captor.getValue()
+    assert(wrapped.getRemoteUser() === "proxy")
+
+    // Impersonating a user without view permissions should cause an error.
+    when(req.getParameter("doAs")).thenReturn("alice")
+    filter.doFilter(req, res, chain)
+    verify(res, times(2)).sendError(meq(HttpServletResponse.SC_FORBIDDEN), any())
+  }
+
+  private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {
     val req = mock(classOf[HttpServletRequest])
     when(req.getParameterMap()).thenReturn(params.asJava)
     req

@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.concurrent.duration.Duration
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.security.SocketAuthHelper
+import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer}
 
 class PythonRDDSuite extends SparkFunSuite {
 
@@ -59,7 +59,7 @@ class PythonRDDSuite extends SparkFunSuite {
   }
 
   class ExceptionPythonServer(authHelper: SocketAuthHelper)
-      extends PythonServer[Unit](authHelper, "error-server") {
+      extends SocketAuthServer[Unit](authHelper, "error-server") {
 
     override def handleConnection(sock: Socket): Unit = {
       throw new Exception("exception within handleConnection")

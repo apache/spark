@@ -87,7 +87,7 @@ class JDBCOptions(
       if (subquery.isEmpty) {
         throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
       } else {
-        s"(${subquery}) __SPARK_GEN_JDBC_SUBQUERY_NAME_${curId.getAndIncrement()}"
+        s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
   }
 

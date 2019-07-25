@@ -49,7 +49,6 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   private byte[] arr = new byte[1024 * 1024];
   private Object baseObject = arr;
-  private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
   private final TaskContext taskContext = TaskContext.get();
 
   public UnsafeSorterSpillReader(
@@ -125,7 +124,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
 
   @Override
   public long getBaseOffset() {
-    return baseOffset;
+    return Platform.BYTE_ARRAY_OFFSET;
   }
 
   @Override

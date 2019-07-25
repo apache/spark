@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import scala.language.existentials
-
 import org.apache.spark.annotation.Evolving
 
 @Evolving

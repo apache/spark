@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Instant, LocalDate}
+import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -99,15 +102,44 @@ object LiteralGenerator {
   lazy val booleanLiteralGen: Gen[Literal] =
     for { b <- Arbitrary.arbBool.arbitrary } yield Literal.create(b, BooleanType)
 
-  lazy val dateLiteralGen: Gen[Literal] =
-    for { d <- Arbitrary.arbInt.arbitrary } yield Literal.create(new Date(d), DateType)
+  lazy val dateLiteralGen: Gen[Literal] = {
+    // Valid range for DateType is [0001-01-01, 9999-12-31]
+    val minDay = LocalDate.of(1, 1, 1).toEpochDay
+    val maxDay = LocalDate.of(9999, 12, 31).toEpochDay
+    for { day <- Gen.choose(minDay, maxDay) }
+      yield Literal.create(new Date(day * DateTimeUtils.MILLIS_PER_DAY), DateType)
+  }
 
-  lazy val timestampLiteralGen: Gen[Literal] =
-    for { t <- Arbitrary.arbLong.arbitrary } yield Literal.create(new Timestamp(t), TimestampType)
+  lazy val timestampLiteralGen: Gen[Literal] = {
+    // Catalyst's Timestamp type stores number of microseconds since epoch in
+    // a variable of Long type. To prevent arithmetic overflow of Long on
+    // conversion from milliseconds to microseconds, the range of random milliseconds
+    // since epoch is restricted here.
+    // Valid range for TimestampType is [0001-01-01T00:00:00.000000Z, 9999-12-31T23:59:59.999999Z]
+    val minMillis = Instant.parse("0001-01-01T00:00:00.000000Z").toEpochMilli
+    val maxMillis = Instant.parse("9999-12-31T23:59:59.999999Z").toEpochMilli
+    for { millis <- Gen.choose(minMillis, maxMillis) }
+      yield Literal.create(new Timestamp(millis), TimestampType)
+  }
 
-  lazy val calendarIntervalLiterGen: Gen[Literal] =
-    for { m <- Arbitrary.arbInt.arbitrary; s <- Arbitrary.arbLong.arbitrary}
-      yield Literal.create(new CalendarInterval(m, s), CalendarIntervalType)
+  // Valid range for DateType and TimestampType is [0001-01-01, 9999-12-31]
+  private val maxIntervalInMonths: Int = 10000 * 12
+
+  lazy val monthIntervalLiterGen: Gen[Literal] = {
+    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
+      yield Literal.create(months, IntegerType)
+  }
+
+  lazy val calendarIntervalLiterGen: Gen[Literal] = {
+    val maxDurationInSec = Duration.between(
+      Instant.parse("0001-01-01T00:00:00.000000Z"),
+      Instant.parse("9999-12-31T23:59:59.999999Z")).getSeconds
+    val maxMicros = TimeUnit.SECONDS.toMicros(maxDurationInSec)
+    for {
+      months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths)
+      micros <- Gen.choose(-1 * maxMicros, maxMicros)
+    } yield Literal.create(new CalendarInterval(months, micros), CalendarIntervalType)
+  }
 
 
   // Sometimes, it would be quite expensive when unlimited value is used,

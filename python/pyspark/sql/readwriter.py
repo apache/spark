@@ -27,21 +27,9 @@ from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 from pyspark.sql import utils
+from pyspark.sql.utils import to_str
 
 __all__ = ["DataFrameReader", "DataFrameWriter"]
-
-
-def to_str(value):
-    """
-    A wrapper over str(), but converts bool values to lower case strings.
-    If None is given, just returns None, instead of converting it to string "None".
-    """
-    if isinstance(value, bool):
-        return str(value).lower()
-    elif value is None:
-        return value
-    else:
-        return str(value)
 
 
 class OptionUtils(object):
@@ -120,6 +108,9 @@ class DataFrameReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
@@ -132,6 +123,9 @@ class DataFrameReader(OptionUtils):
             * ``timeZone``: sets the string that indicates a timezone to be used to parse timestamps
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
+            * ``pathGlobFilter``: an optional glob pattern to only include files with paths matching
+                the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
+                It does not change the behavior of partition discovery.
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
@@ -327,6 +321,7 @@ class DataFrameReader(OptionUtils):
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
+        The text files must be encoded as UTF-8.
 
         By default, each line in the text file is a new row in the resulting DataFrame.
 
@@ -423,7 +418,11 @@ class DataFrameReader(OptionUtils):
         :param maxMalformedLogPerPartition: this parameter is no longer used since Spark 2.2.0.
                                             If specified, it is ignored.
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
-                     set, it uses the default value, ``PERMISSIVE``.
+                     set, it uses the default value, ``PERMISSIVE``. Note that Spark tries to
+                     parse only required columns in CSV under column pruning. Therefore, corrupt
+                     records can be different based on required set of fields. This behavior can
+                     be controlled by ``spark.sql.csv.parser.columnPruning.enabled``
+                     (enabled by default).
 
                 * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
                   into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
@@ -507,8 +506,6 @@ class DataFrameReader(OptionUtils):
     @since(1.5)
     def orc(self, path):
         """Loads ORC files, returning the result as a :class:`DataFrame`.
-
-        .. note:: Currently ORC support is only available together with Hive support.
 
         >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
@@ -748,7 +745,7 @@ class DataFrameWriter(OptionUtils):
             self._jwrite.save(path)
 
     @since(1.4)
-    def insertInto(self, tableName, overwrite=False):
+    def insertInto(self, tableName, overwrite=None):
         """Inserts the content of the :class:`DataFrame` to the specified table.
 
         It requires that the schema of the class:`DataFrame` is the same as the
@@ -756,7 +753,9 @@ class DataFrameWriter(OptionUtils):
 
         Optionally overwriting any existing data.
         """
-        self._jwrite.mode("overwrite" if overwrite else "append").insertInto(tableName)
+        if overwrite is not None:
+            self.mode("overwrite" if overwrite else "append")
+        self._jwrite.insertInto(tableName)
 
     @since(1.4)
     def saveAsTable(self, name, format=None, mode=None, partitionBy=None, **options):
@@ -856,6 +855,7 @@ class DataFrameWriter(OptionUtils):
     @since(1.6)
     def text(self, path, compression=None, lineSep=None):
         """Saves the content of the DataFrame in a text file at the specified path.
+        The text files will be encoded as UTF-8.
 
         :param path: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
@@ -947,8 +947,6 @@ class DataFrameWriter(OptionUtils):
     @since(1.5)
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
-
-        .. note:: Currently ORC support is only available together with Hive support.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.

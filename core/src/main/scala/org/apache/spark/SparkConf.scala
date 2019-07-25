@@ -62,9 +62,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   @transient private lazy val reader: ConfigReader = {
     val _reader = new ConfigReader(new SparkConfigProvider(settings))
-    _reader.bindEnv(new ConfigProvider {
-      override def get(key: String): Option[String] = Option(getenv(key))
-    })
+    _reader.bindEnv((key: String) => Option(getenv(key)))
     _reader
   }
 
@@ -170,6 +168,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /** Set multiple parameters together */
+  def setAll(settings: Iterable[(String, String)]): SparkConf = {
+    settings.foreach { case (k, v) => set(k, v) }
+    this
+  }
+
+  /**
+   * Set multiple parameters together
+   */
+  @deprecated("Use setAll(Iterable) instead", "3.0.0")
   def setAll(settings: Traversable[(String, String)]): SparkConf = {
     settings.foreach { case (k, v) => set(k, v) }
     this
@@ -392,7 +399,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get an optional value, applying variable substitution. */
   private[spark] def getWithSubstitution(key: String): Option[String] = {
-    getOption(key).map(reader.substitute(_))
+    getOption(key).map(reader.substitute)
   }
 
   /** Get all parameters as a list of pairs */
@@ -407,7 +414,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     getAll.filter { case (k, v) => k.startsWith(prefix) }
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
-
 
   /**
    * Get a parameter as an integer, falling back to a default if not set
@@ -493,6 +499,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
   }
 
+
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
    * idempotent - may mutate this conf object to convert deprecated settings to supported ones.
@@ -577,16 +584,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains(EXECUTOR_CORES) && contains(CPUS_PER_TASK)) {
-      val executorCores = get(EXECUTOR_CORES)
-      val taskCpus = get(CPUS_PER_TASK)
-
-      if (executorCores < taskCpus) {
-        throw new SparkException(
-          s"${EXECUTOR_CORES.key} must not be less than ${CPUS_PER_TASK.key}.")
-      }
-    }
-
     val encryptionEnabled = get(NETWORK_CRYPTO_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
@@ -598,7 +595,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     // it will almost always cause ExecutorLostFailure. See SPARK-22754.
     require(executorTimeoutThresholdMs > executorHeartbeatIntervalMs, "The value of " +
       s"${networkTimeout}=${executorTimeoutThresholdMs}ms must be no less than the value of " +
-      s"spark.executor.heartbeatInterval=${executorHeartbeatIntervalMs}ms.")
+      s"${EXECUTOR_HEARTBEAT_INTERVAL.key}=${executorHeartbeatIntervalMs}ms.")
   }
 
   /**
@@ -606,7 +603,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
    * configuration out for debugging.
    */
   def toDebugString: String = {
-    getAll.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
+    Utils.redact(this, getAll).sorted.map { case (k, v) => k + "=" + v }.mkString("\n")
   }
 
 }
@@ -670,12 +667,12 @@ private[spark] object SparkConf extends Logging {
         translation = s => s"${s.toLong * 10}s")),
     REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
-    "spark.kryoserializer.buffer" -> Seq(
+    KRYO_SERIALIZER_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
         translation = s => s"${(s.toDouble * 1000).toInt}k")),
-    "spark.kryoserializer.buffer.max" -> Seq(
+    KRYO_SERIALIZER_MAX_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
-    "spark.shuffle.file.buffer" -> Seq(
+    SHUFFLE_FILE_BUFFER_SIZE.key -> Seq(
       AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
     EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
       AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
@@ -717,7 +714,9 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),
     KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
       AlternateConfig("spark.yarn.access.namenodes", "2.2"),
-      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0"))
+      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
+    "spark.kafka.consumer.cache.capacity" -> Seq(
+      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
   )
 
   /**
@@ -740,7 +739,6 @@ private[spark] object SparkConf extends Logging {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
-    name.startsWith("spark.ssl") ||
     name.startsWith("spark.rpc") ||
     name.startsWith("spark.network") ||
     isSparkPortConf(name)

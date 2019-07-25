@@ -19,14 +19,16 @@ package org.apache.spark.sql.internal
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
+import org.apache.spark.sql.catalog.v2.CatalogPlugin
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -80,13 +82,21 @@ abstract class BaseSessionStateBuilder(
   /**
    * SQL-specific key-value configurations.
    *
-   * These either get cloned from a pre-existing instance or newly created. The conf is always
-   * merged with its [[SparkConf]].
+   * These either get cloned from a pre-existing instance or newly created. The conf is merged
+   * with its [[SparkConf]] only when there is no parent session.
    */
   protected lazy val conf: SQLConf = {
-    val conf = parentState.map(_.conf.clone()).getOrElse(new SQLConf)
-    mergeSparkConf(conf, session.sparkContext.conf)
-    conf
+    parentState.map { s =>
+      val cloned = s.conf.clone()
+      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
+        mergeSparkConf(cloned, session.sparkContext.conf)
+      }
+      cloned
+    }.getOrElse {
+      val conf = new SQLConf
+      mergeSparkConf(conf, session.sparkContext.conf)
+      conf
+    }
   }
 
   /**
@@ -159,7 +169,8 @@ abstract class BaseSessionStateBuilder(
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
-        new FallbackOrcDataSourceV2(session) +:
+        new FallBackFileSourceV2(session) +:
+        DataSourceResolution(conf, this) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -172,7 +183,11 @@ abstract class BaseSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         HiveOnlyCheck +:
+        V2WriteSupportCheck +:
+        V2StreamingScanSupportCheck +:
         customCheckRules
+
+    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**
@@ -249,6 +264,10 @@ abstract class BaseSessionStateBuilder(
     extensions.buildPlannerStrategies(session)
   }
 
+  protected def columnarRules: Seq[ColumnarRule] = {
+    extensions.buildColumnarRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
@@ -299,7 +318,8 @@ abstract class BaseSessionStateBuilder(
       listenerManager,
       () => resourceLoader,
       createQueryExecution,
-      createClone)
+      createClone,
+      columnarRules)
   }
 }
 

@@ -22,13 +22,13 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
   def testWithMinPartitions(name: String, minPartition: Int)
       (f: KafkaOffsetRangeCalculator => Unit): Unit = {
-    val options = new DataSourceOptions(Map("minPartitions" -> minPartition.toString).asJava)
+    val options = new CaseInsensitiveStringMap(Map("minPartitions" -> minPartition.toString).asJava)
     test(s"with minPartition = $minPartition: $name") {
       f(KafkaOffsetRangeCalculator(options))
     }
@@ -36,7 +36,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
 
   test("with no minPartition: N TopicPartitions to N offset ranges") {
-    val calc = KafkaOffsetRangeCalculator(DataSourceOptions.empty())
+    val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
       calc.getRanges(
         fromOffsets = Map(tp1 -> 1),
@@ -64,7 +64,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   }
 
   test("with no minPartition: empty ranges ignored") {
-    val calc = KafkaOffsetRangeCalculator(DataSourceOptions.empty())
+    val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
       calc.getRanges(
         fromOffsets = Map(tp1 -> 1, tp2 -> 1),

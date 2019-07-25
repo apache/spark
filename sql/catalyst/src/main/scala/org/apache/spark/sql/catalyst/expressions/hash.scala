@@ -63,7 +63,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.md5Hex($c))")
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.md5Hex($c))")
   }
 }
 
@@ -120,7 +120,7 @@ case class Sha2(left: Expression, right: Expression)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val digestUtils = "org.apache.commons.codec.digest.DigestUtils"
+    val digestUtils = classOf[DigestUtils].getName
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         if ($eval2 == 224) {
@@ -170,7 +170,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
+      s"UTF8String.fromString(${classOf[DigestUtils].getName}.sha1Hex($c))"
     )
   }
 }
@@ -594,12 +594,19 @@ object Murmur3HashFunction extends InterpretedHashFunction {
 /**
  * A xxHash64 64-bit hash expression.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark', array(123), 2);
+       5602566077635097486
+  """)
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
   override def dataType: DataType = LongType
 
-  override def prettyName: String = "xxHash"
+  override def prettyName: String = "xxhash64"
 
   override protected def hasherClassName: String = classOf[XXH64].getName
 

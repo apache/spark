@@ -95,6 +95,10 @@ private[spark] class BasicExecutorFeatureStep(
       .withAmount(executorCoresRequest)
       .build()
 
+    val executorResourceQuantities =
+      KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_PREFIX,
+        kubernetesConf.sparkConf)
+
     val executorEnv: Seq[EnvVar] = {
         (Seq(
           (ENV_DRIVER_URL, driverUrl),
@@ -168,11 +172,12 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
+        .addToLimits(executorResourceQuantities.asJava)
         .endResources()
-        .addNewEnv()
-          .withName(ENV_SPARK_USER)
-          .withValue(Utils.getCurrentUserName())
-          .endEnv()
+      .addNewEnv()
+        .withName(ENV_SPARK_USER)
+        .withValue(Utils.getCurrentUserName())
+        .endEnv()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")

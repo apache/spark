@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql.streaming.sources
 
+import java.util
+import java.util.Collections
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming._
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder
+import org.apache.spark.sql.sources.v2.writer.{WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, StreamTest, Trigger}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 class FakeDataStream extends MicroBatchStream with ContinuousStream {
@@ -59,23 +66,27 @@ class FakeScanBuilder extends ScanBuilder with Scan {
   override def toContinuousStream(checkpointLocation: String): ContinuousStream = new FakeDataStream
 }
 
-trait FakeMicroBatchReadTable extends Table with SupportsMicroBatchRead {
-  override def name(): String = "fake"
-  override def schema(): StructType = StructType(Seq())
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new FakeScanBuilder
-}
-
-trait FakeContinuousReadTable extends Table with SupportsContinuousRead {
-  override def name(): String = "fake"
-  override def schema(): StructType = StructType(Seq())
-  override def newScanBuilder(options: DataSourceOptions): ScanBuilder = new FakeScanBuilder
-}
-
-trait FakeStreamingWriteTable extends Table with SupportsStreamingWrite {
-  override def name(): String = "fake"
-  override def schema(): StructType = StructType(Seq())
-  override def newWriteBuilder(options: DataSourceOptions): WriteBuilder = {
+class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
+  override def buildForStreaming(): StreamingWrite = this
+  override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")
+  }
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    throw new IllegalStateException("fake sink - cannot actually write")
+  }
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    throw new IllegalStateException("fake sink - cannot actually write")
+  }
+}
+
+trait FakeStreamingWriteTable extends Table with SupportsWrite {
+  override def name(): String = "fake"
+  override def schema(): StructType = StructType(Seq())
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(STREAMING_WRITE).asJava
+  }
+  override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
+    new FakeWriteBuilder
   }
 }
 
@@ -87,9 +98,18 @@ class FakeReadMicroBatchOnly
 
   override def keyPrefix: String = shortName()
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     LastReadOptions.options = options
-    new FakeMicroBatchReadTable {}
+    new Table with SupportsRead {
+      override def name(): String = "fake"
+      override def schema(): StructType = StructType(Seq())
+      override def capabilities(): util.Set[TableCapability] = {
+        Set(MICRO_BATCH_READ).asJava
+      }
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new FakeScanBuilder
+      }
+    }
   }
 }
 
@@ -101,27 +121,46 @@ class FakeReadContinuousOnly
 
   override def keyPrefix: String = shortName()
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     LastReadOptions.options = options
-    new FakeContinuousReadTable {}
+    new Table with SupportsRead {
+      override def name(): String = "fake"
+      override def schema(): StructType = StructType(Seq())
+      override def capabilities(): util.Set[TableCapability] = {
+        Set(CONTINUOUS_READ).asJava
+      }
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new FakeScanBuilder
+      }
+    }
   }
 }
 
 class FakeReadBothModes extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-read-microbatch-continuous"
 
-  override def getTable(options: DataSourceOptions): Table = {
-    new Table with FakeMicroBatchReadTable with FakeContinuousReadTable {}
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new Table with SupportsRead {
+      override def name(): String = "fake"
+      override def schema(): StructType = StructType(Seq())
+      override def capabilities(): util.Set[TableCapability] = {
+        Set(MICRO_BATCH_READ, CONTINUOUS_READ).asJava
+      }
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+        new FakeScanBuilder
+      }
+    }
   }
 }
 
 class FakeReadNeitherMode extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-read-neither-mode"
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
+      override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
     }
   }
 }
@@ -134,7 +173,7 @@ class FakeWriteOnly
 
   override def keyPrefix: String = shortName()
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     LastWriteOptions.options = options
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
@@ -145,10 +184,11 @@ class FakeWriteOnly
 
 class FakeNoWrite extends DataSourceRegister with TableProvider {
   override def shortName(): String = "fake-write-neither-mode"
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
+      override def capabilities(): util.Set[TableCapability] = Collections.emptySet()
     }
   }
 }
@@ -172,7 +212,7 @@ class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
 
   override def shortName(): String = "fake-write-v1-fallback"
 
-  override def getTable(options: DataSourceOptions): Table = {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
     new Table with FakeStreamingWriteTable {
       override def name(): String = "fake"
       override def schema(): StructType = StructType(Nil)
@@ -181,7 +221,7 @@ class FakeWriteSupportProviderV1Fallback extends DataSourceRegister
 }
 
 object LastReadOptions {
-  var options: DataSourceOptions = _
+  var options: CaseInsensitiveStringMap = _
 
   def clear(): Unit = {
     options = null
@@ -189,7 +229,7 @@ object LastReadOptions {
 }
 
 object LastWriteOptions {
-  var options: DataSourceOptions = _
+  var options: CaseInsensitiveStringMap = _
 
   def clear(): Unit = {
     options = null
@@ -201,7 +241,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     val fakeCheckpoint = Utils.createTempDir()
-    spark.conf.set("spark.sql.streaming.checkpointLocation", fakeCheckpoint.getCanonicalPath)
+    spark.conf.set(SQLConf.CHECKPOINT_LOCATION.key, fakeCheckpoint.getCanonicalPath)
   }
 
   override def afterEach(): Unit = {
@@ -306,7 +346,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
         testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
           eventually(timeout(streamingTimeout)) {
             // Write options should not be set.
-            assert(LastWriteOptions.options.getBoolean(readOptionName, false) == false)
+            assert(!LastWriteOptions.options.containsKey(readOptionName))
             assert(LastReadOptions.options.getBoolean(readOptionName, false))
           }
         }
@@ -317,7 +357,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
         testPositiveCaseWithQuery(readSource, writeSource, trigger) { _ =>
           eventually(timeout(streamingTimeout)) {
             // Read options should not be set.
-            assert(LastReadOptions.options.getBoolean(writeOptionName, false) == false)
+            assert(!LastReadOptions.options.containsKey(writeOptionName))
             assert(LastWriteOptions.options.getBoolean(writeOptionName, false))
           }
         }
@@ -337,44 +377,42 @@ class StreamingDataSourceV2Suite extends StreamTest {
   for ((read, write, trigger) <- cases) {
     testQuietly(s"stream with read format $read, write format $write, trigger $trigger") {
       val sourceTable = DataSource.lookupDataSource(read, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].getTable(DataSourceOptions.empty())
+        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
 
       val sinkTable = DataSource.lookupDataSource(write, spark.sqlContext.conf).getConstructor()
-        .newInstance().asInstanceOf[TableProvider].getTable(DataSourceOptions.empty())
+        .newInstance().asInstanceOf[TableProvider].getTable(CaseInsensitiveStringMap.empty())
 
-      (sourceTable, sinkTable, trigger) match {
-        // Valid microbatch queries.
-        case (_: SupportsMicroBatchRead, _: SupportsStreamingWrite, t)
-            if !t.isInstanceOf[ContinuousTrigger] =>
-          testPositiveCase(read, write, trigger)
-
-        // Valid continuous queries.
-        case (_: SupportsContinuousRead, _: SupportsStreamingWrite,
-              _: ContinuousTrigger) =>
-          testPositiveCase(read, write, trigger)
-
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      trigger match {
         // Invalid - can't read at all
-        case (r, _, _) if !r.isInstanceOf[SupportsMicroBatchRead] &&
-            !r.isInstanceOf[SupportsContinuousRead] =>
+        case _ if !sourceTable.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
           testNegativeCase(read, write, trigger,
             s"Data source $read does not support streamed reading")
 
         // Invalid - can't write
-        case (_, w, _) if !w.isInstanceOf[SupportsStreamingWrite] =>
+        case _ if !sinkTable.supports(STREAMING_WRITE) =>
           testNegativeCase(read, write, trigger,
             s"Data source $write does not support streamed writing")
 
-        // Invalid - trigger is continuous but reader is not
-        case (r, _: SupportsStreamingWrite, _: ContinuousTrigger)
-            if !r.isInstanceOf[SupportsContinuousRead] =>
-          testNegativeCase(read, write, trigger,
-            s"Data source $read does not support continuous processing")
+        case _: ContinuousTrigger =>
+          if (sourceTable.supports(CONTINUOUS_READ)) {
+            // Valid microbatch queries.
+            testPositiveCase(read, write, trigger)
+          } else {
+            // Invalid - trigger is continuous but reader is not
+            testNegativeCase(
+              read, write, trigger, s"Data source $read does not support continuous processing")
+          }
 
-        // Invalid - trigger is microbatch but reader is not
-        case (r, _, t) if !r.isInstanceOf[SupportsMicroBatchRead] &&
-            !t.isInstanceOf[ContinuousTrigger] =>
-          testPostCreationNegativeCase(read, write, trigger,
-            s"Data source $read does not support microbatch processing")
+        case microBatchTrigger =>
+          if (sourceTable.supports(MICRO_BATCH_READ)) {
+            // Valid continuous queries.
+            testPositiveCase(read, write, trigger)
+          } else {
+            // Invalid - trigger is microbatch but reader is not
+            testPostCreationNegativeCase(read, write, trigger,
+              s"Data source $read does not support microbatch processing")
+          }
       }
     }
   }

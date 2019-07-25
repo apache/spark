@@ -20,7 +20,6 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.JavaConverters._
-import scala.language.postfixOps
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -203,7 +202,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         val progress = query.lastProgress
         assert(progress.stateOperators.length > 0)
         // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
-        eventually(timeout(1 minute)) {
+        eventually(timeout(1.minute)) {
           val nextProgress = query.lastProgress
           assert(nextProgress.timestamp !== progress.timestamp)
           assert(nextProgress.numInputRows === 0)

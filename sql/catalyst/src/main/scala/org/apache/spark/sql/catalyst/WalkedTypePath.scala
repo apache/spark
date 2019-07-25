@@ -22,7 +22,7 @@ package org.apache.spark.sql.catalyst
  * Note that this class adds new path in prior to recorded paths so it maintains
  * the paths as reverse order.
  */
-case class WalkedTypePath(private val walkedPaths: Seq[String] = Nil) extends Serializable {
+case class WalkedTypePath(private val walkedPaths: Seq[String] = Nil) {
   def recordRoot(className: String): WalkedTypePath =
     newInstance(s"""- root class: "$className"""")
 

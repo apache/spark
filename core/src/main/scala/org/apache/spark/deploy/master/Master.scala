@@ -143,18 +143,16 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
-    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
+    masterWebUiUrl = s"${webUi.scheme}$masterPublicAddress:${webUi.boundPort}"
     if (reverseProxy) {
       masterWebUiUrl = conf.get(UI_REVERSE_PROXY_URL).orElse(Some(masterWebUiUrl)).get
       webUi.addProxy()
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
     }
-    checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit = Utils.tryLogNonFatalError {
-        self.send(CheckForWorkerTimeOut)
-      }
-    }, 0, workerTimeoutMs, TimeUnit.MILLISECONDS)
+    checkForWorkerTimeOutTask = forwardMessageThread.scheduleAtFixedRate(
+      () => Utils.tryLogNonFatalError { self.send(CheckForWorkerTimeOut) },
+      0, workerTimeoutMs, TimeUnit.MILLISECONDS)
 
     if (restServerEnabled) {
       val port = conf.get(MASTER_REST_SERVER_PORT)
@@ -252,13 +250,13 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
+        workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           workerRef, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress))
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
           schedule()
         } else {
           val workerAddress = worker.endpoint.address

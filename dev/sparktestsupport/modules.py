@@ -341,7 +341,7 @@ pyspark_core = Module(
 
 pyspark_sql = Module(
     name="pyspark-sql",
-    dependencies=[pyspark_core, hive],
+    dependencies=[pyspark_core, hive, avro],
     source_file_regexes=[
         "python/pyspark/sql"
     ],
@@ -360,6 +360,7 @@ pyspark_sql = Module(
         "pyspark.sql.streaming",
         "pyspark.sql.udf",
         "pyspark.sql.window",
+        "pyspark.sql.avro.functions",
         # unittests
         "pyspark.sql.tests.test_appsubmit",
         "pyspark.sql.tests.test_arrow",
@@ -545,6 +546,13 @@ kubernetes = Module(
     sbt_test_goals=["kubernetes/test"]
 )
 
+hadoop_cloud = Module(
+    name="hadoop-cloud",
+    dependencies=[],
+    source_file_regexes=["hadoop-cloud"],
+    build_profile_flags=["-Phadoop-cloud"],
+    sbt_test_goals=["hadoop-cloud/test"]
+)
 
 spark_ganglia_lgpl = Module(
     name="spark-ganglia-lgpl",

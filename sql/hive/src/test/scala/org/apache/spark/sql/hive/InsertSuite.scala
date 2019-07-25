@@ -19,12 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfter
+import org.apache.hadoop.fs.Path
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.hive.execution.InsertIntoHiveTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -36,7 +38,7 @@ case class TestData(key: Int, value: String)
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils {
+    with SQLTestUtils  with PrivateMethodTester  {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -550,6 +552,32 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+  test("SPARK-27552: hive.exec.stagingdir is invalid on Windows OS") {
+    val conf = spark.sessionState.newHadoopConf()
+    val inputPath = new Path("/tmp/b/c")
+    var stagingDir = "tmp/b"
+    val saveHiveFile = InsertIntoHiveTable(null, Map.empty, null, false, false, null)
+    val getStagingDir = PrivateMethod[Path]('getStagingDir)
+    var path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b_hive_") != -1)
+
+    stagingDir = "tmp/b/c"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
+
+    stagingDir = "d/e"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b/c/.hive-staging_hive_") != -1)
+
+    stagingDir = ".d/e"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/b/c/.d/e_hive_") != -1)
+
+    stagingDir = "/tmp/c/"
+    path = saveHiveFile invokePrivate getStagingDir(inputPath, conf, stagingDir)
+    assert(path.toString.indexOf("/tmp/c_hive_") != -1)
+  }
+
   test("insert overwrite to dir from hive metastore table") {
     withTempDir { dir =>
       val path = dir.toURI.getPath
@@ -727,6 +755,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }.getMessage
 
       assert(e.contains("mismatched input 'ROW'"))
+    }
+  }
+
+
+  test("insert overwrite to dir from non-existent table") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE notexists")
+      }.getMessage
+      assert(e.contains("Table or view not found"))
     }
   }
 

@@ -25,7 +25,6 @@ import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.FileUtils
@@ -33,10 +32,8 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.security.AccessControlException
 import org.json4s.jackson.JsonMethods._
-import org.mockito.ArgumentMatcher
 import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doThrow, mock, spy, verify, when}
-import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -49,21 +46,26 @@ import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.security.GroupMappingServiceProvider
-import org.apache.spark.status.{AppStatusStore, ExecutorSummaryWrapper}
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 import org.apache.spark.util.logging.DriverLogger
 
-class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
+class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   private var testDir: File = null
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
   }
 
-  after {
-    Utils.deleteRecursively(testDir)
+  override def afterEach(): Unit = {
+    try {
+      Utils.deleteRecursively(testDir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   /** Create a fake log file using the new log format used in Spark 1.3+ */
@@ -143,7 +145,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.
-      list.foreach { case info =>
+      list.foreach { info =>
         val appUi = provider.getAppUI(info.id, None)
         appUi should not be null
         appUi should not be None
@@ -282,7 +284,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       list.last.attempts.size should be (3)
       list.head.attempts.head.attemptId should be (Some("attempt1"))
 
-      list.foreach { case app =>
+      list.foreach { app =>
         app.attempts.foreach { attempt =>
           val appUi = provider.getAppUI(app.id, attempt.attemptId)
           appUi should not be null
@@ -735,7 +737,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         provider.getConfig().keys should not contain ("HDFS State")
       }
     } finally {
@@ -743,17 +745,17 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("provider reports error after FS leaves safe mode") {
+  testRetry("provider reports error after FS leaves safe mode") {
     testDir.delete()
     val clock = new ManualClock()
     val provider = new SafeModeTestProvider(createTestConf(), clock)
     val errorHandler = mock(classOf[Thread.UncaughtExceptionHandler])
-    val initThread = provider.startSafeModeCheckThread(Some(errorHandler))
+    provider.startSafeModeCheckThread(Some(errorHandler))
     try {
       provider.inSafeMode = false
       clock.setTime(10000)
 
-      eventually(timeout(1 second), interval(10 millis)) {
+      eventually(timeout(3.second), interval(10.milliseconds)) {
         verify(errorHandler).uncaughtException(any(), any())
       }
     } finally {
@@ -768,11 +770,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
     // write out one totally bogus hidden file
     val hiddenGarbageFile = new File(testDir, ".garbage")
-    val out = new PrintWriter(hiddenGarbageFile)
-    // scalastyle:off println
-    out.println("GARBAGE")
-    // scalastyle:on println
-    out.close()
+    Utils.tryWithResource(new PrintWriter(hiddenGarbageFile)) { out =>
+      // scalastyle:off println
+      out.println("GARBAGE")
+      // scalastyle:on println
+    }
 
     // also write out one real event log file, but since its a hidden file, we shouldn't read it
     val tmpNewAppFile = newLogFile("hidden", None, inProgress = false)
@@ -1120,21 +1122,16 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(accessGranted, true, None,
       SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
       SparkListenerApplicationEnd(5L))
+    var isReadable = false
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
-      argThat(new ArgumentMatcher[Path]() {
-        override def matches(path: Path): Boolean = {
-          path.asInstanceOf[Path].getName.toLowerCase(Locale.ROOT) == "accessdenied"
-        }
-      }))
+      argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
+        !isReadable))
     val mockedProvider = spy(provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
-    writeFile(accessDenied, true, None,
-      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None),
-      SparkListenerApplicationEnd(5L))
     // Doing 2 times in order to check the blacklist filter too
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
@@ -1142,8 +1139,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val accessDeniedPath = new Path(accessDenied.getPath)
     assert(mockedProvider.isBlacklisted(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    isReadable = true
     mockedProvider.cleanLogs()
-    assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+    updateAndCheck(mockedProvider) { list =>
+      assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+      assert(list.exists(_.name == "accessDenied"))
+      assert(list.exists(_.name == "accessGranted"))
+      list.size should be(2)
+    }
   }
 
   test("check in-progress event logs absolute length") {
@@ -1180,6 +1183,56 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     // fs.open throws exception
     when(mockedFs.open(path)).thenThrow(new IOException("Throwing intentionally"))
     assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+  }
+
+  test("log cleaner with the maximum number of log files") {
+    val clock = new ManualClock(0)
+    (5 to 0 by -1).foreach { num =>
+      val log1_1 = newLogFile("app1", Some("attempt1"), inProgress = false)
+      writeFile(log1_1, true, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
+        SparkListenerApplicationEnd(2L)
+      )
+      log1_1.setLastModified(2L)
+
+      val log2_1 = newLogFile("app2", Some("attempt1"), inProgress = false)
+      writeFile(log2_1, true, None,
+        SparkListenerApplicationStart("app2", Some("app2"), 3L, "test", Some("attempt1")),
+        SparkListenerApplicationEnd(4L)
+      )
+      log2_1.setLastModified(4L)
+
+      val log3_1 = newLogFile("app3", Some("attempt1"), inProgress = false)
+      writeFile(log3_1, true, None,
+        SparkListenerApplicationStart("app3", Some("app3"), 5L, "test", Some("attempt1")),
+        SparkListenerApplicationEnd(6L)
+      )
+      log3_1.setLastModified(6L)
+
+      val log1_2_incomplete = newLogFile("app1", Some("attempt2"), inProgress = false)
+      writeFile(log1_2_incomplete, true, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 7L, "test", Some("attempt2"))
+      )
+      log1_2_incomplete.setLastModified(8L)
+
+      val log3_2 = newLogFile("app3", Some("attempt2"), inProgress = false)
+      writeFile(log3_2, true, None,
+        SparkListenerApplicationStart("app3", Some("app3"), 9L, "test", Some("attempt2")),
+        SparkListenerApplicationEnd(10L)
+      )
+      log3_2.setLastModified(10L)
+
+      val provider = new FsHistoryProvider(createTestConf().set(MAX_LOG_NUM.key, s"$num"), clock)
+      updateAndCheck(provider) { list =>
+        assert(log1_1.exists() == (num > 4))
+        assert(log1_2_incomplete.exists())  // Always exists for all configurations
+
+        assert(log2_1.exists() == (num > 3))
+
+        assert(log3_1.exists() == (num > 2))
+        assert(log3_2.exists() == (num > 2))
+      }
+    }
   }
 
   /**

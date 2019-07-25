@@ -857,10 +857,7 @@ class JDBCSuite extends QueryTest
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
-    val errMsg = intercept[IllegalArgumentException] {
-      Postgres.getJDBCType(ByteType)
-    }
-    assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
+    assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
   }
 
   test("DerbyDialect jdbc type mapping") {
@@ -883,6 +880,29 @@ class JDBCSuite extends QueryTest
       Some(DoubleType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+  }
+
+  test("MsSqlServerDialect jdbc type mapping") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
+      "DATETIME")
+    assert(msSqlServerDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get ==
+      "NVARCHAR(MAX)")
+    assert(msSqlServerDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get ==
+      "BIT")
+    assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get ==
+      "VARBINARY(MAX)")
+    assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
+      "SMALLINT")
+  }
+
+  test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+      metadata).get == ShortType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+      metadata).get == FloatType)
   }
 
   test("table exists query by jdbc dialect") {
@@ -1310,7 +1330,7 @@ class JDBCSuite extends QueryTest
 
     testJdbcParitionColumn("THEID", "THEID")
     testJdbcParitionColumn("\"THEID\"", "THEID")
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testJdbcParitionColumn("ThEiD", "THEID")
     }
     testJdbcParitionColumn("THE ID", "THE ID")
