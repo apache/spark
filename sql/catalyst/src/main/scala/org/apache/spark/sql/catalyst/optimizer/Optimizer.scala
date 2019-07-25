@@ -152,10 +152,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
-    Batch("Pullup Correlated Expressions", Once,
-      PullupCorrelatedPredicates) ::
-    Batch("Subquery", FixedPoint(1),
-      OptimizeSubqueries) ::
+    Batch("Subquery", Once,
+      OptimizeSubqueries,
+      PullupCorrelatedPredicates,
+      RewritePredicateSubquery) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
       RewriteIntersectAll,
@@ -187,11 +187,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // "Extract PythonUDF From JoinCondition".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
-    Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
-      ColumnPruning,
-      CollapseProject,
-      RemoveNoopOperators) :+
+    Batch("Final column pruning", Once,
+      FinalColumnPruning,
+      CollapseProject) :+
+     // ConvertToLocalRelation,
+     // RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }
@@ -548,12 +548,47 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
  * remove the Project p2 in the following pattern:
  *
  *   p1 @ Project(_, Filter(_, p2 @ Project(_, child))) if p2.outputSet.subsetOf(p2.inputSet)
+ *   p1 @ Project(_, j @ Join(p2 @ Project(_, child), _, LeftSemiOrAnti(_), _))
  *
  * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
  */
 object ColumnPruning extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = removeProjectBeforeFilter(FinalColumnPruning(plan))
+
+  /**
+   * The Project before Filter or LeftSemi/LeftAnti not necessary but conflict with
+   * PushPredicatesThroughProject, so remove it. Since the Projects have been added
+   * top-down, we need to remove in bottom-up order, otherwise lower Projects can be missed.
+   *
+   * While removing the projects below a self join, we should ensure that the plan remains
+   * valid after removing the project. The project node could have been added to de-duplicate
+   * the attributes and thus we need to check for this case before removing the project node.
+   */
+  private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
+      if p2.outputSet.subsetOf(child.outputSet) =>
+      p1.copy(child = f.copy(child = child))
+
+    case p1 @ Project(_, j @ Join(p2 @ Project(_, child), right, LeftSemiOrAnti(_), _, _))
+      if p2.outputSet.subsetOf(child.outputSet) &&
+        child.outputSet.intersect(right.outputSet).isEmpty =>
+      p1.copy(child = j.copy(left = child))
+  }
+}
+
+/**
+ * Attempts to eliminate the reading of unneeded columns from the query plan.
+ *
+ * Since adding Project before Filter conflicts with PushPredicatesThroughProject, this rule will
+ * remove the Project p2 in the following pattern:
+ *
+ *   p1 @ Project(_, Filter(_, p2 @ Project(_, child))) if p2.outputSet.subsetOf(p2.inputSet)
+ *
+ * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
+ */
+object FinalColumnPruning extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if !p2.outputSet.subsetOf(p.references) =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
@@ -656,10 +691,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
-  })
+  }
 
   /** Applies a projection only when the child is producing unnecessary attributes */
-  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
+  private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) = {
     if (!c.outputSet.subsetOf(allReferences)) {
       Project(c.output.filter(allReferences.contains), c)
     } else {
@@ -1113,8 +1148,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(condition, union: Union) =>
       // Union could change the rows, so non-deterministic predicate can't be pushed down
-      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition(_.deterministic)
+      val (candidates, containingNonDeterministic) =
+        splitConjunctivePredicates(condition).partition(_.deterministic)
 
+      val (pushDown, rest) = candidates.partition { cond => !SubExprUtils.containsOuter(cond) }
+      val stayUp = rest ++ containingNonDeterministic
       if (pushDown.nonEmpty) {
         val pushDownCond = pushDown.reduceLeft(And)
         val output = union.output
@@ -1227,7 +1265,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     val attributes = plan.outputSet
     val matched = condition.find {
       case s: SubqueryExpression => s.plan.outputSet.intersect(attributes).nonEmpty
-      case _ => false
+      case e => SubExprUtils.containsOuter(e)
     }
     matched.isEmpty
   }
@@ -1253,13 +1291,17 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
-    val (pushDownCandidates, nonDeterministic) = condition.partition(_.deterministic)
+    val (candidates, nonDeterministic) = condition.partition(_.deterministic)
+    val (pushDownCandidates, subquery) = candidates.partition { cond =>
+      !SubExprUtils.containsOuter(cond)
+    }
     val (leftEvaluateCondition, rest) =
       pushDownCandidates.partition(_.references.subsetOf(left.outputSet))
     val (rightEvaluateCondition, commonCondition) =
-        rest.partition(expr => expr.references.subsetOf(right.outputSet))
+      rest.partition(expr => expr.references.subsetOf(right.outputSet))
 
-    (leftEvaluateCondition, rightEvaluateCondition, commonCondition ++ nonDeterministic)
+    (leftEvaluateCondition, rightEvaluateCondition,
+      subquery ++ commonCondition ++ nonDeterministic)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform applyLocally
