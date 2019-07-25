@@ -23,7 +23,7 @@ package org.apache.spark.sql.catalog.v2;
  * <pre>
  *   import NamespaceChange._
  *   val catalog = Catalogs.load(name)
- *   catalog.namespaces.alterNamespace(ident,
+ *   catalog.alterNamespace(ident,
  *       setProperty("prop", "value"),
  *       removeProperty("other_prop")
  *     )
