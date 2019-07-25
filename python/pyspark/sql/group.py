@@ -221,8 +221,15 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self._df)
 
+    @since(3.0)
     def cogroup(self, other):
+        """
+        Cogroups this group with another group so that we can run cogrouped operations.
+
+        See :class:`CoGroupedData` for the operations that can be run.
+        """
         return CoGroupedData(self, other)
+
 
     @since(2.3)
     def apply(self, udf):
