@@ -1363,7 +1363,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     val t1 = "testcat.ns1.ns2.tbl"
     val t2 = "testcat2.db.tbl"
     withTable(t1, t2) {
-      sql(s"CREATE TABLE $t1 USING foo AS TABLE source")
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT * FROM source")
       sql(s"CREATE TABLE $t2 (id bigint, data string) USING foo")
       sql(s"INSERT INTO $t2 SELECT * FROM $t1")
       checkAnswer(spark.table(t2), spark.table("source"))
@@ -1456,7 +1456,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   test("InsertInto: overwrite non-partitioned table") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
-      sql(s"CREATE TABLE $t1 USING foo AS TABLE source")
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT * FROM source")
       sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source2")
       checkAnswer(spark.table(t1), spark.table("source2"))
     }

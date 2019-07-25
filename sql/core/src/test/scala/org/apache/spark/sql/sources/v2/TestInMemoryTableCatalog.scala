@@ -230,7 +230,7 @@ class InMemoryTable(
               case _ =>
                 throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
             }
-          case f @ _ =>
+          case f =>
             throw new IllegalArgumentException(s"Unsupported filter type: $f")
         }
       }
@@ -248,7 +248,7 @@ class InMemoryTable(
 
   private object TruncateAndAppend extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      dataMap = mutable.Map.empty
+      dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
