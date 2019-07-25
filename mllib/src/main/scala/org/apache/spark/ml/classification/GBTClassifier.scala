@@ -34,7 +34,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions._
 
 /**
@@ -285,14 +285,6 @@ class GBTClassificationModel private[ml](
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
-
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
-    val predictUDF = udf { (features: Any) =>
-      bcastModel.value.predict(features.asInstanceOf[Vector])
-    }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
-  }
 
   override def predict(features: Vector): Double = {
     // If thresholds defined, use predictRaw to get probabilities, otherwise use optimization
