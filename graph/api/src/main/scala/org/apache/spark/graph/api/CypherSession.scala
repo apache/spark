@@ -26,18 +26,22 @@ import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
  * Contains constants used for convention based column naming.
  */
 object CypherSession {
+
   /**
    * Naming convention for identifier columns, both node and relationship identifiers.
    */
   val ID_COLUMN = "$ID"
+
   /**
    * Naming convention for relationship source identifier.
    */
   val SOURCE_ID_COLUMN = "$SOURCE_ID"
+
   /**
    * Naming convention for relationship target identifier.
    */
   val TARGET_ID_COLUMN = "$TARGET_ID"
+
   /**
    * Naming convention both for node label and relationship type prefixes.
    */
@@ -70,6 +74,22 @@ trait CypherSession extends Logging {
   /**
    * Executes a Cypher query on the given input graph.
    *
+   * Note that queries can take optional parameters:
+   *
+   * {{{
+   *     Parameters:
+   *
+   *     {
+   *        "name" : "Alice"
+   *     }
+   *
+   *     Query:
+   *
+   *     MATCH (n:Person)
+   *     WHERE n.name = $name
+   *     RETURN n
+   * }}}
+   *
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
    * @param graph      [[PropertyGraph]] on which the query is executed
@@ -82,6 +102,22 @@ trait CypherSession extends Logging {
   /**
    * Executes a Cypher query on the given input graph.
    *
+   * Note that queries can take optional parameters:
+   *
+   * {{{
+   *     Parameters:
+   *
+   *     {
+   *        "name" : "Alice"
+   *     }
+   *
+   *     Query:
+   *
+   *     MATCH (n:Person)
+   *     WHERE n.name = $name
+   *     RETURN n
+   * }}}
+   *
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
    * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
    * @param graph      [[PropertyGraph]] on which the query is executed
@@ -90,9 +126,9 @@ trait CypherSession extends Logging {
    * @since 3.0.0
    */
   def cypher(
-              graph: PropertyGraph,
-              query: String,
-              parameters: java.util.Map[String, Object]): CypherResult = {
+      graph: PropertyGraph,
+      query: String,
+      parameters: java.util.Map[String, Object]): CypherResult = {
     cypher(graph, query, parameters.asScala.toMap)
   }
 
@@ -121,8 +157,8 @@ trait CypherSession extends Logging {
    * @since 3.0.0
    */
   def createGraph(
-                   nodes: java.util.List[NodeFrame],
-                   relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
+      nodes: java.util.List[NodeFrame],
+      relationships: java.util.List[RelationshipFrame]): PropertyGraph = {
     createGraph(nodes.asScala, relationships.asScala)
   }
 
@@ -144,7 +180,6 @@ trait CypherSession extends Logging {
    *
    * @note It is recommended to cache the input DataFrames if they represent multiple label sets and
    *       relationship types.
-   *
    * @see [[CypherSession]]
    * @param nodes         node DataFrame
    * @param relationships relationship DataFrame
@@ -213,9 +248,9 @@ trait CypherSession extends Logging {
   /**
    * Saves a [[PropertyGraph]] to the given location.
    *
-   * @param graph     [[PropertyGraph]] to be stored
-   * @param path      directory in which the graph should be stored
-   * @param saveMode  specifies what happens when the destination already exists
+   * @param graph    [[PropertyGraph]] to be stored
+   * @param path     directory in which the graph should be stored
+   * @param saveMode specifies what happens when the destination already exists
    * @since 3.0.0
    */
   def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
