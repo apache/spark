@@ -658,13 +658,14 @@ select f1, sum(f1) over (partition by f1 order by f1
                          range between 1 preceding and 1 following)
 from t1 where f1 = f2;
 
-explain
-select f1, sum(f1) over (partition by f1 order by f2
-range between 1 preceding and 1 following)
-from t1 where f1 = f2;
-select f1, sum(f1) over (partition by f1 order by f2
-                         range between 1 preceding and 1 following)
-from t1 where f1 = f2;
+-- Since EXPLAIN clause rely on host physical location, it is commented out
+-- explain
+-- select f1, sum(f1) over (partition by f1 order by f2
+-- range between 1 preceding and 1 following)
+-- from t1 where f1 = f2;
+-- select f1, sum(f1) over (partition by f1 order by f2
+--                          range between 1 preceding and 1 following)
+-- from t1 where f1 = f2;
 
 select f1, sum(f1) over (partition by f1, f1 order by f2
 range between 2 preceding and 1 preceding)
@@ -678,10 +679,11 @@ select f1, sum(f1) over (partition by f1,
 f1 order by f2 range between 1 preceding and 1 following)
 from t1 where f1 = f2;
 
-explain
-select f1, sum(f1) over (partition by f1 order by f2
-range between 1 preceding and 1 following)
-from t1 where f1 = f2;
+-- Since EXPLAIN clause rely on host physical location, it is commented out
+-- explain
+-- select f1, sum(f1) over (partition by f1 order by f2
+-- range between 1 preceding and 1 following)
+-- from t1 where f1 = f2;
 
 select f1, sum(f1) over (partition by f1 order by f2
 range between 1 preceding and 1 following)
@@ -734,35 +736,39 @@ where rn < 10;
 -- )
 -- FROM empsalary GROUP BY depname;
 
-EXPLAIN
-SELECT * FROM
-(SELECT depname,
-sum(salary) OVER (PARTITION BY depname) depsalary,
-min(salary) OVER (PARTITION BY depname || 'A', depname) depminsalary
-FROM empsalary) emp
-WHERE depname = 'sales';
+-- Since EXPLAIN clause rely on host physical location, it is commented out
+-- EXPLAIN
+-- SELECT * FROM
+-- (SELECT depname,
+-- sum(salary) OVER (PARTITION BY depname) depsalary,
+-- min(salary) OVER (PARTITION BY depname || 'A', depname) depminsalary
+-- FROM empsalary) emp
+-- WHERE depname = 'sales';
 
-EXPLAIN
-SELECT * FROM
-(SELECT depname,
-sum(salary) OVER (PARTITION BY enroll_date) enroll_salary,
-min(salary) OVER (PARTITION BY depname) depminsalary
-FROM empsalary) emp
-WHERE depname = 'sales';
+-- Since EXPLAIN clause rely on host physical location, it is commented out
+-- EXPLAIN
+-- SELECT * FROM
+-- (SELECT depname,
+-- sum(salary) OVER (PARTITION BY enroll_date) enroll_salary,
+-- min(salary) OVER (PARTITION BY depname) depminsalary
+-- FROM empsalary) emp
+-- WHERE depname = 'sales';
 
-EXPLAIN
-SELECT * FROM
-(SELECT depname,
-sum(salary) OVER (PARTITION BY depname order by empno) depsalary,
-min(salary) OVER (PARTITION BY depname, empno order by enroll_date) depminsalary
-FROM empsalary) emp
-WHERE depname = 'sales';
+-- Since EXPLAIN clause rely on host physical location, it is commented out
+-- EXPLAIN
+-- SELECT * FROM
+-- (SELECT depname,
+-- sum(salary) OVER (PARTITION BY depname order by empno) depsalary,
+-- min(salary) OVER (PARTITION BY depname, empno order by enroll_date) depminsalary
+-- FROM empsalary) emp
+-- WHERE depname = 'sales';
 
-EXPLAIN
-SELECT
-lead(1) OVER (PARTITION BY depname ORDER BY salary, enroll_date),
-lag(1) OVER (PARTITION BY depname ORDER BY salary,enroll_date,empno)
-FROM empsalary;
+-- Since EXPLAIN clause rely on host physical location, it is commented out
+-- EXPLAIN
+-- SELECT
+-- lead(1) OVER (PARTITION BY depname ORDER BY salary, enroll_date),
+-- lag(1) OVER (PARTITION BY depname ORDER BY salary,enroll_date,empno)
+-- FROM empsalary;
 
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
