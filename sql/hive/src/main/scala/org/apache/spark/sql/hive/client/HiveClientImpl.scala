@@ -21,7 +21,6 @@ import java.io.{File, IOException, PrintStream}
 import java.lang.{Iterable => JIterable}
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
-
 import javax.security.auth.login.LoginException
 
 import scala.collection.JavaConverters._
