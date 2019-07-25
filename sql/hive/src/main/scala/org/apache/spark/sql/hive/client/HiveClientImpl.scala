@@ -42,7 +42,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.hive.shims.{Utils => HiveUtils}
+import org.apache.hadoop.hive.shims.{Utils => HiveShimsUtils}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -223,7 +223,7 @@ private[hive] class HiveClientImpl(
   }
 
   private val userName: String = try {
-    val ugi = HiveUtils.getUGI
+    val ugi = HiveShimsUtils.getUGI
     ugi.getShortUserName
   } catch {
     case _: LoginException => throw new IOException("Can not get login user.")
