@@ -128,7 +128,7 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
     val mountVolumeStep = new MountVolumesFeatureStep(mountVolumeConf)
     val configuredPod = mountVolumeStep.configurePod(SparkPod.initialPod())
 
-    val sparkConf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> "/tmp"))
+    val sparkConf = new SparkConfWithEnv(Map())
     val localDirConf = KubernetesTestConf.createDriverConf(sparkConf)
     val localDirStep = new LocalDirsFeatureStep(localDirConf, defaultLocalDir)
     val newConfiguredPod = localDirStep.configurePod(configuredPod)
@@ -138,5 +138,10 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
     assert(newConfiguredPod.container.getVolumeMounts.size() === 1)
     assert(newConfiguredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
     assert(newConfiguredPod.container.getVolumeMounts.get(0).getName === "spark-local-dir-test")
+    assert(newConfiguredPod.container.getEnv.get(0) ===
+      new EnvVarBuilder()
+        .withName("SPARK_LOCAL_DIRS")
+        .withValue("/tmp")
+        .build())
   }
 }

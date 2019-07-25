@@ -285,12 +285,11 @@ The configuration properties for mounting volumes into the executor pods use pre
 
 ## Local Storage
 
-Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should starts with `spark-local-dir-` and the mount path should be set in the spark configuration `spark.local.dir` or in the pod environment variable `SPARK_LOCAL_DIRS`, for example:
+Spark supports using volumes to spill data during shuffles and other operations. To use a volume as local storage, the volume's name should starts with `spark-local-dir-`, for example:
 
 ```
 --conf spark.kubernetes.driver.volumes.[VolumeType].spark-local-dir-[VolumeName].mount.path=<mount path>
 --conf spark.kubernetes.driver.volumes.[VolumeType].spark-local-dir-[VolumeName].mount.readOnly=false
---conf spark.local.dir=<mount path>
 ```
 
 
