@@ -556,8 +556,7 @@ private[spark] class Executor(
           }
         }
 
-        // update metric counting the number of tasks finished
-        executorSource.FINISHED_TASKS.inc(1L)
+        executorSource.SUCCEEDED_TASKS.inc(1L)
         setTaskFinishedAndClearInterruptStatus()
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
 
