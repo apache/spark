@@ -183,7 +183,7 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
       throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
   }
@@ -745,15 +745,16 @@ object JdbcUtils extends Logging {
    * Compute the schema string for this RDD.
    */
   def schemaString(
-      df: DataFrame,
+      schema: StructType,
+      caseSensitive: Boolean,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitive, _))
       .getOrElse(Map.empty[String, String])
-    df.schema.fields.foreach { field =>
+    schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -769,7 +770,8 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      df: DataFrame,
+      schema: StructType,
+      caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
     def typeName(f: StructField): String = {
       // char/varchar gets translated to string type. Real data type specified by the user
@@ -782,7 +784,11 @@ object JdbcUtils extends Logging {
     }
 
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = df.sparkSession.sessionState.conf.resolver
+    val nameEquality = if (caseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
@@ -790,16 +796,15 @@ object JdbcUtils extends Logging {
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+      schema.find(f => nameEquality(f.name, col)).getOrElse {
         throw new AnalysisException(
           s"createTableColumnTypes option column $col not found in schema " +
-            df.schema.catalogString)
+            schema.catalogString)
       }
     }
 
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
-    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+    if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -864,17 +869,18 @@ object JdbcUtils extends Logging {
    */
   def createTable(
       conn: Connection,
-      df: DataFrame,
+      tableName: String,
+      schema: StructType,
+      caseSensitive: Boolean,
       options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
-      df, options.url, options.createTableColumnTypes)
-    val table = options.table
+      schema, caseSensitive, options.url, options.createTableColumnTypes)
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)

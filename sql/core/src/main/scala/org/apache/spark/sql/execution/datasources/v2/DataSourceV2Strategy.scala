@@ -64,11 +64,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       val rdd = v1Relation.buildScan()
       val unsafeRowRDD = DataSourceStrategy.toCatalystRDD(v1Relation, output, rdd)
-      val originalOutputNames = relation.table.schema().map(_.name)
-      val requiredColumnsIndex = output.map(_.name).map(originalOutputNames.indexOf)
+      // `RowDataSourceScanExec` requires the full output instead of the scan output after column
+      // pruning. However, when we reach here following the v2 code path, we don't have the full
+      // output anymore. `RowDataSourceScanExec.fullOutput` is actually meaningless so here we just
+      // pass the pruned output.
+      // TODO: remove `RowDataSourceScanExec.fullOutput`.
       val dsScan = RowDataSourceScanExec(
         output,
-        requiredColumnsIndex,
+        output.indices,
         translated.toSet,
         pushed.toSet,
         unsafeRowRDD,
@@ -230,7 +233,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
-      DescribeNamespaceExec(desc.output, catalog, ns, extended) :: Nil
+      DescribeNamespaceExec(desc.output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
     case desc @ DescribeRelation(ResolvedTable(_, _, table), partitionSpec, isExtended) =>
       if (partitionSpec.nonEmpty) {
@@ -248,17 +251,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       RenameTableExec(catalog, oldIdent, newIdent) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
-      AlterNamespaceSetPropertiesExec(catalog, ns, properties) :: Nil
+      AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
     case AlterNamespaceSetLocation(ResolvedNamespace(catalog, ns), location) =>
       AlterNamespaceSetPropertiesExec(
-        catalog,
+        catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_LOCATION -> location)) :: Nil
 
     case CommentOnNamespace(ResolvedNamespace(catalog, ns), comment) =>
       AlterNamespaceSetPropertiesExec(
-        catalog,
+        catalog.asNamespaceCatalog,
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
@@ -273,7 +276,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
     case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
-      ShowNamespacesExec(r.output, catalog, ns, pattern) :: Nil
+      ShowNamespacesExec(r.output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
     case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
       ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
