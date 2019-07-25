@@ -230,7 +230,6 @@ class GroupedData(object):
         """
         return CoGroupedData(self, other)
 
-
     @since(2.3)
     def apply(self, udf):
         """
