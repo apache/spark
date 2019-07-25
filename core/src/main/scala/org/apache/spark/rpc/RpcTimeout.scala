@@ -31,7 +31,6 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
   extends TimeoutException(message) { initCause(cause) }
 
-
 /**
  * Associates a timeout with a description so that a when a TimeoutException occurs, additional
  * context about the timeout can be amended to the exception message.

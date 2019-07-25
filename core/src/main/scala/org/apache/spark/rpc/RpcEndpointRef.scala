@@ -66,6 +66,31 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] and get its result within a
    * default timeout, throw an exception if this fails.
    *
+   * Can specify an `isInterrupt` function which checking whether it should be interrupted, if
+   * interrupted an `RpcInterruptedException` will be thrown.
+   *
+   * Note: this is a blocking action which may cost a lot of time,  so don't call it in a message
+   * loop of [[RpcEndpoint]].
+   *
+   * @param message the message to send
+   * @param timeout timeout of this RPC request
+   * @param isCanceled an function which checking whether it should be canceled
+   * @param checkCanceledInterval check RPC canceled interval in milliseconds
+   * @tparam T type of the reply message
+   * @return the reply message from the corresponding [[RpcEndpoint]]
+   */
+  def askWithCancelCheck[T: ClassTag](
+      message: Any,
+      timeout: RpcTimeout,
+      isCanceled: () => Boolean,
+      checkCanceledInterval: Long): Future[T] = {
+    throw new UnsupportedOperationException
+  }
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] and get its result within a
+   * default timeout, throw an exception if this fails.
+   *
    * Note: this is a blocking action which may cost a lot of time,  so don't call it in a message
    * loop of [[RpcEndpoint]].
 
@@ -92,18 +117,12 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
     timeout.awaitResult(future)
   }
 
-  def askSyncWithInterruptCheck[T: ClassTag](
+  def askSyncWithCancelCheck[T: ClassTag](
       message: Any,
       timeout: RpcTimeout,
-      interruptCheck: () => Unit): T = {
-    val future = ask[T](message, timeout)
-    while(!future.isCompleted) {
-      interruptCheck()
-      Thread.sleep(10)
-    }
-    future.value.get match {
-      case scala.util.Success(v) => v
-      case scala.util.Failure(exception) => throw exception
-    }
+      isCanceled: () => Boolean,
+      checkCanceledInterval: Long): T = {
+    val future = askWithCancelCheck[T](message, timeout, isCanceled, checkCanceledInterval)
+    timeout.awaitResult(future)
   }
 }

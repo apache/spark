@@ -74,6 +74,14 @@ private[netty] case class RpcOutboxMessage(
     }
   }
 
+  def onCancel(): Unit = {
+    if (client != null) {
+        client.removeRpcRequest(requestId)
+    } else {
+      logError("Ask interrupted before connecting successfully")
+    }
+  }
+
   override def onFailure(e: Throwable): Unit = {
     _onFailure(e)
   }

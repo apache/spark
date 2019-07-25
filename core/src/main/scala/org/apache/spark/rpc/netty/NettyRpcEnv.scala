@@ -88,6 +88,9 @@ private[netty] class NettyRpcEnv(
 
   val timeoutScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor("netty-rpc-env-timeout")
 
+  val cancelCheckerScheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+    "netty-rpc-env-cancel-checker")
+
   // Because TransportClientFactory.createClient is blocking, we need to run it in this thread pool
   // to implement non-blocking send/ask.
   // TODO: a non-blocking TransportClientFactory.createClient in future
@@ -204,7 +207,11 @@ private[netty] class NettyRpcEnv(
     clientFactory.createClient(address.host, address.port)
   }
 
-  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
+  private[netty] def askWithInterruptCheck[T: ClassTag](
+      message: RequestMessage,
+      timeout: RpcTimeout,
+      isCanceled: () => Boolean,
+      checkCanceledInterval: Long): Future[T] = {
     val promise = Promise[Any]()
     val remoteAddr = message.receiver.address
 
@@ -239,7 +246,8 @@ private[netty] class NettyRpcEnv(
           (client, response) => onSuccess(deserialize[Any](client, response)))
         postToOutbox(message.receiver, rpcMessage)
         promise.future.failed.foreach {
-          case _: TimeoutException => rpcMessage.onTimeout()
+          case e: TimeoutException => rpcMessage.onTimeout()
+          case e: RpcCanceledException => rpcMessage.onCancel()
           case _ =>
         }(ThreadUtils.sameThread)
       }
@@ -250,14 +258,33 @@ private[netty] class NettyRpcEnv(
             s"in ${timeout.duration}"))
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)
+
+      val rpcCanceledChecker = if (isCanceled != null) {
+        assert(checkCanceledInterval > 0, "RPC check interrupt interval should be > 0.")
+        cancelCheckerScheduler.scheduleWithFixedDelay(new Runnable {
+          override def run(): Unit = {
+            if (isCanceled()) {
+              onFailure(new RpcCanceledException)
+            }
+          }
+        }, checkCanceledInterval, checkCanceledInterval, TimeUnit.MILLISECONDS)
+      } else { null }
+
       promise.future.onComplete { v =>
         timeoutCancelable.cancel(true)
+        if (rpcCanceledChecker != null) {
+          rpcCanceledChecker.cancel(true)
+        }
       }(ThreadUtils.sameThread)
     } catch {
       case NonFatal(e) =>
         onFailure(e)
     }
     promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread)
+  }
+
+  private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout) = {
+    askWithInterruptCheck(message, timeout, null, 0L)
   }
 
   private[netty] def serialize(content: Any): ByteBuffer = {
@@ -530,6 +557,15 @@ private[netty] class NettyRpcEndpointRef(
 
   override def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T] = {
     nettyEnv.ask(new RequestMessage(nettyEnv.address, this, message), timeout)
+  }
+
+  override def askWithCancelCheck[T: ClassTag](
+      message: Any,
+      timeout: RpcTimeout,
+      isInterrupted: () => Boolean,
+      checkInterruptInterval: Long): Future[T] = {
+    nettyEnv.askWithInterruptCheck(new RequestMessage(nettyEnv.address, this, message),
+      timeout, isInterrupted, checkInterruptInterval)
   }
 
   override def send(message: Any): Unit = {
