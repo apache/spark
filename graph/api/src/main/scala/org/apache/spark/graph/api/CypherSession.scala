@@ -22,10 +22,25 @@ import scala.collection.JavaConverters._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
+/**
+ * Contains constants used for convention based column naming.
+ */
 object CypherSession {
+  /**
+   * Naming convention for identifier columns, both node and relationship identifiers.
+   */
   val ID_COLUMN = "$ID"
+  /**
+   * Naming convention for relationship source identifier.
+   */
   val SOURCE_ID_COLUMN = "$SOURCE_ID"
+  /**
+   * Naming convention for relationship target identifier.
+   */
   val TARGET_ID_COLUMN = "$TARGET_ID"
+  /**
+   * Naming convention both for node label and relationship type prefixes.
+   */
   val LABEL_COLUMN_PREFIX = ":"
 }
 
