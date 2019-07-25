@@ -23,6 +23,7 @@ import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
 
 import javax.security.auth.login.LoginException
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -39,6 +40,7 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Tab
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.shims.{Utils => HiveUtils}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -56,7 +58,6 @@ import org.apache.spark.sql.hive.HiveExternalCatalog.{DATASOURCE_SCHEMA, DATASOU
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
-import org.apache.hadoop.hive.shims.{Utils => HiveUtils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
