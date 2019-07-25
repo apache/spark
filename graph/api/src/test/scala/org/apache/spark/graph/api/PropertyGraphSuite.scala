@@ -19,12 +19,7 @@ package org.apache.spark.graph.api
 
 import org.scalatest.Matchers
 
-import org.apache.spark.graph.api.CypherSession.{
-  ID_COLUMN,
-  LABEL_COLUMN_PREFIX,
-  SOURCE_ID_COLUMN,
-  TARGET_ID_COLUMN
-}
+import org.apache.spark.graph.api.CypherSession.{ID_COLUMN, LABEL_COLUMN_PREFIX, SOURCE_ID_COLUMN, TARGET_ID_COLUMN}
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.test.SharedSparkSession
 
