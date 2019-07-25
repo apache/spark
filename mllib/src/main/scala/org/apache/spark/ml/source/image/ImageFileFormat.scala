@@ -125,7 +125,7 @@ object ImageFileFormat {
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
    */
-  private[image] val columnSchema = StructType(
+  val columnSchema = StructType(
     StructField("origin", StringType, true) ::
     StructField("height", IntegerType, true) ::
     StructField("width", IntegerType, true) ::
@@ -135,7 +135,7 @@ object ImageFileFormat {
     // Bytes in OpenCV-compatible order: row-wise BGR in most cases
     StructField("data", BinaryType, true) :: Nil)
 
-  private[image] val imageFields: Array[String] = columnSchema.fieldNames
+  val imageFields: Array[String] = columnSchema.fieldNames
 
   /**
    * DataFrame with a single column of images named "image" (nullable)
