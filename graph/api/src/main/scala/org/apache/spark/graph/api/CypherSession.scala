@@ -59,6 +59,7 @@ trait CypherSession extends Logging {
   /**
    * Executes a Cypher query on the given input graph.
    *
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
    * @param graph [[PropertyGraph]] on which the query is executed
    * @param query Cypher query to execute
    * @since 3.0.0
@@ -68,6 +69,7 @@ trait CypherSession extends Logging {
   /**
    * Executes a Cypher query on the given input graph.
    *
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
    * @param graph      [[PropertyGraph]] on which the query is executed
    * @param query      Cypher query to execute
    * @param parameters parameters used by the Cypher query
@@ -78,15 +80,16 @@ trait CypherSession extends Logging {
   /**
    * Executes a Cypher query on the given input graph.
    *
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
    * @param graph      [[PropertyGraph]] on which the query is executed
    * @param query      Cypher query to execute
    * @param parameters parameters used by the Cypher query
    * @since 3.0.0
    */
   def cypher(
-      graph: PropertyGraph,
-      query: String,
-      parameters: java.util.Map[String, Object]): CypherResult = {
+              graph: PropertyGraph,
+              query: String,
+              parameters: java.util.Map[String, Object]): CypherResult = {
     cypher(graph, query, parameters.asScala.toMap)
   }
 
