@@ -83,7 +83,7 @@ abstract class PropertyGraph {
    * @return NodeFrame for the given label set
    * @since 3.0.0
    */
-  def nodeFrame(labelSet: Set[String]): NodeFrame
+  def nodeFrame(labelSet: Array[String]): NodeFrame
 
   /**
    * Returns the [[RelationshipFrame]] for a given relationship type.

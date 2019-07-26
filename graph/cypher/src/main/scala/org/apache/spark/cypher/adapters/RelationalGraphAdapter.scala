@@ -83,7 +83,7 @@ case class RelationalGraphAdapter(
     df.select(selectColumns: _*)
   }
 
-  override def nodeFrame(labelSet: Set[String]): NodeFrame = _nodeFrame(labelSet)
+  override def nodeFrame(labelSet: Array[String]): NodeFrame = _nodeFrame(labelSet.toSet)
 
   override def relationshipFrame(relationshipType: String): RelationshipFrame = _relationshipFrame(relationshipType)
 
