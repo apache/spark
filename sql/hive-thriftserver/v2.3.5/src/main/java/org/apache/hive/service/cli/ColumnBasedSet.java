@@ -24,7 +24,6 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hive.serde2.thrift.ColumnBuffer;
-import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.rpc.thrift.TColumn;
 import org.apache.hive.service.rpc.thrift.TRow;
 import org.apache.hive.service.rpc.thrift.TRowSet;
