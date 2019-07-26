@@ -912,6 +912,10 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
+    >>> df = spark.createDataFrame([(["a", "a", "b", "b", "c", "d"],)], ["words"])
+    >>> hashingTF = HashingTF(numFeatures=100, inputCol="words", outputCol="features")
+    >>> hashingTF.indexOf("a")
+    70
 
     .. versionadded:: 1.3.0
     """
@@ -955,6 +959,14 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         Gets the value of binary or its default value.
         """
         return self.getOrDefault(self.binary)
+
+    @since("3.0.0")
+    def indexOf(self, term):
+        """
+        Returns the index of the input term.
+        """
+        self._transfer_params_to_java()
+        return self._java_obj.indexOf(term)
 
 
 @inherit_doc
