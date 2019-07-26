@@ -61,19 +61,23 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
       // Splits offset ranges with relatively large amount of data to smaller ones.
       val totalSize = offsetRanges.map(_.size).sum
-      val idealRangeSize = totalSize.toDouble / minPartitions.get
-
       offsetRanges.flatMap { range =>
-        // Split the current range into subranges as close to the ideal range size
-        val numSplitsInRange = math.round(range.size.toDouble / idealRangeSize).toInt
-
-        (0 until numSplitsInRange).map { i =>
-          val splitStart = range.fromOffset + range.size * (i.toDouble / numSplitsInRange)
-          val splitEnd = range.fromOffset + range.size * ((i.toDouble + 1) / numSplitsInRange)
-          KafkaOffsetRange(
-            range.topicPartition, splitStart.toLong, splitEnd.toLong, preferredLoc = None)
+        val tp = range.topicPartition
+        val size = range.size
+        // number of partitions to divvy up this topic partition to
+        val parts = math.max(math.round(size.toDouble / totalSize * minPartitions.get), 1).toInt
+        var remaining = size
+        var startOffset = range.fromOffset
+        (0 until parts).map { part =>
+          // Fine to do integer division. Last partition will consume all the round off errors
+          val thisPartition = remaining / (parts - part)
+          remaining -= thisPartition
+          val endOffset = math.min(startOffset + thisPartition, range.untilOffset)
+          val offsetRange = KafkaOffsetRange(tp, startOffset, endOffset, None)
+          startOffset = endOffset
+          offsetRange
         }
-      }
+      }.filter(_.size > 0)
     }
   }
 
