@@ -104,11 +104,11 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       val isBinary = $(binary)
       val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
       terms.foreach { term =>
-        val i = indexOf (term)
+        val i = indexOf(term)
         if (isBinary) {
           termFrequencies(i) = 1.0
         } else {
-          termFrequencies(i) = termFrequencies(i) + 1.0
+          termFrequencies(i) += 1.0
         }
       }
       Vectors.sparse($(numFeatures), termFrequencies.toSeq)

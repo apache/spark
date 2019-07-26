@@ -912,10 +912,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
-    >>> df = spark.createDataFrame([(["a", "a", "b", "b", "c", "d"],)], ["words"])
-    >>> hashingTF = HashingTF(numFeatures=100, inputCol="words", outputCol="features")
-    >>> hashingTF.indexOf("a")
-    70
+    >>> hashingTF.indexOf("b")
+    1
 
     .. versionadded:: 1.3.0
     """
