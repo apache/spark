@@ -50,7 +50,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   override protected val blacklistedOnceBatches: Set[String] =
     Set("Pullup Correlated Expressions",
       "Join Reorder",
-      "Subquery",
       "Extract Python UDFs"
     )
 
@@ -156,7 +155,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
-    Batch("Subquery", Once,
+    Batch("Subquery", FixedPoint(1),
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       RewriteExceptAll,
