@@ -211,7 +211,7 @@ private[spark] class BlockManager(
    *
    * @param blockSize the decrypted size of the block
    */
-  private abstract class BlockStoreUpdater[T](
+  private[spark] abstract class BlockStoreUpdater[T](
       blockSize: Long,
       blockId: BlockId,
       level: StorageLevel,
@@ -357,7 +357,7 @@ private[spark] class BlockManager(
   /**
    * Helper for storing a block based from bytes already in a local temp file.
    */
-  private case class TempFileBasedBlockStoreUpdater[T](
+  private[spark] case class TempFileBasedBlockStoreUpdater[T](
       blockId: BlockId,
       level: StorageLevel,
       classTag: ClassTag[T],

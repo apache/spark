@@ -16,6 +16,7 @@
 #
 import os
 import random
+import time
 import tempfile
 import unittest
 
@@ -81,6 +82,21 @@ class BroadcastTest(unittest.TestCase):
 
     def test_broadcast_value_driver_encryption(self):
         self._test_broadcast_on_driver(("spark.io.encryption.enabled", "true"))
+
+    def test_broadcast_value_against_gc(self):
+        """Test broadcast value against gc."""
+        conf = SparkConf()
+        conf.setMaster("local[1,1]")
+        conf.set("spark.memory.fraction", "0.0001")
+        self.sc = SparkContext(conf = conf)
+        b = self.sc.broadcast([100])
+        self.sc.parallelize([0],1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
+        self.sc._jvm.java.lang.System.gc()
+        time.sleep(5)
+        self.sc._jvm.java.lang.System.gc()
+        time.sleep(5)
+        self.sc.parallelize([1],1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
+        b.destroy()
 
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
