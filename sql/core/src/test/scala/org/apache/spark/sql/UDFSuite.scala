@@ -523,4 +523,11 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
     assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
   }
+
+  test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
+    val e = intercept[AnalysisException] {
+      spark.sql("SELECT CAST(1)")
+    }
+    assert(e.getMessage.contains("Invalid number of arguments for function cast. Expected:"))
+  }
 }
