@@ -50,12 +50,12 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
   }
 
   // Clear all the states of the spark session.
-  def reset(): Unit = {
+  def reset(preCreatedTempViews: Seq[String]): Unit = {
     // Clear the cached tables.
     sharedState.cacheManager.clearCache()
     // Clear the newly created temp views.
     val currentTempViews = sessionState.catalog.getAllTempViews().toSet
-    (currentTempViews -- SQLTestData.tempViewsOfTestData).foreach { name =>
+    (currentTempViews -- preCreatedTempViews -- SQLTestData.tempViewsOfTestData).foreach { name =>
       sessionState.catalog.dropTempView(name)
     }
     // Clear the SQL configs.
