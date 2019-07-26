@@ -18,6 +18,7 @@
 package org.apache.spark.graph.api
 
 import scala.collection.JavaConverters._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.types.{BooleanType, StructType}
@@ -63,8 +64,7 @@ trait CypherSession extends Logging {
   /**
    * Executes a Cypher query on the given input graph.
    *
-   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
-   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">Cypher Manual</a>
    * @param graph [[PropertyGraph]] on which the query is executed
    * @param query Cypher query to execute
    * @since 3.0.0
@@ -90,8 +90,8 @@ trait CypherSession extends Logging {
    *     RETURN n
    * }}}
    *
-   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
-   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">Cypher Manual</a>
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">Parameters</a>
    * @param graph      [[PropertyGraph]] on which the query is executed
    * @param query      Cypher query to execute
    * @param parameters parameters used by the Cypher query
@@ -118,8 +118,8 @@ trait CypherSession extends Logging {
    *     RETURN n
    * }}}
    *
-   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">
-   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/">Cypher Manual</a>
+   * @see <a href="https://neo4j.com/docs/cypher-manual/current/syntax/parameters/">Parameters</a>
    * @param graph      [[PropertyGraph]] on which the query is executed
    * @param query      Cypher query to execute
    * @param parameters parameters used by the Cypher query
@@ -163,6 +163,7 @@ trait CypherSession extends Logging {
    *
    * @note It is recommended to cache the input DataFrames if they represent multiple label sets and
    *       relationship types.
+   *
    * @see [[CypherSession]]
    * @param nodes         node DataFrame
    * @param relationships relationship DataFrame
@@ -170,11 +171,14 @@ trait CypherSession extends Logging {
    */
   def createGraph(nodes: DataFrame, relationships: DataFrame): PropertyGraph = {
     def validateLabelColumns(schema: StructType, columns: Set[String]): Unit = {
-      schema.fields.filter(f => columns.contains(f.name)).foreach(field => {
-        if (field.dataType != BooleanType) {
-          throw new IllegalArgumentException(s"Column ${field.name} must be of type BooleanType.")
-        }
-      })
+      schema.fields
+        .filter(f => columns.contains(f.name))
+        .foreach(field => {
+          if (field.dataType != BooleanType) {
+            throw new IllegalArgumentException(
+              s"Column ${field.name} must be of type BooleanType.")
+          }
+        })
     }
 
     val idColumn = CypherSession.ID_COLUMN
@@ -245,9 +249,9 @@ trait CypherSession extends Logging {
   /**
    * Saves a [[PropertyGraph]] to the given location.
    *
-   * @param graph    [[PropertyGraph]] to be stored
-   * @param path     directory in which the graph should be stored
-   * @param saveMode specifies what happens when the destination already exists
+   * @param graph     [[PropertyGraph]] to be stored
+   * @param path      directory in which the graph should be stored
+   * @param saveMode  specifies what happens when the destination already exists
    * @since 3.0.0
    */
   def save(graph: PropertyGraph, path: String, saveMode: SaveMode): Unit
