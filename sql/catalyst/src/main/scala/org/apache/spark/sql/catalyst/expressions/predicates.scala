@@ -842,8 +842,10 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
 
-abstract class BooleanTest(boolValue: Boolean, whenNull: Boolean)
-  extends UnaryExpression with Predicate with ExpectsInputTypes {
+trait BooleanTest extends UnaryExpression with Predicate with ExpectsInputTypes {
+
+  def boolValue: Boolean
+  def whenNull: Boolean
 
   override def nullable: Boolean = false
   override def inputTypes: Seq[DataType] = Seq(BooleanType)
@@ -852,35 +854,51 @@ abstract class BooleanTest(boolValue: Boolean, whenNull: Boolean)
     val value = child.eval(input)
     Option(value) match {
       case None => whenNull
-      case other => value == boolValue
+      case other => if (whenNull) {
+        value == !boolValue
+      } else {
+        value == boolValue
+      }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val boolVar = if (boolValue) "true" else "false"
-    val nagationPrefix = if (!whenNull) "!" else ""
     ev.copy(code = code"""
       ${eval.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-      ${ev.value} = $nagationPrefix${eval.isNull} && ${eval.value} == $boolVar;""",
-      isNull = FalseLiteral)
+      if (${eval.isNull}) {
+        ${ev.value} = $whenNull;
+      } else if ($whenNull) {
+        ${ev.value} = ${eval.value} == !$boolValue;
+      } else {
+        ${ev.value} = ${eval.value} == $boolValue;
+      }
+      """, isNull = FalseLiteral)
   }
 }
 
-case class IsTrue(child: Expression) extends BooleanTest(true, false) {
+case class IsTrue(child: Expression) extends BooleanTest {
+  override def boolValue: Boolean = true
+  override def whenNull: Boolean = false
   override def sql: String = s"(${child.sql} IS TRUE)"
 }
 
-case class IsNotTrue(child: Expression) extends BooleanTest(true, true) {
+case class IsNotTrue(child: Expression) extends BooleanTest {
+  override def boolValue: Boolean = true
+  override def whenNull: Boolean = true
   override def sql: String = s"(${child.sql} IS NOT TRUE)"
 }
 
-case class IsFalse(child: Expression) extends BooleanTest(false, false) {
+case class IsFalse(child: Expression) extends BooleanTest {
+  override def boolValue: Boolean = false
+  override def whenNull: Boolean = false
   override def sql: String = s"(${child.sql} IS FALSE)"
 }
 
-case class IsNotFalse(child: Expression) extends BooleanTest(false, true) {
+case class IsNotFalse(child: Expression) extends BooleanTest {
+  override def boolValue: Boolean = false
+  override def whenNull: Boolean = true
   override def sql: String = s"(${child.sql} IS NOT FALSE)"
 }
 
