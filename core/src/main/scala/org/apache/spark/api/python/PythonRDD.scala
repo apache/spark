@@ -720,7 +720,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   }
 
   /**
-   * Write data into disk, using randomly generated name.
+   * Write data into disk and map it to a broadcast block.
    */
   private def readObject(in: ObjectInputStream): Unit = {
     broadcastId = in.readLong()
@@ -735,7 +735,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
         Utils.tryWithSafeFinally {
           val size = Utils.copyStream(in, out)
           val ct = implicitly[ClassTag[Object]]
-          // SPARK-28486: attach broadcast file to a broadcast block, so that it could be
+          // SPARK-28486: map broadcast file to a broadcast block, so that it could be
           // cleared by unpersist/destroy rather than gc(previously).
           val blockStoreUpdater = blockManager.
             TempFileBasedBlockStoreUpdater(blockId, StorageLevel.DISK_ONLY, ct, file, size)
