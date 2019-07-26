@@ -79,10 +79,9 @@ trait DataSourceV2ScanExecBase extends LeafExecNode {
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val numOutputRows = longMetric("numOutputRows")
-    inputRDD.asInstanceOf[RDD[ColumnarBatch]].map {
-      b =>
-        numOutputRows += b.numRows()
-        b
+    inputRDD.asInstanceOf[RDD[ColumnarBatch]].map { b =>
+      numOutputRows += b.numRows()
+      b
     }
   }
 }

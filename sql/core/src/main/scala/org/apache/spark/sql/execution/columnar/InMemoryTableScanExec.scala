@@ -115,22 +115,19 @@ case class InMemoryTableScanExec(
     val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
     buffers
       .map(createAndDecompressColumn(_, offHeapColumnVectorEnabled))
-      .map(b => {
-        numOutputRows += b.numRows()
-        b
-      })
+      .map { buffer =>
+        numOutputRows += buffer.numRows()
+        buffer
+      }
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
-    val buffers = filteredCachedBatches()
-    val offHeapColumnVectorEnabled = conf.offHeapColumnVectorEnabled
-    val numOutputRows = longMetric("numOutputRows")
-
     if (enableAccumulatorsForTest) {
       readPartitions.setValue(0)
       readBatches.setValue(0)
     }
 
+    val numOutputRows = longMetric("numOutputRows")
     // Using these variables here to avoid serialization of entire objects (if referenced
     // directly) within the map Partitions closure.
     val relOutput: AttributeSeq = relation.output

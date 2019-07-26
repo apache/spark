@@ -487,7 +487,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
 
     val planBeforeFilter = df2.queryExecution.executedPlan.collect {
       case FilterExec(_, c: ColumnarToRowExec) => c.child
-      case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(i: InputAdapter))) => i.child
+      case WholeStageCodegenExec(FilterExec(_, c: ColumnarToRowExec)) => c.child
     }
     assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
