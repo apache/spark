@@ -60,8 +60,13 @@ object TypeUtils {
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+    } else {
+      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    }
+  }
 
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
