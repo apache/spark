@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-28486][CORE][PYTHON] Map PythonBroadcast's data file to a BroadcastBlock to avoid delete by GC
+    ProblemFilters.exclude[InaccessibleMethodProblem]("java.lang.Object.finalize"),
+
     // [SPARK-27366][CORE] Support GPU Resources in Spark job scheduling
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.resources"),
 
