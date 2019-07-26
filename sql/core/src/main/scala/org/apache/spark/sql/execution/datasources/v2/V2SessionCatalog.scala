@@ -23,23 +23,26 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.catalog.v2.TableChange.{RemoveProperty, SetProperty}
+import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
+class V2SessionCatalog(sessionState: SessionState) extends TableCatalog
+  with HiveMetaStoreBackedDataSourceCatalog {
+
   def this() = {
     this(SparkSession.active.sessionState)
   }
@@ -123,15 +126,21 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
         throw new NoSuchTableException(ident)
     }
 
-    val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
-    val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
+    val properties = applyPropertyChanges(
+      catalogTable.identifier.identifier, catalogTable.properties, changes)
+    val schema = applySchemaChanges(catalogTable, changes)
+    val storage = applyStorageChanges(catalogTable.storage, changes)
 
     try {
-      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
+      catalog.alterTable(catalogTable.copy(
+        storage = storage,
+        properties = properties,
+        schema = schema))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
     }
+    catalog.refreshTable(ident.asTableIdentifier)
 
     loadTable(ident)
   }
@@ -253,3 +262,45 @@ private[sql] object V2SessionCatalog {
   }
 }
 
+trait HiveMetaStoreBackedDataSourceCatalog { self: TableCatalog =>
+
+  protected def applySchemaChanges(
+      table: CatalogTable,
+      changes: Seq[TableChange]): StructType = {
+    val dataSchema = table.dataSchema
+    val newDataSchema = CatalogV2Util.applySchemaChanges(dataSchema, changes)
+//    def flatten(field: StructField): Seq[String] = {
+//
+//    }
+    StructType(newDataSchema ++ table.partitionSchema)
+  }
+
+  protected def applyPropertyChanges(
+      table: String,
+      properties: Map[String, String],
+      changes: Seq[TableChange]): Map[String, String] = {
+    val newProperties = new util.HashMap[String, String](properties.asJava)
+    changes.foreach {
+      case set: SetProperty =>
+        newProperties.put(set.property(), set.value())
+      case remove: RemoveProperty =>
+        if (newProperties.remove(remove.property()) == null && !remove.ifExists()) {
+          throw new AnalysisException(
+            s"Attempted to unset non-existent property '${remove.property()}' in table '$table'")
+        }
+      case _ =>
+    }
+    newProperties.asScala.toMap
+  }
+
+  protected def applyStorageChanges(
+      storage: CatalogStorageFormat,
+      changes: Seq[TableChange]): CatalogStorageFormat = {
+    changes.foldLeft(storage) {
+      case (strg, c: SetProperty) if c.property() == "location" =>
+        strg.copy(locationUri = Some(CatalogUtils.stringToURI(c.value())))
+      case (strg, _) =>
+        strg
+    }
+  }
+}

@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -247,6 +248,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
     case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
+
+    case DataSourceV2Relation(CatalogTableAsV2(v1Table), output, options)
+        if DDLUtils.isDatasourceTable(v1Table) && v1Table.tableType != CatalogTableType.VIEW =>
+      val LogicalRelation(relation, _, _, _) = readDataSourceTable(v1Table)
+      new NamedLogicalRelation(relation, output, Some(v1Table))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
       readDataSourceTable(tableMeta)

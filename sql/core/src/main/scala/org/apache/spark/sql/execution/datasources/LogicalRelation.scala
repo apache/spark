@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -74,4 +74,19 @@ object LogicalRelation {
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation =
     LogicalRelation(relation, relation.schema.toAttributes, Some(table), false)
+}
+
+/**
+ * A DataSource V2 adapter for V1 DataSources.
+ */
+class NamedLogicalRelation(
+    relation: BaseRelation,
+    output: Seq[AttributeReference],
+    table: Option[CatalogTable],
+    isStreaming: Boolean = false)
+  extends LogicalRelation(relation, output, table, isStreaming)
+  with NamedRelation {
+
+  require(table.isDefined)
+  override val name: String = table.get.identifier.identifier
 }
