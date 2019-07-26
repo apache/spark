@@ -1454,7 +1454,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("Fix StatisticsCollectionTestBase#getDataSize refer to ChecksumFileSystem#isChecksumFile") {
+  test("SPARK-28518 fix getDataSize refer to ChecksumFileSystem#isChecksumFile") {
     withTempDir { tempDir =>
       withTable("t1") {
         spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
