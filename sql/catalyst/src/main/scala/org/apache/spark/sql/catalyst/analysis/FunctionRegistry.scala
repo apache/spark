@@ -580,16 +580,23 @@ object FunctionRegistry {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          val validParametersCount = constructors
-            .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
-            .map(_.getParameterCount).distinct.sorted
+          val (validParameters, invalidParameters) = constructors
+            .partition(_.getParameterTypes.forall(_ == classOf[Expression]))
+          val validParametersCount = validParameters.map(_.getParameterCount).distinct.sorted
+
+          def getExpectedNumberOfParameters(parametersCount: Array[Int]): String = {
+            if (parametersCount.length == 1) {
+              parametersCount.head.toString
+            } else {
+              parametersCount.init.mkString("one of ", ", ", " and ") + parametersCount.last
+            }
+          }
           val expectedNumberOfParameters = if (validParametersCount.isEmpty) {
-            constructors.headOption.map(_.getParameterCount).getOrElse(0).toString
-          } else if (validParametersCount.length == 1) {
-            validParametersCount.head.toString
+            val invalidParametersCount = invalidParameters.map(_.getParameterCount).distinct.sorted
+            getExpectedNumberOfParameters(invalidParametersCount) +
+              "(But none is valid, please check whether it is properly defined or misused)"
           } else {
-            validParametersCount.init.mkString("one of ", ", ", " and ") +
-              validParametersCount.last
+            getExpectedNumberOfParameters(validParametersCount)
           }
           throw new AnalysisException(s"Invalid number of arguments for function $name. " +
             s"Expected: $expectedNumberOfParameters; Found: ${params.length}")
