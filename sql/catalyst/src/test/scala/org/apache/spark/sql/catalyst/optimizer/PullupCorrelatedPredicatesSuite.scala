@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{InSubquery, ListQuery}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 class PullupCorrelatedPredicatesSuite extends PlanTest {
@@ -38,17 +38,65 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
   val testRelation2 = LocalRelation('c.int, 'd.double)
 
   test("PullupCorrelatedPredicates should not produce unresolved plan") {
-    val correlatedSubquery =
+    val subPlan =
       testRelation2
         .where('b < 'd)
         .select('c)
-    val outerQuery =
+    val inSubquery =
       testRelation
-        .where(InSubquery(Seq('a), ListQuery(correlatedSubquery)))
+        .where(InSubquery(Seq('a), ListQuery(subPlan)))
         .select('a).analyze
-    assert(outerQuery.resolved)
+    assert(inSubquery.resolved)
 
-    val optimized = Optimize.execute(outerQuery)
+    val optimized = Optimize.execute(inSubquery)
     assert(optimized.resolved)
+  }
+
+  test("SPARK-28375 PullupCorrelatedPredicates in correlated subquery idiompotency check") {
+    val subPlan =
+      testRelation2
+      .where('b < 'd)
+      .select('c)
+    val inSubquery =
+      testRelation
+      .where(InSubquery(Seq('a), ListQuery(subPlan)))
+      .select('a).analyze
+    assert(inSubquery.resolved)
+
+    val optimized = Optimize.execute(inSubquery)
+    val doubleOptimized = Optimize.execute(optimized)
+    comparePlans(optimized, doubleOptimized)
+  }
+
+  test("SPARK-28375 PullupCorrelatedPredicates exists correlated subquery idiompotency check") {
+    val subPlan =
+      testRelation2
+        .where('b === 'd && 'd === 1)
+        .select(Literal(1))
+    val existsSubquery =
+      testRelation
+        .where(Exists(subPlan))
+        .select('a).analyze
+    assert(existsSubquery.resolved)
+
+    val optimized = Optimize.execute(existsSubquery)
+    val doubleOptimized = Optimize.execute(optimized)
+    comparePlans(optimized, doubleOptimized)
+  }
+
+  test("SPARK-28375 PullupCorrelatedPredicates scalar correlated subquery idiompotency check") {
+    val subPlan =
+      testRelation2
+        .where('b === 'd && 'd === 1)
+        .select(max('d))
+    val scalarSubquery =
+      testRelation
+        .where(ScalarSubquery(subPlan))
+        .select('a).analyze
+    assert(scalarSubquery.resolved)
+
+    val optimized = Optimize.execute(scalarSubquery)
+    val doubleOptimized = Optimize.execute(optimized)
+    comparePlans(optimized, doubleOptimized, false)
   }
 }
