@@ -457,7 +457,7 @@ class AnalysisErrorSuite extends AnalysisTest {
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
       if (shouldSuccess) {
-        assertAnalysisSuccess(plan)
+        assertAnalysisSuccess(plan, true)
       } else {
         assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
       }
