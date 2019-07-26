@@ -49,9 +49,7 @@ private[thriftserver] object ThriftserverShimUtils {
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
-  private[thriftserver] val testedProtocalVersions = Seq(
-    HIVE_CLI_SERVICE_PROTOCOL_V1,
-    HIVE_CLI_SERVICE_PROTOCOL_V2,
+  private[thriftserver] val testedProtocolVersions = Seq(
     HIVE_CLI_SERVICE_PROTOCOL_V3,
     HIVE_CLI_SERVICE_PROTOCOL_V4,
     HIVE_CLI_SERVICE_PROTOCOL_V5,

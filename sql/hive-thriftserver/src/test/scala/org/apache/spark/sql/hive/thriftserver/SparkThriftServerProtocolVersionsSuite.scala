@@ -68,7 +68,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2Test {
     }
   }
 
-  ThriftserverShimUtils.testedProtocalVersions.foreach { version =>
+  ThriftserverShimUtils.testedProtocolVersions.foreach { version =>
     test(s"$version get byte type") {
       testWithProtocolVersion(version, "SELECT cast(1 as byte)") { rs =>
         assert(rs.next())
