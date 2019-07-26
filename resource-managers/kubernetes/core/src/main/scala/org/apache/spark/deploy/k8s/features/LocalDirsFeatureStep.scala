@@ -18,8 +18,8 @@ package org.apache.spark.deploy.k8s.features
 
 import java.util.UUID
 
-import collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
+import scala.collection.JavaConverters._
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
@@ -29,15 +29,6 @@ private[spark] class LocalDirsFeatureStep(
     defaultLocalDir: String = s"/var/data/spark-${UUID.randomUUID}")
   extends KubernetesFeatureConfigStep {
 
-  // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
-  // property - we want to instead default to mounting an emptydir volume that doesn't already
-  // exist in the image.
-  // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
-  // a bit opinionated about YARN and Mesos.
-  private val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
-    .orElse(conf.getOption("spark.local.dir"))
-    .getOrElse(defaultLocalDir)
-    .split(",")
   private val useLocalDirTmpFs = conf.get(KUBERNETES_LOCAL_DIRS_TMPFS)
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -46,6 +37,15 @@ private[spark] class LocalDirsFeatureStep(
     var localDirVolumeMounts : Seq[VolumeMount] = Seq()
 
     if (localDirs.isEmpty) {
+      // Cannot use Utils.getConfiguredLocalDirs because that will default to the Java system
+      // property - we want to instead default to mounting an emptydir volume that doesn't already
+      // exist in the image.
+      // We could make utils.getConfiguredLocalDirs opinionated about Kubernetes, as it is already
+      // a bit opinionated about YARN and Mesos.
+      val resolvedLocalDirs = Option(conf.sparkConf.getenv("SPARK_LOCAL_DIRS"))
+        .orElse(conf.getOption("spark.local.dir"))
+        .getOrElse(defaultLocalDir)
+        .split(",")
       localDirs = resolvedLocalDirs.toSeq
       localDirVolumes = resolvedLocalDirs
         .zipWithIndex
@@ -85,13 +85,10 @@ private[spark] class LocalDirsFeatureStep(
 
   def findLocalDirVolumeMount(pod: SparkPod): Seq[String] = {
     val localDirVolumes = pod.pod.getSpec.getVolumes.asScala
-      .filter(v => v.getName.startsWith("spark-local-dir-"))
+      .filter(_.getName.startsWith("spark-local-dir-"))
 
-    localDirVolumes.map { volume => pod.container.getVolumeMounts.asScala
-      .find(m => m.getName.equals(volume.getName)) match {
-          case Some(m) => m.getMountPath
-          case _ => ""
-      }
-    }.filter(s => s.length > 0)
+    localDirVolumes.flatMap { volume =>
+      pod.container.getVolumeMounts.asScala
+      .filter(_.getName == volume.getName).map(_.getMountPath) }
   }
 }

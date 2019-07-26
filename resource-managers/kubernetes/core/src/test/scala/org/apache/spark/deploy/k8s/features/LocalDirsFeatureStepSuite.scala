@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.{EnvVarBuilder, VolumeBuilder, VolumeMountBuilder}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesHostPathVolumeConf, KubernetesTestConf, KubernetesVolumeSpec, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.util.SparkConfWithEnv
 
@@ -124,13 +124,10 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       false,
       KubernetesHostPathVolumeConf("/hostPath/tmp")
     )
-    val mountVolumeConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
-    val mountVolumeStep = new MountVolumesFeatureStep(mountVolumeConf)
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val mountVolumeStep = new MountVolumesFeatureStep(kubernetesConf)
     val configuredPod = mountVolumeStep.configurePod(SparkPod.initialPod())
-
-    val sparkConf = new SparkConfWithEnv(Map())
-    val localDirConf = KubernetesTestConf.createDriverConf(sparkConf)
-    val localDirStep = new LocalDirsFeatureStep(localDirConf, defaultLocalDir)
+    val localDirStep = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
     val newConfiguredPod = localDirStep.configurePod(configuredPod)
 
     assert(newConfiguredPod.pod.getSpec.getVolumes.size() === 1)
