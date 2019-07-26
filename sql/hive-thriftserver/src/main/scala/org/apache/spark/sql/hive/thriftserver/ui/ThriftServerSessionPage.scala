@@ -90,7 +90,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
             [{id}]
           </a>
         }
-        val detail = if (info.state == ExecutionState.FAILED) info.detail else info.executePlan
+        val detail = Option(info.detail).filter(!_.isEmpty).getOrElse(info.executePlan)
         <tr>
           <td>{info.userName}</td>
           <td>
