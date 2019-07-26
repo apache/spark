@@ -103,7 +103,7 @@ private[spark] object ResourceUtils extends Logging {
    * allocated resources. If available resources don't meet worker's or driver's requirement,
    * try to update allocated resources by excluding the resource allocation if its related
    * process has already terminated and do the assignment again. If still don't meet requirement,
-   * exception would be threw. Third, updating ALLOCATED_RESOURCES_FILE with new allocated
+   * exception should be thrown. Third, updating ALLOCATED_RESOURCES_FILE with new allocated
    * resources along with pid for the worker or driver. Then, return allocated resources
    * information after releasing the lock.
    *
