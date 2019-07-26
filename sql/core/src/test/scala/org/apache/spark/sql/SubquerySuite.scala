@@ -1475,11 +1475,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("""
             |SELECT
             |  l.a
-            |FROM l WHERE
+            |FROM l
+            |WHERE
             |  (
-            |    SELECT udf(count(*)) + udf(sum(r.d)
-            |  )
-            |FROM r WHERE l.a = r.c) = 0""".stripMargin),
+            |    SELECT udf(count(*)) + udf(sum(r.d))
+            |    FROM r WHERE l.a = r.c
+            |  ) = 0""".stripMargin),
       Nil)
   }
 
@@ -1567,12 +1568,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("""
             |SELECT l.a FROM l
             |WHERE (
-            |    SELECT cntPlusOne + 1 AS cntPlusTwo FROM (
-            |        SELECT cnt + 1 AS cntPlusOne FROM (
-            |            SELECT sum(r.c) s, (count(*) + cast(rand() as int)) cnt FROM r
-            |                WHERE l.a = r.c HAVING cnt = 0
-            |        )
-            |    )
+            |  SELECT cntPlusOne + 1 AS cntPlusTwo FROM (
+            |    SELECT cnt + 1 AS cntPlusOne FROM (
+            |      SELECT sum(r.c) s, (count(*) + cast(rand() as int)) cnt FROM r
+            |        WHERE l.a = r.c HAVING cnt = 0
+            |      )
+            |  )
             |) = 2""".stripMargin),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
@@ -1581,7 +1582,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val df = sql("""
                    |SELECT
                    |  l.a
-                   |  FROM l WHERE
+                   |FROM l WHERE
                    |  (
                    |    SELECT cntPlusOne + 1 as cntPlusTwo FROM
                    |    (
