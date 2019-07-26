@@ -99,16 +99,19 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashUDF = udf { (terms: Seq[_]) => {
-      val termFrequencies = mutable.HashMap.empty[Int, Double]
-      val setTF =
-        if ($(binary)) (i: Int) => 1.0 else (i: Int) => termFrequencies.getOrElse(i, 0.0) + 1.0
-        terms.foreach { term =>
-          val i = Utils.nonNegativeMod(hashFunc(term), $(numFeatures))
-          termFrequencies.put(i, setTF(i))
+    val hashUDF = udf { terms: Seq[_] =>
+      val numOfFeatures = $(numFeatures)
+      val isBinary = $(binary)
+      val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
+      terms.foreach { term =>
+        val i = indexOf (term)
+        if (isBinary) {
+          termFrequencies(i) = 1.0
+        } else {
+          termFrequencies(i) = termFrequencies(i) + 1.0
         }
-        Vectors.sparse($(numFeatures), termFrequencies.toSeq)
       }
+      Vectors.sparse($(numFeatures), termFrequencies.toSeq)
     }
 
     dataset.withColumn($(outputCol), hashUDF(col($(inputCol))),
