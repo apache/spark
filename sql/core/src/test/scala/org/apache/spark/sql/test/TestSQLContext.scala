@@ -19,16 +19,14 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SharedState, SQLConf, WithTestConf}
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf, WithTestConf}
 
 /**
  * A special `SparkSession` prepared for testing.
  */
-private[spark] class TestSparkSession(
-    sc: SparkContext,
-    existingSharedState: Option[SharedState] = None)
-  extends SparkSession(sc, existingSharedState) { self =>
-
+private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
   def this(sparkConf: SparkConf) {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
@@ -51,8 +49,24 @@ private[spark] class TestSparkSession(
     testData.loadTestData()
   }
 
-  override def newSession(): TestSparkSession = {
-    new TestSparkSession(sparkContext, Some(sharedState))
+  // Clear all the states of the spark session.
+  def reset(): Unit = {
+    // Clear the cached tables.
+    sharedState.cacheManager.clearCache()
+    // Clear the newly created temp views.
+    val currentTempViews = sessionState.catalog.getAllTempViews().toSet
+    (currentTempViews -- SQLTestData.tempViewsOfTestData).foreach { name =>
+      sessionState.catalog.dropTempView(name)
+    }
+    // Clear the SQL configs.
+    sessionState.conf.clear()
+    // Clear the registered UDFs, but need to restore the built-in functions.
+    sessionState.functionRegistry.clear()
+    FunctionRegistry.expressions.foreach { case (name, (info, builder)) =>
+      sessionState.functionRegistry.registerFunction(FunctionIdentifier(name), info, builder)
+    }
+    // Clear registered catalogs
+    catalogs.clear()
   }
 
   private object testData extends SQLTestData {

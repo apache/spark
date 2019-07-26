@@ -36,13 +36,13 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSessionWithFreshCopy}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
+class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
@@ -477,14 +477,17 @@ class DataFrameSuite extends QueryTest with SharedSparkSessionWithFreshCopy {
 
   test("withColumns: case sensitive") {
     setConf(SQLConf.CASE_SENSITIVE, true)
-    val data = Seq(0, 1).toDF("key")
-    val df = data.withColumns(Seq("newCol1", "newCOL1"),
+    val df = testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
       Seq(col("key") + 1, col("key") + 2))
-    checkAnswer(df, Row(0, 1, 2) :: Row(1, 2, 3) :: Nil)
-    assert(df.schema.map(_.name) === Seq("key", "newCol1", "newCOL1"))
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1, key + 2)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCOL1"))
 
     val err = intercept[AnalysisException] {
-      data.toDF().withColumns(Seq("newCol1", "newCol1"),
+      testData.toDF().withColumns(Seq("newCol1", "newCol1"),
         Seq(col("key") + 1, col("key") + 2))
     }
     assert(err.getMessage.contains("Found duplicate column(s)"))

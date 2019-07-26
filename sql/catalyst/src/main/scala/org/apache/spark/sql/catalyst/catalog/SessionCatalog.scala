@@ -852,8 +852,13 @@ class SessionCatalog(
    * Drop all existing temporary views.
    * For testing only.
    */
-  def clearTempTables(): Unit = synchronized {
+  def clearTempViews(): Unit = synchronized {
     tempViews.clear()
+  }
+
+  // For test only.
+  def getAllTempViews(): Seq[String] = synchronized {
+    tempViews.keys.toSeq
   }
 
   // ----------------------------------------------------------------------------
@@ -1428,7 +1433,7 @@ class SessionCatalog(
         dropTempFunction(func.funcName, ignoreIfNotExists = false)
       }
     }
-    clearTempTables()
+    clearTempViews()
     globalTempViewManager.clear()
     functionRegistry.clear()
     tableRelationCache.invalidateAll()

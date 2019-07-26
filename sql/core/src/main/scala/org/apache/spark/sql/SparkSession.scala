@@ -87,14 +87,6 @@ class SparkSession private(
   // The call site where this SparkSession was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
-  // A constructor for tests.
-  private[sql] def this(sc: SparkContext, existingSharedState: Option[SharedState]) {
-    this(sc, existingSharedState, None,
-      SparkSession.applyExtensions(
-        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
-        new SparkSessionExtensions))
-  }
-
   /**
    * Constructor used in Pyspark. Contains explicit application of Spark Session Extensions
    * which otherwise only occurs during getOrCreate. We cannot add this to the default constructor
@@ -102,7 +94,10 @@ class SparkSession private(
    * running extensions.
    */
   private[sql] def this(sc: SparkContext) {
-    this(sc, None)
+    this(sc, None, None,
+      SparkSession.applyExtensions(
+        sc.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
+        new SparkSessionExtensions))
   }
 
   sparkContext.assertNotStopped()
@@ -612,7 +607,7 @@ class SparkSession private(
    */
   @transient lazy val catalog: Catalog = new CatalogImpl(self)
 
-  @transient private lazy val catalogs = new mutable.HashMap[String, CatalogPlugin]()
+  @transient private[sql] lazy val catalogs = new mutable.HashMap[String, CatalogPlugin]()
 
   private[sql] def catalog(name: String): CatalogPlugin = synchronized {
     catalogs.getOrElseUpdate(name, Catalogs.load(name, sessionState.conf))

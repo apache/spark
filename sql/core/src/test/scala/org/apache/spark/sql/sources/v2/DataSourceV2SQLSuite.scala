@@ -28,11 +28,11 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
-import org.apache.spark.sql.test.SharedSparkSessionWithFreshCopy
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 
 class DataSourceV2SQLSuite extends QueryTest
-  with SharedSparkSessionWithFreshCopy with BeforeAndAfterEach {
+  with SharedSparkSession with BeforeAndAfterEach {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 

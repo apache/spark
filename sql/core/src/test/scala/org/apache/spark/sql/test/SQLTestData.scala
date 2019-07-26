@@ -18,6 +18,7 @@
 package org.apache.spark.sql.test
 
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext, SQLImplicits}
@@ -335,4 +336,30 @@ private[sql] object SQLTestData {
   case class ComplexData(m: Map[String, Int], s: TestData, a: Seq[Int], b: Boolean)
   case class CourseSales(course: String, year: Int, earnings: Double)
   case class TrainingSales(training: String, sales: CourseSales)
+
+  val tempViewsOfTestData = Seq(
+    "emptyTestData",
+    "testData",
+    "testData2",
+    "testData3",
+    "negativeData",
+    "largeAndSmallInts",
+    "decimalData",
+    "binaryData",
+    "upperCaseData",
+    "lowerCaseData",
+    "arrayData",
+    "mapData",
+    "repeatedData",
+    "nullableRepeatedData",
+    "nullInts",
+    "allNulls",
+    "nullStrings",
+    "tableName",
+    "withEmptyParts",
+    "person",
+    "salary",
+    "complexData",
+    "courseSales"
+  ).map(_.toLowerCase(Locale.ROOT))
 }
