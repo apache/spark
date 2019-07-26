@@ -47,6 +47,13 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty)
   }
 
+  override protected val blacklistedOnceBatches: Set[String] =
+    Set("Pullup Correlated Expressions",
+      "Join Reorder",
+      "Subquery",
+      "Extract Python UDFs"
+    )
+
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
   /**
