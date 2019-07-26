@@ -26,6 +26,7 @@ import org.apache.spark.sql.{DataFrame, SaveMode}
  * The lifetime of a graph is bound by the session lifetime.
  *
  * @see <a href="http://www.opencypher.org/">openCypher project</a>
+ * @see <a href="https://github.com/opencypher/openCypher/blob/master/docs/property-graph-model.adoc">PG Model</a>
  * @since 3.0.0
  */
 abstract class PropertyGraph {
