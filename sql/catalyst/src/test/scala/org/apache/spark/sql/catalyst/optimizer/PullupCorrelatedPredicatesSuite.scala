@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class PullupCorrelatedPredicatesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
+    override protected val blacklistedOnceBatches = Set("PullupCorrelatedPredicates")
+
     val batches =
       Batch("PullupCorrelatedPredicates", Once,
         PullupCorrelatedPredicates) :: Nil
