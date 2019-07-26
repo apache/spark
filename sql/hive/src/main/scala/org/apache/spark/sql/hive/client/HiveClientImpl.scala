@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.client
 
-import java.io.{File, IOException, PrintStream}
+import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
 import java.util.{Locale, Map => JMap}
 import java.util.concurrent.TimeUnit._
@@ -42,7 +42,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.hive.shims.{Utils => HiveShimsUtils}
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -222,11 +222,16 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private val userName: String = try {
-    val ugi = HiveShimsUtils.getUGI
+  private val userName = try {
+    val doAs = sys.env.get("HADOOP_USER_NAME").orNull
+    val ugi = if (doAs != null && doAs.length() > 0) {
+      UserGroupInformation.createProxyUser(doAs, UserGroupInformation.getLoginUser())
+    } else {
+      UserGroupInformation.getCurrentUser
+    }
     ugi.getShortUserName
   } catch {
-    case _: LoginException => throw new IOException("Can not get login user.")
+    case _: LoginException => throw new LoginException("Can not get login user.")
   }
 
   override def getConf(key: String, defaultValue: String): String = {
