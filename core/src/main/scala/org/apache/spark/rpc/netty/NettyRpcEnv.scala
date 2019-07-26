@@ -207,7 +207,7 @@ private[netty] class NettyRpcEnv(
     clientFactory.createClient(address.host, address.port)
   }
 
-  private[netty] def askWithInterruptCheck[T: ClassTag](
+  private[netty] def askWithCancelCheck[T: ClassTag](
       message: RequestMessage,
       timeout: RpcTimeout,
       isCanceled: () => Boolean,
@@ -284,7 +284,7 @@ private[netty] class NettyRpcEnv(
   }
 
   private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout) = {
-    askWithInterruptCheck(message, timeout, null, 0L)
+    askWithCancelCheck(message, timeout, null, 0L)
   }
 
   private[netty] def serialize(content: Any): ByteBuffer = {
@@ -331,6 +331,9 @@ private[netty] class NettyRpcEnv(
     }
     if (timeoutScheduler != null) {
       timeoutScheduler.shutdownNow()
+    }
+    if (cancelCheckerScheduler != null) {
+      cancelCheckerScheduler.shutdown()
     }
     if (dispatcher != null) {
       dispatcher.stop()
@@ -564,7 +567,7 @@ private[netty] class NettyRpcEndpointRef(
       timeout: RpcTimeout,
       isInterrupted: () => Boolean,
       checkInterruptInterval: Long): Future[T] = {
-    nettyEnv.askWithInterruptCheck(new RequestMessage(nettyEnv.address, this, message),
+    nettyEnv.askWithCancelCheck(new RequestMessage(nettyEnv.address, this, message),
       timeout, isInterrupted, checkInterruptInterval)
   }
 
