@@ -225,7 +225,7 @@ abstract class PropertyGraphSuite extends QueryTest with SharedSparkSession with
 
   test("select nodes via label set") {
     val graph = cypherSession.createGraph(nodes, relationships)
-    val nodeFrame = graph.nodeFrame(Set("Person", "Teacher"))
+    val nodeFrame = graph.nodeFrame(Array("Person", "Teacher"))
 
     nodeFrame.labelSet shouldEqual Set("Person", "Teacher")
     nodeFrame.idColumn shouldEqual ID_COLUMN
