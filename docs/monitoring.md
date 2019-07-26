@@ -853,7 +853,7 @@ when running in local mode.
   - shuffleRemoteBytesReadToDisk.count
   - shuffleTotalBytesRead.count
   - shuffleWriteTime.count
-  - succeddedTasks.count
+  - succeededTasks.count
   - threadpool.activeTasks
   - threadpool.completeTasks
   - threadpool.currentPool_size
