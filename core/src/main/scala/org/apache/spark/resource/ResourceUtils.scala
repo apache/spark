@@ -212,12 +212,8 @@ private[spark] object ResourceUtils extends Logging {
       StandaloneResourceAllocation(pid, allocations)
     }
     writeResourceAllocationJson(componentName, origAllocation ++ Seq(newAllocation), resourcesFile)
-    val acquired = newAllocation.toResourceInformationMap
-    logInfo("==============================================================")
-    logInfo(s"Acquired isolated resources for $componentName:\n${acquired.mkString("\n")}")
-    logInfo("==============================================================")
     releaseLock(lock)
-    acquired
+    newAllocation.toResourceInformationMap
   }
 
   /**
@@ -472,10 +468,14 @@ private[spark] object ResourceUtils extends Logging {
     val allocations = parseAllocatedOrDiscoverResources(sparkConf, componentName, resourcesFileOpt)
     assertAllResourceAllocationsMeetRequests(allocations, requests)
     val resourceInfoMap = allocations.map(a => (a.id.resourceName, a.toResourceInformation)).toMap
-    logInfo("==============================================================")
-    logInfo(s"Resources for $componentName:\n${resourceInfoMap.mkString("\n")}")
-    logInfo("==============================================================")
     resourceInfoMap
+  }
+
+  def showResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
+    : Unit = {
+    logInfo("==============================================================")
+    logInfo(s"Resources for $componentName:\n${resources.mkString("\n")}")
+    logInfo("==============================================================")
   }
 
   // visible for test

@@ -397,6 +397,7 @@ class SparkContext(config: SparkConf) extends Logging {
       try {
         _resources = acquireResources(_conf, SPARK_DRIVER_PREFIX, _resources,
           requests, Utils.getProcessId)
+        showResourceInfo(SPARK_DRIVER_PREFIX, _resources)
       } catch {
         case NonFatal(e) =>
           // set _resources to empty to avoid driver releases
@@ -404,6 +405,8 @@ class SparkContext(config: SparkConf) extends Logging {
           _resources = Map.empty[String, ResourceInformation]
           throw e
       }
+    } else {
+      showResourceInfo(SPARK_DRIVER_PREFIX, _resources)
     }
 
     // log out spark.app.name in the Spark driver logs

@@ -95,6 +95,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (resources.isEmpty) {
         throw new SparkException("User specified resources per task via: " +
           s"$SPARK_TASK_PREFIX, but can't find any resources available on the executor.")
+      } else {
+        showResourceInfo(SPARK_EXECUTOR_PREFIX, resources)
       }
       resources
     } else {
