@@ -29,10 +29,12 @@ class RewriteSubquerySuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
+      Batch("Subquery", Once,
+        RewritePredicateSubquery) ::
       Batch("Column Pruning", FixedPoint(100), ColumnPruning) ::
-      Batch("Rewrite Subquery", FixedPoint(1),
+      Batch("Final Column Pruning", FixedPoint(1),
         RewritePredicateSubquery,
-        ColumnPruning,
+        FinalColumnPruning,
         CollapseProject,
         RemoveNoopOperators) :: Nil
   }

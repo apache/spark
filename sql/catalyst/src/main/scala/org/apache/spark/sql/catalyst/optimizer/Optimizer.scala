@@ -187,11 +187,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     // "Extract PythonUDF From JoinCondition".
     Batch("Check Cartesian Products", Once,
       CheckCartesianProducts) :+
-    Batch("Final column pruning", Once,
+    Batch("Final Column Pruning", Once,
       FinalColumnPruning,
-      CollapseProject) :+
-     // ConvertToLocalRelation,
-     // RemoveNoopOperators) :+
+      CollapseProject,
+      RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }
