@@ -88,14 +88,14 @@ class BroadcastTest(unittest.TestCase):
         conf = SparkConf()
         conf.setMaster("local[1,1]")
         conf.set("spark.memory.fraction", "0.0001")
-        self.sc = SparkContext(conf = conf)
+        self.sc = SparkContext(conf=conf)
         b = self.sc.broadcast([100])
-        self.sc.parallelize([0],1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
+        self.sc.parallelize([0], 1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
         self.sc._jvm.java.lang.System.gc()
         time.sleep(5)
         self.sc._jvm.java.lang.System.gc()
         time.sleep(5)
-        self.sc.parallelize([1],1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
+        self.sc.parallelize([1], 1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
         b.destroy()
 
 
