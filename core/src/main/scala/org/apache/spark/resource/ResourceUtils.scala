@@ -318,8 +318,9 @@ private[spark] object ResourceUtils extends Logging {
   private def getOrCreateResourcesDir(conf: SparkConf): File = {
     val coordinateDir = new File(conf.get(SPARK_RESOURCES_DIR).getOrElse {
       val sparkHome = if (Utils.isTesting) {
-        assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
-        sys.props("spark.test.home")
+        assert(sys.props.contains("spark.test.home") ||
+          sys.env.contains("SPARK_HOME"), "spark.test.home or SPARK_HOME is not set.")
+        sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
       } else {
         sys.env.getOrElse("SPARK_HOME", ".")
       }
