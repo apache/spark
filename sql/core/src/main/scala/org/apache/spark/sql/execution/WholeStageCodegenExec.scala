@@ -895,6 +895,10 @@ case class CollapseCodegenStages(
       // domain object can not be written into unsafe row.
       case plan if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
         plan.withNewChildren(plan.children.map(insertWholeStageCodegen(_, isColumnar)))
+      case plan: LocalTableScanExec =>
+        // Do not make LogicalTableScanExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
       case plan: CodegenSupport if supportCodegen(plan) =>
         WholeStageCodegenExec(
           insertInputAdapter(plan, isColumnar))(codegenStageCounter.incrementAndGet())

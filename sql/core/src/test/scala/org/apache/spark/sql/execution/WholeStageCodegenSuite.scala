@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -323,6 +324,70 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
           ProjectExec(_, BroadcastHashJoinExec(_, _, _, _, _, _: HashAggregateExec, _))) => true
       }.isDefined)
       checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
+    }
+  }
+
+  test("WholeStageCodegen does not work properly for LocalTableScanExec") {
+    // Case1: LocalTableScanExec is the root of a query plan tree.
+    // In this case, WholeStageCodegenExec should not be inserted
+    // as the direct parent of LocalTableScanExec.
+    val df1 = spark.createDataset(1 to 10).toDF
+    val rootOfExecutedPlan = df1.queryExecution.executedPlan
+
+    // Ensure WholeStageCodegenExec is not inserted and
+    // LocalTableScanExec is still the root.
+    assert(!rootOfExecutedPlan.isInstanceOf[WholeStageCodegenExec],
+      "WholeStageCodegenExec should not be inserted if LocalTableScanExec is the only plan.")
+    assert(rootOfExecutedPlan.isInstanceOf[LocalTableScanExec],
+      "LocalTableScanExec should be still the root.")
+
+    // Case2: The parent of a LocalTableScanExec supports WholeStageCodegen.
+    // In this case, the LocalTableScanExec should be within a WholeStageCodegen domain
+    // and no more InputAdapter is inserted as the direct parent of the LocalTableScanExec.
+    val leftDF = spark.createDataset(1 to 10).toDF
+    val rightDF = spark.createDataset(1 to 10).toDF
+
+    // Force BroadcastHasJoin enabled
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
+      val joinedDF = leftDF.join(rightDF, leftDF("value") === rightDF("value"))
+      val executedPlan = joinedDF.queryExecution.executedPlan
+
+      // BroadcastHashJoinExec supports WholeStageCodegen and it's the parent of
+      // LocalTableScanExec so LocalTableScanExec should be within a WholeStageCodegen domain.
+      assert(
+        executedPlan.find {
+          case WholeStageCodegenExec(
+            BroadcastHashJoinExec(_, _, _, _, _, _: LocalTableScanExec, _)) => true
+          case _ => false
+        }.isDefined,
+        "LocalTableScanExec is not within a WholeStageCodegen domain.")
+
+      // No more InputAdapter inserted between LocalTableScanExec and its parent.
+      assert(
+        executedPlan.find {
+          case InputAdapter(_: LocalTableScanExec, _) => true
+          case _ => false
+        }.isEmpty,
+        "InputAdapter should not be inserted.")
+    }
+
+    // Case3: The parent of a plan of LocalTableScanExec does not support WholeStageCodegen.
+    // In this case, the LocalTableScanExec should not be within a WholeStageCodegen domain
+    // and has a parent
+
+    // Force SortMergeJoin enabled
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val joinedDF = leftDF.join(rightDF, leftDF("value") === rightDF("value"))
+      val executedPlan = joinedDF.queryExecution.executedPlan
+      // The parent of LocalTableScanExec (ShuffleExchangeExec, in this case) does
+      // not support WholeStageCodegen so LocalTableScanExec should not be within a
+      // WholeStageCodegen domain and InputAdapter should be inserted.
+      assert(
+        executedPlan.find {
+          case InputAdapter(ShuffleExchangeExec(_, _: LocalTableScanExec, _), _) => true
+          case _ => false
+        }.isDefined,
+        "InputAdapter should be inserted as the grand parent of LocalTableScanExec.")
     }
   }
 }
