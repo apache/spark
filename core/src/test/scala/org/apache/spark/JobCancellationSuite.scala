@@ -363,7 +363,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       }.foreachAsync { x =>
         // Block this code from being executed, until the job get cancelled. In this case, if the
         // source iterator is interruptible, the max number of increment should be under
-        // `numElements`.
+        // `numElements`. We sleep a little to make sure that we leave enough time for the
+        // "kill" message to be delivered to the executor (10000 * 10ms = 100s allowance for
+        // delivery, which should be more than enough).
+        Thread.sleep(10)
         taskCancelledSemaphore.acquire()
         executionOfInterruptibleCounter.getAndIncrement()
     }
