@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.debug
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -47,5 +49,26 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
     assert(res.length == 2)
     assert(res.forall{ case (subtree, code) =>
       subtree.contains("Range") && code.contains("Object[]")})
+  }
+
+  test("debug() or broadcast and columnar") {
+    val rightDF = spark.range(10)
+    val leftDF = spark.range(10)
+    val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
+    Try {
+      joinedDF.debug()
+    } match {
+      case Success(_) =>
+      case Failure(e) => fail(e)
+    }
+
+    val df = spark.range(5)
+    df.persist()
+    Try {
+      df.debug()
+    } match {
+      case Success(_) =>
+      case Failure(e) => fail(e)
+    }
   }
 }
