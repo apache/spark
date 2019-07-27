@@ -344,12 +344,16 @@ private[spark] object ResourceUtils extends Logging {
    * @param componentName spark.driver / spark.executor
    * @param resources allocated resources for driver(cluster only) or executor
    * @param dir the target directory used to place the resources file
-   * @return resources file
+   * @return None if resources is empty or Some(file) which represents the resources file
    */
   def prepareResourcesFile(
       componentName: String,
       resources: Map[String, ResourceInformation],
-      dir: File): File = {
+      dir: File): Option[File] = {
+    if (resources.isEmpty) {
+      return None
+    }
+
     val compShortName = componentName.substring(componentName.lastIndexOf(".") + 1)
     val tmpFile = Utils.tempFileWith(dir)
     val allocations = resources.map { case (rName, rInfo) =>
@@ -365,7 +369,7 @@ private[spark] object ResourceUtils extends Logging {
     }
     val resourcesFile = File.createTempFile(s"resource-${compShortName}-", ".json", dir)
     tmpFile.renameTo(resourcesFile)
-    resourcesFile
+    Some(resourcesFile)
   }
 
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {

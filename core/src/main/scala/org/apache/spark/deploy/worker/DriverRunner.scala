@@ -174,11 +174,8 @@ private[deploy] class DriverRunner(
   private[worker] def prepareAndRunDriver(): Int = {
     val driverDir = createWorkingDirectory()
     val localJarFilename = downloadUserJar(driverDir)
-    val resourceFileOpt = if (resources.isEmpty) {
-      None
-    } else {
-      Option(ResourceUtils.prepareResourcesFile(SPARK_DRIVER_PREFIX, resources, driverDir))
-    }
+    val resourceFileOpt =
+      ResourceUtils.prepareResourcesFile(SPARK_DRIVER_PREFIX, resources, driverDir)
 
     def substituteVariables(argument: String): String = argument match {
       case "{{WORKER_URL}}" => workerUrl

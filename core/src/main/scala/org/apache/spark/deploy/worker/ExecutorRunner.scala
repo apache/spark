@@ -146,11 +146,8 @@ private[deploy] class ExecutorRunner(
    */
   private def fetchAndRunExecutor() {
     try {
-      val resourceFileOpt = if (resources.isEmpty) {
-        None
-      } else {
-        Option(ResourceUtils.prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir))
-      }
+      val resourceFileOpt =
+        ResourceUtils.prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir)
       // Launch the process
       val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
         Seq("--resourcesFile", f.getAbsolutePath)).getOrElse(Seq.empty)
