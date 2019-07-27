@@ -131,6 +131,7 @@ private[spark] object ResourceUtils extends Logging {
       // all allocated resources in ALLOCATED_RESOURCES_FILE, can be updated if any allocations'
       // related processes detected to be terminated while checking pids below.
       var origAllocation = Seq.empty[StandaloneResourceAllocation]
+      // Map[pid -> Map[resourceName -> Addresses[]]]
       var allocated = {
         if (resourcesFile.exists()) {
           origAllocation = allocatedStandaloneResources(resourcesFile.getPath)
@@ -174,6 +175,10 @@ private[spark] object ResourceUtils extends Logging {
             val resourceMap = a._2
             val assigned = resourceMap.getOrElse(rName, Array.empty)
             val retained = available.diff(assigned)
+            // if len(retained) < len(available) after differ to assigned, then, there must be
+            // some conflicting resources addresses between available and assigned. So, we should
+            // store its pid here to check whether it's alive in case we don't find enough
+            // resources after traversal all allocated resources.
             if (retained.length < available.length && !checked) {
               pidsToCheck += thePid
             }
@@ -204,7 +209,6 @@ private[spark] object ResourceUtils extends Logging {
           }
           rName -> assigned
         }.toMap
-
       }
       val newAllocation = {
         val allocations = newAssignments.map { case (rName, addresses) =>
