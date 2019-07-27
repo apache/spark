@@ -80,8 +80,8 @@ while IFS= read -d "$DELIM" -r ARG; do
   if [ -n "$CMD_START_FLAG" ]; then
     CMD+=("$ARG")
   else
-    if [ "$ARG" == $'\001' ]; then
-      # After Start-of-Header (\001) is consumed, change the delimiter and consume command string.
+    if [ "$ARG" == $'\0' ]; then
+      # After NULL character is consumed, change the delimiter and consume command string.
       DELIM=''
       CMD_START_FLAG="true"
     elif [ "$ARG" != "" ]; then

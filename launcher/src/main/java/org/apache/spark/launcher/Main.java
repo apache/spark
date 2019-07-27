@@ -90,8 +90,8 @@ class Main {
     if (isWindows()) {
       System.out.println(prepareWindowsCommand(cmd, env));
     } else {
-      // A sequence of Start-of-Header character and newline separates command-strings and others.
-      System.out.println('\001');
+      // A sequence of NULL character and newline separates command-strings and others.
+      System.out.println('\0');
 
       // In bash, use NULL as the arg separator since it cannot be used in an argument.
       List<String> bashCmd = prepareBashCommand(cmd, env);
