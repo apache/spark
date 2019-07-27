@@ -163,7 +163,7 @@ class ObjectAggregationIterator(
           logInfo(
             s"Aggregation hash map size ${hashMap.size} reaches threshold " +
               s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +
-              s" based aggregation. You may change the threshold by adjust option " +
+              " based aggregation. You may change the threshold by adjust option " +
               SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key
           )
 
