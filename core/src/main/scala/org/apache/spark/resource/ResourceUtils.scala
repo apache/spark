@@ -471,7 +471,7 @@ private[spark] object ResourceUtils extends Logging {
     resourceInfoMap
   }
 
-  def showResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
+  def logResourceInfo(componentName: String, resources: Map[String, ResourceInformation])
     : Unit = {
     logInfo("==============================================================")
     logInfo(s"Resources for $componentName:\n${resources.mkString("\n")}")

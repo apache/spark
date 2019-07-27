@@ -405,7 +405,7 @@ class SparkContext(config: SparkConf) extends Logging {
         discovered
       }
     }
-    showResourceInfo(SPARK_DRIVER_PREFIX, _resources)
+    logResourceInfo(SPARK_DRIVER_PREFIX, _resources)
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
