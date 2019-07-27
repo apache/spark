@@ -80,7 +80,5 @@ case class LocalTableScanExec(
   // Input is already UnsafeRows.
   override protected val createUnsafeProjection: Boolean = false
 
-  override def supportCodegen: Boolean = true
-
   override def inputRDD: RDD[InternalRow] = rdd
 }
