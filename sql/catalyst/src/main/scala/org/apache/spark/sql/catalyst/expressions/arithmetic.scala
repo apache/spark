@@ -142,14 +142,13 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$calendarIntervalMethod($eval2)")
     // byte and short are casted into int when add, minus, times or divide
-    case dt @ ByteType | ShortType =>
+    case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val tmpResult = ctx.freshName("tmpResult")
         val overflowCheck = if (checkOverflow) {
-          val maxValue = 2 << (dt.defaultSize * 8 - 2) - 1
-          val minValue = - 2 << (dt.defaultSize * 8 - 2)
+          val javaType = CodeGenerator.boxedType(dataType)
           s"""
-             |if ($tmpResult < $minValue || $tmpResult > $maxValue) {
+             |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
              |  throw new ArithmeticException($eval1 + " $symbol " + $eval2 + " caused overflow.");
              |}
            """.stripMargin
