@@ -307,7 +307,6 @@ private[deploy] class Master(
             if (!appInfo.isFinished) {
               appInfo.removeExecutor(exec)
             }
-            exec.worker.releaseResources(exec.resources)
             exec.worker.removeExecutor(exec)
             releaseResourcesIfPossible(exec.worker)
 
@@ -1039,7 +1038,6 @@ private[deploy] class Master(
    * Ask the worker on which the specified executor is launched to kill the executor.
    */
   private def killExecutor(exec: ExecutorDesc): Unit = {
-    exec.worker.releaseResources(exec.resources)
     exec.worker.removeExecutor(exec)
     exec.worker.endpoint.send(KillExecutor(masterUrl, exec.application.id, exec.id))
     exec.state = ExecutorState.KILLED
@@ -1098,7 +1096,6 @@ private[deploy] class Master(
     drivers.find(d => d.id == driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
-        driver.worker.get.releaseResources(driver.resources)
         drivers -= driver
         if (completedDrivers.size >= retainedDrivers) {
           val toRemove = math.max(retainedDrivers / 10, 1)

@@ -113,6 +113,7 @@ private[spark] class WorkerInfo(
       executors -= exec.fullId
       coresUsed -= exec.cores
       memoryUsed -= exec.memory
+      releaseResources(exec.resources)
       execToResourcesUsed.remove(exec.fullId)
     }
   }
@@ -132,6 +133,7 @@ private[spark] class WorkerInfo(
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
+    releaseResources(driver.resources)
     driverToResourcesUsed.remove(driver.id)
   }
 
@@ -167,7 +169,7 @@ private[spark] class WorkerInfo(
    * release resources to worker from the driver/executor
    * @param allocated the resources which allocated to driver/executor previously
    */
-  def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
+  private def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
     allocated.foreach { case (rName, rInfo) =>
       resources(rName).release(rInfo.addresses)
     }
