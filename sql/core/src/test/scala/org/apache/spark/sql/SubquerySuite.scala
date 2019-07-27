@@ -1388,6 +1388,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-28441: COUNT bug in WHERE clause (Filter) with PythonUDF") {
     import IntegratedUDFTestUtils._
 
+    assume(shouldTestPythonUDFs)
+
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
 
@@ -1409,6 +1411,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-28441: COUNT bug in SELECT clause (Project) with PythonUDF") {
     import IntegratedUDFTestUtils._
 
+    assume(shouldTestPythonUDFs)
+
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
 
@@ -1420,6 +1424,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-28441: COUNT bug in HAVING clause (Filter) with PythonUDF") {
     import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
 
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
@@ -1440,6 +1446,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-28441: COUNT bug in Aggregate with PythonUDF") {
     import IntegratedUDFTestUtils._
 
+    assume(shouldTestPythonUDFs)
+
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
 
@@ -1458,6 +1466,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-28441: COUNT bug negative examples with PythonUDF") {
     import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
 
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
@@ -1487,6 +1497,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-28441: COUNT bug in nested subquery with PythonUDF") {
     import IntegratedUDFTestUtils._
 
+    assume(shouldTestPythonUDFs)
+
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
 
@@ -1507,6 +1519,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-28441: COUNT bug with nasty predicate expr with PythonUDF") {
     import IntegratedUDFTestUtils._
 
+    assume(shouldTestPythonUDFs)
+
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
 
@@ -1524,6 +1538,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-28441: COUNT bug with attribute ref in subquery input and output with PythonUDF") {
     import IntegratedUDFTestUtils._
+
+    assume(shouldTestPythonUDFs)
 
     val pythonTestUDF = TestPythonUDF(name = "udf")
     registerTestUDF(pythonTestUDF, spark)
