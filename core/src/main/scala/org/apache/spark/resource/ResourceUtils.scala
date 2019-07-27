@@ -338,6 +338,14 @@ private[spark] object ResourceUtils extends Logging {
     Files.write(jsonFile.toPath, compact(render(allocationJson)).getBytes())
   }
 
+  /**
+   * Save the allocated resources of driver(cluster only) or executor into a JSON formatted
+   * resources file. Used in Standalone only.
+   * @param componentName spark.driver / spark.executor
+   * @param resources allocated resources for driver(cluster only) or executor
+   * @param dir the target directory used to place the resources file
+   * @return resources file
+   */
   def prepareResourceFile(
       componentName: String,
       resources: Map[String, ResourceInformation],
