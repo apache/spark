@@ -282,7 +282,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // In Python UDF tests, the number of shuffle partitions matters considerably in
         // the testing time because it requires to fork and communicate between external
         // processes.
-        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 8)
+        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 4)
         registerTestUDF(udfTestCase.udf, localSparkSession)
       case _ =>
     }
