@@ -230,7 +230,7 @@ private[spark] object ResourceUtils extends Logging {
       toRelease: Map[String, ResourceInformation],
       pid: Int)
     : Unit = {
-    if (toRelease.nonEmpty) {
+    if (toRelease != null && toRelease.nonEmpty) {
       val lock = acquireLock(conf)
       val resourcesFile = new File(getOrCreateResourcesDir(conf), ALLOCATED_RESOURCES_FILE)
       if (resourcesFile.exists()) {

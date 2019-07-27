@@ -388,26 +388,24 @@ class SparkContext(config: SparkConf) extends Logging {
     _driverLogger = DriverLogger(_conf)
 
     val resourcesFileOpt = conf.get(DRIVER_RESOURCES_FILE)
-    _resources = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
-    // driver submitted in client mode under Standalone may have conflicting resources with
-    // workers on this host. We should sync driver's resources info into SPARK_RESOURCES
-    // to avoid collision.
-    if (isClientStandalone) {
-      val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
-      try {
-        _resources = acquireResources(_conf, SPARK_DRIVER_PREFIX, _resources,
-          requests, Utils.getProcessId)
-        showResourceInfo(SPARK_DRIVER_PREFIX, _resources)
-      } catch {
-        case NonFatal(e) =>
-          // set _resources to empty to avoid driver releases
-          // any discovered but not allocated resources
-          _resources = Map.empty[String, ResourceInformation]
-          throw e
+    val discovered = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
+    _resources = {
+      // driver submitted in client mode under Standalone may have conflicting resources with
+      // workers on this host. We should sync driver's resources info into SPARK_RESOURCES
+      // to avoid collision.
+      if (isClientStandalone) {
+        val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
+        try {
+          acquireResources(_conf, SPARK_DRIVER_PREFIX, discovered, requests, Utils.getProcessId)
+        } catch {
+          case NonFatal(e) =>
+            throw e
+        }
+      } else {
+        discovered
       }
-    } else {
-      showResourceInfo(SPARK_DRIVER_PREFIX, _resources)
     }
+    showResourceInfo(SPARK_DRIVER_PREFIX, _resources)
 
     // log out spark.app.name in the Spark driver logs
     logInfo(s"Submitted application: $appName")
