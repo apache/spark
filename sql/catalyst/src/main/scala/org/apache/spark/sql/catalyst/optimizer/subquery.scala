@@ -273,28 +273,20 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
   }
 
   private def rewriteSubQueries(plan: LogicalPlan, outerPlans: Seq[LogicalPlan]): LogicalPlan = {
+    def getJoinCondition(newCond: Seq[Expression], oldCond: Seq[Expression]): Seq[Expression] = {
+      if (newCond.isEmpty) oldCond else newCond
+    }
+
     plan transformExpressions {
       case ScalarSubquery(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        if (newCond.isEmpty) {
-          ScalarSubquery(newPlan, children, exprId)
-        } else {
-          ScalarSubquery(newPlan, newCond, exprId)
-        }
+        ScalarSubquery(newPlan, getJoinCondition(newCond, children), exprId)
       case Exists(sub, children, exprId) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        if (newCond.isEmpty) {
-          Exists(newPlan, children, exprId)
-        } else {
-          Exists(newPlan, newCond, exprId)
-        }
+        Exists(newPlan, getJoinCondition(newCond, children), exprId)
       case ListQuery(sub, children, exprId, childOutputs) if children.nonEmpty =>
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, outerPlans)
-        if (newCond.isEmpty) {
-          ListQuery(newPlan, children, exprId, childOutputs)
-        } else {
-          ListQuery(newPlan, newCond, exprId, childOutputs)
-        }
+        ListQuery(newPlan, getJoinCondition(newCond, children), exprId, childOutputs)
     }
   }
 
