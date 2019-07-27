@@ -631,7 +631,7 @@ private[deploy] class Master(
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
 
     /** Return whether the specified worker can launch an executor for this app. */
-    def canLaunchExecutor(pos: Int): Boolean = {
+    def canLaunchExecutorForApp(pos: Int): Boolean = {
       val keepScheduling = coresToAssign >= minCoresPerExecutor
       val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
       val assignedExecutorNum = assignedExecutors(pos)
@@ -661,11 +661,11 @@ private[deploy] class Master(
 
     // Keep launching executors until no more workers can accommodate any
     // more executors, or if we have reached this application's limits
-    var freeWorkers = (0 until numUsable).filter(canLaunchExecutor)
+    var freeWorkers = (0 until numUsable).filter(canLaunchExecutorForApp)
     while (freeWorkers.nonEmpty) {
       freeWorkers.foreach { pos =>
         var keepScheduling = true
-        while (keepScheduling && canLaunchExecutor(pos)) {
+        while (keepScheduling && canLaunchExecutorForApp(pos)) {
           coresToAssign -= minCoresPerExecutor
           assignedCores(pos) += minCoresPerExecutor
 
@@ -686,7 +686,7 @@ private[deploy] class Master(
           }
         }
       }
-      freeWorkers = freeWorkers.filter(canLaunchExecutor)
+      freeWorkers = freeWorkers.filter(canLaunchExecutorForApp)
     }
     assignedCores
   }
