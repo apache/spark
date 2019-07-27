@@ -23,7 +23,7 @@ import scala.math.Ordering
 
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
   private def checkOverflow(res: Int, x: Byte, y: Byte, op: String): Unit = {
-    if (x > Byte.MaxValue || x < Byte.MinValue) {
+    if (res > Byte.MaxValue || res < Byte.MinValue) {
       throw new ArithmeticException(s"$x $op $y caused overflow.")
     }
   }
@@ -50,7 +50,7 @@ object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
 
 object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
   private def checkOverflow(res: Int, x: Short, y: Short, op: String): Unit = {
-    if (x > Short.MaxValue || x < Short.MinValue) {
+    if (res > Short.MaxValue || res < Short.MinValue) {
       throw new ArithmeticException(s"$x $op $y caused overflow.")
     }
   }

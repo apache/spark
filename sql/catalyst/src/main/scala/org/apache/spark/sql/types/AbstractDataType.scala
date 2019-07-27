@@ -143,7 +143,7 @@ abstract class NumericType extends AtomicType {
   // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
 
-  private[sql] val exactNumeric: Numeric[InternalType] = numeric
+  private[sql] def exactNumeric: Numeric[InternalType] = numeric
 }
 
 

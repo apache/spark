@@ -400,7 +400,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val e6 = Multiply(minLongLiteral, minLongLiteral)
     withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "true") {
       Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
-        checkExceptionInExpression[ArithmeticException](e, "caused overflow")
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
       }
     }
     withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "false") {
