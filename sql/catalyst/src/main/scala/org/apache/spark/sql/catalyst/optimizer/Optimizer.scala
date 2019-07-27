@@ -49,7 +49,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   override protected val blacklistedOnceBatches: Set[String] =
     Set("Pullup Correlated Expressions",
-      "Join Reorder",
       "Extract Python UDFs"
     )
 
@@ -168,7 +167,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
-    Batch("Join Reorder", Once,
+    Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
     Batch("Remove Redundant Sorts", Once,
       RemoveRedundantSorts) :+
