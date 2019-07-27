@@ -72,10 +72,12 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
   protected override def canCheckLimitNotReached: Boolean = true
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numInputBatches" -> SQLMetrics.createMetric(sparkContext, "number of input batches")
   )
 
   override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
     val numInputBatches = longMetric("numInputBatches")
     // This avoids calling `output` in the RDD closure, so that we don't need to include the entire
     // plan (this) in the closure.
@@ -84,6 +86,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
       val outputProject = UnsafeProjection.create(localOutput, localOutput)
       batches.flatMap { batch =>
         numInputBatches += 1
+        numOutputRows += batch.numRows()
         batch.rowIterator().asScala.map(outputProject)
       }
     }
@@ -130,6 +133,7 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
       v => s"$v = inputs[0];")
 
     // metrics
+    val numOutputRows = metricTerm(ctx, "numOutputRows")
     val numInputBatches = metricTerm(ctx, "numInputBatches")
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
@@ -150,7 +154,8 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
          |private void $nextBatch() throws java.io.IOException {
          |  if ($input.hasNext()) {
          |    $batch = ($columnarBatchClz)$input.next();
-         |    ${numInputBatches}.add(1);
+         |    $numInputBatches.add(1);
+         |    $numOutputRows.add($batch.numRows());
          |    $idx = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}
          |  }
