@@ -57,10 +57,6 @@ private[spark] class WorkerInfo(
   @transient var state: WorkerState.Value = _
   @transient var coresUsed: Int = _
   @transient var memoryUsed: Int = _
-  @transient var driverToResourcesUsed:
-    mutable.HashMap[String, Map[String, ResourceInformation]] = _
-  @transient var execToResourcesUsed:
-    mutable.HashMap[String, Map[String, ResourceInformation]] = _
 
   @transient var lastHeartbeat: Long = _
 
@@ -91,8 +87,6 @@ private[spark] class WorkerInfo(
     state = WorkerState.ALIVE
     coresUsed = 0
     memoryUsed = 0
-    driverToResourcesUsed = new mutable.HashMap
-    execToResourcesUsed = new mutable.HashMap
     lastHeartbeat = System.currentTimeMillis()
   }
 
@@ -105,7 +99,6 @@ private[spark] class WorkerInfo(
     executors(exec.fullId) = exec
     coresUsed += exec.cores
     memoryUsed += exec.memory
-    execToResourcesUsed(exec.fullId) = exec.resources
   }
 
   def removeExecutor(exec: ExecutorDesc) {
@@ -114,7 +107,6 @@ private[spark] class WorkerInfo(
       coresUsed -= exec.cores
       memoryUsed -= exec.memory
       releaseResources(exec.resources)
-      execToResourcesUsed.remove(exec.fullId)
     }
   }
 
@@ -126,7 +118,6 @@ private[spark] class WorkerInfo(
     drivers(driver.id) = driver
     memoryUsed += driver.desc.mem
     coresUsed += driver.desc.cores
-    driverToResourcesUsed(driver.id) = driver.resources
   }
 
   def removeDriver(driver: DriverInfo) {
@@ -134,7 +125,6 @@ private[spark] class WorkerInfo(
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
     releaseResources(driver.resources)
-    driverToResourcesUsed.remove(driver.id)
   }
 
   def setState(state: WorkerState.Value): Unit = {
