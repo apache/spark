@@ -177,7 +177,7 @@ private[deploy] class DriverRunner(
     val resourceFileOpt = if (resources.isEmpty) {
       None
     } else {
-      Option(ResourceUtils.prepareResourceFile(SPARK_DRIVER_PREFIX, resources, driverDir))
+      Option(ResourceUtils.prepareResourcesFile(SPARK_DRIVER_PREFIX, resources, driverDir))
     }
 
     def substituteVariables(argument: String): String = argument match {

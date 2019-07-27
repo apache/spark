@@ -346,7 +346,7 @@ private[spark] object ResourceUtils extends Logging {
    * @param dir the target directory used to place the resources file
    * @return resources file
    */
-  def prepareResourceFile(
+  def prepareResourcesFile(
       componentName: String,
       resources: Map[String, ResourceInformation],
       dir: File): File = {
@@ -363,9 +363,9 @@ private[spark] object ResourceUtils extends Logging {
         logError(errMsg, e)
         throw new SparkException(errMsg, e)
     }
-    val resourceFile = File.createTempFile(s"resource-${compShortName}-", ".json", dir)
-    tmpFile.renameTo(resourceFile)
-    resourceFile
+    val resourcesFile = File.createTempFile(s"resource-${compShortName}-", ".json", dir)
+    tmpFile.renameTo(resourcesFile)
+    resourcesFile
   }
 
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {

@@ -149,7 +149,7 @@ private[deploy] class ExecutorRunner(
       val resourceFileOpt = if (resources.isEmpty) {
         None
       } else {
-        Option(ResourceUtils.prepareResourceFile(SPARK_EXECUTOR_PREFIX, resources, executorDir))
+        Option(ResourceUtils.prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir))
       }
       // Launch the process
       val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
