@@ -229,7 +229,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
-      if (SQLConf.get.getConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK)) {
+      if (SQLConf.get.arithmeticOperationOverflowCheck) {
         // This will throw an exception if overflow occurs
         if (decimalVal.compare(LONG_MIN_BIG_DEC) < 0 || decimalVal.compare(LONG_MAX_BIG_DEC) > 0) {
           throw new ArithmeticException("Overflow")

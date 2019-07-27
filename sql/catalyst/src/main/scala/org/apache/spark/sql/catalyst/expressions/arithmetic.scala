@@ -35,6 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
+  private val checkOverflow = SQLConf.get.arithmeticOperationOverflowCheck
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -42,10 +43,28 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 
   override def toString: String = s"-$child"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
+    case ByteType | ShortType if checkOverflow =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val javaBoxedType = CodeGenerator.boxedType(dataType)
+        val javaType = CodeGenerator.javaType(dataType)
+        val originValue = ctx.freshName("origin")
+        s"""
+           |$javaType $originValue = ($javaType)($eval);
+           |if ($originValue == $javaBoxedType.MIN_VALUE) {
+           |  throw new ArithmeticException("- " + $originValue + " caused overflow.");
+           |}
+           |${ev.value} = ($javaType)(-($originValue));
+           """.stripMargin
+      })
+    case IntegerType | LongType if checkOverflow =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val mathClass = classOf[Math].getName
+        s"${ev.value} = $mathClass.negateExact(-($eval));"
+      })
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
       // codegen would fail to compile if we just write (-($c))
@@ -117,7 +136,7 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
-  protected val checkOverflow = SQLConf.get.getConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK)
+  protected val checkOverflow = SQLConf.get.arithmeticOperationOverflowCheck
 
   override def dataType: DataType = left.dataType
 

@@ -79,6 +79,16 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
     checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
     checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
+    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "true") {
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Long.MinValue)), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Int.MinValue)), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Short.MinValue)), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(Literal(Byte.MinValue)), "overflow")
+    }
     checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
     checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
     checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)

@@ -2296,6 +2296,8 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
+  def arithmeticOperationOverflowCheck: Boolean = getConf(ARITHMETIC_OPERATION_OVERFLOW_CHECK)
+
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingEpochBacklogQueueSize: Int =

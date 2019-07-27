@@ -45,6 +45,13 @@ object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
     checkOverflow(tmp, x, y, "*")
     tmp.toByte
   }
+
+  override def negate(x: Byte): Byte = {
+    if (x == Byte.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
+      throw new ArithmeticException(s"- $x caused overflow.")
+    }
+    (-x).toByte
+  }
 }
 
 
@@ -72,6 +79,13 @@ object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
     checkOverflow(tmp, x, y, "*")
     tmp.toShort
   }
+
+  override def negate(x: Short): Short = {
+    if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
+      throw new ArithmeticException(s"- $x caused overflow.")
+    }
+    (-x).toByte
+  }
 }
 
 
@@ -81,6 +95,8 @@ object IntegerExactNumeric extends IntIsIntegral with Ordering.IntOrdering {
   override def minus(x: Int, y: Int): Int = Math.subtractExact(x, y)
 
   override def times(x: Int, y: Int): Int = Math.multiplyExact(x, y)
+
+  override def negate(x: Int): Int = Math.negateExact(x)
 }
 
 object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
@@ -89,4 +105,6 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
   override def minus(x: Long, y: Long): Long = Math.subtractExact(x, y)
 
   override def times(x: Long, y: Long): Long = Math.multiplyExact(x, y)
+
+  override def negate(x: Long): Long = Math.negateExact(x)
 }
