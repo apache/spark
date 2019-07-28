@@ -255,7 +255,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>(none)</td>
   <td>
     Path to resource discovery script, which is used to find a particular resource while worker starting up.
-    And the output of the script should be formatted like <code>{"name": "gpu", "addresses": ["0","1"]}</code>.
+    And the output of the script should be formatted like the <code>ResourceInformation</code> class.
   </td>
 </tr>
 <tr>
@@ -263,8 +263,7 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>(none)</td>
   <td>
     Path to resources file which is used to find various resources while worker starting up.
-    The content of resources file should be formatted like <code>[[{"id":{"componentName":
-    "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]]</code>.
+    The content of resources file should be formatted like the <code>ResourceAllocation</code> class.
     If a particular resource required by amount config does not found in resources file, discovery
     script would be used to find that resource. If discovery script also does not config for
     that resource, worker could be failed to start up.
