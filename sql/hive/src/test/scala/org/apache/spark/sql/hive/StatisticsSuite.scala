@@ -1508,18 +1508,17 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         withTable("t1") {
           sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
           sql("INSERT INTO t1 VALUES (1, 'a')")
-
           // Analyze command updates the statistics of table `t1`
           sql("analyze table t1 compute statistics")
-
           val catalogTable = getCatalogTable("t1")
-
           assert(catalogTable.stats.isDefined)
+
           if (!fallBackToHdfs) {
             sizeInBytesDisabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
           } else {
             sizeInBytesEnabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
           }
+          checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
         }
       }
     }
