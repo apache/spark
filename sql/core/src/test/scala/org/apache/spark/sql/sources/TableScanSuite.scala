@@ -369,7 +369,8 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
              |)
            """.stripMargin)
       }
-      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas, " +
+          "user-specified schemas are not same as source schema"))
 
       val schemaNeeded = intercept[Exception] {
         sql(

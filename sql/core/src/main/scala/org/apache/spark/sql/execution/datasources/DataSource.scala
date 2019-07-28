@@ -340,7 +340,8 @@ case class DataSource(
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
         if (baseRelation.schema != schema) {
           throw new AnalysisException(s"$className does not allow user-specified schemas, " +
-              s"source schema: ${baseRelation.schema}, user-specific schema: ${schema}")
+              s"user-specified schemas are not same as source schema: \n" +
+              s"${baseRelation.schema.treeString}")
         }
         baseRelation
 
