@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.execution.debug.DebugQuery
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
@@ -199,6 +200,49 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
         assert("Create\\w*?TableAsSelectCommand".r.findAllMatchIn(normalizedOutput).length == 1)
       }
     }
+  }
+
+  test("SPARK-28548: explain() shows wrong result for persisted DataFrames after some operations")
+    val df = spark.range(10).toDF
+    val expected =
+      s"""== Optimized Logical Plan ==
+         |InMemoryRelation [id#xL], StorageLevel(disk, memory, deserialized, 1 replicas)
+         |   +- *(1) Range (0, 10, step=1, splits=2)
+         |
+         |== Physical Plan ==
+         |*(1) ColumnarToRow
+         |+- InMemoryTableScan [id#xL]
+         |      +- InMemoryRelation [id#xL], StorageLevel(disk, memory, deserialized, 1 replicas)
+         |            +- *(1) Range (0, 10, step=1, splits=2)
+         |""".stripMargin
+
+    def testFor(testName: String, func: => Unit): Unit = {
+      func
+      df.persist()
+      withNormalizedExplain(df, true) { output =>
+        assert(output.contains(expected), testName + " failed.")
+      }
+      df.unpersist()
+    }
+
+    testFor("explain(false)", df.explain(false))
+
+    // explain() and explain(true) walk difference code path so we need to test for both cases.
+    testFor("explain(true)", df.explain(true))
+    testFor("debug()", df.debug())
+    testFor("debugCodegen()", df.debugCodegen())
+
+    val qe = df.queryExecution
+    testFor("stringWithStats", qe.stringWithStats)
+
+    val debug = qe.debug
+    testFor("debug.codegen()", debug.codegen())
+    testFor("debug.codegenToSeq()", debug.codegenToSeq())
+    testFor("debug.toFile",
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath + "/plans.txt"
+        debug.toFile(path)
+      })
   }
 }
 

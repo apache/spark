@@ -149,8 +149,10 @@ package object debug {
    */
   implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
+      val (_, _, _, _, executedPlan) = query.queryExecution.getOrCalculatePlans()
+
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
-      val debugPlan = query.queryExecution.executedPlan transform {
+      val debugPlan = executedPlan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
           DebugExec(s)
@@ -167,7 +169,8 @@ package object debug {
      * WholeStageCodegen subtree).
      */
     def debugCodegen(): Unit = {
-      debugPrint(codegenString(query.queryExecution.executedPlan))
+      val (_, _, _, _, executedPlan) = query.queryExecution.getOrCalculatePlans()
+      debugPrint(codegenString(executedPlan))
     }
   }
 

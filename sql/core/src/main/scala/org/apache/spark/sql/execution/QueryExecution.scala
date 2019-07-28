@@ -22,7 +22,7 @@ import java.io.{BufferedWriter, OutputStreamWriter}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -58,40 +58,107 @@ class QueryExecution(
     }
   }
 
-  lazy val analyzed: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.ANALYSIS) {
+  def calculateAnalyzedPlan(): LogicalPlan = {
     SparkSession.setActiveSession(sparkSession)
     // We can't clone `logical` here, which will reset the `_analyzed` flag.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
-  lazy val withCachedData: LogicalPlan = {
+  def calculatePlanWithCachedData(plan: LogicalPlan): LogicalPlan = {
     assertAnalyzed()
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(plan.clone())
   }
 
-  lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
+  def calculateOptimizedPlan(plan: LogicalPlan): LogicalPlan = {
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    sparkSession.sessionState.optimizer.executeAndTrack(plan.clone(), tracker)
   }
 
-  lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
+  def calculateSparkPlan(plan: LogicalPlan): SparkPlan = {
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
     // Clone the logical plan here, in case the planner rules change the states of the logical plan.
-    planner.plan(ReturnAnswer(optimizedPlan.clone())).next()
+    planner.plan(ReturnAnswer(plan.clone())).next()
+  }
+
+  def calculateExecutedPlan(plan: SparkPlan): SparkPlan = {
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    prepareForExecution(plan.clone())
+  }
+
+  /**
+   * Some operations need any post-analyzed-plans even though
+   * those plans are not materialized yet (plans are materialized lazily).
+   * One of those operation is [[Dataset.explain()]], which needs executedPlan.
+   * If explain accesses to executedPlan, pre-executed-plans including
+   * withCachedData are also materialized.
+   * After withCachedData is materialized and then [[Dataset.persist()]],
+   * [[Dataset.explain()]] shows wrong resut.
+   * To prevent materializing post-analyzed-plans accidentally, use this method.
+   * This method returns a tuple of analyzedPlan, withCachedData, optimizedPlan,
+   * sparkPlan and executedPlan in this order.
+   * If some plans are already materialized, they are just returned otherwise calculated.
+   */
+  def getOrCalculatePlans(): (LogicalPlan, LogicalPlan, LogicalPlan, SparkPlan, SparkPlan) = {
+    val phases = tracker.phases
+
+    val analyzed = if (phases.contains(QueryPlanningTracker.ANALYSIS)) {
+      this.analyzed
+    } else {
+      calculateAnalyzedPlan()
+    }
+
+    val withCachedData = if (phases.contains(QueryPlanningTracker.OPTIMIZATION)) {
+      this.withCachedData
+    } else {
+      calculatePlanWithCachedData(analyzed)
+    }
+
+    val optimizedPlan = if (phases.contains(QueryPlanningTracker.OPTIMIZATION)) {
+      this.optimizedPlan
+    } else {
+      calculateOptimizedPlan(withCachedData)
+    }
+
+    val sparkPlan = if (phases.contains(QueryPlanningTracker.PLANNING)) {
+      this.sparkPlan
+    } else {
+      calculateSparkPlan(optimizedPlan)
+    }
+
+    val executedPlan = if (phases.contains(QueryPlanningTracker.PLANNING)) {
+      this.executedPlan
+    } else {
+      calculateExecutedPlan(sparkPlan)
+    }
+
+    (analyzed, withCachedData, optimizedPlan, sparkPlan, executedPlan)
+  }
+
+  lazy val analyzed: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.ANALYSIS) {
+    calculateAnalyzedPlan()
+  }
+
+  lazy val withCachedData: LogicalPlan = calculatePlanWithCachedData(analyzed)
+
+  lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
+    calculateOptimizedPlan(withCachedData)
+  }
+
+  lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
+    calculateSparkPlan(optimizedPlan)
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    prepareForExecution(sparkPlan.clone())
+    calculateExecutedPlan(sparkPlan)
   }
 
   /**
@@ -128,6 +195,7 @@ class QueryExecution(
     ReuseSubquery(sparkSession.sessionState.conf))
 
   def simpleString: String = withRedaction {
+    val (_, _, _, _, executedPlan) = getOrCalculatePlans()
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
     QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
@@ -136,6 +204,7 @@ class QueryExecution(
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
+    val (analyzed, _, optimizedPlan, _, executedPlan) = getOrCalculatePlans()
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
@@ -162,6 +231,7 @@ class QueryExecution(
   }
 
   def stringWithStats: String = withRedaction {
+    val (_, _, optimizedPlan, _, executedPlan) = getOrCalculatePlans()
     val concat = new PlanStringConcat()
     val maxFields = SQLConf.get.maxToStringFields
 
@@ -194,6 +264,7 @@ class QueryExecution(
      * WholeStageCodegen subtree).
      */
     def codegen(): Unit = {
+      val (_, _, _, _, executedPlan) = getOrCalculatePlans()
       // scalastyle:off println
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
@@ -205,6 +276,7 @@ class QueryExecution(
      * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
     def codegenToSeq(): Seq[(String, String)] = {
+      val (_, _, _, _, executedPlan) = getOrCalculatePlans()
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
 
@@ -214,6 +286,7 @@ class QueryExecution(
      * @param maxFields maximum number of fields converted to string representation.
      */
     def toFile(path: String, maxFields: Int = Int.MaxValue): Unit = {
+      val (_, _, _, _, executedPlan) = getOrCalculatePlans()
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
