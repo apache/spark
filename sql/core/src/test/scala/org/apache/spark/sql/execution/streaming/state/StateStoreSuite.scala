@@ -569,7 +569,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
       val spark = SparkSession.builder().master("local[2]").getOrCreate()
       SparkSession.setActiveSession(spark)
       implicit val sqlContext = spark.sqlContext
-      spark.conf.set("spark.sql.shuffle.partitions", "1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
       import spark.implicits._
       val inputData = MemoryStream[Int]
 

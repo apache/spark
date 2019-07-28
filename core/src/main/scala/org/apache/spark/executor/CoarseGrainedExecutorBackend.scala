@@ -262,7 +262,19 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         executorConf,
         new SecurityManager(executorConf),
         clientMode = true)
-      val driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)
+
+      var driver: RpcEndpointRef = null
+      val nTries = 3
+      for (i <- 0 until nTries if driver == null) {
+        try {
+          driver = fetcher.setupEndpointRefByURI(arguments.driverUrl)
+        } catch {
+          case e: Throwable => if (i == nTries - 1) {
+            throw e
+          }
+        }
+      }
+
       val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
       val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", arguments.appId))
       fetcher.shutdown()

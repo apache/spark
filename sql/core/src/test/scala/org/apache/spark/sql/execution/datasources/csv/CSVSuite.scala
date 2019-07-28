@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.Files
+import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -28,6 +28,7 @@ import java.util.zip.GZIPOutputStream
 import scala.collection.JavaConverters._
 import scala.util.Properties
 
+import com.univocity.parsers.common.TextParsingException
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -1399,8 +1400,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     // that whole test file is mapped to only one partition. This will guarantee
     // reliable sampling of the input file.
     withSQLConf(
-      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
-      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> (128 * 1024 * 1024).toString,
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
@@ -2083,6 +2084,29 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
           checkAnswer(readDF, Row(0, null, "0,2013-111-11") :: Nil)
         }
       }
+    }
+  }
+
+  test("SPARK-28431: prevent CSV datasource throw TextParsingException with large size message") {
+    withTempPath { path =>
+      val maxCharsPerCol = 10000
+      val str = "a" * (maxCharsPerCol + 1)
+
+      Files.write(
+        path.toPath,
+        str.getBytes(StandardCharsets.UTF_8),
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE
+      )
+
+      val errMsg = intercept[TextParsingException] {
+        spark.read
+          .option("maxCharsPerColumn", maxCharsPerCol)
+          .csv(path.getAbsolutePath)
+          .count()
+      }.getMessage
+
+      assert(errMsg.contains("..."),
+        "expect the TextParsingException truncate the error content to be 1000 length.")
     }
   }
 }

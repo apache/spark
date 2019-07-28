@@ -16,7 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.{Comparator, TimeZone}
+import java.time.ZoneId
+import java.util.Comparator
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -2459,10 +2460,10 @@ case class Sequence(
       new IntegralSequenceImpl(iType)(ct, iType.integral)
 
     case TimestampType =>
-      new TemporalSequenceImpl[Long](LongType, 1, identity, timeZone)
+      new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
 
     case DateType =>
-      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, timeZone)
+      new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -2603,7 +2604,7 @@ object Sequence {
   }
 
   private class TemporalSequenceImpl[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, timeZone: TimeZone)
+      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
       (implicit num: Integral[T]) extends SequenceImpl {
 
     override val defaultStep: DefaultStep = new DefaultStep(
@@ -2641,8 +2642,8 @@ object Sequence {
 
         while (t < exclusiveItem ^ stepSign < 0) {
           arr(i) = fromLong(t / scale)
-          t = timestampAddInterval(t, stepMonths, stepMicros, timeZone)
           i += 1
+          t = timestampAddInterval(startMicros, i * stepMonths, i * stepMicros, zoneId)
         }
 
         // truncate array to the correct length
@@ -2668,18 +2669,12 @@ object Sequence {
       val exclusiveItem = ctx.freshName("exclusiveItem")
       val t = ctx.freshName("t")
       val i = ctx.freshName("i")
-      val genTimeZone = ctx.addReferenceObj("timeZone", timeZone, classOf[TimeZone].getName)
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
 
       val sequenceLengthCode =
         s"""
            |final long $intervalInMicros = $stepMicros + $stepMonths * ${microsPerMonth}L;
            |${genSequenceLengthCode(ctx, startMicros, stopMicros, intervalInMicros, arrLength)}
-          """.stripMargin
-
-      val timestampAddIntervalCode =
-        s"""
-           |$t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
-           |  $t, $stepMonths, $stepMicros, $genTimeZone);
           """.stripMargin
 
       s"""
@@ -2705,8 +2700,9 @@ object Sequence {
          |
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
          |    $arr[$i] = ($elemType) ($t / ${scale}L);
-         |    $timestampAddIntervalCode
          |    $i += 1;
+         |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+         |       $startMicros, $i * $stepMonths, $i * $stepMicros, $zid);
          |  }
          |
          |  if ($arr.length > $i) {

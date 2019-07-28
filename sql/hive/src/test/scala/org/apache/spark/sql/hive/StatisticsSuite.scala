@@ -1454,6 +1454,37 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("SPARK-28518 fix getDataSize refer to ChecksumFileSystem#isChecksumFile") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        Utils.tryWithResource(new PrintWriter(new File(tempDir + "/temp.crc"))) { writer =>
+          writer.write("1,2")
+        }
+
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |STORED AS parquet
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+
+        spark.sql("REFRESH TABLE t1")
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === getDataSize(tempDir))
+        }
+      }
+    }
+  }
+
   test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
     withSQLConf("spark.sql.statistics.fallBackToHdfs" -> "true") {
       withTable("t1", "t2") {
@@ -1471,10 +1502,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("SPARK-25474: should not fall back to hdfs when table statistics exists" +
     " for CatalogFileIndex dataSourceTable") {
 
-      var sizeInBytesDisabledFallBack, sizeInBytesEnabledFallBack = 0L
-      Seq(true, false).foreach { fallBackToHdfs =>
-        withSQLConf("spark.sql.statistics.fallBackToHdfs" -> fallBackToHdfs.toString) {
-          withTable("t1") {
+    var sizeInBytesDisabledFallBack, sizeInBytesEnabledFallBack = 0L
+    Seq(true, false).foreach { fallBackToHdfs =>
+      withSQLConf("spark.sql.statistics.fallBackToHdfs" -> fallBackToHdfs.toString) {
+        withTable("t1") {
           sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
           sql("INSERT INTO t1 VALUES (1, 'a')")
 

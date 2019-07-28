@@ -19,12 +19,12 @@
 PySpark supports custom serializers for transferring data; this can improve
 performance.
 
-By default, PySpark uses L{PickleSerializer} to serialize objects using Python's
-C{cPickle} serializer, which can serialize nearly any Python object.
-Other serializers, like L{MarshalSerializer}, support fewer datatypes but can be
+By default, PySpark uses :class:`PickleSerializer` to serialize objects using Python's
+`cPickle` serializer, which can serialize nearly any Python object.
+Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
-The serializer is chosen when creating L{SparkContext}:
+The serializer is chosen when creating :class:`SparkContext`:
 
 >>> from pyspark.context import SparkContext
 >>> from pyspark.serializers import MarshalSerializer
@@ -34,7 +34,7 @@ The serializer is chosen when creating L{SparkContext}:
 >>> sc.stop()
 
 PySpark serializes objects in batches; by default, the batch size is chosen based
-on the size of objects and is also configurable by SparkContext's C{batchSize}
+on the size of objects and is also configurable by SparkContext's `batchSize`
 parameter:
 
 >>> sc = SparkContext('local', 'test', batchSize=2)
@@ -129,7 +129,7 @@ class FramedSerializer(Serializer):
 
     """
     Serializer that writes objects as a stream of (length, data) pairs,
-    where C{length} is a 32-bit integer and data is C{length} bytes.
+    where `length` is a 32-bit integer and data is `length` bytes.
     """
 
     def __init__(self):
@@ -296,8 +296,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             mask = s.isnull()
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
-                s = _check_series_convert_timestamps_internal(s.fillna(0), self._timezone)
-
+                s = _check_series_convert_timestamps_internal(s, self._timezone)
             try:
                 array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except pa.ArrowException as e:

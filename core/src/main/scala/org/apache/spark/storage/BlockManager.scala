@@ -43,8 +43,9 @@ import org.apache.spark.internal.config.Network
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
-import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
+import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
@@ -137,6 +138,8 @@ private[spark] class BlockManager(
 
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
+
+  private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
 
   val diskBlockManager = {
     // Only perform cleanup if an external service is not serving our shuffle files.
@@ -411,6 +414,7 @@ private[spark] class BlockManager(
 
     val idFromMaster = master.registerBlockManager(
       id,
+      diskBlockManager.localDirsString,
       maxOnHeapMemory,
       maxOffHeapMemory,
       slaveEndpoint)
@@ -445,7 +449,7 @@ private[spark] class BlockManager(
   private def registerWithExternalShuffleServer() {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
-      diskBlockManager.localDirs.map(_.toString),
+      diskBlockManager.localDirsString,
       diskBlockManager.subDirsPerLocalDir,
       shuffleManager.getClass.getName)
 
@@ -500,7 +504,8 @@ private[spark] class BlockManager(
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
     logInfo(s"BlockManager $blockManagerId re-registering with master")
-    master.registerBlockManager(blockManagerId, maxOnHeapMemory, maxOffHeapMemory, slaveEndpoint)
+    master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString, maxOnHeapMemory,
+      maxOffHeapMemory, slaveEndpoint)
     reportAllBlocks()
   }
 
@@ -827,10 +832,63 @@ private[spark] class BlockManager(
    */
   private[spark] def getRemoteValues[T: ClassTag](blockId: BlockId): Option[BlockResult] = {
     val ct = implicitly[ClassTag[T]]
-    getRemoteManagedBuffer(blockId).map { data =>
+    getRemoteBlock(blockId, (data: ManagedBuffer) => {
       val values =
         serializerManager.dataDeserializeStream(blockId, data.createInputStream())(ct)
       new BlockResult(values, DataReadMethod.Network, data.size)
+    })
+  }
+
+  /**
+   * Get the remote block and transform it to the provided data type.
+   *
+   * If the block is persisted to the disk and stored at an executor running on the same host then
+   * first it is tried to be accessed using the local directories of the other executor directly.
+   * If the file is successfully identified then tried to be transformed by the provided
+   * transformation function which expected to open the file. If there is any exception during this
+   * transformation then block access falls back to fetching it from the remote executor via the
+   * network.
+   *
+   * @param blockId identifies the block to get
+   * @param bufferTransformer this transformer expected to open the file if the block is backed by a
+   *                          file by this it is guaranteed the whole content can be loaded
+   * @tparam T result type
+   * @return
+   */
+  private[spark] def getRemoteBlock[T](
+      blockId: BlockId,
+      bufferTransformer: ManagedBuffer => T): Option[T] = {
+    logDebug(s"Getting remote block $blockId")
+    require(blockId != null, "BlockId is null")
+
+    // Because all the remote blocks are registered in driver, it is not necessary to ask
+    // all the slave executors to get block status.
+    val locationsAndStatusOption = master.getLocationsAndStatus(blockId, blockManagerId.host)
+    if (locationsAndStatusOption.isEmpty) {
+      logDebug(s"Block $blockId is unknown by block manager master")
+      None
+    } else {
+      val locationsAndStatus = locationsAndStatusOption.get
+      val blockSize = locationsAndStatus.status.diskSize.max(locationsAndStatus.status.memSize)
+
+      locationsAndStatus.localDirs.flatMap { localDirs =>
+        val blockDataOption =
+          readDiskBlockFromSameHostExecutor(blockId, localDirs, locationsAndStatus.status.diskSize)
+        val res = blockDataOption.flatMap { blockData =>
+          try {
+            Some(bufferTransformer(blockData))
+          } catch {
+            case NonFatal(e) =>
+              logDebug("Block from the same host executor cannot be opened: ", e)
+              None
+          }
+        }
+        logInfo(s"Read $blockId from the disk of a same host executor is " +
+          (if (res.isDefined) "successful." else "failed."))
+        res
+      }.orElse {
+        fetchRemoteManagedBuffer(blockId, blockSize, locationsAndStatus).map(bufferTransformer)
+      }
     }
   }
 
@@ -861,22 +919,12 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Get block from remote block managers as a ManagedBuffer.
+   * Fetch the block from remote block managers as a ManagedBuffer.
    */
-  private def getRemoteManagedBuffer(blockId: BlockId): Option[ManagedBuffer] = {
-    logDebug(s"Getting remote block $blockId")
-    require(blockId != null, "BlockId is null")
-    var runningFailureCount = 0
-    var totalFailureCount = 0
-
-    // Because all the remote blocks are registered in driver, it is not necessary to ask
-    // all the slave executors to get block status.
-    val locationsAndStatus = master.getLocationsAndStatus(blockId)
-    val blockSize = locationsAndStatus.map { b =>
-      b.status.diskSize.max(b.status.memSize)
-    }.getOrElse(0L)
-    val blockLocations = locationsAndStatus.map(_.locations).getOrElse(Seq.empty)
-
+  private def fetchRemoteManagedBuffer(
+      blockId: BlockId,
+      blockSize: Long,
+      locationsAndStatus: BlockManagerMessages.BlockLocationsAndStatus): Option[ManagedBuffer] = {
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
     // null value means the block will be persisted in memory.
@@ -885,8 +933,9 @@ private[spark] class BlockManager(
     } else {
       null
     }
-
-    val locations = sortLocations(blockLocations)
+    var runningFailureCount = 0
+    var totalFailureCount = 0
+    val locations = sortLocations(locationsAndStatus.locations)
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
@@ -947,10 +996,36 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Reads the block from the local directories of another executor which runs on the same host.
+   */
+  private[spark] def readDiskBlockFromSameHostExecutor(
+      blockId: BlockId,
+      localDirs: Array[String],
+      blockSize: Long): Option[ManagedBuffer] = {
+    val file = ExecutorDiskUtils.getFile(localDirs, subDirsPerLocalDir, blockId.name)
+    if (file.exists()) {
+      val mangedBuffer = securityManager.getIOEncryptionKey() match {
+        case Some(key) =>
+          // Encrypted blocks cannot be memory mapped; return a special object that does decryption
+          // and provides InputStream / FileRegion implementations for reading the data.
+          new EncryptedManagedBuffer(
+            new EncryptedBlockData(file, blockSize, conf, key))
+
+        case _ =>
+          val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
+          new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
+      }
+      Some(mangedBuffer)
+    } else {
+      None
+    }
+  }
+
+  /**
    * Get block from remote block managers as serialized bytes.
    */
   def getRemoteBytes(blockId: BlockId): Option[ChunkedByteBuffer] = {
-    getRemoteManagedBuffer(blockId).map { data =>
+    getRemoteBlock(blockId, (data: ManagedBuffer) => {
       // SPARK-24307 undocumented "escape-hatch" in case there are any issues in converting to
       // ChunkedByteBuffer, to go back to old code-path.  Can be removed post Spark 2.4 if
       // new path is stable.
@@ -959,7 +1034,7 @@ private[spark] class BlockManager(
       } else {
         ChunkedByteBuffer.fromManagedBuffer(data)
       }
-    }
+    })
   }
 
   /**

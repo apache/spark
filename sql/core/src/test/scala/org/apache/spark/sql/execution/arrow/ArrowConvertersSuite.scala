@@ -1191,7 +1191,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   test("max records in batch conf") {
     val totalRecords = 10
     val maxRecordsPerBatch = 3
-    spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", maxRecordsPerBatch)
+    spark.conf.set(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key, maxRecordsPerBatch)
     val df = spark.sparkContext.parallelize(1 to totalRecords, 2).toDF("i")
     val arrowBatches = df.toArrowBatchRdd.collect()
     assert(arrowBatches.length >= 4)
@@ -1206,7 +1206,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     }
     assert(recordCount == totalRecords)
     allocator.close()
-    spark.conf.unset("spark.sql.execution.arrow.maxRecordsPerBatch")
+    spark.conf.unset(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key)
   }
 
   testQuietly("unsupported types") {
