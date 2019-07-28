@@ -48,9 +48,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   }
 
   override protected val blacklistedOnceBatches: Set[String] =
-    Set("Pullup Correlated Expressions",
-      "Extract Python UDFs"
-    )
+    Set("Extract Python UDFs")
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
