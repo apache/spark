@@ -1667,7 +1667,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       * month - the month-of-year to represent, from 1 (January) to 12 (December)
       * day - the day-of-month to represent, from 1 to 31
       * hour - the hour-of-day to represent, from 0 to 23
-      * minute - the minute-of-hour to represent, from 0 to 59
+      * min - the minute-of-hour to represent, from 0 to 59
       * second - the second-of-minute and its micro-fraction to represent, from
                  0 to 60. If the second argument equals to 60, the seconds field is set
                  to 0 and 1 minute is added to the final timestamp.
