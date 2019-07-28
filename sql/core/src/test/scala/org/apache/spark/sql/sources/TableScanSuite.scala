@@ -361,7 +361,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       val schemaNotAllowed = intercept[Exception] {
         sql(
           s"""
-             |CREATE $tableType relationProvierWithSchema (i int)
+             |CREATE $tableType relationProviderWithSchema (i int)
              |USING org.apache.spark.sql.sources.SimpleScanSource
              |OPTIONS (
              |  From '1',
@@ -369,13 +369,15 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
              |)
            """.stripMargin)
       }
+      val expectedSchema = StructType(StructField("i", IntegerType, nullable = false) :: Nil)
       assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas, " +
-          "user-specified schemas are not same as source schema"))
+          "user-specified schemas are not same as source schema: \n" +
+          s"${expectedSchema.treeString}"))
 
       val schemaNeeded = intercept[Exception] {
         sql(
           s"""
-             |CREATE $tableType schemaRelationProvierWithoutSchema
+             |CREATE $tableType schemaRelationProviderWithoutSchema
              |USING org.apache.spark.sql.sources.AllDataTypesScanSource
              |OPTIONS (
              |  From '1',
@@ -389,7 +391,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   test("read the data source tables that do not extend SchemaRelationProvider") {
     Seq("TEMPORARY VIEW", "TABLE").foreach { tableType =>
-      val tableName = "relationProvierWithSchema"
+      val tableName = "relationProviderWithSchema"
       withTable (tableName) {
         sql(
           s"""
