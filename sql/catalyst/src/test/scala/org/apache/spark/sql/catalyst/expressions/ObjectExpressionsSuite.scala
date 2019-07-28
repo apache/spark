@@ -124,7 +124,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Return null when null argument is passed with propagateNull = true
     val stringCls = classOf[java.lang.String]
     checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
-      Seq(BoundReference(0, ObjectType(classOf[Object]), true))),
+      Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = true),
       null, InternalRow.fromSeq(Seq(null)))
     checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
       Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = false),
@@ -424,7 +424,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("LambdaVariable should support interpreted execution") {
     def genSchema(dt: DataType): Seq[StructType] = {
       Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
-        StructType(StructField("col_1", dt) :: Nil))
+        StructType(StructField("col_1", dt, nullable = true) :: Nil))
     }
 
     val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
@@ -438,7 +438,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     val structTypes = elementTypes.flatMap { elementType =>
       Seq(StructType(StructField("col1", elementType, false) :: Nil),
-        StructType(StructField("col1", elementType) :: Nil))
+        StructType(StructField("col1", elementType, true) :: Nil))
     }
 
     val testTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
