@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -1679,8 +1679,8 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
        2014-12-28 06:30:45.887
       > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
        2014-12-28 10:30:45.887
-      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60.5)
-       2019-07-01 00:00:00.5
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60)
+       2019-07-01 00:00:00
       > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
@@ -1742,13 +1742,18 @@ case class MakeTimestamp(
       val seconds = secAndNanos.toInt
       val nanos = ((secAndNanos - seconds) * NANOS_PER_SECOND).toInt
       val ldt = if (seconds == 60) {
-        LocalDateTime.of(year, month, day, hour, min, 0, nanos).plusMinutes(1)
+        if (nanos == 0) {
+          // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
+          LocalDateTime.of(year, month, day, hour, min, 0, 0).plusMinutes(1)
+        } else {
+          throw new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
+        }
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
       }
       instantToMicros(ldt.atZone(zoneId).toInstant)
     } catch {
-      case _: java.time.DateTimeException => null
+      case _: DateTimeException => null
     }
   }
 
@@ -1784,8 +1789,13 @@ case class MakeTimestamp(
         int nanos = (int)(($secAndNanos - seconds) * 1000000000L);
         java.time.LocalDateTime ldt;
         if (seconds == 60) {
-          ldt = java.time.LocalDateTime.of(
-            $year, $month, $day, $hour, $min, 0, nanos).plusMinutes(1);
+          if (nanos == 0) {
+            ldt = java.time.LocalDateTime.of(
+              $year, $month, $day, $hour, $min, 0, nanos).plusMinutes(1);
+          } else {
+            throw new java.time.DateTimeException(
+              "The fraction of sec must be zero. Valid range is [0, 60].");
+          }
         } else {
           ldt = java.time.LocalDateTime.of(
             $year, $month, $day, $hour, $min, seconds, nanos);

@@ -930,7 +930,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("creating values of TimestampType via make_timestamp") {
-    val makeTimestampExpr = MakeTimestamp(
+    var makeTimestampExpr = MakeTimestamp(
       Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15), Literal(23.5),
       Some(Literal(ZoneId.systemDefault().getId)))
     val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
@@ -953,10 +953,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
 
     checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DoubleType)), null)
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(70.5)), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(70.0)), null)
 
-    checkEvaluation(MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-      Literal(23), Literal(59), Literal(60.5)),
-      Timestamp.valueOf("2019-07-01 00:00:00.5"))
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+      Literal(23), Literal(59), Literal(60.0))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(60.5)), null)
   }
 }
