@@ -202,7 +202,7 @@ class ExplainSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-28548: explain() shows wrong result for persisted DataFrames after some operations")
+  test("SPARK-28548: explain() shows wrong result for persisted DataFrames after some operations") {
     val df = spark.range(10).toDF
     val expected =
       s"""== Optimized Logical Plan ==
