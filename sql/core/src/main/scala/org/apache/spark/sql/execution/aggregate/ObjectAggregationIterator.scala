@@ -161,9 +161,9 @@ class ObjectAggregationIterator(
         // The the hash map gets too large, makes a sorted spill and clear the map.
         if (hashMap.size >= fallbackCountThreshold) {
           logInfo(
-            s"Aggregation hash map reaches threshold " +
+            s"Aggregation hash map size ${hashMap.size} reaches threshold " +
               s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +
-              s" based aggregation. You may change the threshold by adjust option " +
+              " based aggregation. You may change the threshold by adjust option " +
               SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key
           )
 
