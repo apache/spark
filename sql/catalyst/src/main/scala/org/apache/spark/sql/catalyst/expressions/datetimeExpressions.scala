@@ -1671,7 +1671,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
       * sec - the second-of-minute and its micro-fraction to represent, from
                  0 to 60. If the second argument equals to 60, the seconds field is set
                  to 0 and 1 minute is added to the final timestamp.
-      * timezone - optional time zone identifier. For example, CET, UTC and etc.
+      * timezone - the time zone identifier. For example, CET, UTC and etc.
   """,
   examples = """
     Examples:
