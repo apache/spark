@@ -351,7 +351,7 @@ object CommandUtils extends Logging {
       path.getFileSystem(hadoopConf).getContentSummary(path).getLength
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get table size from hdfs. Using the default size, $defaultSize")
+        logWarning(s"Failed to get table size from hdfs. Using the default size, $defaultSize.", e)
         defaultSize
     }
   }
