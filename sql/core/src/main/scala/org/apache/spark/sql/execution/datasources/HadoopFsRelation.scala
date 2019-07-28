@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
-
 import org.apache.hadoop.fs.Path
-import scala.collection.mutable
 
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec

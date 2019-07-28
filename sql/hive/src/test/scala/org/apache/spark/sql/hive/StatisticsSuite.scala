@@ -1455,19 +1455,43 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
-    val table1 = "table1"
-    val table2 = "table2"
-    withSQLConf(
-      "spark.sql.statistics.fallBackToHdfs" -> "true") {
-      withTable(table1, table2) {
-        sql(s"create table $table1 (id int, name string) using parquet partitioned by (name)")
-        sql(s"insert into $table1 values (1, 'a')")
-        checkKeywordsNotExist(sql(s"explain cost select * from $table1"), "sizeInBytes=8.0 EiB")
-        sql(s"create table $table2 (id int, name string) using parquet partitioned by (name)")
-        sql(s"insert into $table2 values (1, 'a')")
-        checkKeywordsExist(sql(s"explain select * from $table1 join $table2 on $table1.id=" +
-          s"$table2.id"), "BroadcastHashJoin")
+    withSQLConf("spark.sql.statistics.fallBackToHdfs" -> "true") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
+        sql("INSERT INTO t1 VALUES (1, 'a')")
+        checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
+        sql("CREATE TABLE t2 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
+        sql("INSERT INTO t2 VALUES (1, 'a')")
+        checkKeywordsExist(sql("EXPLAIN SELECT * FROM t1, t2 WHERE t1.id=t2.id"),
+          "BroadcastHashJoin")
       }
     }
+  }
+
+  test("SPARK-25474: should not fall back to hdfs when table statistics exists" +
+    " for CatalogFileIndex dataSourceTable") {
+
+      var sizeInBytesDisabledFallBack, sizeInBytesEnabledFallBack = 0L
+      Seq(true, false).foreach { fallBackToHdfs =>
+        withSQLConf("spark.sql.statistics.fallBackToHdfs" -> fallBackToHdfs.toString) {
+          withTable("t1") {
+          sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
+          sql("INSERT INTO t1 VALUES (1, 'a')")
+
+          // Analyze command updates the statistics of table `t1`
+          sql("analyze table t1 compute statistics")
+
+          val catalogTable = getCatalogTable("t1")
+
+          assert(catalogTable.stats.isDefined)
+          if (!fallBackToHdfs) {
+            sizeInBytesDisabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
+          } else {
+            sizeInBytesEnabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
+          }
+        }
+      }
+    }
+    assert(sizeInBytesEnabledFallBack === sizeInBytesDisabledFallBack)
   }
 }

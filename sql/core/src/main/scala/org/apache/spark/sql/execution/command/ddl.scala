@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
