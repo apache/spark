@@ -528,7 +528,7 @@ SELECT atanh(double('0.5'))
 -- !query 56 schema
 struct<ATANH(CAST(0.5 AS DOUBLE)):double>
 -- !query 56 output
-0.5493061443340549
+0.5493061443340548
 
 
 -- !query 57
