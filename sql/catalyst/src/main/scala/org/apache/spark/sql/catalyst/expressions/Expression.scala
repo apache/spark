@@ -995,14 +995,12 @@ abstract class SeptenaryExpression extends Expression {
           }
         }
 
-      ev.copy(code =
-        code"""
+      ev.copy(code = code"""
         boolean ${ev.isNull} = true;
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
-      ev.copy(code =
-        code"""
+      ev.copy(code = code"""
         ${firstGen.code}
         ${secondGen.code}
         ${thirdGen.code}
