@@ -27,6 +27,7 @@ import com.google.common.io.Files
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
@@ -146,8 +147,7 @@ private[deploy] class ExecutorRunner(
    */
   private def fetchAndRunExecutor() {
     try {
-      val resourceFileOpt =
-        ResourceUtils.prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir)
+      val resourceFileOpt = prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir)
       // Launch the process
       val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
         Seq("--resourcesFile", f.getAbsolutePath)).getOrElse(Seq.empty)
