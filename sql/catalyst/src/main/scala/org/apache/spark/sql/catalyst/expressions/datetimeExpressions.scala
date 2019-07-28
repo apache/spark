@@ -1660,7 +1660,7 @@ case class MakeDate(year: Expression, month: Expression, day: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec, timezone) - Create timestamp from year, month, day, hour, min, sec and timezone fields.",
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields.",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
