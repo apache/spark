@@ -16,11 +16,11 @@
  */
 package org.apache.spark.sql.mv
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryComparison, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal}
+import org.apache.spark.sql.catalyst.expressions._
 
-case class AttributeExpressionLiteral(attr: AttributeReference, exp: Expression,
-                                      literal: Option[Literal]) {
+case class AttributeExpressionLiteral(attr: Attribute, exp: Expression,
+                          literal: Option[Literal]) {
   def same: AttributeExpression[_ <:Expression] = AttributeExpression(attr, exp.getClass)
 }
 
-case class AttributeExpression[T](attributeReference: AttributeReference, expClass: Class[T])
+case class AttributeExpression[T](attributeReference: Attribute, expClass: Class[T])

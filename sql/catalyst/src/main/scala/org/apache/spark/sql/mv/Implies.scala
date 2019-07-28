@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.mv
 
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BinaryComparison, EqualTo, Expression, GreaterThan, GreaterThanOrEqual, IsNotNull, IsNull, LessThan, LessThanOrEqual, Literal, Or, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions._
 
 class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
@@ -190,10 +190,10 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     */
   private def groupAndReduceConjunct(orderedConjuncts: Seq[Expression]): Option[Seq[Expression]] = {
     val expandedConjuncts = orderedConjuncts.map(_ match {
-      case bc @ BinaryComparison(left: AttributeReference, right: Literal) =>
+      case bc @ BinaryComparison(left: Attribute, right: Literal) =>
         AttributeExpressionLiteral(left, bc, Some(right))
       case ue: UnaryExpression =>
-        AttributeExpressionLiteral(ue.child.asInstanceOf[AttributeReference], ue, None)
+        AttributeExpressionLiteral(ue.child.asInstanceOf[Attribute], ue, None)
     })
 
     val groupedConjunct = expandedConjuncts.groupBy(_.same)
@@ -222,7 +222,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
   def impliesPredicate(expression1: Expression, expression2: Expression): Boolean = {
     expression1 match {
-      case bc@BinaryComparison(left: AttributeReference, right: Expression) =>
+      case bc@BinaryComparison(left: Attribute, right: Expression) =>
         impliesForBinaryComparision(bc, expression2, left, right)
       case _@IsNotNull(left : Expression) =>
         impliesForNotNullCheck(expression2, left)
@@ -243,9 +243,9 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     * 2. query: a > 10, mv: a > 10 , will return false
     */
   private def impliesForBinaryComparision(bc: BinaryComparison, expression2: Expression,
-                                          left: AttributeReference, right: Expression): Boolean = {
+                                          left: Attribute, right: Expression): Boolean = {
     val evaluate = PartialFunction[Expression, Boolean] {
-      case b@BinaryComparison(l: AttributeReference, r: Expression) =>
+      case b@BinaryComparison(l: Attribute, r: Expression) =>
         if (l != left) {
           return false
         } else {
@@ -284,8 +284,8 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     exp match {
       case bc @ BinaryComparison(left, right) =>
         (left, right) match {
-          case (_: AttributeReference, _: Literal) => Some(bc)
-          case (left: Literal, right: AttributeReference) =>
+          case (_: Attribute, _: Literal) => Some(bc)
+          case (left: Literal, right: Attribute) =>
             bc match {
               case g: GreaterThan => Some(LessThan(right, left))
               case ge: GreaterThanOrEqual => Some(LessThanOrEqual(right, left))
@@ -304,7 +304,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
   private def unaryExpWithAttributeReference[T <: UnaryExpression](ue: T): Option[Expression] = {
     ue.child match {
-      case _: AttributeReference => Some(ue)
+      case _: Attribute => Some(ue)
       case _ => None
     }
   }

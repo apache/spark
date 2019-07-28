@@ -141,7 +141,7 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
     tablesCreated :+ mvTable1
 
     catalog.dropTable(TableIdentifier("mv2", Some("db")), ignoreIfNotExists = true, purge = true)
-    mvTable2 = createMVTable("a, b", "a > 5",
+      mvTable2 = createMVTable("*", "a > 5",
       "db.tbl1", "mv2", "db", mvSchema, catalog)
     tablesCreated :+ mvTable2
 
@@ -340,9 +340,9 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
     var optimized2: LogicalPlan = null
     withSQLConf((mvConfName, "true"),
       (convertParquetConfName, "true")) {
-      val df1 = spark.sql("select * from db.tbl where id = 20")
+      val df1 = spark.sql("select * from db.tbl1 where a > 11")
       optimized1 = Optimize.execute(df1.queryExecution.analyzed)
-      val df2 = spark.sql("select * from db.mv where id = 20")
+      val df2 = spark.sql("select * from db.mv1 where a > 11")
       optimized2 = Optimize.execute(df2.queryExecution.analyzed)
       comparePlans(optimized1, optimized2)
     }
@@ -389,7 +389,8 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
       Seq(Batch("Substitute MV",
         Once,
         EliminateSubqueryAliases,
-        SubstituteMaterializedOSView(mockCatalog.asInstanceOf[HiveMvCatalog])))
+        SubstituteMaterializedOSView(mockCatalog.asInstanceOf[HiveMvCatalog]),
+        org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators))
     }
   }
 

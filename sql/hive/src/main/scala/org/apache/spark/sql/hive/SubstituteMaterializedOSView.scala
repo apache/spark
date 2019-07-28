@@ -18,7 +18,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, HiveTableRelation, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, EqualTo, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -42,8 +42,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
           case Some(relation@HiveTableRelation(table, _, _)) if !isMVTable(Option(table)) =>
             transformToMV(projects, filters, relation, table).getOrElse(op)
           case Some(relation@LogicalRelation(_, _, tableOpt, _)) if !isMVTable(tableOpt) =>
-            val a = transformToMV(projects, filters, relation, tableOpt.get).getOrElse(op)
-            a
+            transformToMV(projects, filters, relation, tableOpt.get).getOrElse(op)
           case _ => op
         }
     }
@@ -72,70 +71,25 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
 
     // Currently supporting only MV on one table for substitution
     val mvCatalogTables = getTableNodes(mv.mvDetails)
-    mvCatalogTables.foreach { mvCatalogTable =>
-      val mvRelation = getTableRelationFromIdentifier(mvCatalogTable)
-      val mvPlan = mvCatalog.getMaterializedViewPlan(mvCatalogTable).get
-      mvPlan match {
-        case op@PhysicalOperation(mvProjects: Seq[NamedExpression], mvFilters, logicalPlan) =>
-          if (projects.forall(p => mvProjects.exists(mvP => mvP.exprId == p.exprId))) {
-            logicalPlan match {
-              case HiveTableRelation(_, _, _) | LogicalRelation(_, _, _, _) =>
-                if (new Implies(filters, mvFilters).implies) {
-                  getCorrespondingMvExps(filters, mvRelation) match {
-                    case Some(correspondingFilters) =>
-                      val filterExpression = correspondingFilters.reduce(And)
-                      if (projects.isEmpty) {
-                        return Some(Filter(filterExpression, mvRelation.get))
-                      } else {
-                        val newProjectList = getCorrespondingMvExps(projects, mvRelation)
-                        return Some(Project(
-                          newProjectList.get.asInstanceOf[Seq[NamedExpression]],
-                          Filter(filterExpression, mvRelation.get)))
-                      }
-                  }
-                }
-            }
+    mvCatalogTables.map {
+      x => {
+        x match {
+        case mvCatalogTable =>
+          val mvRelation = getTableRelationFromIdentifier(mvCatalogTable)
+          val mvPlan = mvCatalog.getMaterializedViewPlan(mvCatalogTable).get
+          mvPlan match {
+            case op@PhysicalOperation(mvProjects: Seq[NamedExpression], mvFilters, logicalPlan)
+              if (projects.forall(p => mvProjects.exists(mvP => mvP.exprId == p.exprId)))
+                && (new Implies(filters, mvFilters).implies) =>
+              constructLogicalPlan(filters, projects, mvRelation, relation)
+            case _ =>
+              None
           }
-      }
-    }
-    None
-    /* This substitutes Order By query
-    TODO: Need a neater way to integrate this.
-    val attrs = filters.flatMap {
-      filter =>
-        filter match {
-          case EqualTo(expr: AttributeReference, _) =>
-            Seq(expr.name)
-          case EqualTo(_, expr: AttributeReference) =>
-            Seq(expr.name)
-          case _ =>
-            Seq.empty
+        case _ =>
+          None
         }
-    }
-
-    val mvs = getTableNodes(mv.mvDetails)
-
-    val table = mvs.map(table => {
-      val mvPlan = mvCatalog.getMaterializedViewPlan(table).get
-      val sort = mvPlan.collect {
-        case s: Sort => s
       }
-      val sortAttrs = sort.head.references.map(x => x.name).toSeq
-      val commonAttrs = attrs.intersect(sortAttrs)
-      CatalogTableInfo(table, commonAttrs.size)
-    })
-    .filter(_.commonAttrsCount != 0)
-    .reduceLeftOption((item1, item2) => {
-      if (item1.commonAttrsCount > item2.commonAttrsCount) item1 else item2
-    })
-    table match {
-      case Some(tableInfo) =>
-        val plan = getTableRelationFromIdentifier(tableInfo.table)
-        constructLogicalPlan(filters, projects, plan, relation)
-      case _ =>
-        None
-    }
-    */
+    }.find(_.isDefined).getOrElse(None)
   }
 
 
@@ -207,7 +161,14 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
           case a: Attribute =>
             projectSmap(a.name)
         }
-        Some(Project(newProjects, Filter(newFilterExpr, getReplacedPlan(relation))))
+
+        val newFilter = Filter(newFilterExpr, getReplacedPlan(relation))
+        val a = if (newProjects == newFilter.output) {
+          Some(newFilter)
+        } else {
+          Some(Project(newProjects, newFilter))
+        }
+        a
       case _ =>
         None
     }
@@ -303,6 +264,4 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
       }
     }))
   }
-  case class CatalogTableInfo(table: CatalogTable, commonAttrsCount: Int)
-
 }
