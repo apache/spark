@@ -45,15 +45,14 @@ SELECT (SELECT udf(min(k)) FROM t2) abs_min_t2 FROM t1 WHERE  t1.k = udf('one');
 
 
 -- Except operation that will be replaced by left anti join
---- [SPARK-28441] udf(max(udf(column))) throws java.lang.UnsupportedOperationException: Cannot evaluate expression: udf(null)
---- SELECT t1.k
---- FROM   t1
---- WHERE  t1.v <= (SELECT   udf(max(udf(t2.v)))
----                 FROM     t2
----                 WHERE    udf(t2.k) = udf(t1.k))
---- MINUS
---- SELECT t1.k
---- FROM   t1
---- WHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))
----                 FROM     t2
----                 WHERE    t2.k = t1.k);
+SELECT t1.k
+FROM   t1
+WHERE  t1.v <= (SELECT   udf(max(udf(t2.v)))
+                FROM     t2
+                WHERE    udf(t2.k) = udf(t1.k))
+MINUS
+SELECT t1.k
+FROM   t1
+WHERE  udf(t1.v) >= (SELECT   min(udf(t2.v))
+                FROM     t2
+                WHERE    t2.k = t1.k);
