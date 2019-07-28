@@ -96,7 +96,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.${funcName}($c);
+          ${ev.value} = java.lang.StrictMath.${funcName}($c);
         }
       """
     )
@@ -676,7 +676,7 @@ case class Atanh(child: Expression)
     0.5 * (StrictMath.log1p(x) - StrictMath.log1p(-x)), "ATANH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev,
-      c => s"0.5 * (java.lang.StrictMath.log1p($c) - java.lang.StrictMath.log1p(-$c))")
+      c => s"0.5 * (java.lang.StrictMath.log1p($c) - java.lang.StrictMath.log1p(- $c))")
   }
 }
 
