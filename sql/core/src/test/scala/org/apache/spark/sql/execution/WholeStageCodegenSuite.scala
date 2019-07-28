@@ -327,7 +327,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("WholeStageCodegen does not work properly for LocalTableScanExec") {
+  test("SPARK-28520: WholeStageCodegen does not work properly for LocalTableScanExec") {
     // Case1: LocalTableScanExec is the root of a query plan tree.
     // In this case, WholeStageCodegenExec should not be inserted
     // as the direct parent of LocalTableScanExec.
