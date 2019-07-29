@@ -722,7 +722,7 @@ class DDLParserSuite extends AnalysisTest {
 
     assert(exc.getMessage.contains("INSERT INTO ... IF NOT EXISTS"))
   }
-  
+
   test("show tables") {
     comparePlans(
       parsePlan("SHOW TABLES"),

@@ -1651,7 +1651,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       }
     }
   }
-  
+
   test("ShowTables using v2 catalog") {
     spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
     val tablesDf = spark.sql("SHOW TABLES FROM testcat.db")
