@@ -201,7 +201,7 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
-      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq.empty)
+      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"))
     }
   }
 }
