@@ -129,7 +129,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   public void write(Iterator<Product2<K, V>> records) throws IOException {
     assert (partitionWriters == null);
     ShuffleMapOutputWriter mapOutputWriter = shuffleExecutorComponents
-        .createMapOutputWriter(shuffleId, mapId, mapTaskAttemptId, numPartitions, writeMetrics);
+        .createMapOutputWriter(shuffleId, mapId, mapTaskAttemptId, numPartitions);
     try {
       if (!records.hasNext()) {
         partitionLengths = new long[numPartitions];
@@ -241,7 +241,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             logger.error("Unable to delete file for partition {}", i);
           }
         }
-        lengths[i] = writer.getNumBytesWritten();
+        long numBytesWritten = writer.getNumBytesWritten();
+        lengths[i] = numBytesWritten;
+        writeMetrics.incBytesWritten(numBytesWritten);
       }
     } finally {
       writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);

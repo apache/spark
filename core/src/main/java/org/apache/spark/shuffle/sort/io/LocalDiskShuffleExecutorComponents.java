@@ -21,7 +21,6 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
-import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
@@ -61,13 +60,12 @@ public class LocalDiskShuffleExecutorComponents implements ShuffleExecutorCompon
       int shuffleId,
       int mapId,
       long mapTaskAttemptId,
-      int numPartitions,
-      ShuffleWriteMetricsReporter mapTaskWriteMetrics) {
+      int numPartitions) {
     if (blockResolver == null) {
       throw new IllegalStateException(
           "Executor components must be initialized before getting writers.");
     }
     return new LocalDiskShuffleMapOutputWriter(
-        shuffleId, mapId, numPartitions, mapTaskWriteMetrics, blockResolver, sparkConf);
+        shuffleId, mapId, numPartitions, blockResolver, sparkConf);
   }
 }

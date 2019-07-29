@@ -79,8 +79,8 @@ public interface ShufflePartitionWriter {
    * method if there is a very specific optimization that needs to be built.
    * <p>
    * Note that the returned {@link WritableByteChannelWrapper} itself is closed, but not the
-   * underlying channel that is returned by {@link WritableByteChannelWrapper#channel()}. Ensure that
-   * the underlying channel is cleaned up in {@link WritableByteChannelWrapper#close()},
+   * underlying channel that is returned by {@link WritableByteChannelWrapper#channel()}. Ensure
+   * that the underlying channel is cleaned up in {@link WritableByteChannelWrapper#close()},
    * {@link ShuffleMapOutputWriter#commitAllPartitions()}, or
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
    */
