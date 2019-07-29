@@ -1025,7 +1025,7 @@ Note that if the quantile range of a feature is zero, it will return default `0.
 
 **Examples**
 
-The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit standard deviation.
+The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit quantile range.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
