@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -458,14 +457,8 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 
 object Overlay {
 
-  private def validate(pos: Int) = {
-    if (pos < 1) {
-      throw new AnalysisException("If you specify `pos`, it must be a positive whole number.")
-    }
-  }
-
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
-    validate(pos)
+    require(pos > 0, "If you specify `pos`, it must be a positive whole number.")
     val builder = new UTF8StringBuilder
     builder.append(input.substringSQL(1, pos - 1))
     builder.append(replace)
@@ -482,7 +475,7 @@ object Overlay {
   }
 
   def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
-    validate(pos)
+    require(pos > 0, "If you specify `pos`, it must be a positive whole number.")
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
     // The default value for length is the length of replace.
