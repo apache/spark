@@ -312,7 +312,7 @@ private[spark] class TaskSetManager(
       dequeueTaskHelper(execId, host, maxLocality, true))
   }
 
-  private def dequeueTaskHelper(
+  protected def dequeueTaskHelper(
       execId: String,
       host: String,
       maxLocality: TaskLocality.Value,
