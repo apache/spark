@@ -44,14 +44,14 @@ case class TextScan(
     super.isSplitable(path) && !textOptions.wholeText
   }
 
-  override def getFileUnSplittableReason(path: Path): String = {
-    if (!isSplitable(path)) {
+  override def getFileUnSplittableReason(path: Path): Option[String] = {
+    if (!super.isSplitable(path)) {
       super.getFileUnSplittableReason(path)
     } else {
       if (textOptions.wholeText) {
-        "the text datasource is set wholetext mode"
+        Some("the text datasource is set wholetext mode")
       } else {
-        null
+        None
       }
     }
   }

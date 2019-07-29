@@ -50,14 +50,14 @@ case class JsonScan(
     JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
   }
 
-  override def getFileUnSplittableReason(path: Path): String = {
+  override def getFileUnSplittableReason(path: Path): Option[String] = {
     if (!super.isSplitable(path)) {
       super.getFileUnSplittableReason(path)
     } else {
       if (!JsonDataSource(parsedOptions).isSplitable) {
-        "the json datasource is set multiLine mode"
+        Some("the json datasource is set multiLine mode")
       } else {
-        null
+        None
       }
     }
   }
