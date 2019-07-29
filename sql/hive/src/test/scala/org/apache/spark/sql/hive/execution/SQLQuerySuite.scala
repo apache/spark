@@ -683,6 +683,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("SPARK-28551: check create table with invalid location") {
+    withTempPath { path =>
+      withTable("t") {
+        val tempLocation = path.toURI.getPath.stripSuffix("/")
+        intercept[AnalysisException] {
+          sql(s"create table t  LOCATION 'file:$tempLocation/c1'")
+          Seq((1, 1, 1), (1, 2, 1)).toDF("i", "p", "j").createOrReplaceGlobalTempView("tmp_tbl")
+          // with existed path
+          sql(s"create table t1  LOCATION 'file:$tempLocation/c1' AS SELECT * from tmp_tbl")
+        }
+
+      }
+    }
+  }
+
   test("specifying the column list for CTAS") {
     withTempView("mytable1") {
       Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
