@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -444,7 +447,6 @@ object PreReadCheck extends (LogicalPlan => Unit) {
   }
 }
 
-
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
@@ -482,6 +484,24 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+
+      case CreateTable(tableDesc,_, Some(query)) => {
+        val uri = tableDesc.storage.locationUri
+        if(uri.isDefined){
+          val fs  = FileSystem.get(uri.get, SparkContext.getActive.get.hadoopConfiguration)
+          val path = new Path(uri.get.getPath)
+          if(fs.exists(path)){
+            if(fs.isDirectory(path)){
+              failAnalysis("Creating table as select with a existed location of directory is not allowed, " +
+                "please check the path and try again")
+            } else {
+              failAnalysis("Creating table as select with a existed location of file is not allowed, " +
+                "please check the path and try again")
+            }
+
+          }
+        }
+      }
 
       case _ => // OK
     }

@@ -575,6 +575,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           checkRelation(
             "ctas1", isDataSourceTable = false, "rcfile", Some(s"file:$tempLocation/c5"))
         }
+
+        withTable("ctas1") {
+          intercept[AnalysisException] {
+            sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION 'file:$tempLocation/c6'")
+            // with existed path
+            sql(s"CREATE TABLE ctas2 LOCATION 'file:$tempLocation/c6 AS SELECT key k, value FROM src ORDER BY k, value")
+          }
+        }
       }
     }
   }
