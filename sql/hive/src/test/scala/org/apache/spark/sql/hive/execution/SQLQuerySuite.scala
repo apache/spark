@@ -25,7 +25,6 @@ import java.util.{Locale, Set}
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -38,7 +37,7 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHiveSingleton}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -575,12 +574,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           checkRelation(
             "ctas1", isDataSourceTable = false, "rcfile", Some(s"file:$tempLocation/c5"))
         }
+      }
+    }
+  }
 
+  test("CTAS without convert with location") {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "false", StaticSQLConf.CATALOG_IMPLEMENTATION.key -> "in-memory") {
+      withTempDir { dir =>
+        val defaultDataSource = sessionState.conf.defaultDataSourceName
+
+        val tempLocation = dir.toURI.getPath.stripSuffix("/")
         withTable("ctas1") {
           intercept[AnalysisException] {
-            sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION 'file:$tempLocation/c6'")
+            sql(s"CREATE TABLE ctas1(id string) stored as rcfile LOCATION 'file:$tempLocation/c1'")
             // with existed path
-            sql(s"CREATE TABLE ctas2 LOCATION 'file:$tempLocation/c6 AS SELECT key k, value FROM src ORDER BY k, value")
+            sql(s"CREATE TABLE ctas2 LOCATION 'file:$tempLocation/c1 AS SELECT key k, value FROM src ORDER BY k, value")
           }
         }
       }
