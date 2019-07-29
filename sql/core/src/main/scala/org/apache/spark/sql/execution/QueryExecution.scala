@@ -47,6 +47,13 @@ class QueryExecution(
     val logical: LogicalPlan,
     val tracker: QueryPlanningTracker = new QueryPlanningTracker) {
 
+  case class Plans(
+    val analized: LogicalPlan,
+    val withCachedData: LogicalPlan,
+    val optimizedPlan: LogicalPlan,
+    val sparkPlan: SparkPlan,
+    val executedPlan: SparkPlan)
+
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
@@ -105,7 +112,7 @@ class QueryExecution(
    * sparkPlan and executedPlan in this order.
    * If some plans are already materialized, they are just returned otherwise calculated.
    */
-  def getOrCalculatePlans(): (LogicalPlan, LogicalPlan, LogicalPlan, SparkPlan, SparkPlan) = {
+  def getOrCalculatePlans(): Plans = {
     val phases = tracker.phases
 
     val analyzed = if (phases.contains(QueryPlanningTracker.ANALYSIS)) {
@@ -138,7 +145,7 @@ class QueryExecution(
       calculateExecutedPlan(sparkPlan)
     }
 
-    (analyzed, withCachedData, optimizedPlan, sparkPlan, executedPlan)
+    Plans(analyzed, withCachedData, optimizedPlan, sparkPlan, executedPlan)
   }
 
   lazy val analyzed: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.ANALYSIS) {
@@ -195,7 +202,7 @@ class QueryExecution(
     ReuseSubquery(sparkSession.sessionState.conf))
 
   def simpleString: String = withRedaction {
-    val (_, _, _, _, executedPlan) = getOrCalculatePlans()
+    lazy val Plans(_, _, _, _, executedPlan) = getOrCalculatePlans()
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
     QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
@@ -204,7 +211,7 @@ class QueryExecution(
   }
 
   private def writePlans(append: String => Unit, maxFields: Int): Unit = {
-    val (analyzed, _, optimizedPlan, _, executedPlan) = getOrCalculatePlans()
+    lazy val Plans(analyzed, _, optimizedPlan, _, executedPlan) = getOrCalculatePlans()
     val (verbose, addSuffix) = (true, false)
     append("== Parsed Logical Plan ==\n")
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
@@ -231,7 +238,7 @@ class QueryExecution(
   }
 
   def stringWithStats: String = withRedaction {
-    val (_, _, optimizedPlan, _, executedPlan) = getOrCalculatePlans()
+    lazy val Plans(_, _, optimizedPlan, _, executedPlan) = getOrCalculatePlans()
     val concat = new PlanStringConcat()
     val maxFields = SQLConf.get.maxToStringFields
 
@@ -264,7 +271,7 @@ class QueryExecution(
      * WholeStageCodegen subtree).
      */
     def codegen(): Unit = {
-      val (_, _, _, _, executedPlan) = getOrCalculatePlans()
+      lazy val Plans(_, _, _, _, executedPlan) = getOrCalculatePlans()
       // scalastyle:off println
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
@@ -276,7 +283,7 @@ class QueryExecution(
      * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
      */
     def codegenToSeq(): Seq[(String, String)] = {
-      val (_, _, _, _, executedPlan) = getOrCalculatePlans()
+      lazy val Plans(_, _, _, _, executedPlan) = getOrCalculatePlans()
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
 
@@ -286,7 +293,7 @@ class QueryExecution(
      * @param maxFields maximum number of fields converted to string representation.
      */
     def toFile(path: String, maxFields: Int = Int.MaxValue): Unit = {
-      val (_, _, _, _, executedPlan) = getOrCalculatePlans()
+      lazy val Plans(_, _, _, _, executedPlan) = getOrCalculatePlans()
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
