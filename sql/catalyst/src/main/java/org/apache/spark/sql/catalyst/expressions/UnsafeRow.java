@@ -284,6 +284,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         // keep the offset for future update
         Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
       } else {
+
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
         byte[] bytes = integer.toByteArray();
         assert(bytes.length <= 16);
