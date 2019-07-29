@@ -699,6 +699,7 @@ object FinalColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
+  }
 
   /**
    * The Project before Filter is not necessary but conflict with PushPredicatesThroughProject,
