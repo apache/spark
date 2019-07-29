@@ -2900,7 +2900,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTable("table1") {
       withView("table1_vw") {
         val df = Seq.tabulate(5) { x => (x, x + 1, x + 2, x + 3) }.toDF("a", "b", "c", "d")
-        df.write.mode("overwrite").format("orc").saveAsTable("table1")
+        df.write.mode("overwrite").format("parquet").saveAsTable("table1")
         sql("drop view if exists table1_vw")
         sql("create view table1_vw as select * from table1")
 
