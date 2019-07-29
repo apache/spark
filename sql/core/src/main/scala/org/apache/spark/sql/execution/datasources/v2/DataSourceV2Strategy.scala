@@ -228,7 +228,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
           throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
-      DeleteFromTableExec(r.table.asMaintainable, r.options, filters, planLater(r)) :: Nil
+      DeleteFromTableExec(r.table.asDeletable, r.options, filters, planLater(r)) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

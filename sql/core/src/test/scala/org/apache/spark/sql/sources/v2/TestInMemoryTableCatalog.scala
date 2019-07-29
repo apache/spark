@@ -21,18 +21,21 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
+import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingTableCatalog, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.{IdentityTransform, Transform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, Literal, Not}
 import org.apache.spark.sql.sources.{And, EqualTo, Filter}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.unsafe.types.UTF8String
 
 // this is currently in the spark-sql module because the read and write API is not in catalyst
 // TODO(rdblue): when the v2 source API is in catalyst, merge with TestTableCatalog/InMemoryTable
@@ -117,7 +120,7 @@ class InMemoryTable(
     val schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
-  extends Table with SupportsRead with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite with SupportsDelete {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -249,6 +252,45 @@ class InMemoryTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
+
+  override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
+    val filtered = data.map {
+      rows =>
+        val newRows = filter(rows.rows, filters)
+        val newBufferedRows = new BufferedRows()
+        newBufferedRows.rows.appendAll(newRows)
+        newBufferedRows
+    }.filter(_.rows.nonEmpty)
+    dataMap.clear()
+    withData(filtered)
+  }
+
+  def filter(rows: mutable.ArrayBuffer[InternalRow],
+      filters: Array[Filter]): Array[InternalRow] = {
+    if (rows.isEmpty) {
+      rows.toArray
+    }
+    val filterStr =
+      filters.map {
+        filter => filter.sql
+      }.toList.mkString("AND")
+    val sparkSession = SparkSession.getActiveSession.getOrElse(
+      throw new RuntimeException("Could not get active sparkSession.")
+    )
+    val filterExpr = sparkSession.sessionState.sqlParser.parseExpression(filterStr)
+    val antiFilter = Not(EqualNullSafe(filterExpr, Literal(true, BooleanType)))
+    val rdd = sparkSession.sparkContext.parallelize(rows)
+
+    sparkSession.internalCreateDataFrame(rdd, schema)
+        .filter(Column(antiFilter)).collect().map {
+      row =>
+        val values = row.toSeq.map {
+          case s: String => UTF8String.fromBytes(s.asInstanceOf[String].getBytes("UTF-8"))
+          case other => other
+        }
+        InternalRow.fromSeq(values)
     }
   }
 }

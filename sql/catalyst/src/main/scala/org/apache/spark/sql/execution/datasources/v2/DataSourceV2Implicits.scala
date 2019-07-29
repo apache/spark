@@ -40,12 +40,12 @@ object DataSourceV2Implicits {
       }
     }
 
-    def asMaintainable: SupportsMaintenance = {
+    def asDeletable: SupportsDelete = {
       table match {
-        case support: SupportsMaintenance =>
+        case support: SupportsDelete =>
           support
         case _ =>
-          throw new AnalysisException(s"Table does not support maintenance: ${table.name}")
+          throw new AnalysisException(s"Table does not support deletes: ${table.name}")
       }
     }
 

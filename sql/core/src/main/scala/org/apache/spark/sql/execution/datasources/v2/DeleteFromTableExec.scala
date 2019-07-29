@@ -17,30 +17,23 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.SupportsMaintenance
-import org.apache.spark.sql.sources.v2.maintain.SupportsDelete
+import org.apache.spark.sql.sources.v2.SupportsDelete
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class DeleteFromTableExec(
-    table: SupportsMaintenance,
+    table: SupportsDelete,
     options: CaseInsensitiveStringMap,
     deleteWhere: Array[Filter],
     query: SparkPlan) extends UnaryExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    table.newMaintainerBuilder(options).build() match {
-      case maintainer: SupportsDelete =>
-        maintainer.delete(deleteWhere)
-      case _ =>
-        throw new SparkException(s"Table does not support delete: $table")
-    }
 
+    table.deleteWhere(deleteWhere)
     sparkContext.emptyRDD
   }
 
