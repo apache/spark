@@ -1325,13 +1325,13 @@ class Dataset[T] private[sql](
       if (sqlContext.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        val expr = resolve(colName)
-        Column(addDataFrameIdToCol(expr))
+        Column(addDataFrameIdToCol(resolve(colName)))
       }
   }
 
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly.See the rule `DetectAmbbiguousSelfJoin`.
+  // This must be called before we return a `Column` that contains `AttributeReference`.
   private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = expr match {
     case a: AttributeReference
         if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN) =>
@@ -1357,7 +1357,7 @@ class Dataset[T] private[sql](
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
         Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        Column(resolve(colName))
+        Column(addDataFrameIdToCol(resolve(colName)))
     }
   }
 
