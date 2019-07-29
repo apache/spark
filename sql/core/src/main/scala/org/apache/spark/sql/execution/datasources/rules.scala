@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -446,6 +443,7 @@ object PreReadCheck extends (LogicalPlan => Unit) {
     }
   }
 }
+
 
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
