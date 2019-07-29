@@ -1791,7 +1791,7 @@ case class MakeTimestamp(
         if (seconds == 60) {
           if (nanos == 0) {
             ldt = java.time.LocalDateTime.of(
-              $year, $month, $day, $hour, $min, 0, nanos).plusMinutes(1);
+              $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
             throw new java.time.DateTimeException(
               "The fraction of sec must be zero. Valid range is [0, 60].");
