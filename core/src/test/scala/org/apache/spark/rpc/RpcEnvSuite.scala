@@ -191,35 +191,6 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
-  test("ask a message and cancel it") {
-    env.setupEndpoint("ask-cancel", new RpcEndpoint {
-      override val rpcEnv = env
-
-      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-        case msg: String =>
-          Thread.sleep(10000)
-          context.reply(msg)
-      }
-    })
-
-    val conf = new SparkConf()
-    conf.set(Network.RPC_NUM_RETRIES, 1)
-    val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
-    // Use anotherEnv to find out the RpcEndpointRef
-    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-cancel")
-    try {
-      val e = intercept[RpcCanceledException] {
-        rpcEndpointRef.askSyncWithCancelCheck[String](
-          "hello", new RpcTimeout(11000.millisecond, "timeout"),
-          isCanceled = () => true, checkCanceledInterval = 100
-        )
-      }
-    } finally {
-      anotherEnv.shutdown()
-      anotherEnv.awaitTermination()
-    }
-  }
-
   test("onStart and onStop") {
     val stopLatch = new CountDownLatch(1)
     val calledMethods = mutable.ArrayBuffer[String]()

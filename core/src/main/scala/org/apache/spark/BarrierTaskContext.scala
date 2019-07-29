@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.util.{Properties, Timer, TimerTask}
 
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -27,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
-import org.apache.spark.rpc.{RpcCanceledException, RpcEndpointRef, RpcTimeout}
+import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
@@ -117,25 +118,36 @@ class BarrierTaskContext private[spark] (
     timer.schedule(timerTask, 60000, 60000)
 
     try {
-      barrierCoordinator.askSyncWithCancelCheck[Unit](
+      val cancelableRpcFuture = barrierCoordinator.askCancelable[Unit](
         message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
-        timeout = new RpcTimeout(365.days, "barrierTimeout"),
-        isCanceled = () => this.isInterrupted(),
-        checkCanceledInterval = 100
-      )
+        timeout = new RpcTimeout(365.days, "barrierTimeout"))
+
+      // Wait the RPC future to be completed, but every 1 second it will jump out waiting
+      // and check whether current spark task is killed. If killed, then throw
+      // a `TaskKilledException`, otherwise continue wait RPC until it completes.
+      while(!taskContext.isCompleted()) {
+        if (taskContext.isInterrupted()) {
+          val reason = taskContext.getKillReason().get
+          cancelableRpcFuture.cancel(reason)
+          throw new TaskKilledException(reason)
+        }
+        // wait RPC future for at most 1 second
+        try {
+          ThreadUtils.awaitResult(cancelableRpcFuture.toFuture, 1.second)
+        } catch {
+          case _: TimeoutException => Unit // await future time reach 1 second.
+        }
+      }
+
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +
         s"${MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime)} seconds, " +
         s"current barrier epoch is $barrierEpoch.")
     } catch {
-      case _: RpcCanceledException =>
-        logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) killed." +
-          s"current barrier epoch is $barrierEpoch.")
-        throw new TaskKilledException(getKillReason().get)
       case e: SparkException =>
         logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) failed " +
           "to perform global sync, waited for " +

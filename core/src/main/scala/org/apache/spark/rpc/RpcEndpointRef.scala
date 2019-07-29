@@ -49,6 +49,17 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
    * receive the reply within the specified timeout.
+   * Return a `CancelableFuture` instance which wrap `Future` but with additional `cancel` method.
+   *
+   * This method only sends the message once and never retries.
+   */
+  def askCancelable[T: ClassTag](message: Any, timeout: RpcTimeout): CancelableFuture[T] = {
+    throw new UnsupportedOperationException()
+  }
+
+  /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
+   * receive the reply within the specified timeout.
    *
    * This method only sends the message once and never retries.
    */
@@ -61,31 +72,6 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
    * This method only sends the message once and never retries.
    */
   def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultAskTimeout)
-
-  /**
-   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] and get its result within a
-   * default timeout, throw an exception if this fails.
-   *
-   * Can specify an `isInterrupt` function which checking whether it should be interrupted, if
-   * interrupted an `RpcInterruptedException` will be thrown.
-   *
-   * Note: this is a blocking action which may cost a lot of time,  so don't call it in a message
-   * loop of [[RpcEndpoint]].
-   *
-   * @param message the message to send
-   * @param timeout timeout of this RPC request
-   * @param isCanceled an function which checking whether it should be canceled
-   * @param checkCanceledInterval check RPC canceled interval in milliseconds
-   * @tparam T type of the reply message
-   * @return the reply message from the corresponding [[RpcEndpoint]]
-   */
-  def askWithCancelCheck[T: ClassTag](
-      message: Any,
-      timeout: RpcTimeout,
-      isCanceled: () => Boolean,
-      checkCanceledInterval: Long): Future[T] = {
-    throw new UnsupportedOperationException
-  }
 
   /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply]] and get its result within a
@@ -117,12 +103,22 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
     timeout.awaitResult(future)
   }
 
-  def askSyncWithCancelCheck[T: ClassTag](
-      message: Any,
-      timeout: RpcTimeout,
-      isCanceled: () => Boolean,
-      checkCanceledInterval: Long): T = {
-    val future = askWithCancelCheck[T](message, timeout, isCanceled, checkCanceledInterval)
-    timeout.awaitResult(future)
-  }
+}
+
+/**
+ * An exception thrown if RpcTimeout modifies a `TimeoutException`.
+ */
+class RPCCanceledException(message: String) extends Exception(message)
+
+/**
+ * A wrapper for `Future` but add cancel method.
+ * This is used in long run RPC and provide an approach to cancel the RPC.
+ */
+private[spark] class CancelableFuture[T: ClassTag](
+    future: Future[T],
+    cancelFunc: String => Unit) {
+
+  def cancel(reason: String): Unit = cancelFunc(reason)
+
+  def toFuture: Future[T] = future
 }
