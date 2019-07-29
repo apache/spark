@@ -121,7 +121,8 @@ class MinMaxScaler @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       case Row(v: Vector) => OldVectors.fromML(v)
     }
     val summary = Statistics.colStats(input)
-    copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
+    copyValues(new MinMaxScalerModel(uid, summary.min.compressed,
+      summary.max.compressed).setParent(this))
   }
 
   @Since("1.5.0")
@@ -176,27 +177,42 @@ class MinMaxScalerModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
+
+    val numFeatures = originalMax.size
+    val scale = $(max) - $(min)
+    val minValue = $(min)
+
+    // transformed value for constant cols
+    val constantOutput = ($(min) + $(max)) / 2
     val minArray = originalMin.toArray
 
-    val reScale = udf { (vector: Vector) =>
-      val scale = $(max) - $(min)
+    val scaleArray = Array.tabulate(numFeatures) { i =>
+      val range = originalMax(i) - originalMin(i)
+      // scaleArray(i) == 0 iff i-th col is constant (range == 0)
+      if (range != 0) scale / range else 0.0
+    }
 
+    val transformer = udf { vector: Vector =>
+      require(vector.size == numFeatures,
+        s"Number of features must be $numFeatures but got ${vector.size}")
       // 0 in sparse vector will probably be rescaled to non-zero
       val values = vector.toArray
-      val size = values.length
       var i = 0
-      while (i < size) {
+      while (i < numFeatures) {
         if (!values(i).isNaN) {
-          val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5
-          values(i) = raw * scale + $(min)
+          if (scaleArray(i) != 0) {
+            values(i) = (values(i) - minArray(i)) * scaleArray(i) + minValue
+          } else {
+            // scaleArray(i) == 0 means i-th col is constant
+            values(i) = constantOutput
+          }
         }
         i += 1
       }
-      Vectors.dense(values)
+      Vectors.dense(values).compressed
     }
 
-    dataset.withColumn($(outputCol), reScale(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
   @Since("1.5.0")

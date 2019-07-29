@@ -1028,10 +1028,12 @@ when running in local mode.
   - shuffleRemoteBytesReadToDisk.count
   - shuffleTotalBytesRead.count
   - shuffleWriteTime.count
+  - succeededTasks.count
   - threadpool.activeTasks
   - threadpool.completeTasks
   - threadpool.currentPool_size
   - threadpool.maxPool_size
+  - threadpool.startedTasks
 
 - namespace=JVMCPU
   - jvmCpuTime

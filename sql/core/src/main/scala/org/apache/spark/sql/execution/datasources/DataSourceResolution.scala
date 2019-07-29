@@ -174,6 +174,7 @@ case class DataSourceResolution(
 
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)
+
   }
 
   object V1WriteProvider {

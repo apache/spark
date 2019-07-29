@@ -431,6 +431,12 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'")
 
+    // Interval.
+    assertEqual("InterVal 'interval 3 month 1 hour'",
+      Literal(CalendarInterval.fromString("interval 3 month 1 hour")))
+    assertEqual("Interval 'interval 3 monthsss 1 hoursss'",
+      Literal(null, CalendarIntervalType))
+
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
