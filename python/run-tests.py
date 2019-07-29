@@ -161,8 +161,13 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 def get_default_python_executables():
     python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
-    if "python2.7" not in python_execs:
-        LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
+    if ("python3.6" not in python_execs) and which("python3"):
+        LOGGER.warning("Not testing against `python3.6` because it could not be found; falling"
+                       " back to `python3` instead")
+        python_execs.insert(0, "python3")
+
+    if ("python2.7" not in python_execs) and (not python_execs[0].startswith("python3")):
+        LOGGER.warning("Both python2.7 and python3 could not be found; falling"
                        " back to `python` instead")
         python_execs.insert(0, "python")
     return python_execs
