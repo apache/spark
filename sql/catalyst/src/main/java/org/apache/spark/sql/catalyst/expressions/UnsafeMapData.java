@@ -143,7 +143,7 @@ public final class UnsafeMapData extends MapData implements Externalizable, Kryo
   }
 
   @Override
-  public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+  public void readExternal(ObjectInput in) throws IOException {
     this.baseOffset = BYTE_ARRAY_OFFSET;
     this.sizeInBytes = in.readInt();
     this.baseObject = new byte[sizeInBytes];

@@ -204,8 +204,8 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
     if ($(predictionCol).nonEmpty) {
       transformImpl(dataset)
     } else {
-      this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: Predictor.transform() does nothing" +
+        " because no output columns were set.")
       dataset.toDF
     }
   }

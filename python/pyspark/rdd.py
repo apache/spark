@@ -693,7 +693,7 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
+        memory = self._memory_limit()
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator):
@@ -1832,8 +1832,7 @@ class RDD(object):
         # grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
 
-        limit = (_parse_memory(self.ctx._conf.get(
-            "spark.python.worker.memory", "512m")) / 2)
+        limit = (self._memory_limit() / 2)
 
         def add_shuffle_key(split, iterator):
 
@@ -2490,7 +2489,7 @@ def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
     pickled_command = ser.dumps(command)
-    if len(pickled_command) > (1 << 20):  # 1M
+    if len(pickled_command) > sc._jvm.PythonUtils.getBroadcastThreshold(sc._jsc):  # Default 1M
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)

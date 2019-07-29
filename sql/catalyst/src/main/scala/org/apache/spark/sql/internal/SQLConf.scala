@@ -1524,6 +1524,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .doc("When true, will perform integral division with the / operator " +
+      "if both sides are integral types.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
@@ -1647,6 +1653,16 @@ object SQLConf {
       .doc("Prune nested fields from object serialization operator which are unnecessary in " +
         "satisfying a query. This optimization allows object serializers to avoid " +
         "executing unnecessary nested expressions.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val NESTED_PRUNING_ON_EXPRESSIONS =
+    buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from expressions in an operator which are unnecessary in " +
+        "satisfying a query. Note that this optimization doesn't prune nested fields from " +
+        "physical data source scanning. For pruning nested fields from scanning, please use " +
+        "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
       .booleanConf
       .createWithDefault(false)
 
@@ -2294,6 +2310,8 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
+  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
+
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
@@ -2306,6 +2324,8 @@ class SQLConf extends Serializable with Logging {
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedPruningOnExpressions: Boolean = getConf(NESTED_PRUNING_ON_EXPRESSIONS)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 
