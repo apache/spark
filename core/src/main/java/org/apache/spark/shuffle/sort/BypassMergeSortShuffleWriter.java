@@ -22,6 +22,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
+import java.util.Optional;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -205,51 +206,64 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         final File file = partitionWriterSegments[i].file();
         ShufflePartitionWriter writer = mapOutputWriter.getPartitionWriter(i);
         if (file.exists()) {
-          boolean copyThrewException = true;
           if (transferToEnabled) {
-            FileInputStream in = new FileInputStream(file);
             // Using WritableByteChannelWrapper to make resource closing consistent between
             // this implementation and UnsafeShuffleWriter.
-            try {
-              WritableByteChannelWrapper outputChannel = writer.openChannelWrapper();
-              try (FileChannel inputChannel = in.getChannel()) {
-                Utils.copyFileStreamNIO(
-                    inputChannel, outputChannel.channel(), 0L, inputChannel.size());
-                copyThrewException = false;
-              } finally {
-                Closeables.close(outputChannel, copyThrewException);
-              }
-            } finally {
-              Closeables.close(in, copyThrewException);
+            Optional<WritableByteChannelWrapper> maybeOutputChannel = writer.openChannelWrapper();
+            if (maybeOutputChannel.isPresent()) {
+              writePartitionedDataWithChannel(file, maybeOutputChannel.get());
+            } else {
+              writePartitionedDataWithStream(file, writer);
             }
           } else {
-            FileInputStream in = new FileInputStream(file);
-            OutputStream outputStream;
-            try {
-              outputStream = writer.openStream();
-              try {
-                Utils.copyStream(in, outputStream, false, false);
-                copyThrewException = false;
-              } finally {
-                Closeables.close(outputStream, copyThrewException);
-              }
-            } finally {
-              Closeables.close(in, copyThrewException);
-            }
+            writePartitionedDataWithStream(file, writer);
           }
           if (!file.delete()) {
             logger.error("Unable to delete file for partition {}", i);
           }
         }
-        long numBytesWritten = writer.getNumBytesWritten();
-        lengths[i] = numBytesWritten;
-        writeMetrics.incBytesWritten(numBytesWritten);
+        lengths[i] = writer.getNumBytesWritten();
       }
     } finally {
       writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
     }
     partitionWriters = null;
     return lengths;
+  }
+
+  private void writePartitionedDataWithChannel(
+      File file, WritableByteChannelWrapper outputChannel) throws IOException {
+    boolean copyThrewException = true;
+    try {
+      FileInputStream in = new FileInputStream(file);
+      try (FileChannel inputChannel = in.getChannel()) {
+        Utils.copyFileStreamNIO(
+            inputChannel, outputChannel.channel(), 0L, inputChannel.size());
+        copyThrewException = false;
+      } finally {
+        Closeables.close(in, copyThrewException);
+      }
+    } finally {
+      Closeables.close(outputChannel, copyThrewException);
+    }
+  }
+
+  private void writePartitionedDataWithStream(File file, ShufflePartitionWriter writer)
+      throws IOException {
+    boolean copyThrewException = true;
+    FileInputStream in = new FileInputStream(file);
+    OutputStream outputStream;
+    try {
+      outputStream = writer.openStream();
+      try {
+        Utils.copyStream(in, outputStream, false, false);
+        copyThrewException = false;
+      } finally {
+        Closeables.close(outputStream, copyThrewException);
+      }
+    } finally {
+      Closeables.close(in, copyThrewException);
+    }
   }
 
   @Override

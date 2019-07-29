@@ -25,6 +25,7 @@ import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -164,7 +165,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
 
     @Override
-    public WritableByteChannelWrapper openChannelWrapper() throws IOException {
+    public Optional<WritableByteChannelWrapper> openChannelWrapper() throws IOException {
       if (partChannel == null) {
         if (partStream != null) {
           throw new IllegalStateException("Requested an output stream for a previous write but" +
@@ -174,7 +175,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
         initChannel();
         partChannel = new PartitionWriterChannel(partitionId);
       }
-      return partChannel;
+      return Optional.of(partChannel);
     }
 
     @Override

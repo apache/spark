@@ -18,11 +18,10 @@
 package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
+import java.util.Optional;
 import java.io.OutputStream;
-import java.nio.channels.Channels;
 
 import org.apache.spark.annotation.Private;
-import org.apache.spark.shuffle.sort.io.DefaultWritableByteChannelWrapper;
 
 /**
  * :: Private ::
@@ -67,16 +66,15 @@ public interface ShufflePartitionWriter {
    * Implementations that intend on combining the bytes for all the partitions written by this
    * map task should reuse the same channel instance across all the partition writers provided
    * by the parent {@link ShuffleMapOutputWriter}. If one does so, ensure that
-   * {@link WritableByteChannelWrapper#close()} does not close the resource, since it
+   * {@link WritableByteChannelWrapper#close()} does not close the resource, since the channel
    * will be reused across partition writes. The underlying resources should be cleaned up in
    * {@link ShuffleMapOutputWriter#commitAllPartitions()} and
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
    * <p>
    * This method is primarily for advanced optimizations where bytes can be copied from the input
-   * spill files to the output channel without copying data into memory.
-   * <p>
-   * The default implementation should be sufficient for most situations. Only override this
-   * method if there is a very specific optimization that needs to be built.
+   * spill files to the output channel without copying data into memory. If such optimizations are
+   * not supported, the implementation should return {@link Optional#empty()}. By default, the
+   * implementation returns {@link Optional#empty()}.
    * <p>
    * Note that the returned {@link WritableByteChannelWrapper} itself is closed, but not the
    * underlying channel that is returned by {@link WritableByteChannelWrapper#channel()}. Ensure
@@ -84,8 +82,8 @@ public interface ShufflePartitionWriter {
    * {@link ShuffleMapOutputWriter#commitAllPartitions()}, or
    * {@link ShuffleMapOutputWriter#abort(Throwable)}.
    */
-  default WritableByteChannelWrapper openChannelWrapper() throws IOException {
-    return new DefaultWritableByteChannelWrapper(Channels.newChannel(openStream()));
+  default Optional<WritableByteChannelWrapper> openChannelWrapper() throws IOException {
+    return Optional.empty();
   }
 
   /**
