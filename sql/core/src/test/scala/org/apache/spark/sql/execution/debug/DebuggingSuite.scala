@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.debug
 
 import java.io.ByteArrayOutputStream
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -51,7 +53,7 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
       subtree.contains("Range") && code.contains("Object[]")})
   }
 
-  test("SPARK-28537: DebugExec cannot debug broadcast or columnar related queries") {
+  test("SPARK-28537: DebugExec cannot debug broadcast and columnar related queries") {
     val rightDF = spark.range(10)
     val leftDF = spark.range(10)
     val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
@@ -73,7 +75,7 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
         |Tuples output: 0
         | id LongType: {}""".stripMargin))
     } catch {
-      case e: Throwable => fail("debug() for broadcast failed with exception", e)
+      case NonFatal(e) => fail("debug() for broadcast failed with exception", e)
     }
 
     val df = spark.range(5)
@@ -84,15 +86,14 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
         df.debug()
       }
 
-      val exprId = df.queryExecution.executedPlan.output.head.toString
-      val output = captured.toString()
+      val output = captured.toString()replaceAll ("#\\d+", "#x")
       assert(output.contains(
-        s"""== InMemoryTableScan [$exprId] ==
+        s"""== InMemoryTableScan [id#xL] ==
           |Tuples output: 0
           | id LongType: {}
           |""".stripMargin))
     } catch {
-      case e: Throwable => fail("debug() for columnar failed with exception", e)
+      case NonFatal(e) => fail("debug() for columnar failed with exception", e)
     }
   }
 }
