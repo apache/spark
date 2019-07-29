@@ -416,6 +416,7 @@ object FunctionRegistry {
     expression[Year]("year"),
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
+    expression[MakeTimestamp]("make_timestamp"),
 
     // collection functions
     expression[CreateArray]("array"),
