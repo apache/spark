@@ -128,7 +128,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val dsIntFilter = dsInt.filter(_ > 0)
     val planInt = dsIntFilter.queryExecution.executedPlan
     assert(planInt.collect {
-      case WholeStageCodegenExec(FilterExec(_, ColumnarToRowExec(_: InMemoryTableScanExec))) => ()
+      case WholeStageCodegenExec(FilterExec(_,
+          ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
     }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 

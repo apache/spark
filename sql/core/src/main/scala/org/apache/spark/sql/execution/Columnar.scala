@@ -66,9 +66,8 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  // `ColumnarToRowExec` is the beginning of a codegen stage, so it doesn't need to copy result and
-  // it can add limit condition check.
-  override def needCopyResult: Boolean = false
+  // `ColumnarToRowExec` processes the input RDD directly, which is kind of a leaf node in the
+  // codegen stage and needs to do the limit check.
   protected override def canCheckLimitNotReached: Boolean = true
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
@@ -431,7 +430,7 @@ case class RowToColumnarExec(child: SparkPlan) extends UnaryExecNode {
     // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
     // combine with some of the Arrow conversion tools we will need to unify some of the configs.
     val numRows = conf.columnBatchSize
-    // This avoids calling `output` in the RDD closure, so that we don't need to include the entire
+    // This avoids calling `schema` in the RDD closure, so that we don't need to include the entire
     // plan (this) in the closure.
     val localSchema = this.schema
     child.execute().mapPartitionsInternal { rowIterator =>

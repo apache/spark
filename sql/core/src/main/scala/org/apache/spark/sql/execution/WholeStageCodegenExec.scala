@@ -517,6 +517,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
     child.executeColumnar()
   }
 
+  // `InputAdapter` can only generate code to process the rows from its child. If the child produces
+  // columnar batches, there must be a `ColumnarToRowExec` above `InputAdapter` to handle it by
+  // overriding `inputRDD`.
   override def inputRDD: RDD[InternalRow] = child.execute()
 
   // This is a leaf node so the node can produce limit not reached checks.
@@ -868,9 +871,6 @@ case class CollapseCodegenStages(
         // The children of SortMergeJoin should do codegen separately.
         j.withNewChildren(j.children.map(
           child => InputAdapter(insertWholeStageCodegen(child))))
-      // `ColumnarToRowExec` is kind of a leaf node to whole-stage-codegen. Its generated code can
-      // process data from the input RDD directly.
-      case c: ColumnarToRowExec => c
       case p => p.withNewChildren(p.children.map(insertInputAdapter))
     }
   }
@@ -889,6 +889,9 @@ case class CollapseCodegenStages(
         // to support the fast driver-local collect/take paths.
         plan
       case plan: CodegenSupport if supportCodegen(plan) =>
+        // The whole-stage-codegen framework is row-based. If a plan supports columnar execution,
+        // it can't support whole-stage-codegen at the same time.
+        assert(!plan.supportsColumnar)
         WholeStageCodegenExec(insertInputAdapter(plan))(codegenStageCounter.incrementAndGet())
       case other =>
         other.withNewChildren(other.children.map(insertWholeStageCodegen))
