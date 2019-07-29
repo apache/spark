@@ -6,25 +6,25 @@
 -- Test JOIN clauses
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/join.sql
 --
-create or replace temporary view INT4_TBL as select * from
-  (values (0), (123456), (-123456), (2147483647), (-2147483647))
-  as v(f1);
-create or replace temporary view INT8_TBL as select * from
-  (values
+CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
+  (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
+  AS v(f1);
+CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
+  (VALUES
     (123, 456),
     (123, 4567890123456789),
     (4567890123456789, 123),
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
-  as v(q1, q2);
-create or replace temporary view FLOAT8_TBL as select * from
-  (values (0.0), (1004.30), (-34.84),
+  AS v(q1, q2);
+CREATE OR REPLACE TEMPORARY VIEW FLOAT8_TBL AS SELECT * FROM
+  (VALUES (0.0), (1004.30), (-34.84),
     (cast('1.2345678901234e+200' as double)), (cast('1.2345678901234e-200' as double)))
-  as v(f1);
-create or replace temporary view TEXT_TBL as select * from
-  (values ('doh!'), ('hi de ho neighbor'))
-  as v(f1);
-create or replace temporary view tenk2 as select * from tenk1;
+  AS v(f1);
+CREATE OR REPLACE TEMPORARY VIEW TEXT_TBL AS SELECT * FROM
+  (VALUES ('doh!'), ('hi de ho neighbor'))
+  AS v(f1);
+CREATE OR REPLACE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
 CREATE TABLE J1_TBL (
   i integer,
@@ -577,15 +577,15 @@ select count(*) from tenk1 a, tenk1 b
 -- regression test for 8.2 bug with improper re-ordering of left joins
 --
 
-drop table if exists tt3;
-create table tt3(f1 int, f2 string) using parquet;
-insert into tt3 select x.id, repeat('xyzzy', 100) from range(1,10001) x;
+DROP TABLE IF EXISTS tt3;
+CREATE TABLE tt3(f1 int, f2 string) USING parquet;
+INSERT INTO tt3 SELECT x.id, repeat('xyzzy', 100) FROM range(1,10001) x;
 -- create index tt3i on tt3(f1);
 -- analyze tt3;
 
-drop table if exists tt4;
-create table tt4(f1 int) using parquet;
-insert into tt4 values (0),(1),(9999);
+DROP TABLE IF EXISTS tt4;
+CREATE TABLE tt4(f1 int) USING parquet;
+INSERT INTO tt4 VALUES (0),(1),(9999);
 -- analyze tt4;
 
 SELECT a.f1
@@ -1984,19 +1984,19 @@ select f1,g from int4_tbl a cross join (select a.f1 as g) ss;
 -- select * from j1
 -- inner join (select id from j3 group by id) j3 on j1.id = j3.id;
 
-drop table if exists j1;
-drop table if exists j2;
-drop table if exists j3;
+-- drop table if exists j1;
+-- drop table if exists j2;
+-- drop table if exists j3;
 
 -- test more complex permutations of unique joins
 
-create table j1 (id1 int, id2 int) using parquet;
-create table j2 (id1 int, id2 int) using parquet;
-create table j3 (id1 int, id2 int) using parquet;
+CREATE TABLE j1 (id1 int, id2 int) USING parquet;
+CREATE TABLE j2 (id1 int, id2 int) USING parquet;
+-- create table j3 (id1 int, id2 int) using parquet;
 
-insert into j1 values(1,1),(1,2);
-insert into j2 values(1,1);
-insert into j3 values(1,1);
+INSERT INTO j1 values(1,1),(1,2);
+INSERT INTO j2 values(1,1);
+-- insert into j3 values(1,1);
 
 -- analyze j1;
 -- analyze j2;
@@ -2036,7 +2036,7 @@ insert into j3 values(1,1);
 -- create index j2_id1_idx on j2 (id1) where id1 % 1000 = 1;
 
 -- need an additional row in j2, if we want j2_id1_idx to be preferred
-insert into j2 values(1,2);
+INSERT INTO j2 values(1,2);
 -- analyze j2;
 
 -- explain (costs off) select * from j1
@@ -2053,7 +2053,7 @@ where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1;
 
 drop table j1;
 drop table j2;
-drop table j3;
+-- drop table j3;
 
 -- Skip these tests because it only test explain
 -- check that semijoin inner is not seen as unique for a portion of the outerrel
