@@ -2830,7 +2830,7 @@ object functions {
   /**
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the
-   * yyyy-MM-dd HH:mm:ss format.
+   * uuuu-MM-dd HH:mm:ss format.
    *
    * @param ut A number of a type that is castable to a long, such as string or integer. Can be
    *           negative for timestamps before the unix epoch
@@ -2839,7 +2839,7 @@ object functions {
    * @since 1.5.0
    */
   def from_unixtime(ut: Column): Column = withExpr {
-    FromUnixTime(ut.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+    FromUnixTime(ut.expr, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   /**
@@ -2871,21 +2871,21 @@ object functions {
    * @since 1.5.0
    */
   def unix_timestamp(): Column = withExpr {
-    UnixTimestamp(CurrentTimestamp(), Literal("yyyy-MM-dd HH:mm:ss"))
+    UnixTimestamp(CurrentTimestamp(), Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   /**
-   * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
+   * Converts time string in format uuuu-MM-dd HH:mm:ss to Unix timestamp (in seconds),
    * using the default timezone and the default locale.
    *
    * @param s A date, timestamp or string. If a string, the data must be in the
-   *          `yyyy-MM-dd HH:mm:ss` format
+   *          `uuuu-MM-dd HH:mm:ss` format
    * @return A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
    * @since 1.5.0
    */
   def unix_timestamp(s: Column): Column = withExpr {
-    UnixTimestamp(s.expr, Literal("yyyy-MM-dd HH:mm:ss"))
+    UnixTimestamp(s.expr, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   /**
@@ -2894,7 +2894,7 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *          cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @param p A date time pattern detailing the format of `s` when `s` is a string
    * @return A long, or null if `s` was a string that could not be cast to a date or `p` was
    *         an invalid format
@@ -2907,7 +2907,7 @@ object functions {
    * Converts to a timestamp by casting rules to `TimestampType`.
    *
    * @param s A date, timestamp or string. If a string, the data must be in a format that can be
-   *          cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *          cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @return A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 2.2.0
@@ -2922,7 +2922,7 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *            cast to a timestamp, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `s` when `s` is a string
    * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
    *         `fmt` was an invalid format
@@ -2947,7 +2947,7 @@ object functions {
    * See [[java.time.format.DateTimeFormatter]] for valid date and time format patterns
    *
    * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
-   *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   *            cast to a date, such as `uuuu-MM-dd` or `uuuu-MM-dd HH:mm:ss.SSSS`
    * @param fmt A date time pattern detailing the format of `e` when `e`is a string
    * @return A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
    *         invalid format

@@ -43,7 +43,7 @@ class Iso8601DateFormatter(
 }
 
 object DateFormatter {
-  val defaultPattern: String = "yyyy-MM-dd"
+  val defaultPattern: String = "uuuu-MM-dd"
   val defaultLocale: Locale = Locale.US
 
   def apply(format: String, locale: Locale): DateFormatter = {

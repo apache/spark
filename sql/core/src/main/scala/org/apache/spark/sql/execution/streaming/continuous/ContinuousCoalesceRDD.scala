@@ -110,8 +110,9 @@ class ContinuousCoalesceRDD(
               context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
             while (!context.isInterrupted() && !context.isCompleted()) {
               writer.write(prev.compute(prevSplit, context).asInstanceOf[Iterator[UnsafeRow]])
-              // Note that current epoch is a non-inheritable thread local, so each writer thread
-              // can properly increment its own epoch without affecting the main task thread.
+              // Note that current epoch is a inheritable thread local but makes another instance,
+              // so each writer thread can properly increment its own epoch without affecting
+              // the main task thread.
               EpochTracker.incrementCurrentEpoch()
             }
           }

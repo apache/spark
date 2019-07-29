@@ -24,7 +24,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -579,7 +579,7 @@ case class ToUnixTimestamp(
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal("yyyy-MM-dd HH:mm:ss"))
+    this(time, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   override def prettyName: String = "to_unix_timestamp"
@@ -616,7 +616,7 @@ case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Op
     copy(timeZoneId = Option(timeZoneId))
 
   def this(time: Expression) = {
-    this(time, Literal("yyyy-MM-dd HH:mm:ss"))
+    this(time, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   def this() = {
@@ -786,7 +786,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
   override def prettyName: String = "from_unixtime"
 
   def this(unix: Expression) = {
-    this(unix, Literal("yyyy-MM-dd HH:mm:ss"))
+    this(unix, Literal("uuuu-MM-dd HH:mm:ss"))
   }
 
   override def dataType: DataType = StringType
@@ -996,14 +996,14 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[CalendarInterval]
     DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], itvl.months, itvl.microseconds, timeZone)
+      start.asInstanceOf[Long], itvl.months, itvl.microseconds, zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds, $tz)"""
+      s"""$dtu.timestampAddInterval($sd, $i.months, $i.microseconds, $zid)"""
     })
   }
 }
@@ -1111,14 +1111,14 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
   override def nullSafeEval(start: Any, interval: Any): Any = {
     val itvl = interval.asInstanceOf[CalendarInterval]
     DateTimeUtils.timestampAddInterval(
-      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds, timeZone)
+      start.asInstanceOf[Long], 0 - itvl.months, 0 - itvl.microseconds, zoneId)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (sd, i) => {
-      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds, $tz)"""
+      s"""$dtu.timestampAddInterval($sd, 0 - $i.months, 0 - $i.microseconds, $zid)"""
     })
   }
 }
@@ -1604,4 +1604,56 @@ private case class GetTimestamp(
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(year, month, day) - Create date from year, month and day fields.",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2013, 7, 15);
+       2013-07-15
+      > SELECT _FUNC_(2019, 13, 1);
+       NULL
+      > SELECT _FUNC_(2019, 7, NULL);
+       NULL
+      > SELECT _FUNC_(2019, 2, 30);
+       NULL
+  """,
+  since = "3.0.0")
+case class MakeDate(year: Expression, month: Expression, day: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  override def children: Seq[Expression] = Seq(year, month, day)
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType)
+  override def dataType: DataType = DateType
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(year: Any, month: Any, day: Any): Any = {
+    try {
+      val ld = LocalDate.of(year.asInstanceOf[Int], month.asInstanceOf[Int], day.asInstanceOf[Int])
+      localDateToDays(ld)
+    } catch {
+      case _: java.time.DateTimeException => null
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    nullSafeCodeGen(ctx, ev, (year, month, day) => {
+      s"""
+      try {
+        ${ev.value} = $dtu.localDateToDays(java.time.LocalDate.of($year, $month, $day));
+      } catch (java.time.DateTimeException e) {
+        ${ev.isNull} = true;
+      }"""
+    })
+  }
+
+  override def prettyName: String = "make_date"
 }
