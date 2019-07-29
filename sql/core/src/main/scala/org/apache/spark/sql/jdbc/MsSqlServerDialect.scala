@@ -22,7 +22,7 @@ import org.apache.spark.sql.types._
 
 private object MsSqlServerDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:sqlserver")
+  override def canHandle(url: String): Boolean = url.toLowerCase().startsWith("jdbc:sqlserver")
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {

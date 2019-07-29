@@ -23,7 +23,7 @@ import org.apache.spark.sql.types._
 
 private object DB2Dialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = url.startsWith("jdbc:db2")
+  override def canHandle(url: String): Boolean = url.toLowerCase().startsWith("jdbc:db2")
 
   override def getCatalystType(
       sqlType: Int,

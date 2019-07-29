@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 
 private case object TeradataDialect extends JdbcDialect {
 
-  override def canHandle(url: String): Boolean = { url.startsWith("jdbc:teradata") }
+  override def canHandle(url: String): Boolean = { url.toLowerCase().startsWith("jdbc:teradata") }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     case StringType => Some(JdbcType("VARCHAR(255)", java.sql.Types.VARCHAR))
