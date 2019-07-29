@@ -52,7 +52,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     assert(optimized.resolved)
   }
 
-  test("PullupCorrelatedPredicates in correlated subquery idiompotency check") {
+  test("PullupCorrelatedPredicates in correlated subquery idempotency check") {
     val subPlan =
       testRelation2
       .where('b < 'd)
@@ -68,7 +68,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     comparePlans(optimized, doubleOptimized)
   }
 
-  test("PullupCorrelatedPredicates exists correlated subquery idiompotency check") {
+  test("PullupCorrelatedPredicates exists correlated subquery idempotency check") {
     val subPlan =
       testRelation2
         .where('b === 'd && 'd === 1)
@@ -84,7 +84,7 @@ class PullupCorrelatedPredicatesSuite extends PlanTest {
     comparePlans(optimized, doubleOptimized)
   }
 
-  test("PullupCorrelatedPredicates scalar correlated subquery idiompotency check") {
+  test("PullupCorrelatedPredicates scalar correlated subquery idempotency check") {
     val subPlan =
       testRelation2
         .where('b === 'd && 'd === 1)
