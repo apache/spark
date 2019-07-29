@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 private[sql] object ShowTablesSchema {
-  val SHOW_TABLES_SCHEMA = StructType.fromAttributes(attributes())
+  val schema = StructType.fromAttributes(attributes())
 
   def attributes(): Seq[AttributeReference] = Seq(
     AttributeReference("database", StringType, nullable = false)(),

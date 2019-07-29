@@ -592,7 +592,7 @@ case class ShowTables(
     pattern: Option[String]) extends Command {
   override val output = ShowTablesSchema.attributes()
 
-  override lazy val schema = ShowTablesSchema.SHOW_TABLES_SCHEMA
+  override lazy val schema = ShowTablesSchema.schema
 }
 
 /**

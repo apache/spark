@@ -25,31 +25,30 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.ShowTablesSchema
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
 /**
  * Physical plan node for showing tables.
  */
 case class ShowTablesExec(catalog: TableCatalog, ident: Identifier, pattern: Option[String])
-    extends LeafExecNode {
-  // TODO: "pattern" is not yet supported.
-  require(pattern.isEmpty)
-
+  extends LeafExecNode {
   override def output: Seq[AttributeReference] = ShowTablesSchema.attributes()
 
   override protected def doExecute(): RDD[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val encoder = RowEncoder(ShowTablesSchema.SHOW_TABLES_SCHEMA).resolveAndBind()
+    val encoder = RowEncoder(ShowTablesSchema.schema).resolveAndBind()
 
     val tables = catalog.listTables(ident.namespace() :+ ident.name())
     tables.map { table =>
-      rows += encoder.toRow(
-        new GenericRowWithSchema(
-          // TODO: there is no v2 catalog API to retrieve 'isTemporary',
-          //  and it is set to true for time being.
-          Array("", table.name(), true),
-          ShowTablesSchema.SHOW_TABLES_SCHEMA))
+      if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
+        rows += encoder.toRow(
+          new GenericRowWithSchema(
+            // TODO: there is no v2 catalog API to retrieve 'isTemporary',
+            //  and it is set to false for the time being.
+            Array(table.namespace().mkString("."), table.name(), false),
+            ShowTablesSchema.schema)).copy()
+      }
     }
 
     sparkContext.parallelize(rows, 1)

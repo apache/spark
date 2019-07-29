@@ -1654,37 +1654,67 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   test("ShowTables using v2 catalog") {
     spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
-    val tablesDf = spark.sql("SHOW TABLES FROM testcat.db")
-    assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
+    spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
 
-    val tables = tablesDf.collect()
-    assert(tables === Seq(Row("", "table_name", true)))
+    {
+      val tables = runShowTablesSql("SHOW TABLES FROM testcat.db")
+      assert(tables === Seq(Row("db", "table_name", false)))
+    }
+    {
+      val tables = runShowTablesSql("SHOW TABLES FROM testcat.n1.n2.db")
+      assert(tables === Seq(Row("n1.n2.db", "table_name", false)))
+    }
+  }
+
+  test("ShowTables using v2 catalog with a pattern") {
+    spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db.table_name_2 (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db2.table_name_2 (id bigint, data string) USING foo")
+
+    {
+      val tables = runShowTablesSql("SHOW TABLES FROM testcat.db")
+      assert(tables === Seq(
+        Row("db", "table", false),
+        Row("db", "table_name_1", false),
+        Row("db", "table_name_2", false)))
+    }
+    {
+      val tables = runShowTablesSql("SHOW TABLES FROM testcat.db LIKE '*name*'")
+      assert(tables === Seq(
+        Row("db", "table_name_1", false),
+        Row("db", "table_name_2", false)))
+    }
+    {
+      val tables = runShowTablesSql("SHOW TABLES FROM testcat.db LIKE '*2'")
+      assert(tables === Seq(Row("db", "table_name_2", false)))
+    }
   }
 
   test("ShowTables: using v2 catalog, db doesn't exist") {
-    val tablesDf = spark.sql("SHOW TABLES FROM testcat.unknown")
-    assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
-
-    val tables = tablesDf.collect()
+    val tables = runShowTablesSql("SHOW TABLES FROM testcat.unknown")
     assert(tables.isEmpty)
   }
 
-  test("ShowTables: db is not specified") {
+  test("ShowTables: db is not specified - fallback to v1") {
     {
-      val tablesDf = spark.sql("SHOW TABLES")
-      assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
-
-      val tables = tablesDf.collect()
+      val tables = runShowTablesSql("SHOW TABLES")
       assert(tables === Seq(
         Row("", "source", true),
         Row("", "source2", true)))
     }
     {
-      val tablesDf = spark.sql("SHOW TABLES LIKE '*2'")
-      assert(tablesDf.schema === ShowTablesSchema.SHOW_TABLES_SCHEMA)
-
-      val tables = tablesDf.collect()
+      val tables = runShowTablesSql("SHOW TABLES LIKE '*2'")
       assert(tables === Seq(Row("", "source2", true)))
     }
+  }
+
+  private def runShowTablesSql(sqlText: String): Seq[Row] =
+    runSqlWithSchemaCheck(sqlText, ShowTablesSchema.schema)
+
+  private def runSqlWithSchemaCheck(sqlText: String, schema: StructType): Seq[Row] = {
+    val df = spark.sql(sqlText)
+    assert(df.schema == schema)
+    df.collect()
   }
 }
