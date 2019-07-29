@@ -58,7 +58,7 @@ trait QueryExecutionListener {
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
-   * @param error the exception that failed this query.
+   * @param error the error that failed this query.
    *
    * @note This can be invoked by multiple different threads.
    */
