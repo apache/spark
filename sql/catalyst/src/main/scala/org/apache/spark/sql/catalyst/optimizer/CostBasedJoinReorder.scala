@@ -59,20 +59,17 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
 
   private def reorder(plan: LogicalPlan, output: Seq[Attribute]): LogicalPlan = {
     val (items, conditions) = extractInnerJoins(plan)
+    // Do reordering if the join conditions exist.
+    // We also need to check if costs of all items can be evaluated.
+    val canPerformReorder = items.size > 2 && conditions.nonEmpty &&
+        items.forall(_.stats.rowCount.isDefined)
     val result =
-      // Do reordering if the join conditions exist.
-      // We also need to check if costs of all items can be evaluated.
-      if (items.size > 2 && conditions.nonEmpty &&
-          items.forall(_.stats.rowCount.isDefined)) {
-        // Reorder with DP when the the number of items is appropriate,
-        // otherwise try GA if it is enabled.
-        if (items.size <= conf.joinReorderDPThreshold) {
-          JoinReorderDP.search(conf, items, conditions, output)
-        } else if (conf.joinReorderGAEnabled) {
-          JoinReorderGA.search(conf, items, conditions, output).getOrElse(plan)
-        } else {
-          plan
-        }
+      // Reorder with DP when the the number of items is appropriate,
+      // otherwise try GA if it is enabled.
+      if (canPerformReorder && items.size <= conf.joinReorderDPThreshold) {
+        JoinReorderDP.search(conf, items, conditions, output)
+      } else if (canPerformReorder && conf.joinReorderGAEnabled) {
+        JoinReorderGA.search(conf, items, conditions, output).getOrElse(plan)
       } else {
         plan
       }
