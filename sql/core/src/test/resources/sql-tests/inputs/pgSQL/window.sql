@@ -28,6 +28,7 @@ SELECT depname, empno, salary, sum(salary) OVER (PARTITION BY depname) FROM emps
 
 SELECT depname, empno, salary, rank() OVER (PARTITION BY depname ORDER BY salary) FROM empsalary;
 
+-- with GROUP BY
 SELECT four, ten, SUM(SUM(four)) OVER (PARTITION BY four), AVG(ten) FROM tenk1
 GROUP BY four, ten ORDER BY four, ten;
 
@@ -36,12 +37,15 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 -- [SPARK-28064] Order by does not accept a call to rank()
 -- SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY rank() OVER w;
 
+-- empty window specification
 SELECT COUNT(*) OVER () FROM tenk1 WHERE unique2 < 10;
 
 SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
 
+-- no window operation
 SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
 
+-- cumulative aggregate
 SELECT sum(four) OVER (PARTITION BY ten ORDER BY unique2) AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10;
 
 SELECT row_number() OVER (ORDER BY unique2) FROM tenk1 WHERE unique2 < 10;
@@ -73,6 +77,7 @@ SELECT lead(ten * 2, 1, -1) OVER (PARTITION BY four ORDER BY ten), ten, four FRO
 
 SELECT first(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 
+-- last returns the last row of the frame, which is CURRENT ROW in ORDER BY window.
 SELECT last(four) OVER (ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 
 SELECT last(ten) OVER (PARTITION BY four), ten, four FROM
@@ -92,6 +97,7 @@ SELECT (count(*) OVER (PARTITION BY four ORDER BY ten) +
   sum(hundred) OVER (PARTITION BY four ORDER BY ten)) AS cntsum
   FROM tenk1 WHERE unique2 < 10;
 
+-- opexpr with different windows evaluation.
 SELECT * FROM(
   SELECT count(*) OVER (PARTITION BY four ORDER BY ten) +
     sum(hundred) OVER (PARTITION BY two ORDER BY ten) AS total,
@@ -105,22 +111,28 @@ SELECT avg(four) OVER (PARTITION BY four ORDER BY thousand / 100) FROM tenk1 WHE
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
 FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 
+-- more than one window with GROUP BY
 SELECT sum(salary),
-row_number() OVER (ORDER BY depname),
-sum(sum(salary)) OVER (ORDER BY depname DESC)
+  row_number() OVER (ORDER BY depname),
+  sum(sum(salary)) OVER (ORDER BY depname DESC)
 FROM empsalary GROUP BY depname;
 
+-- identical windows with different names
 SELECT sum(salary) OVER w1, count(*) OVER w2
 FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
--- Correlated scalar subqueries must be aggregated: Filter (outer(unique2#x) = unique2#x)
+-- subplan
+-- [SPARK-28553] subqueries must be aggregated before hand
 -- SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
 -- FROM tenk1 s WHERE unique2 < 10;
 
+-- empty table
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s;
 
+-- mixture of agg/wfunc in the same window
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
+-- strict aggs
 -- no viable alternative at input 'year'
 -- SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
 -- SELECT *,
@@ -138,18 +150,23 @@ create temporary view int4_tbl as select * from values
   (-2147483647)
   as int4_tbl(f1);
 
+-- window function over ungrouped agg over empty row set (bug before 9.1)
 SELECT SUM(COUNT(f1)) OVER () FROM int4_tbl WHERE f1=42;
 
+-- window function with ORDER BY an expression involving aggregates (9.1 bug)
 select ten,
   sum(unique1) + sum(unique2) as res,
   rank() over (order by sum(unique1) + sum(unique2)) as rank
 from tenk1
 group by ten order by ten;
 
-select first(max(x)) over (), y
-  from (select unique1 as x, ten+four as y from tenk1) ss
-  group by y;
+-- window and aggregate with GROUP BY expression (9.2 bug)
+-- explain
+-- select first(max(x)) over (), y
+--   from (select unique1 as x, ten+four as y from tenk1) ss
+--   group by y;
 
+-- test non-default frame specifications
 SELECT four, ten,
 sum(ten) over (partition by four order by ten),
 last(ten) over (partition by four order by ten)
@@ -327,6 +344,8 @@ DROP VIEW v_window;
 -- SELECT i, min(i) over (order by i range between '1 day' preceding and '10 days' following) as min_i
 --   FROM range(now(), now()+'100 days', '1 hour') i;
 
+-- RANGE offset PRECEDING/FOLLOWING tests
+
 SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding),
 unique1, four
 FROM tenk1 WHERE unique1 < 10;
@@ -450,6 +469,7 @@ FROM tenk1 WHERE unique1 < 10;
 --   exclude current row),
 -- salary, enroll_date from empsalary;
 
+-- RANGE offset PRECEDING/FOLLOWING with null values
 select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
@@ -490,6 +510,8 @@ from
 window w as
   (order by ss.id desc nulls last range between 2 preceding and 2 following);
 
+-- Check overflow behavior for various integer sizes
+
 select x.id, last(x.id) over (order by x.id range between current row and 2147450884 following)
 from range(32764, 32766) x;
 
@@ -507,6 +529,208 @@ from range(9223372036854775804, 9223372036854775806) x;
 
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
 from range(-9223372036854775806, -9223372036854775804) x;
+
+-- Test in_range for other numeric datatypes
+
+create table numerics (
+    id int,
+    f_float4 float,
+    f_float8 float,
+    f_numeric int
+) using parquet;
+
+-- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
+insert into numerics values
+(1, -3, -3, -3),
+(2, -1, -1, -1),
+(3, 0, 0, 0),
+(4, 1.1, 1.1, 1.1),
+(5, 1.12, 1.12, 1.12),
+(6, 2, 2, 2),
+(7, 100, 100, 100);
+--(8, 'infinity', 'infinity', '1000'),
+--(9, 'NaN', 'NaN', 'NaN');
+--(0, '-infinity', '-infinity', '-1000'),  -- numeric type lacks infinities
+
+
+select id, f_float4, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1 preceding and 1 following);
+
+select id, f_float4, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1 preceding and 1.1 following);
+
+select id, f_float4, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float4 range between
+             'inf' preceding and 'inf' following);
+
+select id, f_float4, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float4 range between
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+
+select id, f_float8, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float8 range between
+             1 preceding and 1 following);
+
+select id, f_float8, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float8 range between
+             1 preceding and 1.1 following);
+
+select id, f_float8, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float8 range between
+             'inf' preceding and 'inf' following);
+
+select id, f_float8, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_float8 range between
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+
+select id, f_numeric, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1 preceding and 1 following);
+
+select id, f_numeric, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1 preceding and 1.1 following);
+
+select id, f_numeric, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1 preceding and 1.1 following);  -- currently unsupported
+
+select id, f_numeric, first(id) over w, last(id) over w
+from numerics
+window w as (order by f_numeric range between
+             1.1 preceding and 'NaN' following);  -- error, NaN disallowed
+
+-- Test in_range for other datetime datatypes
+
+-- Spark only supports timestamp
+create table datetimes (
+    id int,
+    f_time timestamp,
+    f_timetz timestamp,
+    f_interval timestamp,
+    f_timestamptz timestamp,
+    f_timestamp timestamp
+) using parquet;
+
+insert into datetimes values
+(1, '11:00', '11:00 BST', '1 year', '2000-10-19 10:23:54+01', '2000-10-19 10:23:54'),
+(2, '12:00', '12:00 BST', '2 years', '2001-10-19 10:23:54+01', '2001-10-19 10:23:54'),
+(3, '13:00', '13:00 BST', '3 years', '2001-10-19 10:23:54+01', '2001-10-19 10:23:54'),
+(4, '14:00', '14:00 BST', '4 years', '2002-10-19 10:23:54+01', '2002-10-19 10:23:54'),
+(5, '15:00', '15:00 BST', '5 years', '2003-10-19 10:23:54+01', '2003-10-19 10:23:54'),
+(6, '15:00', '15:00 BST', '5 years', '2004-10-19 10:23:54+01', '2004-10-19 10:23:54'),
+(7, '17:00', '17:00 BST', '7 years', '2005-10-19 10:23:54+01', '2005-10-19 10:23:54'),
+(8, '18:00', '18:00 BST', '8 years', '2006-10-19 10:23:54+01', '2006-10-19 10:23:54'),
+(9, '19:00', '19:00 BST', '9 years', '2007-10-19 10:23:54+01', '2007-10-19 10:23:54'),
+(10, '20:00', '20:00 BST', '10 years', '2008-10-19 10:23:54+01', '2008-10-19 10:23:54');
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_time, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_time range between
+--              '70 min' preceding and '2 hours' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_time, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_time desc range between
+--              '70 min' preceding and '2 hours' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_timetz, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_timetz range between
+--              '70 min' preceding and '2 hours' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_timetz, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_timetz desc range between
+--              '70 min' preceding and '2 hours' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_interval, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_interval range between
+--              '1 year' preceding and '1 year' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_interval, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_interval desc range between
+--              '1 year' preceding and '1 year' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_timestamptz, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_timestamptz range between
+--              '1 year' preceding and '1 year' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_timestamptz, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_timestamptz desc range between
+--              '1 year' preceding and '1 year' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_timestamp, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_timestamp range between
+--              '1 year' preceding and '1 year' following);
+
+-- [SPARK-28429] SQL Datetime util function being casted to double instead of timestamp
+-- select id, f_timestamp, first(id) over w, last(id) over w
+-- from datetimes
+-- window w as (order by f_timestamp desc range between
+--              '1 year' preceding and '1 year' following);
+
+-- RANGE offset PRECEDING/FOLLOWING error cases
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select sum(salary) over (order by enroll_date, salary range between '1 year' preceding and '2 years' following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select sum(salary) over (range between '1 year' preceding and '2 years' following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select sum(salary) over (order by depname range between '1 year' preceding and '2 years' following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select max(enroll_date) over (order by enroll_date range between 1 preceding and 2 following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select max(enroll_date) over (order by salary range between -1 preceding and 2 following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select max(enroll_date) over (order by salary range between 1 preceding and -2 following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select max(enroll_date) over (order by salary range between '1 year' preceding and '2 years' following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- select max(enroll_date) over (order by enroll_date range between '1 year' preceding and '-2 years' following
+-- 	exclude ties), salary, enroll_date from empsalary;
+
+-- GROUPS tests
 
 SELECT sum(unique1) over (order by four range between unbounded preceding and current row),
 unique1, four
@@ -604,6 +828,8 @@ FROM tenk1 WHERE unique1 < 10;
 -- lag(salary) over(order by enroll_date range between 1 following and 3 following exclude group),
 -- salary, enroll_date from empsalary;
 
+-- Show differences in offset interpretation between ROWS, RANGE, and GROUPS
+
 WITH cte (x) AS (
         SELECT * FROM range(1, 35, 2)
 )
@@ -648,15 +874,19 @@ WITH cte (x) AS (
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+
+-- with UNION
 
 SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SELECT * FROM tenk2)s LIMIT 0;
+
+-- check some degenerate cases
 
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
 
 select f1, sum(f1) over (partition by f1 order by f1
                          range between 1 preceding and 1 following)
-from t1 where f1 = f2;
+from t1 where f1 = f2; -- error, must have order by
 
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- explain
@@ -697,11 +927,15 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2;
 
+-- ordering by a non-integer constant is allowed
+
 SELECT rank() OVER (ORDER BY length('abc'));
 
+-- can't order by another window function
 -- [SPARK-28086] Adds `random()` to Spark
 -- SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
 
+-- some other errors
 select * from
 (select row_number() over (order by salary) rn from empsalary) ss
 where rn < 10;
@@ -730,12 +964,17 @@ where rn < 10;
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
+-- filter
+
 -- [SPARK-28500] Adds support for `filter` clause
 -- SELECT sum(salary), row_number() OVER (ORDER BY depname), sum(
 --     sum(salary) FILTER (WHERE enroll_date > '2007-01-01')
 -- )
 -- FROM empsalary GROUP BY depname;
 
+-- Test pushdown of quals into a subquery containing window functions
+
+-- pushdown is safe because all PARTITION BY clauses include depname:
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- EXPLAIN
 -- SELECT * FROM
@@ -745,6 +984,7 @@ where rn < 10;
 -- FROM empsalary) emp
 -- WHERE depname = 'sales';
 
+-- pushdown is unsafe because there's a PARTITION BY clause without depname:
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- EXPLAIN
 -- SELECT * FROM
@@ -754,6 +994,7 @@ where rn < 10;
 -- FROM empsalary) emp
 -- WHERE depname = 'sales';
 
+-- Test Sort node collapsing
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- EXPLAIN
 -- SELECT * FROM
@@ -763,6 +1004,7 @@ where rn < 10;
 -- FROM empsalary) emp
 -- WHERE depname = 'sales';
 
+-- Test Sort node reordering
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- EXPLAIN
 -- SELECT
@@ -770,6 +1012,14 @@ where rn < 10;
 -- lag(1) OVER (PARTITION BY depname ORDER BY salary,enroll_date,empno)
 -- FROM empsalary;
 
+-- cleanup
+DROP TABLE empsalary;
+
+--
+-- Test various built-in aggregates that have moving-aggregate support
+--
+
+-- test inverse transition functions handle NULLs properly
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 
@@ -893,11 +1143,24 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING)
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v);
 
+-- ensure aggregate over numeric properly recovers from NaN values
+-- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
+-- SELECT a, b,
+--        SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+-- FROM (VALUES(1,1),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
+
+-- It might be tempting for someone to add an inverse trans function for
+-- float and double precision. This should not be done as it can give incorrect
+-- results. This test should fail if anyone ever does this without thinking too
+-- hard about it.
+-- [SPARK-28516] adds `to_char`
+-- SELECT to_char(SUM(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING),'999999999999999999999D9')
+--   FROM (VALUES(1,1e20),(2,1)) n(i,n);
+
 -- [SPARK-27880] Implement boolean aggregates(BOOL_AND, BOOL_OR and EVERY)
 -- SELECT i, b, bool_and(b) OVER w, bool_or(b) OVER w
 --   FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
 --   WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
 
-drop table empsalary;
 drop table t1;
 drop view int4_tbl;
