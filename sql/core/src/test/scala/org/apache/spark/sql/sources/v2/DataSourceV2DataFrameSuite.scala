@@ -62,7 +62,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("insertInto: append partitioned table - dynamic clause") {
+  test("insertInto: append partitioned table") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
@@ -80,7 +80,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("insertInto: overwrite - dynamic clause - static mode") {
+  test("insertInto: overwrite - static mode") {
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
       val t1 = "testcat.ns1.ns2.tbl"
       withTable(t1) {
@@ -92,7 +92,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("insertInto: overwrite - dynamic clause - dynamic mode") {
+  test("insertInto: overwrite - dynamic mode") {
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val t1 = "testcat.ns1.ns2.tbl"
       withTable(t1) {

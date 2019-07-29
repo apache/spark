@@ -361,6 +361,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
 
+    assertNotBucketed("insertInto")
+
+    if (partitioningColumns.isDefined) {
+      throw new AnalysisException(
+        "insertInto() can't be used together with partitionBy(). " +
+          "Partition columns have already been defined for the table. " +
+          "It is not necessary to use partitionBy()."
+      )
+    }
+
     df.sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         insertInto(catalog, ident)
@@ -371,16 +381,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
-
-    assertNotBucketed("insertInto")
-
-    if (partitioningColumns.isDefined) {
-      throw new AnalysisException(
-        "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns have already been defined for the table. " +
-          "It is not necessary to use partitionBy()."
-      )
-    }
 
     val table = DataSourceV2Relation.create(catalog.asTableCatalog.loadTable(ident))
 
@@ -410,16 +410,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    assertNotBucketed("insertInto")
-
-    if (partitioningColumns.isDefined) {
-      throw new AnalysisException(
-        "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns have already been defined for the table. " +
-          "It is not necessary to use partitionBy()."
-      )
-    }
-
     runCommand(df.sparkSession, "insertInto") {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
