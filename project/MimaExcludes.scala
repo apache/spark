@@ -376,7 +376,11 @@ object MimaExcludes {
 
     // [SPARK-28199][SS] Remove deprecated ProcessingTime
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.ProcessingTime"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.ProcessingTime$")
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.streaming.ProcessingTime$"),
+
+    // [SPARK-28556][SQL] QueryExecutionListener should also notify Error
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.util.QueryExecutionListener.onFailure"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.util.QueryExecutionListener.onFailure")
   )
 
   // Exclude rules for 2.4.x
