@@ -1162,5 +1162,6 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 --   FROM (VALUES (1,true), (2,true), (3,false), (4,false), (5,true)) v(i,b)
 --   WINDOW w AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND 1 FOLLOWING);
 
+drop table numerics;
 drop table t1;
 drop view int4_tbl;
