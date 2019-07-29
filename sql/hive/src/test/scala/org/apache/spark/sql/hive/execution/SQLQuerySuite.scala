@@ -681,7 +681,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
-  
 
   test("specifying the column list for CTAS") {
     withTempView("mytable1") {
