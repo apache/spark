@@ -850,4 +850,44 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Sentences("Hi there! The price was $1,234.56.... But, not now.", "XXX", "YYY"),
       answer)
   }
+
+  test ("Left / Right") {
+    val nullString = Literal.create(null, StringType)
+    val row = create_row("example", "example".toArray.map(_.toByte))
+    val s = 'a.string.at(0)
+
+    // Check left function.
+    def leftExpr(str: Expression, len: Expression): Expression = {
+      val left = new Left(str, len)
+      left.child
+    }
+
+    checkEvaluation(leftExpr(s, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(leftExpr(s, Literal.create(0, IntegerType)), "", row)
+    checkEvaluation(leftExpr(s, Literal(1, IntegerType)), "e", row)
+    checkEvaluation(leftExpr(s, Literal(2, IntegerType)), "ex", row)
+    checkEvaluation(leftExpr(s, Literal(7, IntegerType)), "example", row)
+    checkEvaluation(leftExpr(s, Literal(8, IntegerType)), "example", row)
+    checkEvaluation(leftExpr(s, Literal(-1, IntegerType)), "exampl", row)
+    checkEvaluation(leftExpr(s, Literal(-2, IntegerType)), "examp", row)
+    checkEvaluation(leftExpr(s, Literal(-7, IntegerType)), "", row)
+    checkEvaluation(leftExpr(s, Literal(-8, IntegerType)), "", row)
+
+    // Check right function.
+    def rightExpr(str: Expression, len: Expression): Expression = {
+      val right = new Right(str, len)
+      right.child
+    }
+
+    checkEvaluation(rightExpr(s, Literal.create(null, IntegerType)), null, row)
+    checkEvaluation(rightExpr(s, Literal.create(0, IntegerType)), "", row)
+    checkEvaluation(rightExpr(s, Literal(1, IntegerType)), "e", row)
+    checkEvaluation(rightExpr(s, Literal(2, IntegerType)), "le", row)
+    checkEvaluation(rightExpr(s, Literal(7, IntegerType)), "example", row)
+    checkEvaluation(rightExpr(s, Literal(8, IntegerType)), "example", row)
+    checkEvaluation(rightExpr(s, Literal(-1, IntegerType)), "xample", row)
+    checkEvaluation(rightExpr(s, Literal(-2, IntegerType)), "ample", row)
+    checkEvaluation(rightExpr(s, Literal(-7, IntegerType)), "", row)
+    checkEvaluation(rightExpr(s, Literal(-8, IntegerType)), "", row)
+  }
 }
