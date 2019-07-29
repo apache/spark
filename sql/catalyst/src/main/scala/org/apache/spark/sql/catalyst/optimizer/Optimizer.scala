@@ -152,7 +152,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation early", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
-    Batch("Subquery", Once,
+    Batch("Subquery", FixedPoint(1),
       OptimizeSubqueries,
       PullupCorrelatedPredicates,
       RewritePredicateSubquery) ::
@@ -566,11 +566,15 @@ object ColumnPruning extends Rule[LogicalPlan] {
    */
   private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
-      if p2.outputSet.subsetOf(child.outputSet) =>
+      if p2.outputSet.subsetOf(child.outputSet) &&
+        // We only remove attribute-only project.
+        p2.projectList.forall(_.isInstanceOf[AttributeReference]) =>
       p1.copy(child = f.copy(child = child))
 
     case p1 @ Project(_, j @ Join(p2 @ Project(_, child), right, LeftSemiOrAnti(_), _, _))
       if p2.outputSet.subsetOf(child.outputSet) &&
+        // We only remove attribute-only project.
+        p2.projectList.forall(_.isInstanceOf[AttributeReference]) &&
         child.outputSet.intersect(right.outputSet).isEmpty =>
       p1.copy(child = j.copy(left = child))
   }
@@ -578,13 +582,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
 /**
  * Attempts to eliminate the reading of unneeded columns from the query plan.
- *
- * Since adding Project before Filter conflicts with PushPredicatesThroughProject, this rule will
- * remove the Project p2 in the following pattern:
- *
- *   p1 @ Project(_, Filter(_, p2 @ Project(_, child))) if p2.outputSet.subsetOf(p2.inputSet)
- *
- * p2 is usually inserted by this rule and useless, p1 could prune the columns anyway.
  */
 object FinalColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -699,19 +696,6 @@ object FinalColumnPruning extends Rule[LogicalPlan] {
     } else {
       c
     }
-  }
-
-  /**
-   * The Project before Filter is not necessary but conflict with PushPredicatesThroughProject,
-   * so remove it. Since the Projects have been added top-down, we need to remove in bottom-up
-   * order, otherwise lower Projects can be missed.
-   */
-  private def removeProjectBeforeFilter(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case p1 @ Project(_, f @ Filter(_, p2 @ Project(_, child)))
-      if p2.outputSet.subsetOf(child.outputSet) &&
-        // We only remove attribute-only project.
-        p2.projectList.forall(_.isInstanceOf[AttributeReference]) =>
-      p1.copy(child = f.copy(child = child))
   }
 }
 
