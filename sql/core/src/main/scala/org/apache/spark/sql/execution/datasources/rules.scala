@@ -485,20 +485,19 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           t.isInstanceOf[LocalRelation] =>
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
-      case CreateTable(tableDesc,_, Some(query)) => {
-        val uri = tableDesc.storage.locationUri
-        if(uri.isDefined){
-          val fs  = FileSystem.get(uri.get, SparkContext.getActive.get.hadoopConfiguration)
-          val path = new Path(uri.get.getPath)
-          if(fs.exists(path)){
-            if(fs.isDirectory(path)){
+      case CreateTable(tableDesc, _, _) => {
+        val location = tableDesc.storage.locationUri
+        if(location.isDefined) {
+          val path = new Path(location.get)
+          val fs = FileSystem.get(path.toUri, SparkContext.getActive.get.hadoopConfiguration)
+          if(fs.exists(path)) {
+            if(fs.isDirectory(path)) {
               failAnalysis("Creating table as select with a existed location of directory is not allowed, " +
                 "please check the path and try again")
             } else {
               failAnalysis("Creating table as select with a existed location of file is not allowed, " +
                 "please check the path and try again")
             }
-
           }
         }
       }
