@@ -394,6 +394,14 @@ object SQLConf {
         "must be a positive integer.")
       .createOptional
 
+  val OPTIMIZED_LOCAL_SHUFFLE_READER_ENABLED =
+    buildConf("spark.sql.adaptive.optimizedLocalShuffleReader.enabled")
+    .doc("When true and adaptive execution is enabled, this enables the optimization of" +
+      " converting the shuffle reader to local shuffle reader for the shuffle exchange" +
+      " of the broadcast hash join in probe side.")
+    .booleanConf
+    .createWithDefault(true)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -2145,6 +2153,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MAX_NUM_POSTSHUFFLE_PARTITIONS).getOrElse(numShufflePartitions)
+
+  def optimizedLocalShuffleReaderEnabled: Boolean = getConf(OPTIMIZED_LOCAL_SHUFFLE_READER_ENABLED)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

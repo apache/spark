@@ -92,6 +92,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(conf, subqueryCache),
     ReduceNumShufflePartitions(conf),
+    OptimizedLocalShuffleReader(conf),
     ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
       session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
