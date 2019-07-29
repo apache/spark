@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.xml.Node
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 private[streaming] object UIUtils {
 
