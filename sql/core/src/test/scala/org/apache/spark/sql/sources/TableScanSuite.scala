@@ -369,10 +369,11 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
              |)
            """.stripMargin)
       }
+      val inputSchema = StructType(StructField("i", IntegerType, nullable = true) :: Nil)
       val expectedSchema = StructType(StructField("i", IntegerType, nullable = false) :: Nil)
-      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas, " +
-          "user-specified schemas are not same as source schema: \n" +
-          s"${expectedSchema.treeString}"))
+      assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas " +
+          s"because user-specified schema [${inputSchema.catalogString}] was different from " +
+          s"its source schema [${expectedSchema.catalogString}]"))
 
       val schemaNeeded = intercept[Exception] {
         sql(

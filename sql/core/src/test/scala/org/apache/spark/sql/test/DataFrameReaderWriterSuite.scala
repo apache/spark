@@ -434,8 +434,9 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val expectedSchema = StructType(StructField("i", IntegerType, nullable = false) :: Nil)
     val e = intercept[AnalysisException] { dfReader.schema(inputSchema).load() }
     assert(e.getMessage.contains(
-      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas, " +
-          s"user-specified schemas are not same as source schema: \n${expectedSchema.treeString}"))
+      "org.apache.spark.sql.sources.SimpleScanSource does not allow user-specified schemas " +
+          s"because user-specified schema [${inputSchema.catalogString}] was different from " +
+          s"its source schema [${expectedSchema.catalogString}]"))
   }
 
   test("read a data source that does not extend RelationProvider") {
