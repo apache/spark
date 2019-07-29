@@ -63,7 +63,7 @@ scala> df.select("image.origin", "image.width", "image.height").show(truncate=fa
 
 <div data-lang="java" markdown="1">
 [`ImageDataSource`](api/java/org/apache/spark/ml/source/image/ImageDataSource.html)
-implements Spark SQL data source API for loading image data as DataFrame.
+implements Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight java %}
 Dataset<Row> imagesDF = spark.read().format("image").option("dropInvalid", true).load("data/mllib/images/origin/kittens");
@@ -83,7 +83,7 @@ Will output:
 </div>
 
 <div data-lang="python" markdown="1">
-In PySpark we provide Spark SQL data source API for loading image data as DataFrame.
+In PySpark we provide Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight python %}
 >>> df = spark.read.format("image").option("dropInvalid", true).load("data/mllib/images/origin/kittens")
@@ -100,7 +100,7 @@ In PySpark we provide Spark SQL data source API for loading image data as DataFr
 </div>
 
 <div data-lang="r" markdown="1">
-In SparkR we provide Spark SQL data source API for loading image data as DataFrame.
+In SparkR we provide Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight r %}
 > df = read.df("data/mllib/images/origin/kittens", "image")
@@ -188,7 +188,7 @@ only showing top 10 rows
 </div>
 
 <div data-lang="python" markdown="1">
-In PySpark we provide Spark SQL data source API for loading `LIBSVM` data as DataFrame.
+In PySpark we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
 
 {% highlight python %}
 >>> df = spark.read.format("libsvm").option("numFeatures", "780").load("data/mllib/sample_libsvm_data.txt")
@@ -212,7 +212,7 @@ only showing top 10 rows
 </div>
 
 <div data-lang="r" markdown="1">
-In SparkR we provide Spark SQL data source API for loading `LIBSVM` data as DataFrame.
+In SparkR we provide Spark SQL data source API for loading `LIBSVM` data as a DataFrame.
 
 {% highlight r %}
 > df = read.df("data/mllib/sample_libsvm_data.txt", "libsvm")
