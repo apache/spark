@@ -934,7 +934,8 @@ from t1 where f1 = f2;
 SELECT rank() OVER (ORDER BY length('abc'));
 
 -- can't order by another window function
-SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
+-- [SPARK-28566] window functions should not be allowed in window definitions
+-- SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
 
 -- some other errors
 select * from
@@ -947,7 +948,6 @@ where rn < 10;
 -- [SPARK-28506] not handling usage of group function and window function at some conditions
 -- SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
 
--- [SPARK-28086] Adds `random()` to Spark
 -- SELECT * FROM rank() OVER (ORDER BY random());
 
 -- Output not being truncated
