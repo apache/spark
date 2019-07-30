@@ -133,14 +133,16 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
 -- strict aggs
--- no viable alternative at input 'year'
--- SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
--- SELECT *,
---   CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(year FROM enroll_date) END * 500 AS bonus,
---   CASE WHEN
---     AVG(salary) OVER (PARTITION BY depname) < salary
---     THEN 200 END AS depadj FROM empsalary
---   )s;
+-- Temporarily turns off the ANSI mode because of compatibility issues between keywords
+SET spark.sql.parser.ansi.enabled=false;
+SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
+SELECT *,
+  CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(year FROM enroll_date) END * 500 AS bonus,
+  CASE WHEN
+    AVG(salary) OVER (PARTITION BY depname) < salary
+    THEN 200 END AS depadj FROM empsalary
+  )s;
+SET spark.sql.parser.ansi.enabled=true;
 
 create temporary view int4_tbl as select * from values
   (0),
@@ -932,8 +934,7 @@ from t1 where f1 = f2;
 SELECT rank() OVER (ORDER BY length('abc'));
 
 -- can't order by another window function
--- [SPARK-28086] Adds `random()` to Spark
--- SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
+SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
 
 -- some other errors
 select * from
@@ -1165,3 +1166,4 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 drop table numerics;
 drop table t1;
 drop view int4_tbl;
+drop table datetimes;
