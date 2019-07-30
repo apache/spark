@@ -180,13 +180,14 @@ object Cast {
 
     case (FloatType | DoubleType, TimestampType) => true
     case (TimestampType, DateType) => false
+    case (TimestampType, _: IntegralType) if to != LongType => true
     case (_, DateType) => true
     case (DateType, TimestampType) => false
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
 
     case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
-    case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
+    case (_: NumericType, _: IntegralType) if !legalNumericPrecedence(from, to) => true
     case _ => false
   }
 
@@ -431,6 +432,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
   }
 
+  private[this] val longMaxValue = Decimal(Long.MaxValue)
+  private[this] val longMinValue = Decimal(Long.MinValue)
+  private[this] def castDecimalToLong(d: Decimal): Any =
+    if (d <= longMaxValue && d >= longMinValue) {
+      d.toLong
+    } else {
+      null
+    }
+
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
@@ -442,8 +452,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Int](_, d => null)
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
+    case ByteType =>
+      b => b.asInstanceOf[Byte].toLong
+    case ShortType =>
+      b => b.asInstanceOf[Short].toLong
+    case IntegerType =>
+      b => b.asInstanceOf[Int].toLong
+    case _: DecimalType =>
+      b => castDecimalToLong(b.asInstanceOf[Decimal])
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      b => castDecimalToLong(Decimal(b.toString))
   }
 
   // IntConverter
@@ -456,9 +474,52 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Long](_, t => timestampToLong(t).toInt)
-    case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toInt) {
+          longValue.toInt
+        } else {
+          null
+        }
+      })
+    case ByteType =>
+      b => b.asInstanceOf[Byte].toInt
+    case ShortType =>
+      b => b.asInstanceOf[Short].toInt
+    case LongType =>
+      buildCast[Long](_, l =>
+        if (l == l.toInt) {
+          l.toInt
+        } else {
+          null
+        }
+      )
+    case x: FloatType =>
+      buildCast[Float](_, f =>
+        if (f <= Int.MaxValue && f >= Int.MinValue) {
+          f.toInt
+        } else {
+          null
+        }
+      )
+    case x: DoubleType =>
+      buildCast[Double](_, d =>
+        if (d <= Int.MaxValue && d >= Int.MinValue) {
+          d.toInt
+        } else {
+          null
+        }
+      )
+    case _: DecimalType =>
+      val intMaxValueAsDecimal = Decimal(Int.MaxValue)
+      val intMinValueAsDecimal = Decimal(Int.MinValue)
+      buildCast[Decimal](_, d =>
+        if (d <= intMaxValueAsDecimal && d >= intMinValueAsDecimal) {
+          d.toInt
+        } else {
+          null
+        }
+      )
   }
 
   // ShortConverter
@@ -475,9 +536,58 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Long](_, t => timestampToLong(t).toShort)
-    case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toShort) {
+          longValue.toShort
+        } else {
+          null
+        }
+      })
+    case ByteType =>
+      b => b.asInstanceOf[Byte].toShort
+    case IntegerType =>
+      buildCast[Int](_, i => {
+        if (i == i.toShort) {
+          i.toShort
+        } else {
+          null
+        }
+      })
+    case LongType =>
+      buildCast[Long](_, i => {
+        if (i == i.toShort) {
+          i.toShort
+        } else {
+          null
+        }
+      })
+    case x: FloatType =>
+      buildCast[Float](_, f =>
+        if (f <= Short.MaxValue && f >= Short.MinValue) {
+          f.toShort
+        } else {
+          null
+        }
+      )
+    case x: DoubleType =>
+      buildCast[Double](_, d =>
+        if (d <= Short.MaxValue && d >= Short.MinValue) {
+          d.toShort
+        } else {
+          null
+        }
+      )
+    case _: DecimalType =>
+      val shortMaxValueAsDecimal = Decimal(Short.MaxValue)
+      val shortMinValueAsDecimal = Decimal(Short.MinValue)
+      buildCast[Decimal](_, d =>
+        if (d <= shortMaxValueAsDecimal && d >= shortMinValueAsDecimal) {
+          d.toShort
+        } else {
+          null
+        }
+      )
   }
 
   // ByteConverter
@@ -494,9 +604,64 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Long](_, t => timestampToLong(t).toByte)
-    case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toByte) {
+          longValue.toByte
+        } else {
+          null
+        }
+      })
+    case ShortType =>
+      buildCast[Short](_, i => {
+        if (i == i.toByte) {
+          i.toByte
+        } else {
+          null
+        }
+      })
+    case IntegerType =>
+      buildCast[Int](_, i => {
+        if (i == i.toByte) {
+          i.toByte
+        } else {
+          null
+        }
+      })
+    case LongType =>
+      buildCast[Long](_, i => {
+        if (i == i.toByte) {
+          i.toByte
+        } else {
+          null
+        }
+      })
+    case x: FloatType =>
+      buildCast[Float](_, f =>
+        if (f <= Byte.MaxValue && f >= Byte.MinValue) {
+          f.toByte
+        } else {
+          null
+        }
+      )
+    case x: DoubleType =>
+      buildCast[Double](_, d =>
+        if (d <= Byte.MaxValue && d >= Byte.MinValue) {
+          d.toByte
+        } else {
+          null
+        }
+      )
+    case _: DecimalType =>
+      val byteMaxValueAsDecimal = Decimal(Byte.MaxValue)
+      val byteMinValueAsDecimal = Decimal(Byte.MinValue)
+      buildCast[Decimal](_, d =>
+        if (d <= byteMaxValueAsDecimal && d >= byteMinValueAsDecimal) {
+          d.toByte
+        } else {
+          null
+        }
+      )
   }
 
   /**
@@ -1150,11 +1315,45 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (byte) ${timestampToIntegerCode(c)};"
+      val longValue = ctx.freshName("longValue")
+      (c, evPrim, evNull) =>
+        code"""
+          long $longValue = ${timestampToIntegerCode(c)};
+          if ($longValue == (byte) $longValue) {
+            $evPrim = (byte) $longValue;
+          } else {
+            $evNull = true;
+          }
+        """
     case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toByte();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
+      val floatValue = ctx.freshName("floatValue")
+      (c, evPrim, evNull) =>
+        code"""
+          float $floatValue = $c.toFloat();
+          if ($floatValue <= ${Byte.MaxValue} && $floatValue >= ${Byte.MinValue}) {
+            $evPrim = $c.toByte();
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: ShortType | _: IntegerType | _: LongType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c == (byte) $c) {
+            $evPrim = (byte) $c;
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: FloatType | _: DoubleType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c >= ${Byte.MinValue} && $c <= ${Byte.MaxValue}) {
+            $evPrim = (byte) $c;
+          } else {
+            $evNull = true;
+          }
+        """
   }
 
   private[this] def castToShortCode(
@@ -1177,11 +1376,47 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (short) ${timestampToIntegerCode(c)};"
+      val longValue = ctx.freshName("longValue")
+      (c, evPrim, evNull) =>
+        code"""
+          long $longValue = ${timestampToIntegerCode(c)};
+          if ($longValue == (short) $longValue) {
+            $evPrim = (short) $longValue;
+          } else {
+            $evNull = true;
+          }
+        """
     case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toShort();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (short) $c;"
+      val floatValue = ctx.freshName("floatValue")
+      (c, evPrim, evNull) =>
+        code"""
+          float $floatValue = $c.toFloat();
+          if ($floatValue <= ${Short.MaxValue} && $floatValue >= ${Short.MinValue}) {
+            $evPrim = $c.toShort();
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: ByteType =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
+    case _: IntegerType | _: LongType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c == (short) $c) {
+            $evPrim = (short) $c;
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: FloatType | _: DoubleType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c >= ${Short.MinValue} && $c <= ${Short.MaxValue}) {
+            $evPrim = (short) $c;
+          } else {
+            $evNull = true;
+          }
+        """
   }
 
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
@@ -1202,11 +1437,47 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (int) ${timestampToIntegerCode(c)};"
+      val longValue = ctx.freshName("longValue")
+      (c, evPrim, evNull) =>
+        code"""
+          long $longValue = ${timestampToIntegerCode(c)};
+          if ($longValue == (int) $longValue) {
+            $evPrim = (int) $longValue;
+          } else {
+            $evNull = true;
+          }
+        """
     case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toInt();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (int) $c;"
+      val doubleValue = ctx.freshName("doubleValue")
+      (c, evPrim, evNull) =>
+        code"""
+          double $doubleValue = $c.toDouble();
+          if ($doubleValue <= ${Int.MaxValue} && $doubleValue >= ${Int.MinValue}) {
+            $evPrim = $c.toInt();
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: ByteType | _: ShortType | _: IntegerType =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
+    case _: LongType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c == (int) $c) {
+            $evPrim = (int) $c;
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: FloatType | _: DoubleType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c >= ${Int.MinValue} && $c <= ${Int.MaxValue}) {
+            $evPrim = (int) $c;
+          } else {
+            $evNull = true;
+          }
+        """
   }
 
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
@@ -1230,9 +1501,26 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToIntegerCode(c)};"
     case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLong();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (long) $c;"
+      val bigIntValue = ctx.freshName("doubleValue")
+      (c, evPrim, evNull) =>
+        code"""
+          try {
+            $evPrim = $c.toJavaBigInteger().longValueExact();
+          } catch (ArithmeticException e) {
+            $evNull = true;
+          }
+        """
+    case _: ByteType | _: ShortType | _: IntegerType | _: LongType =>
+      (c, evPrim, evNull) => code"$evPrim = $c;"
+    case _: FloatType | _: DoubleType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c >= ${Long.MinValue}L && $c <= ${Long.MaxValue}L) {
+            $evPrim = (long) $c;
+          } else {
+            $evNull = true;
+          }
+        """
   }
 
   private[this] def castToFloatCode(from: DataType): CastFunction = from match {

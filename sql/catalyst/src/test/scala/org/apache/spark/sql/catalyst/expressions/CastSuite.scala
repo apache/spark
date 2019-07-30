@@ -1023,4 +1023,95 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, InternalRow(null))
     }
   }
+
+  private def testIntMaxAndMin(dt: DataType): Unit = {
+    Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
+      checkEvaluation(cast(value, dt), null)
+      checkEvaluation(cast(value.toString, dt), null)
+      checkEvaluation(cast(Decimal(value.toString), dt), null)
+      checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), dt), null)
+      checkEvaluation(cast(Literal(value * 2.0f, FloatType), dt), null)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), dt), null)
+    }
+  }
+
+  private def testLongMaxAndMin(dt: DataType): Unit = {
+    Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
+      checkEvaluation(cast(value.toString, dt), null)
+      checkEvaluation(cast(value, dt), null)
+      checkEvaluation(cast((value * Decimal(1.1)).toFloat, dt), null)
+      checkEvaluation(cast((value * Decimal(1.1)).toDouble, dt), null)
+    }
+  }
+
+  test("Cast to byte") {
+    testIntMaxAndMin(ByteType)
+    Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
+      checkEvaluation(cast(value, ByteType), null)
+      checkEvaluation(cast(value.toString, ByteType), null)
+      checkEvaluation(cast(Decimal(value.toString), ByteType), null)
+      checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), null)
+      checkEvaluation(cast(Literal(value, DateType), ByteType), null)
+      checkEvaluation(cast(Literal(value * 1.0f, FloatType), ByteType), null)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), ByteType), null)
+    }
+
+    Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
+      checkEvaluation(cast(value, ByteType), value)
+      checkEvaluation(cast(value.toString, ByteType), value)
+      checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+      checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), value)
+      checkEvaluation(cast(Literal(value.toInt, DateType), ByteType), null)
+      checkEvaluation(cast(Literal(value * 1.0f, FloatType), ByteType), value)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), ByteType), value)
+    }
+  }
+
+  test("Cast to short") {
+    testIntMaxAndMin(ShortType)
+    Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
+      checkEvaluation(cast(value, ShortType), null)
+      checkEvaluation(cast(value.toString, ShortType), null)
+      checkEvaluation(cast(Decimal(value.toString), ShortType), null)
+      checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), null)
+      checkEvaluation(cast(Literal(value, DateType), ShortType), null)
+      checkEvaluation(cast(Literal(value * 1.0f, FloatType), ShortType), null)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), ShortType), null)
+    }
+
+    Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
+      checkEvaluation(cast(value, ShortType), value)
+      checkEvaluation(cast(value.toString, ShortType), value)
+      checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+      checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), value)
+      checkEvaluation(cast(Literal(value.toInt, DateType), ShortType), null)
+      checkEvaluation(cast(Literal(value * 1.0f, FloatType), ShortType), value)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), ShortType), value)
+    }
+  }
+
+  test("Cast to int") {
+    testIntMaxAndMin(IntegerType)
+    testLongMaxAndMin(IntegerType)
+
+    Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
+      checkEvaluation(cast(value, IntegerType), value)
+      checkEvaluation(cast(value.toString, IntegerType), value)
+      checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+      checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
+      checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
+    }
+  }
+
+  test("Cast to long") {
+    testLongMaxAndMin(LongType)
+
+    Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
+      checkEvaluation(cast(value, LongType), value)
+      checkEvaluation(cast(value.toString, LongType), value)
+      checkEvaluation(cast(Decimal(value.toString), LongType), value)
+      checkEvaluation(cast(Literal(value, TimestampType), LongType),
+        Math.floorDiv(value, MICROS_PER_SECOND))
+    }
+  }
 }
