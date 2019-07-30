@@ -116,6 +116,17 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-28344: fail ambiguous self join - Dataset.colRegex as column ref") {
+    val df1 = spark.range(3)
+    val df2 = df1.filter($"id" > 0)
+
+    withSQLConf(
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      assertAmbiguousSelfJoin(df1.join(df2, df1.colRegex("id") > df2.colRegex("id")))
+    }
+  }
+
   test("SPARK-28344: fail ambiguous self join - column ref in Project") {
     val df1 = spark.range(3)
     val df2 = df1.filter($"id" > 0)
