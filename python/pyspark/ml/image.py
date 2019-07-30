@@ -16,11 +16,11 @@
 #
 
 """
-.. attribute:: ImageUtils
+.. attribute:: ImageSchema
 
-    An attribute of this module that contains the instance of :class:`_ImageUtils`.
+    An attribute of this module that contains the instance of :class:`_ImageSchema`.
 
-.. autoclass:: _ImageUtils
+.. autoclass:: _ImageSchema
    :members:
 """
 
@@ -34,13 +34,13 @@ from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
 from pyspark.sql import DataFrame, SparkSession
 
-__all__ = ["ImageUtils"]
+__all__ = ["ImageSchema"]
 
 
-class _ImageUtils(object):
+class _ImageSchema(object):
     """
-    Internal class for `pyspark.ml.image.ImageUtils` attribute. Meant to be private and
-    not to be instantized. Use `pyspark.ml.image.ImageUtils` attribute to access the
+    Internal class for `pyspark.ml.image.ImageSchema` attribute. Meant to be private and
+    not to be instantized. Use `pyspark.ml.image.ImageSchema` attribute to access the
     APIs of this class.
     """
 
@@ -64,7 +64,7 @@ class _ImageUtils(object):
 
         if self._imageSchema is None:
             ctx = SparkContext._active_spark_context
-            jschema = ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.schema()
+            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageSchema()
             self._imageSchema = _parse_datatype_json_string(jschema.json())
         return self._imageSchema
 
@@ -80,8 +80,7 @@ class _ImageUtils(object):
 
         if self._ocvTypes is None:
             ctx = SparkContext._active_spark_context
-            self._ocvTypes = dict(
-                ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.javaOcvTypes())
+            self._ocvTypes = dict(ctx._jvm.org.apache.spark.ml.image.ImageSchema.javaOcvTypes())
         return self._ocvTypes
 
     @property
@@ -97,7 +96,7 @@ class _ImageUtils(object):
 
         if self._columnSchema is None:
             ctx = SparkContext._active_spark_context
-            jschema = ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.columnSchema()
+            jschema = ctx._jvm.org.apache.spark.ml.image.ImageSchema.columnSchema()
             self._columnSchema = _parse_datatype_json_string(jschema.json())
         return self._columnSchema
 
@@ -113,8 +112,7 @@ class _ImageUtils(object):
 
         if self._imageFields is None:
             ctx = SparkContext._active_spark_context
-            self._imageFields = list(
-                ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.imageFields())
+            self._imageFields = list(ctx._jvm.org.apache.spark.ml.image.ImageSchema.imageFields())
         return self._imageFields
 
     @property
@@ -128,7 +126,7 @@ class _ImageUtils(object):
         if self._undefinedImageType is None:
             ctx = SparkContext._active_spark_context
             self._undefinedImageType = \
-                ctx._jvm.org.apache.spark.ml.source.image.ImageFileFormat.undefinedImageType()
+                ctx._jvm.org.apache.spark.ml.image.ImageSchema.undefinedImageType()
         return self._undefinedImageType
 
     def toNDArray(self, image):
@@ -180,7 +178,7 @@ class _ImageUtils(object):
             raise ValueError("Invalid array shape")
 
         height, width, nChannels = array.shape
-        ocvTypes = ImageUtils.ocvTypes
+        ocvTypes = ImageSchema.ocvTypes
         if nChannels == 1:
             mode = ocvTypes["CV_8UC1"]
         elif nChannels == 3:
@@ -206,15 +204,13 @@ class _ImageUtils(object):
                            [origin, height, width, nChannels, mode, data])
 
 
-ImageUtils = _ImageUtils()
+ImageSchema = _ImageSchema()
 
 
 # Monkey patch to disallow instantiation of this class.
 def _disallow_instance(_):
-    raise RuntimeError("Creating instance of _ImageUtils class is disallowed.")
-
-
-_ImageUtils.__init__ = _disallow_instance
+    raise RuntimeError("Creating instance of _ImageSchema class is disallowed.")
+_ImageSchema.__init__ = _disallow_instance
 
 
 def _test():
