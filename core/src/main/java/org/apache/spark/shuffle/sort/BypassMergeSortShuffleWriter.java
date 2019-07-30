@@ -232,7 +232,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   }
 
   private void writePartitionedDataWithChannel(
-      File file, WritableByteChannelWrapper outputChannel) throws IOException {
+      File file,
+      WritableByteChannelWrapper outputChannel) throws IOException {
     boolean copyThrewException = true;
     try {
       FileInputStream in = new FileInputStream(file);
