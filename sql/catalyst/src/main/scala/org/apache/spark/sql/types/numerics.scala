@@ -84,7 +84,7 @@ object ShortExactNumeric extends ShortIsIntegral with Ordering.ShortOrdering {
     if (x == Short.MinValue) { // if and only if x is Byte.MinValue, overflow can happen
       throw new ArithmeticException(s"- $x caused overflow.")
     }
-    (-x).toByte
+    (-x).toShort
   }
 }
 
