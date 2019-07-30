@@ -134,7 +134,7 @@ private object Lit {
 /**
  * Convenience extractor for any NamedReference.
  */
-private object Ref {
+private[sql] object Ref {
   def unapply(named: NamedReference): Some[Seq[String]] = {
     Some(named.fieldNames)
   }
@@ -143,7 +143,7 @@ private object Ref {
 /**
  * Convenience extractor for any Transform.
  */
-private object NamedTransform {
+private[sql] object NamedTransform {
   def unapply(transform: Transform): Some[(String, Seq[Expression])] = {
     Some((transform.name, transform.arguments))
   }

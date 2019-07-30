@@ -29,19 +29,18 @@ import org.apache.spark.sql.catalog.v2.TableChange.{RemoveProperty, SetProperty}
 import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, Resolver, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(sessionState: SessionState) extends TableCatalog
-  with HiveMetaStoreBackedDataSourceCatalog {
+class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
 
   def this() = {
     this(SparkSession.active.sessionState)
@@ -93,10 +92,11 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog
     val location = Option(properties.get("location"))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
+    val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
 
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,
-      tableType = CatalogTableType.MANAGED,
+      tableType = tableType,
       storage = storage,
       schema = schema,
       provider = Some(provider),
@@ -126,10 +126,10 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog
         throw new NoSuchTableException(ident)
     }
 
-    val properties = applyPropertyChanges(
-      catalogTable.identifier.identifier, catalogTable.properties, changes)
-    val schema = applySchemaChanges(catalogTable, changes)
-    val storage = applyStorageChanges(catalogTable.storage, changes)
+    val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
+    val schema = V2SessionCatalog.applySchemaChanges(
+      catalogTable, changes, sessionState.conf.caseSensitiveAnalysis)
+    val storage = V2SessionCatalog.applyStorageChanges(catalogTable.storage, changes)
 
     try {
       catalog.alterTable(catalogTable.copy(
@@ -260,47 +260,29 @@ private[sql] object V2SessionCatalog {
 
     (identityCols, bucketSpec)
   }
-}
 
-trait HiveMetaStoreBackedDataSourceCatalog { self: TableCatalog =>
-
-  protected def applySchemaChanges(
+  /**
+   * Makes the provided schema changes and ensures that we don't end up in an ambiguous situation
+   * depending on case sensitivity with respect to the schema.
+   */
+  private def applySchemaChanges(
       table: CatalogTable,
-      changes: Seq[TableChange]): StructType = {
-    val dataSchema = table.dataSchema
-    val newDataSchema = CatalogV2Util.applySchemaChanges(dataSchema, changes)
-//    def flatten(field: StructField): Seq[String] = {
-//
-//    }
-    StructType(newDataSchema ++ table.partitionSchema)
+      changes: Seq[TableChange],
+      caseSensitive: Boolean): StructType = {
+    val newDataSchema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+    SchemaUtils.checkV2ColumnNameDuplication(
+      newDataSchema,
+      "after schema changes",
+      caseSensitive)
+    newDataSchema
   }
 
-  protected def applyPropertyChanges(
-      table: String,
-      properties: Map[String, String],
-      changes: Seq[TableChange]): Map[String, String] = {
-    val newProperties = new util.HashMap[String, String](properties.asJava)
-    changes.foreach {
-      case set: SetProperty =>
-        newProperties.put(set.property(), set.value())
-      case remove: RemoveProperty =>
-        if (newProperties.remove(remove.property()) == null && !remove.ifExists()) {
-          throw new AnalysisException(
-            s"Attempted to unset non-existent property '${remove.property()}' in table '$table'")
-        }
-      case _ =>
-    }
-    newProperties.asScala.toMap
-  }
-
-  protected def applyStorageChanges(
+  private def applyStorageChanges(
       storage: CatalogStorageFormat,
-      changes: Seq[TableChange]): CatalogStorageFormat = {
-    changes.foldLeft(storage) {
-      case (strg, c: SetProperty) if c.property() == "location" =>
-        strg.copy(locationUri = Some(CatalogUtils.stringToURI(c.value())))
-      case (strg, _) =>
-        strg
-    }
+      changes: Seq[TableChange]): CatalogStorageFormat = changes.foldLeft(storage) {
+    case (strg, c: SetProperty) if c.property() == "location" =>
+      strg.copy(locationUri = Some(CatalogUtils.stringToURI(c.value())))
+    case (strg, _) =>
+      strg
   }
 }

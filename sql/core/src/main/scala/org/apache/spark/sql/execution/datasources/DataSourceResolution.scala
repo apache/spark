@@ -25,7 +25,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.CastSupport
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSour
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 case class DataSourceResolution(
     conf: SQLConf,
@@ -245,6 +246,52 @@ case class DataSourceResolution(
       catalog: TableCatalog,
       identifier: Identifier,
       create: CreateTableStatement): CreateV2Table = {
+    val isCaseSensitive = conf.caseSensitiveAnalysis
+
+    val flattenedSchema = SchemaUtils.explodeNestedFieldNames(create.tableSchema)
+    SchemaUtils.checkColumnNameDuplication(
+      flattenedSchema,
+      s"in the table definition of ${identifier.quoted}",
+      isCaseSensitive)
+    SchemaUtils.checkTransformDuplication(
+      create.partitioning, "in the partition schema", isCaseSensitive)
+
+    SchemaUtils.checkTransformDuplication(
+      create.bucketSpec.map(_.asTransform).toSeq, "in bucketing columns", isCaseSensitive)
+    if (create.tableSchema.isEmpty) {
+      if (create.partitioning.nonEmpty) {
+        throw new AnalysisException("It is not allowed to specify partition columns when the " +
+          "table schema is not defined. When the table schema is not provided, schema and " +
+          "partition columns will be inferred.")
+      }
+      if (create.bucketSpec.nonEmpty) {
+        throw new AnalysisException("Cannot specify bucketing information if the table schema " +
+          "is not specified when creating and will be inferred at runtime.")
+      }
+    } else {
+      val schema = create.tableSchema
+      val resolver = conf.resolver
+      val partitioningReferences = create.partitioning.flatMap(_.references()).map(f =>
+        f.fieldNames())
+
+      // Throws an exception if the reference cannot be resolved
+      val partitionColumns = partitioningReferences.map(
+        SchemaUtils.findColumnPosition(_, schema, resolver))
+
+      val bucketingReferences = create.bucketSpec.map(_.asTransform.references())
+        .getOrElse(Array.empty).map(f => f.fieldNames())
+
+      // Throws an exception if the reference cannot be resolved
+      val bucketingColumns = bucketingReferences.map(
+        SchemaUtils.findColumnPosition(_, schema, resolver))
+
+      val numPartitioningColumns = (partitionColumns ++ bucketingColumns).distinct.length
+
+      if (numPartitioningColumns == flattenedSchema.length) {
+        throw new AnalysisException("Cannot use all columns for partitioning.")
+      }
+    }
+
     // convert the bucket spec and add it as a transform
     val partitioning = create.partitioning ++ create.bucketSpec.map(_.asTransform)
     val properties = convertTableProperties(

@@ -37,48 +37,6 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class V2SessionCatalogDDLSuite extends DDLSuite with SharedSQLContext with BeforeAndAfterEach {
-  import testImplicits._
-
-  override def afterEach(): Unit = {
-    try {
-      // drop all databases, tables and functions after each test
-      spark.sessionState.catalog.reset()
-    } finally {
-      Utils.deleteRecursively(new File(spark.sessionState.conf.warehousePath))
-      super.afterEach()
-    }
-  }
-
-  override protected val catalogPrefix: String = "session."
-
-  protected override def generateTable(
-      catalog: SessionCatalog,
-      name: TableIdentifier,
-      isDataSource: Boolean = true,
-      partitionCols: Seq[String] = Seq("a", "b")): CatalogTable = {
-    val storage =
-      CatalogStorageFormat.empty.copy(locationUri = Some(catalog.defaultTablePath(name)))
-    val metadata = new MetadataBuilder()
-      .putString("key", "value")
-      .build()
-    val schema = new StructType()
-      .add("col1", "int", nullable = true, metadata = metadata)
-      .add("col2", "string")
-    CatalogTable(
-      identifier = name,
-      tableType = CatalogTableType.EXTERNAL,
-      storage = storage,
-      schema = schema.copy(
-        fields = schema.fields ++ partitionCols.map(StructField(_, IntegerType))),
-      provider = Some("parquet"),
-      partitionColumnNames = partitionCols,
-      createTime = 0L,
-      createVersion = org.apache.spark.SPARK_VERSION,
-      tracksPartitionsInCatalog = true)
-  }
-}
-
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with BeforeAndAfterEach {
   import testImplicits._
 
@@ -233,9 +191,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
   protected def normalizeCatalogTable(table: CatalogTable): CatalogTable = table
-
-  // A pluggable catalog that can be used to perform DDL on Spark
-  protected val catalogPrefix: String = ""
 
   private def normalizeSerdeProp(props: Map[String, String]): Map[String, String] = {
     props.filterNot(p => Seq("serialization.format", "path").contains(p._1))
@@ -472,7 +427,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }
 
         ex = intercept[AnalysisException] {
-          sql(s"CREATE TABLE ${catalogPrefix}tab1 (col1 int, col2 string) USING ${dataSource}")
+          sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
         }.getMessage
         assert(ex.contains(exMsgWithDefaultDB))
 
@@ -515,7 +470,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val uri = path.toURI
       val sqlCreateTable =
         s"""
-           |CREATE TABLE ${catalogPrefix}$tabName $schemaClause
+           |CREATE TABLE $tabName $schemaClause
            |USING parquet
            |OPTIONS (
            |  path '$uri'
@@ -624,7 +579,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE ${catalogPrefix}t($c0 INT, $c1 INT) USING parquet")
+          sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING parquet")
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
       }
@@ -633,7 +588,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("create table - partition column names not in table definition") {
     val e = intercept[AnalysisException] {
-      sql(s"CREATE TABLE ${catalogPrefix}tbl(a int, b string) USING json PARTITIONED BY (c)")
+      sql(s"CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
     assert(e.message == "partition column c is not defined in table tbl, " +
       "defined table columns are: a, b")
@@ -641,7 +596,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("create table - bucket column names not in table definition") {
     val e = intercept[AnalysisException] {
-      sql(s"CREATE TABLE ${catalogPrefix}tbl(a int, b string) " +
+      sql(s"CREATE TABLE tbl(a int, b string) " +
         s"USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
     assert(e.message == "bucket column c is not defined in table tbl, " +
@@ -652,7 +607,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE ${catalogPrefix}t($c0 INT) USING parquet PARTITIONED BY ($c0, $c1)")
+          sql(s"CREATE TABLE t($c0 INT) USING parquet PARTITIONED BY ($c0, $c1)")
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the partition schema"))
       }
@@ -663,14 +618,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         var errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE ${catalogPrefix}t($c0 INT) USING parquet " +
+          sql(s"CREATE TABLE t($c0 INT) USING parquet " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
 
         errMsg = intercept[AnalysisException] {
           sql(s"""
-              |CREATE TABLE ${catalogPrefix}t($c0 INT, col INT) USING parquet CLUSTERED BY (col)
+              |CREATE TABLE t($c0 INT, col INT) USING parquet CLUSTERED BY (col)
               |  SORTED BY ($c0, $c1) INTO 2 BUCKETS
              """.stripMargin)
         }.getMessage
@@ -1305,11 +1260,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent, isDatasourceTable)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
-    sql(s"DROP TABLE ${catalogPrefix}dbx.tab1")
+    sql(s"DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
-    sql(s"DROP TABLE IF EXISTS ${catalogPrefix}dbx.tab1")
+    sql(s"DROP TABLE IF EXISTS dbx.tab1")
     intercept[AnalysisException] {
-      sql(s"DROP TABLE ${catalogPrefix}dbx.tab1")
+      sql(s"DROP TABLE dbx.tab1")
     }
   }
 
@@ -1345,16 +1300,16 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(getProps.isEmpty)
     // set table properties
     sql(
-      s"ALTER TABLE ${catalogPrefix}dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
+      s"ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
     assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
     // set table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql(
-      s"ALTER TABLE ${catalogPrefix}tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
+      s"ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
     assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE ${catalogPrefix}does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
+      sql(s"ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
     }
   }
 
@@ -1374,25 +1329,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
     // unset table properties
-    sql(s"ALTER TABLE ${catalogPrefix}dbx.tab1 " +
+    sql(s"ALTER TABLE dbx.tab1 " +
       s"SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
-    sql(s"ALTER TABLE ${catalogPrefix}dbx.tab1 UNSET TBLPROPERTIES ('j')")
+    sql(s"ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
     assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
     // unset table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
-    sql(s"ALTER TABLE ${catalogPrefix}tab1 UNSET TBLPROPERTIES ('p')")
+    sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
     assert(getProps == Map("c" -> "lan", "x" -> "y"))
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE ${catalogPrefix}does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
+      sql(s"ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
     }
     // property to unset does not exist
     val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE ${catalogPrefix}tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
+      sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
     }
     assert(e.getMessage.contains("xyz"))
     // property to unset does not exist, but "IF EXISTS" is specified
-    sql(s"ALTER TABLE ${catalogPrefix}tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
+    sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(getProps == Map("x" -> "y"))
   }
 
@@ -1424,7 +1379,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(storageFormat.locationUri.map(_.getPath) === Some(expected.getPath))
     }
     // set table location
-    sql(s"ALTER TABLE ${catalogPrefix}dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
+    sql(s"ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
     verifyLocation(new URI("/path/to/your/lovely/heart"))
     // set table partition location
     sql(s"ALTER TABLE dbx.tab1 " +
@@ -1432,14 +1387,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
-    sql(s"ALTER TABLE ${catalogPrefix}tab1 SET LOCATION '/swanky/steak/place'")
+    sql(s"ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
     verifyLocation(new URI("/swanky/steak/place"))
     // set table partition location without explicitly specifying database
     sql(s"ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
     verifyLocation(new URI("vienna"), Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE ${catalogPrefix}dbx.does_not_exist SET LOCATION '/mister/spark'")
+      sql(s"ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
     }
     // partition to alter does not exist
     intercept[AnalysisException] {
@@ -2571,9 +2526,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   protected def testAddColumn(provider: String): Unit = {
     withTable("t1") {
-      sql(s"CREATE TABLE ${catalogPrefix}t1 (c1 int) USING $provider")
+      sql(s"CREATE TABLE t1 (c1 int) USING $provider")
       sql(s"INSERT INTO t1 VALUES (1)") // add support
-      sql(s"ALTER TABLE ${catalogPrefix}t1 ADD COLUMNS (c2 int)")
+      sql(s"ALTER TABLE t1 ADD COLUMNS (c2 int)")
       checkAnswer(
         spark.table("t1"),
         Seq(Row(1, null))
@@ -2593,9 +2548,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   protected def testAddColumnPartitioned(provider: String): Unit = {
     withTable("t1") {
-      sql(s"CREATE TABLE ${catalogPrefix}t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
+      sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
       sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
-      sql(s"ALTER TABLE ${catalogPrefix}t1 ADD COLUMNS (c3 int)")
+      sql(s"ALTER TABLE t1 ADD COLUMNS (c3 int)")
       checkAnswer(
         spark.table("t1"),
         Seq(Row(1, null, 2))

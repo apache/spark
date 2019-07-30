@@ -957,11 +957,11 @@ class Analyzer(
           changes.toSeq)
 
       case alter @ AlterTableUnsetPropertiesStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), keys, ifExists) =>
+          CatalogObjectIdentifier(Some(v2Catalog), ident), keys, _) =>
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          keys.map(key => TableChange.removeProperty(key, ifExists)))
+          keys.map(key => TableChange.removeProperty(key)))
 
       case alter @ AlterTableSetLocationStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), newLoc) =>

@@ -25,10 +25,13 @@ import scala.collection.JavaConverters._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.{Table, TableProvider}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -41,6 +44,7 @@ class V2SessionCatalogSuite
   private val schema: StructType = new StructType()
       .add("id", IntegerType)
       .add("data", StringType)
+  private val v2Source = classOf[FakeV2Provider].getName
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -158,6 +162,57 @@ class V2SessionCatalogSuite
     assert(exc.message.contains("already exists"))
 
     assert(catalog.tableExists(testIdent))
+  }
+
+  test("create table - duplicate column names in the table definition") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING $v2Source")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
+      }
+    }
+  }
+
+  test("create table - partition column names not in table definition") {
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE TABLE tbl(a int, b string) USING $v2Source PARTITIONED BY (c)")
+    }
+    assert(e.message == "partition column c is not defined in table tbl, " +
+      "defined table columns are: a, b")
+  }
+
+  test("create table - bucket column names not in table definition") {
+    val e = intercept[AnalysisException] {
+      sql(s"CREATE TABLE tbl(a int, b string) " +
+        s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS")
+    }
+    assert(e.message == "bucket column c is not defined in table tbl, " +
+      "defined table columns are: a, b")
+  }
+
+  test("create table - column repeated in partition columns") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the partition schema"))
+      }
+    }
+  }
+
+  test("create table - column repeated in bucket/sort columns") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        var errMsg = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
+      }
+    }
   }
 
   test("tableExists") {
@@ -360,6 +415,36 @@ class V2SessionCatalogSuite
 
     // the table has not changed
     assert(catalog.loadTable(testIdent).schema == schema)
+  }
+
+
+  test("alter table add columns with existing column name") {
+    val catalog = newCatalog()
+
+    val testSchema = new StructType().add("foo", "int")
+    val table = catalog.createTable(testIdent, testSchema, Array.empty, emptyProps)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      Seq("foo", "fOo", "FOO").foreach { name =>
+        val e = intercept[AnalysisException] {
+          val tc = TableChange.addColumn(Array(name), LongType)
+          catalog.alterTable(testIdent, tc)
+        }.getMessage
+        assert(e.contains("Found duplicate column(s)"))
+      }
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val e = intercept[AnalysisException] {
+        val tc = TableChange.addColumn(Array("foo"), LongType)
+        catalog.alterTable(testIdent, tc)
+      }.getMessage
+      assert(e.contains("Found duplicate column(s)"))
+
+      Seq("fOo", "FOO").foreach { name =>
+       val tc = TableChange.addColumn(Array(name), LongType)
+        catalog.alterTable(testIdent, tc)
+      }
+    }
   }
 
   test("alterTable: add field to missing column fails") {
@@ -679,5 +764,12 @@ class V2SessionCatalogSuite
 
     assert(!wasDropped)
     assert(!catalog.tableExists(testIdent))
+  }
+}
+
+/** Used as a V2 DataSource for V2SessionCatalog DDL */
+class FakeV2Provider extends TableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
 }
