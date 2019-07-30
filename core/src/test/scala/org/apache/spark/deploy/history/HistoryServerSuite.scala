@@ -632,7 +632,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
-  test("SPARK-28564: Access history application defaults to the last attempt id") {
+  test("access history application defaults to the last attempt id") {
 
     def getRedirectUrl(url: URL): (Int, String) = {
       val connection = url.openConnection().asInstanceOf[HttpURLConnection]
