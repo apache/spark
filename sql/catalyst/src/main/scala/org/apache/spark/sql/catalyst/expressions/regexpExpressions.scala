@@ -106,11 +106,11 @@ abstract class StringRegexExpression extends BinaryExpression
     Use RLIKE to match with standard regular expressions.
   """,
   since = "1.0.0")
-case class Like(left: Expression, right: Expression, escapeCharOpt: Option[String] = None)
+case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Char] = None)
   extends StringRegexExpression {
 
   override def escape(v: String): String =
-    StringUtils.escapeLikeRegex(v, escapeCharOpt.getOrElse("\\"))
+    StringUtils.escapeLikeRegex(v, escapeCharOpt.getOrElse('\\'))
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
@@ -158,7 +158,7 @@ case class Like(left: Expression, right: Expression, escapeCharOpt: Option[Strin
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
           String $rightStr = $eval2.toString();
-          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, "$escapeChar"));
+          $patternClass $pattern = $patternClass.compile($escapeFunc($rightStr, '$escapeChar'));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
