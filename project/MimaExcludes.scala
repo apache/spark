@@ -54,8 +54,7 @@ object MimaExcludes {
     ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.mllib.regression.LinearRegressionWithSGD$"),
 
     // [SPARK-27651][Core] Avoid the network when shuffle blocks are fetched from the same host
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.BlockManagerMessages.GetLocalDirs"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.BlockManagerMessages.BlockManagerLocalDirs"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.LiveEntityHelpers.createMetrics")
 
     // [SPARK-28486][CORE][PYTHON] Map PythonBroadcast's data file to a BroadcastBlock to avoid delete by GC
     ProblemFilters.exclude[InaccessibleMethodProblem]("java.lang.Object.finalize"),
