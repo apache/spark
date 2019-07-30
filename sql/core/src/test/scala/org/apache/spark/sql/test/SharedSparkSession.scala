@@ -126,22 +126,14 @@ trait SharedSparkSession
     }
   }
 
-  private var preCreatedTempViews: Seq[String] = _
-
   protected override def beforeEach(): Unit = {
     super.beforeEach()
-    if (preCreatedTempViews == null) {
-      // Test suite may create temp views in beforeAll, we should not remove them after each test.
-      preCreatedTempViews = spark.sessionState.catalog.getAllTempViews()
-    }
-
     DebugFilesystem.clearOpenStreams()
   }
 
   protected override def afterEach(): Unit = {
     super.afterEach()
-    assert(preCreatedTempViews != null)
-    _spark.reset(preCreatedTempViews)
+    _spark.reset()
     // files can be closed from other threads, so wait a bit
     // normally this doesn't take more than 1s
     eventually(timeout(10.seconds), interval(2.seconds)) {

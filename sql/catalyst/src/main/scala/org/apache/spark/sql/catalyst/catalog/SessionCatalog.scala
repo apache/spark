@@ -856,11 +856,6 @@ class SessionCatalog(
     tempViews.clear()
   }
 
-  // For test only.
-  def getAllTempViews(): Seq[String] = synchronized {
-    tempViews.keys.toSeq
-  }
-
   // ----------------------------------------------------------------------------
   // Partitions
   // ----------------------------------------------------------------------------

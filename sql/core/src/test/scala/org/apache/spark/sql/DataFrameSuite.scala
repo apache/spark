@@ -1790,16 +1790,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17409: Do Not Optimize Query in CTAS (Data source tables) More Than Once") {
     withTable("bar") {
-      setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "json")
-      sql("select 0 as id").createOrReplaceTempView("foo")
-      val df = sql("select * from foo group by id")
-      // If we optimize the query in CTAS more than once, the following saveAsTable will fail
-      // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
-      df.write.mode("overwrite").saveAsTable("bar")
-      checkAnswer(spark.table("bar"), Row(0) :: Nil)
-      val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
-      assert(tableMetadata.provider == Some("json"),
-        "the expected table is a data source table using json")
+      withTempView("foo") {
+        setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "json")
+        sql("select 0 as id").createOrReplaceTempView("foo")
+        val df = sql("select * from foo group by id")
+        // If we optimize the query in CTAS more than once, the following saveAsTable will fail
+        // with the error: `GROUP BY position 0 is not in select list (valid range is [1, 1])`
+        df.write.mode("overwrite").saveAsTable("bar")
+        checkAnswer(spark.table("bar"), Row(0) :: Nil)
+        val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier("bar"))
+        assert(tableMetadata.provider == Some("json"),
+          "the expected table is a data source table using json")
+      }
     }
   }
 
@@ -2106,26 +2108,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26057: attribute deduplication on already analyzed plans") {
-    val df1 = Seq(("1-1", 6)).toDF("id", "n")
-    df1.createOrReplaceTempView("a")
-    val df3 = Seq("1-1").toDF("id")
-    df3.createOrReplaceTempView("b")
-    spark.sql(
-      """
-        |SELECT a.id, n as m
-        |FROM a
-        |WHERE EXISTS(
-        |  SELECT 1
-        |  FROM b
-        |  WHERE b.id = a.id)
-      """.stripMargin).createOrReplaceTempView("v")
-    val res = spark.sql(
-      """
-        |SELECT a.id, n, m
-        |  FROM a
-        |  LEFT OUTER JOIN v ON v.id = a.id
-      """.stripMargin)
-    checkAnswer(res, Row("1-1", 6, 6))
+    withTempView("a", "b", "v") {
+      val df1 = Seq(("1-1", 6)).toDF("id", "n")
+      df1.createOrReplaceTempView("a")
+      val df3 = Seq("1-1").toDF("id")
+      df3.createOrReplaceTempView("b")
+      spark.sql(
+        """
+          |SELECT a.id, n as m
+          |FROM a
+          |WHERE EXISTS(
+          |  SELECT 1
+          |  FROM b
+          |  WHERE b.id = a.id)
+        """.stripMargin).createOrReplaceTempView("v")
+      val res = spark.sql(
+        """
+          |SELECT a.id, n, m
+          |  FROM a
+          |  LEFT OUTER JOIN v ON v.id = a.id
+        """.stripMargin)
+      checkAnswer(res, Row("1-1", 6, 6))
+    }
   }
 
   test("SPARK-27671: Fix analysis exception when casting null in nested field in struct") {
@@ -2138,24 +2142,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-27439: Explain result should match collected result after view change") {
-    spark.range(10).createOrReplaceTempView("test")
-    spark.range(5).createOrReplaceTempView("test2")
-    spark.sql("select * from test").createOrReplaceTempView("tmp")
-    val df = spark.sql("select * from tmp")
-    spark.sql("select * from test2").createOrReplaceTempView("tmp")
+    withTempView("test", "test2", "tmp") {
+      spark.range(10).createOrReplaceTempView("test")
+      spark.range(5).createOrReplaceTempView("test2")
+      spark.sql("select * from test").createOrReplaceTempView("tmp")
+      val df = spark.sql("select * from tmp")
+      spark.sql("select * from test2").createOrReplaceTempView("tmp")
 
-    val captured = new ByteArrayOutputStream()
-    Console.withOut(captured) {
-      df.explain(extended = true)
+      val captured = new ByteArrayOutputStream()
+      Console.withOut(captured) {
+        df.explain(extended = true)
+      }
+      checkAnswer(df, spark.range(10).toDF)
+      val output = captured.toString
+      assert(output.contains(
+        """== Parsed Logical Plan ==
+          |'Project [*]
+          |+- 'UnresolvedRelation [tmp]""".stripMargin))
+      assert(output.contains(
+        """== Physical Plan ==
+          |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
-    checkAnswer(df, spark.range(10).toDF)
-    val output = captured.toString
-    assert(output.contains(
-      """== Parsed Logical Plan ==
-        |'Project [*]
-        |+- 'UnresolvedRelation [tmp]""".stripMargin))
-    assert(output.contains(
-      """== Physical Plan ==
-        |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
   }
 }
