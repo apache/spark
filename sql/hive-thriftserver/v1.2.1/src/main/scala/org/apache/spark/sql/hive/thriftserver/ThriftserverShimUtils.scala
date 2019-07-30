@@ -33,6 +33,7 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] type TGetSchemasReq = org.apache.hive.service.cli.thrift.TGetSchemasReq
   private[thriftserver] type TGetTablesReq = org.apache.hive.service.cli.thrift.TGetTablesReq
   private[thriftserver] type TGetColumnsReq = org.apache.hive.service.cli.thrift.TGetColumnsReq
+  private[thriftserver] type TGetInfoReq = org.apache.hive.service.cli.thrift.TGetInfoReq
   private[thriftserver] type TExecuteStatementReq =
     org.apache.hive.service.cli.thrift.TExecuteStatementReq
 
@@ -50,6 +51,8 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
   private[thriftserver] val testedProtocolVersions = Seq(
+    HIVE_CLI_SERVICE_PROTOCOL_V1,
+    HIVE_CLI_SERVICE_PROTOCOL_V2,
     HIVE_CLI_SERVICE_PROTOCOL_V3,
     HIVE_CLI_SERVICE_PROTOCOL_V4,
     HIVE_CLI_SERVICE_PROTOCOL_V5,
