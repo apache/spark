@@ -149,17 +149,21 @@ private[spark] object SchemaUtils {
       isCaseSensitive: Boolean): Unit = {
     val normalizedTransforms = if (isCaseSensitive) {
       transforms.map {
-        case NamedTransform(transformName, Seq(Ref(fieldNameParts))) =>
+        case NamedTransform(transformName, refs) =>
+          val fieldNameParts = refs.collect { case Ref(parts) => parts}
           transformName -> fieldNameParts
       }
     } else {
       transforms.map {
-        case NamedTransform(transformName, Seq(Ref(fieldNameParts))) =>
+        case NamedTransform(transformName, refs) =>
           // scalastyle:off caselocale
-          transformName -> fieldNameParts.map(_.toLowerCase)
+          val fieldNameParts = refs.collect { case Ref(parts) => parts.map(_.toLowerCase)}
           // scalastyle:on caselocale
+          transformName -> fieldNameParts
       }
     }
+    println(normalizedTransforms)
+    println(normalizedTransforms.distinct)
     if (normalizedTransforms.distinct.length != normalizedTransforms.length) {
       val duplicateColumns = normalizedTransforms.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => s"${x._2.mkString(".")}"

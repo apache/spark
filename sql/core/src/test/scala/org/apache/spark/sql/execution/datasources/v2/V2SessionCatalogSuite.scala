@@ -26,7 +26,6 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -164,54 +163,65 @@ class V2SessionCatalogSuite
     assert(catalog.tableExists(testIdent))
   }
 
-  test("create table - duplicate column names in the table definition") {
+  test("createTable: duplicate column names in the table definition") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val errMsg = intercept[AnalysisException] {
           sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING $v2Source")
         }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the table definition of `t`"))
+        assert(errMsg.contains("Found duplicate column(s) in the table definition of t"))
       }
     }
   }
 
-  test("create table - partition column names not in table definition") {
+  test("createTable: partition column names not in table definition") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE TABLE tbl(a int, b string) USING $v2Source PARTITIONED BY (c)")
-    }
-    assert(e.message == "partition column c is not defined in table tbl, " +
-      "defined table columns are: a, b")
+    }.getMessage
+    assert(e.contains("Couldn't find column c in"))
   }
 
-  test("create table - bucket column names not in table definition") {
+  test("createTable: bucket column names not in table definition") {
     val e = intercept[AnalysisException] {
       sql(s"CREATE TABLE tbl(a int, b string) " +
         s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS")
-    }
-    assert(e.message == "bucket column c is not defined in table tbl, " +
-      "defined table columns are: a, b")
+    }.getMessage
+    assert(e.contains("Couldn't find column c in"))
   }
 
-  test("create table - column repeated in partition columns") {
+  test("createTable: column repeated in partition columns") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val errMsg = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(s"CREATE TABLE t($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)")
         }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the partition schema"))
+        assert(e.contains("Found duplicate column(s) in the partition schema"))
       }
     }
   }
 
-  test("create table - column repeated in bucket/sort columns") {
+  test("createTable: column repeated in bucket columns") {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        var errMsg = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(s"CREATE TABLE t($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
         }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
+        assert(e.contains("Found duplicate column(s) in the bucket definition"))
       }
+    }
+  }
+
+  test("createTable: all columns used in partitioning") {
+    Seq(
+      "PARTITIONED BY (a, b)",
+      "CLUSTERED BY (a, b) INTO 2 BUCKETS",
+      "PARTITIONED BY (a) CLUSTERED BY (b) INTO 2 BUCKETS").foreach { partitioning =>
+
+      val e = intercept[AnalysisException] {
+        sql(s"CREATE TABLE t(a INT, b STRING) USING $v2Source $partitioning")
+      }.getMessage
+      assert(e.contains("Cannot use all columns for partitioning."))
     }
   }
 
@@ -418,7 +428,7 @@ class V2SessionCatalogSuite
   }
 
 
-  test("alter table add columns with existing column name") {
+  test("alterTable add columns with existing column name") {
     val catalog = newCatalog()
 
     val testSchema = new StructType().add("foo", "int")
