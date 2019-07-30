@@ -29,7 +29,6 @@ from tempfile import NamedTemporaryFile
 
 import jinja2
 import pendulum
-import six
 
 from airflow import models, settings, configuration
 from airflow.exceptions import AirflowException, AirflowDagCycleException
@@ -262,7 +261,7 @@ class DagTest(unittest.TestCase):
                     for prev_task in pipeline[d - 1]:
                         current_task.set_upstream(prev_task)
 
-            for task in six.itervalues(dag.task_dict):
+            for task in dag.task_dict.values():
                 match = pattern.match(task.task_id)
                 task_depth = int(match.group(1))
                 # the sum of each stages after this task + itself
@@ -288,7 +287,7 @@ class DagTest(unittest.TestCase):
                     for prev_task in pipeline[d - 1]:
                         current_task.set_upstream(prev_task)
 
-            for task in six.itervalues(dag.task_dict):
+            for task in dag.task_dict.values():
                 match = pattern.match(task.task_id)
                 task_depth = int(match.group(1))
                 # the sum of each stages after this task + itself
@@ -314,7 +313,7 @@ class DagTest(unittest.TestCase):
                     for prev_task in pipeline[d - 1]:
                         current_task.set_upstream(prev_task)
 
-            for task in six.itervalues(dag.task_dict):
+            for task in dag.task_dict.values():
                 match = pattern.match(task.task_id)
                 task_depth = int(match.group(1))
                 # the sum of each stages after this task + itself
