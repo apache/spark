@@ -383,8 +383,8 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.util.QueryExecutionListener.onFailure"),
 
     // [SPARK-25382][SQL][PYSPARK] Remove ImageSchema.readImages in 3.0
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.image.ImageSchema"),
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.ml.image.ImageSchema$")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.image.ImageSchema.readImages"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.image.ImageSchema.readImages")
   )
 
   // Exclude rules for 2.4.x
