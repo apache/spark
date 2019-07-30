@@ -432,10 +432,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
   }
 
-  private[this] val longMaxValue = Decimal(Long.MaxValue)
-  private[this] val longMinValue = Decimal(Long.MinValue)
+  private[this] val maxLongValueAsDecimal = Decimal(Long.MaxValue)
+  private[this] val minongValueAsDecimal = Decimal(Long.MinValue)
   private[this] def castDecimalToLong(d: Decimal): Any =
-    if (d <= longMaxValue && d >= longMinValue) {
+    if (d <= maxLongValueAsDecimal && d >= minongValueAsDecimal) {
       d.toLong
     } else {
       null
@@ -1501,7 +1501,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToIntegerCode(c)};"
     case DecimalType() =>
-      val bigIntValue = ctx.freshName("doubleValue")
       (c, evPrim, evNull) =>
         code"""
           try {
