@@ -122,7 +122,7 @@ SELECT sum(salary) OVER w1, count(*) OVER w2
 FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
 -- subplan
--- [SPARK-28553] subqueries must be aggregated before hand
+-- [SPARK-28379] Correlated scalar subqueries must be aggregated
 -- SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
 -- FROM tenk1 s WHERE unique2 < 10;
 
