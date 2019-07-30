@@ -51,7 +51,8 @@ abstract class FileScan(
    * otherwise return `None`.
    */
   def getFileUnSplittableReason(path: Path): Option[String] = {
-    if (!isSplitable(path)) Some("Undefined") else None
+    assert(!isSplitable(path))
+    Some("undefined")
   }
 
   override def description(): String = {
