@@ -56,10 +56,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case _ => DoubleType
   }
 
-  private lazy val sumDataType = child.dataType match {
-    case LongType => DecimalType.BigIntDecimal
-    case _ => resultType
-  }
+  private lazy val sumDataType = resultType
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
@@ -92,11 +89,5 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     )
   }
 
-  override lazy val evaluateExpression: Expression = {
-    if (sumDataType == resultType) {
-      sum
-    } else {
-      Cast(sum, resultType)
-    }
-  }
+  override lazy val evaluateExpression: Expression = sum
 }

@@ -51,11 +51,11 @@ struct<>
 
 
 -- !query 6
-set spark.sql.arithmetic.checkOverflow=false
+set spark.sql.arithmeticOperations.failOnOverFlow=false
 -- !query 6 schema
 struct<key:string,value:string>
 -- !query 6 output
-spark.sql.arithmetic.checkOverflow	false
+spark.sql.arithmeticOperations.failOnOverFlow	false
 
 
 -- !query 7

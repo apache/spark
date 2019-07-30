@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
-  private val checkOverflow = SQLConf.get.arithmeticOperationOverflowCheck
+  private val checkOverflow = SQLConf.get.arithmeticOperationsFailOnOverflow
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -63,7 +63,7 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
     case IntegerType | LongType if checkOverflow =>
       nullSafeCodeGen(ctx, ev, eval => {
         val mathClass = classOf[Math].getName
-        s"${ev.value} = $mathClass.negateExact(-($eval));"
+        s"${ev.value} = $mathClass.negateExact($eval);"
       })
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
@@ -136,7 +136,7 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
-  protected val checkOverflow = SQLConf.get.arithmeticOperationOverflowCheck
+  protected val checkOverflow = SQLConf.get.arithmeticOperationsFailOnOverflow
 
   override def dataType: DataType = left.dataType
 

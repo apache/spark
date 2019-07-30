@@ -60,7 +60,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Add(positiveLongLit, negativeLongLit), -1L)
 
     Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> checkOverflow) {
+      withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> checkOverflow) {
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Add, tpe, tpe)
         }
@@ -79,7 +79,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(Literal(Int.MinValue)), Int.MinValue)
     checkEvaluation(UnaryMinus(Literal(Short.MinValue)), Short.MinValue)
     checkEvaluation(UnaryMinus(Literal(Byte.MinValue)), Byte.MinValue)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "true") {
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(Literal(Long.MinValue)), "overflow")
       checkExceptionInExpression[ArithmeticException](
@@ -88,6 +88,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         UnaryMinus(Literal(Short.MinValue)), "overflow")
       checkExceptionInExpression[ArithmeticException](
         UnaryMinus(Literal(Byte.MinValue)), "overflow")
+      checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
+      checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
+      checkEvaluation(UnaryMinus(positiveIntLit), - positiveInt)
+      checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
+      checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
+      checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
     }
     checkEvaluation(UnaryMinus(positiveShortLit), (- positiveShort).toShort)
     checkEvaluation(UnaryMinus(negativeShortLit), (- negativeShort).toShort)
@@ -115,7 +121,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Subtract(positiveLongLit, negativeLongLit), positiveLong - negativeLong)
 
     Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> checkOverflow) {
+      withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> checkOverflow) {
         DataTypeTestUtils.numericAndInterval.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Subtract, tpe, tpe)
         }
@@ -137,7 +143,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(Multiply(positiveLongLit, negativeLongLit), positiveLong * negativeLong)
 
     Seq("true", "false").foreach { checkOverflow =>
-      withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> checkOverflow) {
+      withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> checkOverflow) {
         DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
           checkConsistencyBetweenInterpretedAndCodegenAllowingException(Multiply, tpe, tpe)
         }
@@ -408,12 +414,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     val e4 = Add(minLongLiteral, minLongLiteral)
     val e5 = Subtract(minLongLiteral, maxLongLiteral)
     val e6 = Multiply(minLongLiteral, minLongLiteral)
-    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "true") {
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
       Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
         checkExceptionInExpression[ArithmeticException](e, "overflow")
       }
     }
-    withSQLConf(SQLConf.ARITHMETIC_OPERATION_OVERFLOW_CHECK.key -> "false") {
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
       checkEvaluation(e1, Long.MinValue)
       checkEvaluation(e2, Long.MinValue)
       checkEvaluation(e3, -2L)
