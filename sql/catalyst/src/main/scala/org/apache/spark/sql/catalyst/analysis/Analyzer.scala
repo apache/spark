@@ -36,13 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-<<<<<<< HEAD
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement}
-||||||| merged common ancestors
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement}
-=======
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, InsertIntoStatement}
->>>>>>> origin/master
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement, InsertIntoStatement}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -177,6 +171,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveAlterTable ::
+      ResolveDescribeTable ::
       ResolveInsertInto ::
       ResolveTables ::
       ResolveRelations ::
@@ -976,6 +971,26 @@ class Analyzer(
           UnresolvedRelation(alter.tableName),
           Seq(TableChange.setProperty("location", newLoc)))
 
+      case describe @ DescribeTableStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), partitionSpec, isExtended) =>
+        DescribeTable(
+          v2Catalog.asTableCatalog,
+          ident,
+          UnresolvedRelation(describe.tableName),
+          isExtended)
+    }
+  }
+  /**
+   * Resolve DESCRIBE TABLE statements that use a DSv2 catalog.
+   *
+   * This rule converts unresolved DESCRIBE TABLE statements to v2 when a v2 catalog is responsible
+   * for the table identifier. A v2 catalog is responsible for an identifier when the identifier
+   * has a catalog specified, like prod_catalog.db.table, or when a default v2 catalog is set and
+   * the table identifier does not include a catalog.
+   */
+  object ResolveDescribeTable extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case describe @ DescribeTableStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), partitionSpec, isExtended) =>
         DescribeTable(

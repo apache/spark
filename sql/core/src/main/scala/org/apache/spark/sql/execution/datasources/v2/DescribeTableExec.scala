@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchemas
+import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
@@ -37,7 +37,7 @@ case class DescribeTableExec(
     isExtended: Boolean) extends LeafExecNode {
 
   override val output: Seq[AttributeReference] =
-    DescribeTableSchemas.describeTableAttributes()
+    DescribeTableSchema.describeTableAttributes()
 
   private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
 

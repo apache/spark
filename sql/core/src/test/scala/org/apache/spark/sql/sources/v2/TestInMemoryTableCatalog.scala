@@ -71,19 +71,7 @@ class TestInMemoryTableCatalog extends TableCatalog {
       throw new TableAlreadyExistsException(ident)
     }
     TestInMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-<<<<<<< HEAD
-    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions)
-||||||| merged common ancestors
-    if (partitions.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"Catalog $name: Partitioned tables are not supported")
-    }
-
-    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, properties)
-=======
-
     val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
->>>>>>> origin/master
 
     tables.put(ident, table)
 
@@ -101,15 +89,8 @@ class TestInMemoryTableCatalog extends TableCatalog {
           throw new IllegalArgumentException(s"Cannot drop all fields")
         }
 
-<<<<<<< HEAD
-        val newTable = new InMemoryTable(
-          table.name, schema, properties, table.partitioning, table.data)
-||||||| merged common ancestors
-        val newTable = new InMemoryTable(table.name, schema, properties, table.data)
-=======
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
           .withData(table.data)
->>>>>>> origin/master
 
         tables.put(ident, newTable)
 
@@ -134,40 +115,24 @@ class TestInMemoryTableCatalog extends TableCatalog {
 class InMemoryTable(
     val name: String,
     val schema: StructType,
-<<<<<<< HEAD
-    override val properties: util.Map[String, String],
-    override val partitioning: Array[Transform])
-||||||| merged common ancestors
-    override val properties: util.Map[String, String])
-=======
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
->>>>>>> origin/master
   extends Table with SupportsRead with SupportsWrite {
 
-<<<<<<< HEAD
   def this(
       name: String,
       schema: StructType,
       properties: util.Map[String, String],
       partitioning: Array[Transform],
       data: Array[BufferedRows]) = {
-    this(name, schema, properties, partitioning)
-    replaceData(data)
-||||||| merged common ancestors
-  def this(
-      name: String,
-      schema: StructType,
-      properties: util.Map[String, String],
-      data: Array[BufferedRows]) = {
-    this(name, schema, properties)
-    replaceData(data)
-=======
+    this(name, schema, partitioning, properties)
+    withData(data)
+  }
+
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
       throw new IllegalArgumentException(s"Transform $t must be IdentityTransform")
     }
->>>>>>> origin/master
   }
 
   @volatile var dataMap: mutable.Map[Seq[Any], BufferedRows] = mutable.Map.empty
@@ -331,13 +296,7 @@ class TestStagingInMemoryCatalog
     validateStagedTable(partitions, properties)
     new TestStagedCreateTable(
       ident,
-<<<<<<< HEAD
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions))
-||||||| merged common ancestors
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
-=======
       new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
->>>>>>> origin/master
   }
 
   override def stageReplace(
@@ -348,13 +307,7 @@ class TestStagingInMemoryCatalog
     validateStagedTable(partitions, properties)
     new TestStagedReplaceTable(
       ident,
-<<<<<<< HEAD
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions))
-||||||| merged common ancestors
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
-=======
       new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
->>>>>>> origin/master
   }
 
   override def stageCreateOrReplace(
@@ -365,13 +318,7 @@ class TestStagingInMemoryCatalog
     validateStagedTable(partitions, properties)
     new TestStagedCreateOrReplaceTable(
       ident,
-<<<<<<< HEAD
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties, partitions))
-||||||| merged common ancestors
-      new InMemoryTable(s"$name.${ident.quoted}", schema, properties))
-=======
       new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties))
->>>>>>> origin/master
   }
 
   private def validateStagedTable(

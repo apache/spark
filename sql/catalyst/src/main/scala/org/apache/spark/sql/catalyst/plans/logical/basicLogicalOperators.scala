@@ -550,7 +550,7 @@ case class DescribeTable(
 
   override def children: Seq[LogicalPlan] = Seq(table)
 
-  override val output = DescribeTableSchemas.describeTableAttributes()
+  override val output = DescribeTableSchema.describeTableAttributes()
 }
 
 /**

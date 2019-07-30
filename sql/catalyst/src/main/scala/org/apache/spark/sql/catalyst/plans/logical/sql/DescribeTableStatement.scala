@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.plans.logical.sql
 
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchemas
+import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 
 case class DescribeTableStatement(
     tableName: Seq[String],
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean) extends ParsedStatement {
-  override def output: Seq[Attribute] = DescribeTableSchemas.describeTableAttributes()
+  override def output: Seq[Attribute] = DescribeTableSchema.describeTableAttributes()
 }

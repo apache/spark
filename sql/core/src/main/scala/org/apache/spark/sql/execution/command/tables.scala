@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchemas
+import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
 import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
@@ -500,7 +500,7 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output = DescribeTableSchemas.describeTableAttributes()
+  override val output = DescribeTableSchema.describeTableAttributes()
 
   protected def describeSchema(
       schema: StructType,
