@@ -49,7 +49,7 @@ private class AsyncEventQueue(
   // The capacity can be configured by spark.scheduler.listenerbus.eventqueue.${name}.capacity,
   // if no such conf is specified, use the value specified in
   // LISTENER_BUS_EVENT_QUEUE_CAPACITY
-  def capacity: Int = conf.getInt(
+  protected def capacity: Int = conf.getInt(
     s"spark.scheduler.listenerbus.eventqueue.${name}.capacity",
      conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
