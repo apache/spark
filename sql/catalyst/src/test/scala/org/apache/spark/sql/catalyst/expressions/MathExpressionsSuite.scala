@@ -373,12 +373,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("exp") {
-    testUnary(Exp, math.exp)
+    testUnary(Exp, StrictMath.exp)
     checkConsistencyBetweenInterpretedAndCodegen(Exp, DoubleType)
   }
 
   test("expm1") {
-    testUnary(Expm1, math.expm1)
+    testUnary(Expm1, StrictMath.expm1)
     checkConsistencyBetweenInterpretedAndCodegen(Expm1, DoubleType)
   }
 

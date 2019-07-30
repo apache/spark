@@ -271,11 +271,11 @@ class MathFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("exp") {
-    testOneToOneMathFunction(exp, math.exp)
+    testOneToOneMathFunction(exp, StrictMath.exp)
   }
 
   test("expm1") {
-    testOneToOneMathFunction(expm1, math.expm1)
+    testOneToOneMathFunction(expm1, StrictMath.expm1)
   }
 
   test("signum / sign") {
