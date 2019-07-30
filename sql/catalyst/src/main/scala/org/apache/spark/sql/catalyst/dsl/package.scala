@@ -110,13 +110,6 @@ package object dsl {
     def isNull: Predicate = IsNull(expr)
     def isNotNull: Predicate = IsNotNull(expr)
 
-    def isTrue: Predicate = IsTrue(expr)
-    def isNotTrue: Predicate = IsNotTrue(expr)
-    def isFalse: Predicate = IsFalse(expr)
-    def isNotFalse: Predicate = IsNotFalse(expr)
-    def isUnknown: Predicate = IsUnknown(expr)
-    def isNotUnknown: Predicate = IsNotUnknown(expr)
-
     def getItem(ordinal: Expression): UnresolvedExtractValue = UnresolvedExtractValue(expr, ordinal)
     def getField(fieldName: String): UnresolvedExtractValue =
       UnresolvedExtractValue(expr, Literal(fieldName))

@@ -901,6 +901,10 @@ case class IsNotFalse(child: Expression) extends BooleanTest {
   override def sql: String = s"(${child.sql} IS NOT FALSE)"
 }
 
+/**
+ * IS UNKNOWN and IS NOT UNKNOWN are the same as IS NULL and IS NOT NULL, respectively,
+ * except that the input expression must be of a boolean type.
+ */
 object IsUnknown {
   def apply(child: Expression): Predicate = {
     new IsNull(child) with ExpectsInputTypes {

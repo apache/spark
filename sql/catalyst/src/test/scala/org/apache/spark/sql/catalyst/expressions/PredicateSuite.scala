@@ -533,6 +533,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsNotTrue(Literal.create(false, BooleanType)), true, row1)
     checkEvaluation(IsTrue(Literal.create(true, BooleanType)), true, row2)
     checkEvaluation(IsNotTrue(Literal.create(true, BooleanType)), false, row2)
+    IsTrue(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
   }
 
   test("isfalse and isnotfalse") {
@@ -542,10 +546,18 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(IsNotFalse(Literal.create(false, BooleanType)), false, row1)
     checkEvaluation(IsFalse(Literal.create(true, BooleanType)), false, row2)
     checkEvaluation(IsNotFalse(Literal.create(true, BooleanType)), true, row2)
+    IsFalse(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
   }
 
   test("isunknown and isnotunknown") {
     checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
     checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
+    IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
   }
 }
