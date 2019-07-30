@@ -209,7 +209,7 @@ private[spark] class ExecutorPodsAllocator(
       }
     }
 
-    // Update the flag that helps the setTotalExpectedExecutors() callback avoid trigerring this
+    // Update the flag that helps the setTotalExpectedExecutors() callback avoid triggering this
     // update method when not needed.
     hasPendingPods.set(knownPendingCount + newlyCreatedExecutors.size > 0)
 

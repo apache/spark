@@ -157,7 +157,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     executorService.schedule(killTask, conf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD),
       TimeUnit.MILLISECONDS)
 
-    // Return an immediate success, since we can't confirm or deny that executors have bee
+    // Return an immediate success, since we can't confirm or deny that executors have been
     // actually shut down without waiting too long and blocking the allocation thread.
     Future.successful(true)
   }
