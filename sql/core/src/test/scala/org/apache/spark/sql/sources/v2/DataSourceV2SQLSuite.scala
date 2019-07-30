@@ -87,6 +87,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       Row("data", "string", "")))
   }
 
+  test("DescribeTable with v2 catalog when table does not exist.") {
+    intercept[AnalysisException] {
+      spark.sql("DESCRIBE TABLE testcat.table_name")
+    }
+  }
+
   test("DescribeTable extended using v2 catalog") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
       " USING foo" +

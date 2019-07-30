@@ -981,7 +981,6 @@ class Analyzer(
    * the table identifier does not include a catalog.
    */
   object ResolveDescribeTable extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case describe @ DescribeTableStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), _, isExtended) =>
