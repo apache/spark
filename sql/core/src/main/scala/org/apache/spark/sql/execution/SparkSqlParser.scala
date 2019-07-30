@@ -541,11 +541,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitSetDatabaseLocation(
-    ctx: SetDatabaseLocationContext): LogicalPlan = withOrigin(ctx) {
-      AlterDatabaseLocationCommand(
-        ctx.db.getText,
-        visitLocationSpec(ctx.locationSpec())
-      )
+      ctx: SetDatabaseLocationContext): LogicalPlan = withOrigin(ctx) {
+    AlterDatabaseLocationCommand(
+      ctx.db.getText,
+      visitLocationSpec(ctx.locationSpec())
+    )
   }
 
   /**
