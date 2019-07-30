@@ -75,7 +75,7 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
       Seq((idx("a"), 1.0), (idx("b"), 1.0), (idx("c"), 1.0)))
     assert(features ~== expected absTol 1e-14)
   }
-  
+
   test("indexOf method") {
     val df = Seq((0, "a a b b c d".split(" ").toSeq)).toDF("id", "words")
     val n = 100
