@@ -28,14 +28,8 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     impliesDNF(queryDNF, mvDNF)
   }
 
-  private def foldUsingConjunct(exps: Seq[Expression]): Expression = {
-    if (exps.size == 1) {
-      exps.head
-    }
-    else {
-      exps.tail.fold(exps.head)((exp1: Expression, exp2: Expression) => And(exp1, exp2))
-    }
-  }
+  private def foldUsingConjunct(exps: Seq[Expression]): Expression =
+                                      exps.foldRight(exps.head)(And(_, _))
 
   private def toDNF(expression: Expression): Option[Seq[Seq[Expression]]] = {
     expression match {
@@ -53,23 +47,8 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
           })
         })
         Some(result)
-      case _ =>
-        if (isAtomic(expression)) {
-          Some(Seq(Seq(expression)))
-        }
-        else {
-          None
-        }
-    }
-  }
-
-  // Check if expression does not contain AND OR expression
-  private def isAtomic(expression: Expression): Boolean = {
-    expression match {
-      case Or(_, _) | And(_, _) =>
-        return false
-      case _ =>
-        return expression.children.forall(child => isAtomic(child))
+      case expr =>
+        Some(Seq(Seq(expr)))
     }
   }
 
@@ -159,7 +138,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     *
     * @param conjunct1 first conjunction
     * @param conjunct2 second conjunction
-    * @return true if conjunt1 implies conjunct2, false means doesn't know
+    * @return true if conjunct1 implies conjunct2, false means doesn't know
     */
   private def impliesConjunction(conjunct1: Seq[Expression], conjunct2: Seq[Expression])
   : Boolean = {
@@ -254,11 +233,13 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
               b match {
                 case _: GreaterThan | _: GreaterThanOrEqual =>
                   GreaterThan(right, r).eval(null).asInstanceOf[Boolean]
+                case _ => false
               }
             case _: LessThan | _: LessThanOrEqual =>
               b match {
                 case _: LessThan | _: LessThanOrEqual =>
                   LessThan(right, r).eval(null).asInstanceOf[Boolean]
+                case _ => false
               }
             case _: EqualTo =>
               b match {
@@ -268,6 +249,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
                   LessThan(right, r).eval(null).asInstanceOf[Boolean]
                 case _: EqualTo =>
                   EqualTo(right, r).eval(null).asInstanceOf[Boolean]
+                case _ => false
               }
           }
         }

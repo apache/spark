@@ -1337,24 +1337,32 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
 
   override def getMaterializedView(hive: Hive,
        dbName: String, tbl: String): CatalogCreationData = {
-    val seq = getMaterializedViewsMethod.invoke(hive, "default").asInstanceOf[JList[Table]].asScala
-    val mvs = seq.filter {
+    val materializedViews = getMaterializedViewsMethod.invoke(hive, dbName)
+      .asInstanceOf[JList[Table]].asScala
+    val creationMetadataMethod = classOf[Table].getMethod("getCreationMetadata")
+    val mvs = materializedViews.filter {
       mv =>
-        val creationMetadata = classOf[Table].getMethod("getCreationMetadata").invoke(mv)
-        val db = creationMetadata
-          .getClass.getMethod("getDbName")
-          .invoke(creationMetadata).asInstanceOf[String]
-        val tables = creationMetadata.getClass.getMethod("getTablesUsed").invoke(creationMetadata)
-          .asInstanceOf[JSet[String]]
-          .asScala.toSeq
-        tables.size == 1 && tables.head.endsWith(tbl)
+        try {
+          val creationMetadata = creationMetadataMethod.invoke(mv)
+          val db = creationMetadata
+            .getClass.getMethod("getDbName")
+            .invoke(creationMetadata).asInstanceOf[String]
+          val tables = creationMetadata.getClass.getMethod("getTablesUsed").invoke(creationMetadata)
+            .asInstanceOf[JSet[String]]
+            .asScala.toSeq
+          // TODO: Add support for MVs involving multiple tables
+          tables.size == 1 && tables.head.endsWith(tbl)
+        } catch {
+          case e: Exception =>
+            logError("Error occurred when fetching the MVs", e)
+            false
+        }
     }
 
-    val mvCreationDatas = mvs.map {
-      mv =>
-        CatalogCreationData(dbName, tbl, Seq((mv.getDbName, mv.getTableName)))
+    val mvInfos = mvs.map {
+      mv => (mv.getDbName, mv.getTableName)
     }
-    mvCreationDatas(0)
+    CatalogCreationData(dbName, tbl, mvInfos)
   }
 }
 

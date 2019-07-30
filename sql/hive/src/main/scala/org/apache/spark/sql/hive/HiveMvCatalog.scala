@@ -35,25 +35,7 @@ class HiveMvCatalog extends MvCatalog {
 
   override def getMaterializedViewPlan(catalogTable: CatalogTable): Option[LogicalPlan] = {
     val viewText = catalogTable.viewOriginalText
-    // val plan = sparkSession.sessionState.sqlParser.parsePlan(viewText.get)
     val optimizedPlan = sparkSession.sql(viewText.get).queryExecution.optimizedPlan
     Some(optimizedPlan)
-  }
-
-  /* hive-3* onwards, there are simple metastore APIs to get all materialized views.
-   * But till hive-3* is used, we will get all tables and filter the materialized views.
-   * This part should be pluggable in another persistent service so that every spark-app
-   * does not need to get all materialized views again and again
-   */
-  private def getAllMaterializedViewsFromMetastore(db: String,
-       sessionCatalog: SessionCatalog): Seq[CatalogTable] = {
-    val hiveSessionCatalog = sessionCatalog.asInstanceOf[HiveSessionCatalog]
-    hiveSessionCatalog.listTables(db)
-      .map(table => {
-        hiveSessionCatalog.externalCatalog.getTable(db, table.identifier)
-      })
-      .filter(table => {
-        table.tableType == CatalogTableType.MV
-      })
   }
 }

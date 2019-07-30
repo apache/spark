@@ -52,10 +52,10 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
   private var dataSourceTable1: CatalogTable = _
   private var dataSourceTable2: CatalogTable = _
   private var dataSourceTable3: CatalogTable = _
-  private var simpleMvTable: CatalogTable = _
   private var mvTable1: CatalogTable = _
   private var mvTable2: CatalogTable = _
   private var mvTable3: CatalogTable = _
+  private var mvTable4: CatalogTable = _
   private val tablesCreated: mutable.Seq[CatalogTable] = mutable.Seq.empty
 
   def getPlan(catalogTable: CatalogTable): Option[LogicalPlan] = {
@@ -68,7 +68,6 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     spark = {
-      // sparkConf.set(HiveUtils.HIVE_METASTORE_VERSION, "3.1.1")
       val builder = SparkSession.builder()
         .config(UI_ENABLED.key, "false")
         .config(Tests.IS_TESTING.key, "true" )
@@ -81,7 +80,7 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
     catalog = spark.sessionState.catalog
 
     catalog.createDatabase(newDb("db"), ignoreIfExists = true)
-    var ident = TableIdentifier("tbl", Some("db"))
+    val ident = TableIdentifier("tbl", Some("db"))
     catalog.dropTable(ident, ignoreIfNotExists = true, purge = true)
     val serde = HiveSerDe.sourceToSerDe("parquet")
     dataSourceTable1 = CatalogTable(
@@ -117,21 +116,6 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
     catalog.createTable(dataSourceTable3, ignoreIfExists = false)
     tablesCreated :+ dataSourceTable3
 
-    ident = TableIdentifier("mv", Some("db"))
-    catalog.dropTable(ident, ignoreIfNotExists = true, purge = true)
-    simpleMvTable = CatalogTable(
-      identifier = TableIdentifier("mv", Some("db")),
-      tableType = CatalogTableType.MV,
-      storage = getCatalogStorageFormat(serde),
-      schema = new StructType()
-        .add("id", "int").add("col1", "string"),
-      viewOriginalText = Some("SELECT * FROM db.tbl ORDER BY id"),
-      viewText = Some("SELECT * FROM db.tbl ORDER BY id"),
-      provider = Some(DDLUtils.HIVE_PROVIDER))
-    catalog.createTable(simpleMvTable, ignoreIfExists = false)
-    simpleMvTable = catalog.getTableMetadata(TableIdentifier("mv", Some("db")))
-    tablesCreated :+ simpleMvTable
-
     val mvSchema = new StructType()
       .add("a", "int").add("b", "string").add("c", "int")
 
@@ -153,15 +137,13 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
       "db.tbl2", "mv3", "db", mvSchema, catalog)
     tablesCreated :+ mvTable3
 
+    catalog.dropTable(TableIdentifier("mv4", Some("db")), ignoreIfNotExists = true, purge = true)
+    mvTable4 = createMVTable("a, b", "a < 5",
+      "db.tbl1", "mv4", "db", mvSchema, catalog)
+    tablesCreated :+ mvTable4
+
     when(mockCatalog.getMaterializedViewForTable("db", "tbl"))
       .thenReturn(CatalogCreationData("db", "tbl", Seq(("db", "mv"))))
-
-    /* when(mockCatalog.getMaterializedViewsOfTable(Seq(("db", "mv"))))
-      .thenReturn(Seq(simpleMvTable)) */
-
-    val maybePlan = getPlan(simpleMvTable)
-    when(mockCatalog.getMaterializedViewPlan(simpleMvTable))
-      .thenReturn(maybePlan)
 
     when(mockCatalog.getMaterializedViewForTable("db", "tbl1"))
       .thenReturn(CatalogCreationData("db", "tbl1", Seq(("db", "mv1"), ("db", "mv2"))))
@@ -243,7 +225,7 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
     // Obtain Plan without MV enabled and it should be same as plan obtained when MV enabled.
     var optimized1 : LogicalPlan = null
     withSQLConf((mvConfName, "false")) {
-      val df1 = sql("select * from db.tbl1 where a > 7")
+      val df1 = sql("select * from db.tbl1 where a < 3")
       optimized1 = Optimize.execute(df1.queryExecution.analyzed)
     }
 
@@ -251,7 +233,7 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
     withSQLConf((mvConfName, "true")) {
       spark.sharedState.mvCatalog.init(spark)
 
-      val df2 = sql("select * from db.tbl1 where a > 7")
+      val df2 = sql("select * from db.tbl1 where a < 3")
       optimized2 = Optimize.execute(df2.queryExecution.analyzed)
     }
     comparePlans(optimized1, optimized2)
