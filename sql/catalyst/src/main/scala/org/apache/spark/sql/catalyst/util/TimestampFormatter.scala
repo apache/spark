@@ -82,7 +82,7 @@ class FractionTimestampFormatter(zoneId: ZoneId)
 }
 
 object TimestampFormatter {
-  val defaultPattern: String = "yyyy-MM-dd HH:mm:ss"
+  val defaultPattern: String = "uuuu-MM-dd HH:mm:ss"
   val defaultLocale: Locale = Locale.US
 
   def apply(format: String, zoneId: ZoneId, locale: Locale): TimestampFormatter = {

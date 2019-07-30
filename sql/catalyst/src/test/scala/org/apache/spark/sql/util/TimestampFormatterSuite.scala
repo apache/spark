@@ -123,4 +123,12 @@ class TimestampFormatterSuite extends SparkFunSuite with SQLHelper {
     assert(formatter.format(900000) === "1970-01-01 00:00:00.9")
     assert(formatter.format(1000000) === "1970-01-01 00:00:01")
   }
+
+  test("formatting negative years with default pattern") {
+    val instant = LocalDateTime.of(-99, 1, 1, 0, 0, 0)
+      .atZone(ZoneOffset.UTC)
+      .toInstant
+    val micros = DateTimeUtils.instantToMicros(instant)
+    assert(TimestampFormatter(ZoneOffset.UTC).format(micros) === "-0099-01-01 00:00:00")
+  }
 }
