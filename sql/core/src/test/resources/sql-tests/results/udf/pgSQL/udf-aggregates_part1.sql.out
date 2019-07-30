@@ -3,19 +3,19 @@
 
 
 -- !query 0
-SELECT CAST(avg(udf(four)) AS decimal(10,3)) AS avg_1 FROM onek
+SELECT avg(udf(four)) AS avg_1 FROM onek
 -- !query 0 schema
-struct<avg_1:decimal(10,3)>
+struct<avg_1:double>
 -- !query 0 output
 1.5
 
 
 -- !query 1
-SELECT CAST(udf(avg(a)) AS decimal(10,3)) AS avg_32 FROM aggtest WHERE a < 100
+SELECT udf(avg(a)) AS avg_32 FROM aggtest WHERE a < 100
 -- !query 1 schema
-struct<avg_32:decimal(10,3)>
+struct<avg_32:double>
 -- !query 1 output
-32.667
+32.666666666666664
 
 
 -- !query 2
@@ -27,9 +27,9 @@ struct<avg_107_943:decimal(10,3)>
 
 
 -- !query 3
-SELECT CAST(sum(udf(four)) AS int) AS sum_1500 FROM onek
+SELECT sum(udf(four)) AS sum_1500 FROM onek
 -- !query 3 schema
-struct<sum_1500:int>
+struct<sum_1500:bigint>
 -- !query 3 output
 1500
 
@@ -37,29 +37,29 @@ struct<sum_1500:int>
 -- !query 4
 SELECT udf(sum(a)) AS sum_198 FROM aggtest
 -- !query 4 schema
-struct<sum_198:string>
+struct<sum_198:bigint>
 -- !query 4 output
 198
 
 
 -- !query 5
-SELECT CAST(udf(udf(sum(b))) AS decimal(10,3)) AS avg_431_773 FROM aggtest
+SELECT udf(udf(sum(b))) AS avg_431_773 FROM aggtest
 -- !query 5 schema
-struct<avg_431_773:decimal(10,3)>
+struct<avg_431_773:double>
 -- !query 5 output
-431.773
+431.77260909229517
 
 
 -- !query 6
 SELECT udf(max(four)) AS max_3 FROM onek
 -- !query 6 schema
-struct<max_3:string>
+struct<max_3:int>
 -- !query 6 output
 3
 
 
 -- !query 7
-SELECT max(CAST(udf(a) AS int)) AS max_100 FROM aggtest
+SELECT max(udf(a)) AS max_100 FROM aggtest
 -- !query 7 schema
 struct<max_100:int>
 -- !query 7 output
@@ -67,97 +67,97 @@ struct<max_100:int>
 
 
 -- !query 8
-SELECT CAST(udf(udf(max(aggtest.b))) AS decimal(10,3)) AS max_324_78 FROM aggtest
+SELECT udf(udf(max(aggtest.b))) AS max_324_78 FROM aggtest
 -- !query 8 schema
-struct<max_324_78:decimal(10,3)>
+struct<max_324_78:float>
 -- !query 8 output
 324.78
 
 
 -- !query 9
-SELECT CAST(stddev_pop(udf(b)) AS decimal(10,3)) FROM aggtest
+SELECT stddev_pop(udf(b)) FROM aggtest
 -- !query 9 schema
-struct<CAST(stddev_pop(CAST(udf(b) AS DOUBLE)) AS DECIMAL(10,3)):decimal(10,3)>
+struct<stddev_pop(CAST(CAST(udf(cast(b as string)) AS FLOAT) AS DOUBLE)):double>
 -- !query 9 output
-131.107
+131.10703231895047
 
 
 -- !query 10
-SELECT CAST(udf(stddev_samp(b)) AS decimal(10,3)) FROM aggtest
+SELECT udf(stddev_samp(b)) FROM aggtest
 -- !query 10 schema
-struct<CAST(udf(stddev_samp(cast(b as double))) AS DECIMAL(10,3)):decimal(10,3)>
+struct<CAST(udf(cast(stddev_samp(cast(b as double)) as string)) AS DOUBLE):double>
 -- !query 10 output
-151.389
+151.38936080399804
 
 
 -- !query 11
-SELECT CAST(var_pop(udf(b)) AS decimal(10,3)) FROM aggtest
+SELECT var_pop(udf(b)) FROM aggtest
 -- !query 11 schema
-struct<CAST(var_pop(CAST(udf(b) AS DOUBLE)) AS DECIMAL(10,3)):decimal(10,3)>
+struct<var_pop(CAST(CAST(udf(cast(b as string)) AS FLOAT) AS DOUBLE)):double>
 -- !query 11 output
-17189.054
+17189.053923482323
 
 
 -- !query 12
-SELECT CAST(udf(var_samp(b)) AS decimal(10,3)) FROM aggtest
+SELECT udf(var_samp(b)) FROM aggtest
 -- !query 12 schema
-struct<CAST(udf(var_samp(cast(b as double))) AS DECIMAL(10,3)):decimal(10,3)>
+struct<CAST(udf(cast(var_samp(cast(b as double)) as string)) AS DOUBLE):double>
 -- !query 12 output
-22918.739
+22918.738564643096
 
 
 -- !query 13
-SELECT CAST(udf(stddev_pop(CAST(b AS Decimal(38,0)))) AS decimal(10,3)) FROM aggtest
+SELECT udf(stddev_pop(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query 13 schema
-struct<CAST(udf(stddev_pop(cast(cast(b as decimal(38,0)) as double))) AS DECIMAL(10,3)):decimal(10,3)>
+struct<CAST(udf(cast(stddev_pop(cast(cast(b as decimal(38,0)) as double)) as string)) AS DOUBLE):double>
 -- !query 13 output
-131.181
+131.18117242958306
 
 
 -- !query 14
-SELECT CAST(stddev_samp(CAST(udf(b) AS Decimal(38,0))) AS decimal(10,3)) FROM aggtest
+SELECT stddev_samp(CAST(udf(b) AS Decimal(38,0))) FROM aggtest
 -- !query 14 schema
-struct<CAST(stddev_samp(CAST(CAST(udf(b) AS DECIMAL(38,0)) AS DOUBLE)) AS DECIMAL(10,3)):decimal(10,3)>
+struct<stddev_samp(CAST(CAST(CAST(udf(cast(b as string)) AS FLOAT) AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query 14 output
-151.475
+151.47497042966097
 
 
 -- !query 15
-SELECT CAST(udf(var_pop(CAST(b AS Decimal(38,0)))) AS decimal(10,3)) FROM aggtest
+SELECT udf(var_pop(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query 15 schema
-struct<CAST(udf(var_pop(cast(cast(b as decimal(38,0)) as double))) AS DECIMAL(10,3)):decimal(10,3)>
+struct<CAST(udf(cast(var_pop(cast(cast(b as decimal(38,0)) as double)) as string)) AS DOUBLE):double>
 -- !query 15 output
 17208.5
 
 
 -- !query 16
-SELECT CAST(var_samp(udf(CAST(b AS Decimal(38,0)))) AS decimal(10,3)) FROM aggtest
+SELECT var_samp(udf(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query 16 schema
-struct<CAST(var_samp(CAST(udf(cast(b as decimal(38,0))) AS DOUBLE)) AS DECIMAL(10,3)):decimal(10,3)>
+struct<var_samp(CAST(CAST(udf(cast(cast(b as decimal(38,0)) as string)) AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query 16 output
-22944.667
+22944.666666666668
 
 
 -- !query 17
-SELECT CAST(udf(var_pop(1.0)) AS int), var_samp(udf(2.0))
+SELECT udf(var_pop(1.0)), var_samp(udf(2.0))
 -- !query 17 schema
-struct<CAST(udf(var_pop(cast(1.0 as double))) AS INT):int,var_samp(CAST(udf(2.0) AS DOUBLE)):double>
+struct<CAST(udf(cast(var_pop(cast(1.0 as double)) as string)) AS DOUBLE):double,var_samp(CAST(CAST(udf(cast(2.0 as string)) AS DECIMAL(2,1)) AS DOUBLE)):double>
 -- !query 17 output
-0	NaN
+0.0	NaN
 
 
 -- !query 18
-SELECT CAST(stddev_pop(udf(CAST(3.0 AS Decimal(38,0)))) AS int), stddev_samp(CAST(udf(4.0) AS Decimal(38,0)))
+SELECT stddev_pop(udf(CAST(3.0 AS Decimal(38,0)))), stddev_samp(CAST(udf(4.0) AS Decimal(38,0)))
 -- !query 18 schema
-struct<CAST(stddev_pop(CAST(udf(cast(3.0 as decimal(38,0))) AS DOUBLE)) AS INT):int,stddev_samp(CAST(CAST(udf(4.0) AS DECIMAL(38,0)) AS DOUBLE)):double>
+struct<stddev_pop(CAST(CAST(udf(cast(cast(3.0 as decimal(38,0)) as string)) AS DECIMAL(38,0)) AS DOUBLE)):double,stddev_samp(CAST(CAST(CAST(udf(cast(4.0 as string)) AS DECIMAL(2,1)) AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query 18 output
-0	NaN
+0.0	NaN
 
 
 -- !query 19
 select sum(udf(CAST(null AS int))) from range(1,4)
 -- !query 19 schema
-struct<sum(CAST(udf(cast(null as int)) AS DOUBLE)):double>
+struct<sum(CAST(udf(cast(cast(null as int) as string)) AS INT)):bigint>
 -- !query 19 output
 NULL
 
@@ -165,7 +165,7 @@ NULL
 -- !query 20
 select sum(udf(CAST(null AS long))) from range(1,4)
 -- !query 20 schema
-struct<sum(CAST(udf(cast(null as bigint)) AS DOUBLE)):double>
+struct<sum(CAST(udf(cast(cast(null as bigint) as string)) AS BIGINT)):bigint>
 -- !query 20 output
 NULL
 
@@ -173,7 +173,7 @@ NULL
 -- !query 21
 select sum(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query 21 schema
-struct<sum(CAST(udf(cast(null as decimal(38,0))) AS DOUBLE)):double>
+struct<sum(CAST(udf(cast(cast(null as decimal(38,0)) as string)) AS DECIMAL(38,0))):decimal(38,0)>
 -- !query 21 output
 NULL
 
@@ -181,7 +181,7 @@ NULL
 -- !query 22
 select sum(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query 22 schema
-struct<sum(CAST(udf(cast(null as double)) AS DOUBLE)):double>
+struct<sum(CAST(udf(cast(cast(null as double) as string)) AS DOUBLE)):double>
 -- !query 22 output
 NULL
 
@@ -189,7 +189,7 @@ NULL
 -- !query 23
 select avg(udf(CAST(null AS int))) from range(1,4)
 -- !query 23 schema
-struct<avg(CAST(udf(cast(null as int)) AS DOUBLE)):double>
+struct<avg(CAST(udf(cast(cast(null as int) as string)) AS INT)):double>
 -- !query 23 output
 NULL
 
@@ -197,7 +197,7 @@ NULL
 -- !query 24
 select avg(udf(CAST(null AS long))) from range(1,4)
 -- !query 24 schema
-struct<avg(CAST(udf(cast(null as bigint)) AS DOUBLE)):double>
+struct<avg(CAST(udf(cast(cast(null as bigint) as string)) AS BIGINT)):double>
 -- !query 24 output
 NULL
 
@@ -205,7 +205,7 @@ NULL
 -- !query 25
 select avg(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query 25 schema
-struct<avg(CAST(udf(cast(null as decimal(38,0))) AS DOUBLE)):double>
+struct<avg(CAST(udf(cast(cast(null as decimal(38,0)) as string)) AS DECIMAL(38,0))):decimal(38,4)>
 -- !query 25 output
 NULL
 
@@ -213,7 +213,7 @@ NULL
 -- !query 26
 select avg(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query 26 schema
-struct<avg(CAST(udf(cast(null as double)) AS DOUBLE)):double>
+struct<avg(CAST(udf(cast(cast(null as double) as string)) AS DOUBLE)):double>
 -- !query 26 output
 NULL
 
@@ -221,7 +221,7 @@ NULL
 -- !query 27
 select sum(CAST(udf('NaN') AS DOUBLE)) from range(1,4)
 -- !query 27 schema
-struct<sum(CAST(udf(NaN) AS DOUBLE)):double>
+struct<sum(CAST(CAST(udf(cast(NaN as string)) AS STRING) AS DOUBLE)):double>
 -- !query 27 output
 NaN
 
@@ -229,7 +229,7 @@ NaN
 -- !query 28
 select avg(CAST(udf('NaN') AS DOUBLE)) from range(1,4)
 -- !query 28 schema
-struct<avg(CAST(udf(NaN) AS DOUBLE)):double>
+struct<avg(CAST(CAST(udf(cast(NaN as string)) AS STRING) AS DOUBLE)):double>
 -- !query 28 output
 NaN
 
@@ -238,7 +238,7 @@ NaN
 SELECT avg(CAST(udf(x) AS DOUBLE)), var_pop(CAST(udf(x) AS DOUBLE))
 FROM (VALUES ('Infinity'), ('1')) v(x)
 -- !query 29 schema
-struct<avg(CAST(udf(x) AS DOUBLE)):double,var_pop(CAST(udf(x) AS DOUBLE)):double>
+struct<avg(CAST(CAST(udf(cast(x as string)) AS STRING) AS DOUBLE)):double,var_pop(CAST(CAST(udf(cast(x as string)) AS STRING) AS DOUBLE)):double>
 -- !query 29 output
 Infinity	NaN
 
@@ -247,7 +247,7 @@ Infinity	NaN
 SELECT avg(CAST(udf(x) AS DOUBLE)), var_pop(CAST(udf(x) AS DOUBLE))
 FROM (VALUES ('Infinity'), ('Infinity')) v(x)
 -- !query 30 schema
-struct<avg(CAST(udf(x) AS DOUBLE)):double,var_pop(CAST(udf(x) AS DOUBLE)):double>
+struct<avg(CAST(CAST(udf(cast(x as string)) AS STRING) AS DOUBLE)):double,var_pop(CAST(CAST(udf(cast(x as string)) AS STRING) AS DOUBLE)):double>
 -- !query 30 output
 Infinity	NaN
 
@@ -256,43 +256,43 @@ Infinity	NaN
 SELECT avg(CAST(udf(x) AS DOUBLE)), var_pop(CAST(udf(x) AS DOUBLE))
 FROM (VALUES ('-Infinity'), ('Infinity')) v(x)
 -- !query 31 schema
-struct<avg(CAST(udf(x) AS DOUBLE)):double,var_pop(CAST(udf(x) AS DOUBLE)):double>
+struct<avg(CAST(CAST(udf(cast(x as string)) AS STRING) AS DOUBLE)):double,var_pop(CAST(CAST(udf(cast(x as string)) AS STRING) AS DOUBLE)):double>
 -- !query 31 output
 NaN	NaN
 
 
 -- !query 32
-SELECT CAST(avg(udf(CAST(x AS DOUBLE))) AS int), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
+SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x)
 -- !query 32 schema
-struct<CAST(avg(CAST(udf(cast(x as double)) AS DOUBLE)) AS INT):int,CAST(udf(var_pop(cast(x as double))) AS DECIMAL(10,3)):decimal(10,3)>
+struct<avg(CAST(udf(cast(cast(x as double) as string)) AS DOUBLE)):double,CAST(udf(cast(var_pop(cast(x as double)) as string)) AS DOUBLE):double>
 -- !query 32 output
-100000005	2.5
+1.00000005E8	2.5
 
 
 -- !query 33
-SELECT CAST(avg(udf(x)) AS long), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
+SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (7000000000005), (7000000000007)) v(x)
 -- !query 33 schema
-struct<CAST(avg(CAST(udf(x) AS DOUBLE)) AS BIGINT):bigint,CAST(udf(var_pop(cast(x as double))) AS DECIMAL(10,3)):decimal(10,3)>
+struct<avg(CAST(udf(cast(cast(x as double) as string)) AS DOUBLE)):double,CAST(udf(cast(var_pop(cast(x as double)) as string)) AS DOUBLE):double>
 -- !query 33 output
-7000000000006	1
+7.000000000006E12	1.0
 
 
 -- !query 34
-SELECT CAST(udf(covar_pop(b, udf(a))) AS decimal(10,3)), CAST(covar_samp(udf(b), a) as decimal(10,3)) FROM aggtest
+SELECT udf(covar_pop(b, udf(a))), covar_samp(udf(b), a) FROM aggtest
 -- !query 34 schema
-struct<CAST(udf(covar_pop(cast(b as double), cast(udf(a) as double))) AS DECIMAL(10,3)):decimal(10,3),CAST(covar_samp(CAST(udf(b) AS DOUBLE), CAST(a AS DOUBLE)) AS DECIMAL(10,3)):decimal(10,3)>
+struct<CAST(udf(cast(covar_pop(cast(b as double), cast(cast(udf(cast(a as string)) as int) as double)) as string)) AS DOUBLE):double,covar_samp(CAST(CAST(udf(cast(b as string)) AS FLOAT) AS DOUBLE), CAST(a AS DOUBLE)):double>
 -- !query 34 output
-653.629	871.505
+653.6289553875104	871.5052738500139
 
 
 -- !query 35
-SELECT CAST(corr(b, udf(a)) AS decimal(10,3)) FROM aggtest
+SELECT corr(b, udf(a)) FROM aggtest
 -- !query 35 schema
-struct<CAST(corr(CAST(b AS DOUBLE), CAST(udf(a) AS DOUBLE)) AS DECIMAL(10,3)):decimal(10,3)>
+struct<corr(CAST(b AS DOUBLE), CAST(CAST(udf(cast(a as string)) AS INT) AS DOUBLE)):double>
 -- !query 35 output
-0.14
+0.1396345165178734
 
 
 -- !query 36
@@ -306,16 +306,16 @@ struct<cnt_1000:bigint>
 -- !query 37
 SELECT udf(count(DISTINCT four)) AS cnt_4 FROM onek
 -- !query 37 schema
-struct<cnt_4:string>
+struct<cnt_4:bigint>
 -- !query 37 output
 4
 
 
 -- !query 38
-select ten, udf(count(*)), CAST(sum(udf(four)) AS int) from onek
+select ten, udf(count(*)), sum(udf(four)) from onek
 group by ten order by ten
 -- !query 38 schema
-struct<ten:int,udf(count(1)):string,CAST(sum(CAST(udf(four) AS DOUBLE)) AS INT):int>
+struct<ten:int,CAST(udf(cast(count(1) as string)) AS BIGINT):bigint,sum(CAST(udf(cast(four as string)) AS INT)):bigint>
 -- !query 38 output
 0	100	100
 1	100	200
@@ -333,7 +333,7 @@ struct<ten:int,udf(count(1)):string,CAST(sum(CAST(udf(four) AS DOUBLE)) AS INT):
 select ten, count(udf(four)), udf(sum(DISTINCT four)) from onek
 group by ten order by ten
 -- !query 39 schema
-struct<ten:int,count(udf(four)):bigint,udf(sum(distinct cast(four as bigint))):string>
+struct<ten:int,count(CAST(udf(cast(four as string)) AS INT)):bigint,CAST(udf(cast(sum(distinct cast(four as bigint)) as string)) AS BIGINT):bigint>
 -- !query 39 output
 0	100	2
 1	100	4
@@ -352,7 +352,7 @@ select ten, udf(sum(distinct four)) from onek a
 group by ten
 having exists (select 1 from onek b where udf(sum(distinct a.four)) = b.four)
 -- !query 40 schema
-struct<ten:int,udf(sum(distinct cast(four as bigint))):string>
+struct<ten:int,CAST(udf(cast(sum(distinct cast(four as bigint)) as string)) AS BIGINT):bigint>
 -- !query 40 output
 0	2
 2	2
@@ -372,7 +372,7 @@ struct<>
 org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(sum(DISTINCT CAST((outer() + b.`four`) AS BIGINT)) = CAST(udf(four) AS BIGINT))]
+Expression in where clause: [(sum(DISTINCT CAST((outer() + b.`four`) AS BIGINT)) = CAST(CAST(udf(cast(four as string)) AS INT) AS BIGINT))]
 Invalid expressions: [sum(DISTINCT CAST((outer() + b.`four`) AS BIGINT))];
 
 

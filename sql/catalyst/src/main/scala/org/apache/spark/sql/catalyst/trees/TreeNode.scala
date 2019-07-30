@@ -287,7 +287,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       mapChildren(_.transformDown(rule))
     } else {
       // If the transform function replaces this node with a new one, carry over the tags.
-      afterRule.tags ++= this.tags
+      afterRule.copyTagsFrom(this)
       afterRule.mapChildren(_.transformDown(rule))
     }
   }
@@ -311,7 +311,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
     }
     // If the transform function replaces this node with a new one, carry over the tags.
-    newNode.tags ++= this.tags
+    newNode.copyTagsFrom(this)
     newNode
   }
 
@@ -429,8 +429,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private def makeCopy(
       newArgs: Array[AnyRef],
       allowEmptyArgs: Boolean): BaseType = attachTree(this, "makeCopy") {
+    val allCtors = getClass.getConstructors
+    if (newArgs.isEmpty && allCtors.isEmpty) {
+      // This is a singleton object which doesn't have any constructor. Just return `this` as we
+      // can't copy it.
+      return this
+    }
+
     // Skip no-arg constructors that are just there for kryo.
-    val ctors = getClass.getConstructors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
+    val ctors = allCtors.filter(allowEmptyArgs || _.getParameterTypes.size != 0)
     if (ctors.isEmpty) {
       sys.error(s"No valid constructor for $nodeName")
     }

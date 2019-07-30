@@ -52,4 +52,10 @@ case class SaveIntoDataSourceCommand(
     val redacted = SQLConf.get.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
   }
+
+  // Override `clone` since the default implementation will turn `CaseInsensitiveMap` to a normal
+  // map.
+  override def clone(): LogicalPlan = {
+    SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
+  }
 }

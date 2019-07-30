@@ -693,7 +693,7 @@ class RDD(object):
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
 
-        memory = _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
+        memory = self._memory_limit()
         serializer = self._jrdd_deserializer
 
         def sortPartition(iterator):
@@ -1832,8 +1832,7 @@ class RDD(object):
         # grouped into chunks.
         outputSerializer = self.ctx._unbatched_serializer
 
-        limit = (_parse_memory(self.ctx._conf.get(
-            "spark.python.worker.memory", "512m")) / 2)
+        limit = (self._memory_limit() / 2)
 
         def add_shuffle_key(split, iterator):
 

@@ -279,6 +279,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     testCase match {
       case udfTestCase: UDFTest =>
+        // In Python UDF tests, the number of shuffle partitions matters considerably in
+        // the testing time because it requires to fork and communicate between external
+        // processes.
+        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 4)
         registerTestUDF(udfTestCase.udf, localSparkSession)
       case _ =>
     }
@@ -293,6 +297,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // PostgreSQL enabled cartesian product by default.
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
+        localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
       case _ =>
     }
 

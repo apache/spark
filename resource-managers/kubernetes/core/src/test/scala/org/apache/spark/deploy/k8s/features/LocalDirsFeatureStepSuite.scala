@@ -19,9 +19,8 @@ package org.apache.spark.deploy.k8s.features
 import io.fabric8.kubernetes.api.model.{EnvVarBuilder, VolumeBuilder, VolumeMountBuilder}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.util.SparkConfWithEnv
 
 class LocalDirsFeatureStepSuite extends SparkFunSuite {
@@ -114,6 +113,32 @@ class LocalDirsFeatureStepSuite extends SparkFunSuite {
       new EnvVarBuilder()
         .withName("SPARK_LOCAL_DIRS")
         .withValue(defaultLocalDir)
+        .build())
+  }
+
+  test("local dir on mounted volume") {
+    val volumeConf = KubernetesVolumeSpec(
+      "spark-local-dir-test",
+      "/tmp",
+      "",
+      false,
+      KubernetesHostPathVolumeConf("/hostPath/tmp")
+    )
+    val kubernetesConf = KubernetesTestConf.createDriverConf(volumes = Seq(volumeConf))
+    val mountVolumeStep = new MountVolumesFeatureStep(kubernetesConf)
+    val configuredPod = mountVolumeStep.configurePod(SparkPod.initialPod())
+    val localDirStep = new LocalDirsFeatureStep(kubernetesConf, defaultLocalDir)
+    val newConfiguredPod = localDirStep.configurePod(configuredPod)
+
+    assert(newConfiguredPod.pod.getSpec.getVolumes.size() === 1)
+    assert(newConfiguredPod.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/hostPath/tmp")
+    assert(newConfiguredPod.container.getVolumeMounts.size() === 1)
+    assert(newConfiguredPod.container.getVolumeMounts.get(0).getMountPath === "/tmp")
+    assert(newConfiguredPod.container.getVolumeMounts.get(0).getName === "spark-local-dir-test")
+    assert(newConfiguredPod.container.getEnv.get(0) ===
+      new EnvVarBuilder()
+        .withName("SPARK_LOCAL_DIRS")
+        .withValue("/tmp")
         .build())
   }
 }
