@@ -26,7 +26,7 @@ select length(42);
 -- an unknown literal.  So these work:
 -- [SPARK-28033] String concatenation low priority than other arithmeticBinary
 select string('four: ') || 2+2;
-select string('four: ') || 2+2;
+select 'four: ' || 2+2;
 
 -- but not this:
 -- Spark SQL implicit cast both side to string
@@ -45,7 +45,10 @@ select concat_ws('',10,20,null,30);
 select concat_ws(NULL,10,20,null,30) is null;
 select reverse('abcde');
 -- [SPARK-28036] Built-in udf left/right has inconsistent behavior
--- select i, left('ahoj', i), right('ahoj', i) from range(-5, 5) t(i) order by i;
+-- [SPARK-28479] Parser error when enabling ANSI mode
+set spark.sql.parser.ansi.enabled=false;
+select i, left('ahoj', i), right('ahoj', i) from range(-5, 6) t(i) order by i;
+set spark.sql.parser.ansi.enabled=true;
 -- [SPARK-28037] Add built-in String Functions: quote_literal
 -- select quote_literal('');
 -- select quote_literal('abc''');
