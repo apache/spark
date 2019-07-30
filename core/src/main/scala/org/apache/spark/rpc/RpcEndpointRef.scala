@@ -106,7 +106,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
 }
 
 /**
- * An exception thrown if RpcTimeout modifies a `TimeoutException`.
+ * An exception thrown if the RPC is canceled.
  */
 class RPCCanceledException(message: String) extends Exception(message)
 
@@ -116,9 +116,9 @@ class RPCCanceledException(message: String) extends Exception(message)
  */
 private[spark] class CancelableFuture[T: ClassTag](
     future: Future[T],
-    cancelFunc: String => Unit) {
+    onCancel: String => Unit) {
 
-  def cancel(reason: String): Unit = cancelFunc(reason)
+  def cancel(reason: String): Unit = onCancel(reason)
 
   def toFuture: Future[T] = future
 }

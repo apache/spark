@@ -226,6 +226,10 @@ private[netty] class NettyRpcEnv(
         }
     }
 
+    def onCancel(reason: String): Unit = {
+      onFailure(new RPCCanceledException(reason))
+    }
+
     try {
       if (remoteAddr == address) {
         val p = Promise[Any]()
@@ -260,12 +264,9 @@ private[netty] class NettyRpcEnv(
         onFailure(e)
     }
 
-    def cancelFunc(reason: String): Unit = {
-      onFailure(new RPCCanceledException(reason))
-    }
     new CancelableFuture[T](
       promise.future.mapTo[T].recover(timeout.addMessageIfTimeout)(ThreadUtils.sameThread),
-      cancelFunc)
+      onCancel)
   }
 
   private[netty] def ask[T: ClassTag](message: RequestMessage, timeout: RpcTimeout): Future[T] = {
