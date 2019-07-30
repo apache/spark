@@ -237,8 +237,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case DescribeTable(catalog, ident, _, isExtended) =>
-      DescribeTableExec(catalog, ident, isExtended) :: Nil
+    case DescribeTable(r: DataSourceV2Relation, isExtended) =>
+      DescribeTableExec(r.table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil

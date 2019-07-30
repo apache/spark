@@ -542,11 +542,7 @@ object OverwritePartitionsDynamic {
   }
 }
 
-case class DescribeTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    table: NamedRelation,
-    isExtended: Boolean) extends Command {
+case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(table)
 

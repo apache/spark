@@ -21,9 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
@@ -31,10 +29,7 @@ import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 
-case class DescribeTableExec(
-    catalog: TableCatalog,
-    ident: Identifier,
-    isExtended: Boolean) extends LeafExecNode {
+case class DescribeTableExec(table: Table, isExtended: Boolean) extends LeafExecNode {
 
   override val output: Seq[AttributeReference] =
     DescribeTableSchema.describeTableAttributes()
@@ -43,31 +38,23 @@ case class DescribeTableExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    if (catalog.tableExists(ident)) {
-      val table = catalog.loadTable(ident)
-      addSchema(rows, table)
+    addSchema(rows)
 
-      if (isExtended) {
-        addPartitioning(rows, table)
-        addProperties(rows, table)
-      }
-
-    } else {
-      // Should rarely happen because the Analyzer should catch this, but the table could have been
-      // dropped between the analysis phase and the execution phase.
-      throw new NoSuchTableException(ident)
+    if (isExtended) {
+      addPartitioning(rows)
+      addProperties(rows)
     }
     sparkContext.parallelize(rows)
   }
 
-  private def addSchema(rows: ArrayBuffer[InternalRow], table: Table): Unit = {
+  private def addSchema(rows: ArrayBuffer[InternalRow]): Unit = {
     rows ++= table.schema.map{ column =>
       toCatalystRow(
         column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
     }
   }
 
-  private def addPartitioning(rows: ArrayBuffer[InternalRow], table: Table): Unit = {
+  private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
     rows += toCatalystRow(" Partitioning", "", "")
     rows += toCatalystRow("--------------", "", "")
@@ -80,7 +67,7 @@ case class DescribeTableExec(
     }
   }
 
-  private def addProperties(rows: ArrayBuffer[InternalRow], table: Table): Unit = {
+  private def addProperties(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
     rows += toCatalystRow(" Table Property", " Value", "")
     rows += toCatalystRow("----------------", "-------", "")

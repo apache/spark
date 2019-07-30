@@ -970,14 +970,6 @@ class Analyzer(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
           Seq(TableChange.setProperty("location", newLoc)))
-
-      case describe @ DescribeTableStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), partitionSpec, isExtended) =>
-        DescribeTable(
-          v2Catalog.asTableCatalog,
-          ident,
-          UnresolvedRelation(describe.tableName),
-          isExtended)
     }
   }
   /**
@@ -992,12 +984,8 @@ class Analyzer(
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case describe @ DescribeTableStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), partitionSpec, isExtended) =>
-        DescribeTable(
-          v2Catalog.asTableCatalog,
-          ident,
-          UnresolvedRelation(describe.tableName),
-          isExtended)
+          CatalogObjectIdentifier(Some(v2Catalog), ident), _, isExtended) =>
+        DescribeTable(UnresolvedRelation(describe.tableName), isExtended)
     }
   }
 
