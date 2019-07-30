@@ -533,6 +533,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
+   * Create an [[AlterDatabaseLocationCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER (DATABASE|SCHEMA) database SET LOCATION path;
+   * }}}
+   */
+  override def visitSetDatabaseLocation(
+    ctx: SetDatabaseLocationContext): LogicalPlan = withOrigin(ctx) {
+      AlterDatabaseLocationCommand(
+        ctx.db.getText,
+        visitLocationSpec(ctx.locationSpec())
+      )
+  }
+
+  /**
    * Create a [[DropDatabaseCommand]] command.
    *
    * For example:
