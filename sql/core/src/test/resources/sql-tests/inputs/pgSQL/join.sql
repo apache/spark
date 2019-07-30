@@ -960,7 +960,7 @@ select * from int4_tbl a full join int4_tbl b on false;
 
 -- variant that isn't quite a star-schema case
 
--- Spark SQL do not support information_schema.cardinal_number type
+-- [SPARK-16452] basic INFORMATION_SCHEMA support
 -- select ss1.d1 from
 --   tenk1 as t1
 --   inner join tenk1 as t2
