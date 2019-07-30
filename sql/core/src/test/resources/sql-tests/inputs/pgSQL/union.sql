@@ -6,21 +6,21 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/union.sql
 --
 
-create or replace temporary view INT4_TBL as select * from
-  (values (0), (123456), (-123456), (2147483647), (-2147483647))
-  as v(f1);
-create or replace temporary view INT8_TBL as select * from
-  (values
+CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
+  (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
+  AS v(f1);
+CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
+  (VALUES
     (123, 456),
     (123, 4567890123456789),
     (4567890123456789, 123),
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
-  as v(q1, q2);
-create or replace temporary view FLOAT8_TBL as select * from
-  (values (0.0), (-34.84), (-1004.30),
-    (cast('-1.2345678901234e+200' as double)), (cast('-1.2345678901234e-200' as double)))
-  as v(f1);
+  AS v(q1, q2);
+CREATE OR REPLACE TEMPORARY VIEW FLOAT8_TBL AS SELECT * FROM
+  (VALUES (0.0), (-34.84), (-1004.30),
+    (CAST('-1.2345678901234e+200' AS DOUBLE)), (CAST('-1.2345678901234e-200' AS DOUBLE)))
+  AS v(f1);
 
 -- Simple UNION constructs
 
@@ -89,7 +89,7 @@ SELECT f1 FROM INT4_TBL
   WHERE f1 BETWEEN 0 AND 1000000
 ORDER BY 1;
 
--- Skip these tests because Spark SQL can not fully support char and varchar types.
+-- [SPARK-28298] Fully support char and varchar types
 -- SELECT CAST(f1 AS char(4)) AS three FROM VARCHAR_TBL
 -- UNION
 -- SELECT f1 FROM CHAR_TBL
@@ -212,6 +212,7 @@ SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1)))
 
 (((((select * from int8_tbl)))));
 
+-- [SPARK-28557] Support empty select list
 --
 -- Check behavior with empty select list (allowed since 9.4)
 --
@@ -230,6 +231,7 @@ SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1)))
 -- select from generate_series(1,5) intersect select from generate_series(1,3);
 
 -- [SPARK-28409] SELECT FROM syntax
+-- [SPARK-27767] Built-in function: generate_series
 select * from range(1,5) union select * from range(1,3);
 select * from range(1,6) union all select * from range(1,4);
 select * from range(1,6) intersect select * from range(1,4);
@@ -399,9 +401,8 @@ ORDER BY x;
 -- WHERE x > 3
 -- ORDER BY x;
 
--- [SPARK-28086] Add random() function
 SELECT * FROM
-  (SELECT 1 AS t, int((rand()*3)) AS x
+  (SELECT 1 AS t, int((random()*3)) AS x
    UNION
    SELECT 2 AS t, 4 AS x) ss
 WHERE x > 3

@@ -3,9 +3,9 @@
 
 
 -- !query 0
-create or replace temporary view INT4_TBL as select * from
-  (values (0), (123456), (-123456), (2147483647), (-2147483647))
-  as v(f1)
+CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
+  (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
+  AS v(f1)
 -- !query 0 schema
 struct<>
 -- !query 0 output
@@ -13,14 +13,14 @@ struct<>
 
 
 -- !query 1
-create or replace temporary view INT8_TBL as select * from
-  (values
+CREATE OR REPLACE TEMPORARY VIEW INT8_TBL AS SELECT * FROM
+  (VALUES
     (123, 456),
     (123, 4567890123456789),
     (4567890123456789, 123),
     (4567890123456789, 4567890123456789),
     (4567890123456789, -4567890123456789))
-  as v(q1, q2)
+  AS v(q1, q2)
 -- !query 1 schema
 struct<>
 -- !query 1 output
@@ -28,10 +28,10 @@ struct<>
 
 
 -- !query 2
-create or replace temporary view FLOAT8_TBL as select * from
-  (values (0.0), (-34.84), (-1004.30),
-    (cast('-1.2345678901234e+200' as double)), (cast('-1.2345678901234e-200' as double)))
-  as v(f1)
+CREATE OR REPLACE TEMPORARY VIEW FLOAT8_TBL AS SELECT * FROM
+  (VALUES (0.0), (-34.84), (-1004.30),
+    (CAST('-1.2345678901234e+200' AS DOUBLE)), (CAST('-1.2345678901234e-200' AS DOUBLE)))
+  AS v(f1)
 -- !query 2 schema
 struct<>
 -- !query 2 output
@@ -718,7 +718,7 @@ struct<t:int,x:bigint>
 
 -- !query 68
 SELECT * FROM
-  (SELECT 1 AS t, int((rand()*3)) AS x
+  (SELECT 1 AS t, int((random()*3)) AS x
    UNION
    SELECT 2 AS t, 4 AS x) ss
 WHERE x > 3
