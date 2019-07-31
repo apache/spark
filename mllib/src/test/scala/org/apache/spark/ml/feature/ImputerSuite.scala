@@ -184,7 +184,7 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       (1, 11.0, 11.0, 11.0),
       (2, 3.6, 3.6, 3.6),
       (3, Double.NaN, 5.2, 3.6)
-    )).toDF("id", "value1", "expected_mean_value1", "expected_median_value1")
+    )).toDF("id", "value1", "expected_mean_value1_double", "expected_median_value1_double")
 
     val imputer = new Imputer()
       .setInputCols(Array("value1"))
@@ -198,11 +198,10 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
       val df2 = df.withColumn("value1", col("value1").cast(mType))
         .withColumn("value1", when(col("value1").equalTo(0), null).otherwise(col("value1")))
 
-
       Seq("mean", "median").foreach { strategy =>
         imputer.setStrategy(strategy)
-        val model = imputer.fit(df)
-        val resultDF = model.transform(df)
+        val model = imputer.fit(df2)
+        val resultDF = model.transform(df2)
 
         imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
 
@@ -212,8 +211,9 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
           assert(inputType === outputType, "Output type is not the same as input type.")
 
           // check value
-          val expectedDoubleColumn = s"texpected_${strategy}_$inputCol"
-          resultDF.select(col(expectedDoubleColumn), col(outputCol).cast(DoubleType))
+          val expectedDoubleColumn = s"expected_${strategy}_${inputCol}_double"
+          resultDF.select(col(expectedDoubleColumn).cast(mType).cast(DoubleType),
+            col(outputCol).cast(DoubleType))
             .collect().foreach {
               case Row(exp: Double, out: Double) =>
                 assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
