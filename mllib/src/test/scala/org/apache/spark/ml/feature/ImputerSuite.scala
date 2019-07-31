@@ -53,11 +53,11 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
 
   test("Imputer for Float with missing Value -1.0") {
     val df = spark.createDataFrame( Seq(
-      (0, 1.0F, 1.0, 1.0),
-      (1, 3.0F, 3.0, 3.0),
-      (2, 10.0F, 10.0, 10.0),
-      (3, 10.0F, 10.0, 10.0),
-      (4, -1.0F, 6.0, 3.0)
+      (0, 1.0F, 1.0F, 1.0F),
+      (1, 3.0F, 3.0F, 3.0F),
+      (2, 10.0F, 10.0F, 10.0F),
+      (3, 10.0F, 10.0F, 10.0F),
+      (4, -1.0F, 6.0F, 3.0F)
     )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1)
@@ -238,6 +238,9 @@ object ImputerSuite {
       val resultDF = model.transform(df)
       imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
         resultDF.select(s"expected_${strategy}_$inputCol", outputCol).collect().foreach {
+          case Row(exp: Float, out: Float) =>
+            assert((exp.isNaN && out.isNaN) || (exp == out),
+              s"Imputed values differ. Expected: $exp, actual: $out")
           case Row(exp: Double, out: Double) =>
             assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
               s"Imputed values differ. Expected: $exp, actual: $out")
