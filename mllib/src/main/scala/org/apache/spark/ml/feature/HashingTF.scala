@@ -155,7 +155,7 @@ object HashingTF extends DefaultParamsReadable[HashingTF] {
       // We support loading old `HashingTF` saved by previous Spark versions.
       // Previous `HashingTF` uses `mllib.feature.HashingTF.murmur3Hash`, but new `HashingTF` uses
       // `ml.Feature.FeatureHasher.murmur3Hash`.
-      val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
+      val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
       if (majorVersion < 3) {
         hashingTF.hashFunc = OldHashingTF.murmur3Hash
       }
