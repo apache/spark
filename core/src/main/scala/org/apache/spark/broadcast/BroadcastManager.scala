@@ -19,7 +19,7 @@ package org.apache.spark.broadcast
 
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
 import org.apache.commons.collections.map.{AbstractReferenceMap, ReferenceMap}
 
