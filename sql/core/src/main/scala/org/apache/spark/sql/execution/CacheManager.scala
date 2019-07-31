@@ -185,10 +185,10 @@ class CacheManager extends Logging {
     }
     needToRecache.map { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
-      val plan = spark.sessionState.executePlan(cd.plan).executedPlan
+      val qe = spark.sessionState.executePlan(cd.plan)
       val newCache = InMemoryRelation(
-        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = plan),
-        logicalPlan = cd.plan)
+        cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
+        logicalPlan = qe.optimizedPlan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
