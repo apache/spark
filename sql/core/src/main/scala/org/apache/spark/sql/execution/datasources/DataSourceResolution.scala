@@ -246,8 +246,8 @@ case class DataSourceResolution(
       catalog: TableCatalog,
       identifier: Identifier,
       create: CreateTableStatement): CreateV2Table = {
-    val isCaseSensitive = conf.caseSensitiveAnalysis
 
+    val isCaseSensitive = conf.caseSensitiveAnalysis
     val flattenedSchema = SchemaUtils.explodeNestedFieldNames(create.tableSchema)
     SchemaUtils.checkColumnNameDuplication(
       flattenedSchema,
@@ -257,7 +257,7 @@ case class DataSourceResolution(
       create.partitioning, "in the partition schema", isCaseSensitive)
 
     SchemaUtils.checkTransformDuplication(
-      create.bucketSpec.map(_.asTransform).toSeq, "in bucketing columns", isCaseSensitive)
+      create.bucketSpec.map(_.asTransform).toSeq, "in the bucket definition", isCaseSensitive)
     if (create.tableSchema.isEmpty) {
       if (create.partitioning.nonEmpty) {
         throw new AnalysisException("It is not allowed to specify partition columns when the " +

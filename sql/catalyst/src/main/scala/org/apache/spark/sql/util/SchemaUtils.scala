@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.util
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.expressions.{NamedTransform, Ref, Transform}
+import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.types._
 
@@ -129,11 +131,12 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Checks if input column names have duplicate identifiers. This throws an exception if
-   * the duplication exists.
+   * Checks if input column names have duplicate identifiers even in if they are nested. This
+   * throws an exception if the duplication exists.
    *
    * @param schema the schema to check for duplicates
    * @param checkType contextual information around the check, used in an exception message
+   * @param isCaseSensitive Whether to be case sensitive when comparing column names
    */
   def checkV2ColumnNameDuplication(
       schema: StructType,
@@ -143,27 +146,37 @@ private[spark] object SchemaUtils {
     checkColumnNameDuplication(columnNames, checkType, isCaseSensitive)
   }
 
+  /**
+   * Checks if the partitioning transforms are being duplicated or not. Throws an exception if
+   * duplication exists.
+   *
+   * @param transforms the schema to check for duplicates
+   * @param checkType contextual information around the check, used in an exception message
+   * @param isCaseSensitive Whether to be case sensitive when comparing column names
+   */
   def checkTransformDuplication(
       transforms: Seq[Transform],
       checkType: String,
       isCaseSensitive: Boolean): Unit = {
-    val normalizedTransforms = if (isCaseSensitive) {
-      transforms.map {
-        case NamedTransform(transformName, refs) =>
-          val fieldNameParts = refs.collect { case Ref(parts) => parts}
-          transformName -> fieldNameParts
-      }
-    } else {
-      transforms.map {
-        case NamedTransform(transformName, refs) =>
-          // scalastyle:off caselocale
-          val fieldNameParts = refs.collect { case Ref(parts) => parts.map(_.toLowerCase)}
-          // scalastyle:on caselocale
-          transformName -> fieldNameParts
-      }
+    val extractedTransforms = transforms.map {
+      case b: BucketTransform =>
+        val colNames = b.columns.map(c => UnresolvedAttribute(c.fieldNames()).name)
+        // We need to check that we're not duplicating columns within our bucketing transform
+        checkColumnNameDuplication(colNames, checkType, isCaseSensitive)
+        b.name -> colNames
+      case NamedTransform(transformName, refs) =>
+        val fieldNameParts = refs.collect { case Ref(parts) => UnresolvedAttribute(parts).name }
+        // We could also check that we're not duplicating column names here as well if
+        // fieldNameParts.length > 1, but we're specifically not, because certain transforms can
+        // be defined where this is a legitimate use case.
+        transformName -> fieldNameParts
     }
-    println(normalizedTransforms)
-    println(normalizedTransforms.distinct)
+    val normalizedTransforms = if (isCaseSensitive) {
+      extractedTransforms
+    } else {
+      extractedTransforms.map(t => t._1 -> t._2.map(_.toLowerCase(Locale.getDefault)))
+    }
+
     if (normalizedTransforms.distinct.length != normalizedTransforms.length) {
       val duplicateColumns = normalizedTransforms.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => s"${x._2.mkString(".")}"
