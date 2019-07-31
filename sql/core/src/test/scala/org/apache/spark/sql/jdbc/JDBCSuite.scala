@@ -1575,4 +1575,32 @@ class JDBCSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-28552: Check whether a dialect instance can be applied on the given jdbc url") {
+    var dialects = List[JdbcDialect]()
+
+    def registerDialect(dialect: JdbcDialect) : Unit = {
+      dialects = dialect :: dialects.filterNot(_ == dialect)
+    }
+
+    registerDialect(MySQLDialect)
+    registerDialect(PostgresDialect)
+    registerDialect(DB2Dialect)
+    registerDialect(MsSqlServerDialect)
+    registerDialect(DerbyDialect)
+    registerDialect(OracleDialect)
+    registerDialect(TeradataDialect)
+
+    def get(url: String): JdbcDialect = {
+      val matchingDialects = dialects.filter(_.canHandle(url))
+      matchingDialects.length match {
+        case 0 => NoopDialect
+        case 1 => matchingDialects.head
+        case _ => new AggregatedDialect(matchingDialects)
+      }
+    }
+
+    assert(get("jdbc:mysql://localhost/db") == MySQLDialect)
+    assert(get("jdbc:MySQL://localhost/db") == MySQLDialect)
+  }
 }
