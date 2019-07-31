@@ -108,18 +108,13 @@ class HistoryServer(
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
       // Also, make sure that the redirect url contains the query string present in the request.
-      val attemptPart = if (shouldAppendAttemptId) {
-        if (!req.getRequestURI.endsWith("/")) {
-          "/" + attemptId.get
-        } else {
-          attemptId.get
-        }
+      val redirect = if (shouldAppendAttemptId) {
+        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get
       } else {
-        ""
+        req.getRequestURI
       }
-      val requestURI = req.getRequestURI +
-        attemptPart + Option(req.getQueryString).map("?" + _).getOrElse("")
-      res.sendRedirect(res.encodeRedirectURL(requestURI))
+      val query = Option(req.getQueryString).map("?" + _).getOrElse("")
+      res.sendRedirect(res.encodeRedirectURL(redirect + query))
     }
 
     // SPARK-5983 ensure TRACE is not supported

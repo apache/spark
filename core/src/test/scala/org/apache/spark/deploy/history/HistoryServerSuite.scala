@@ -667,9 +667,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       assert(code === 302, s"Unexpected status code $code for $url")
       attemptId match {
         case None =>
-          assert(location.stripSuffix("/") === lastAttemptUrl.toString, s"Unexpected url")
+          assert(location.stripSuffix("/") === lastAttemptUrl.toString)
         case _ =>
-          assert(location.stripSuffix("/") === url.toString, s"Unexpected url")
+          assert(location.stripSuffix("/") === url.toString)
       }
       HistoryServerSuite.getUrl(new URL(location))
     }
