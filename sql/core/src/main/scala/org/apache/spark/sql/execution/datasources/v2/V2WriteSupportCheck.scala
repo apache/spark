@@ -51,9 +51,6 @@ object V2WriteSupportCheck extends (LogicalPlan => Unit) {
           }
       }
 
-    case DeleteFromTable(relation, _) if !relation.isInstanceOf[DataSourceV2Relation] =>
-      failAnalysis(s"Delete is not supported for table: ${relation.toString}")
-
     case _ => // OK
   }
 }

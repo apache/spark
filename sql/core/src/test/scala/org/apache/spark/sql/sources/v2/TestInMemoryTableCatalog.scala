@@ -255,43 +255,28 @@ class InMemoryTable(
     }
   }
 
-  override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
-    val filtered = data.map {
-      rows =>
-        val newRows = filter(rows.rows, filters)
-        val newBufferedRows = new BufferedRows()
-        newBufferedRows.rows.appendAll(newRows)
-        newBufferedRows
-    }.filter(_.rows.nonEmpty)
-    dataMap.clear()
-    withData(filtered)
+  private def splitAnd(filter: Filter): Seq[Filter] = {
+    filter match {
+      case And(left, right) => splitAnd(left) ++ splitAnd(right)
+      case _ => filter :: Nil
+    }
   }
 
-  def filter(rows: mutable.ArrayBuffer[InternalRow],
-      filters: Array[Filter]): Array[InternalRow] = {
-    if (rows.isEmpty) {
-      rows.toArray
+  override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
+    val deleteKeys = dataMap.keys.filter { partValues =>
+      filters.flatMap(splitAnd).forall {
+        case EqualTo(attr, value) =>
+          partFieldNames.zipWithIndex.find(_._1 == attr) match {
+            case Some((_, partIndex)) =>
+              value == partValues(partIndex)
+            case _ =>
+              throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
+          }
+        case f =>
+          throw new IllegalArgumentException(s"Unsupported filter type: $f")
+      }
     }
-    val filterStr =
-      filters.map {
-        filter => filter.sql
-      }.toList.mkString("AND")
-    val sparkSession = SparkSession.getActiveSession.getOrElse(
-      throw new RuntimeException("Could not get active sparkSession.")
-    )
-    val filterExpr = sparkSession.sessionState.sqlParser.parseExpression(filterStr)
-    val antiFilter = Not(EqualNullSafe(filterExpr, Literal(true, BooleanType)))
-    val rdd = sparkSession.sparkContext.parallelize(rows)
-
-    sparkSession.internalCreateDataFrame(rdd, schema)
-        .filter(Column(antiFilter)).collect().map {
-      row =>
-        val values = row.toSeq.map {
-          case s: String => UTF8String.fromBytes(s.asInstanceOf[String].getBytes("UTF-8"))
-          case other => other
-        }
-        InternalRow.fromSeq(values)
-    }
+    dataMap --= deleteKeys
   }
 }
 

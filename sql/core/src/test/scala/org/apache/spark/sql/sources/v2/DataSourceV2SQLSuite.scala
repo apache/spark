@@ -51,17 +51,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     df.createOrReplaceTempView("source")
     val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
     df2.createOrReplaceTempView("source2")
-    val df3 = spark.createDataFrame(Seq((2L, "b"), (3L, "c"))).toDF("id", "data")
-    df3.createOrReplaceTempView("source3")
   }
 
   after {
     spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
     spark.catalog("testcat_atomic").asInstanceOf[TestInMemoryTableCatalog].clearTables()
     spark.catalog("session").asInstanceOf[TestInMemoryTableCatalog].clearTables()
-    spark.sql("DROP TABLE source")
-    spark.sql("DROP TABLE source2")
-    spark.sql("DROP TABLE source3")
   }
 
   test("CreateTable: use v2 plan because catalog is set") {
@@ -500,23 +495,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     // use the catalog name to force loading with the v2 catalog
     checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
-  }
-
-  test("DeleteFromTable: basic") {
-    spark.sql(
-      "CREATE TABLE IF NOT EXISTS testcat.table_name USING foo AS SELECT id, data FROM source")
-
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
-
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
-
-    val deleted = spark.sql("DELETE FROM testcat.table_name where id=1")
-    val table2 = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
-
-    val rdd2 = spark.sparkContext.parallelize(table2.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd2, table2.schema), spark.table("source3"))
   }
 
   test("DropTable: basic") {
@@ -1881,6 +1859,17 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
           errorMsg
         )
       }
+    }
+  }
+
+  test("DeleteFromTable: basic") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t WHERE id=2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
     }
   }
 

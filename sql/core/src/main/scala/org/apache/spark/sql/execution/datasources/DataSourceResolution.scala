@@ -24,11 +24,12 @@ import scala.collection.mutable
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand}
 import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
@@ -173,6 +174,19 @@ case class DataSourceResolution(
       // only top-level adds are supported using AlterTableAddColumnsCommand
       AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
 
+    case DeleteFromStatement(AsTableIdentifier(table), tableAlias, condition) =>
+      throw new AnalysisException(
+        s"Delete from tables is not supported using the legacy / v1 Spark external catalog" +
+            s" API. Identifier: $table.")
+
+    case delete: DeleteFromStatement =>
+      val CatalogObjectIdentifier(maybeCatalog, identifier) = delete.tableName
+      val catalog = maybeCatalog.orElse(defaultCatalog)
+          .getOrElse(throw new AnalysisException(
+            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
+          .asTableCatalog
+      convertDeleteFrom(catalog.asTableCatalog, identifier, delete)
+
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)
 
@@ -307,6 +321,17 @@ case class DataSourceResolution(
       partitioning,
       properties,
       orCreate = replace.orCreate)
+  }
+
+  private def convertDeleteFrom(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      delete: DeleteFromStatement): DeleteFromTable = {
+    val relation = CatalogV2Util.loadTable(catalog, identifier)
+        .map(DataSourceV2Relation.create).getOrElse(UnresolvedRelation(delete.tableName))
+    DeleteFromTable(
+        delete.tableAlias.map { SubqueryAlias(_, relation) }.getOrElse(relation),
+        delete.condition)
   }
 
   private def convertTableProperties(

@@ -15,25 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.SupportsDelete
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-case class DeleteFromTableExec(
-    table: SupportsDelete,
-    options: CaseInsensitiveStringMap,
-    deleteWhere: Array[Filter]) extends LeafExecNode {
+case class DeleteFromStatement(
+    tableName: Seq[String],
+    tableAlias: Option[String],
+    condition: Expression)
+    extends ParsedStatement {
 
-  override protected def doExecute(): RDD[InternalRow] = {
-    table.deleteWhere(deleteWhere)
-    sparkContext.emptyRDD
-  }
+  override def output: Seq[Attribute] = Seq.empty
 
-  override def output: Seq[Attribute] = Nil
+  override def children: Seq[LogicalPlan] = Seq.empty
 }
