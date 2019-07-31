@@ -33,7 +33,7 @@ case class UserDefinedPythonFunction(
     udfDeterministic: Boolean,
     udfNullable: Boolean = true) {
 
-  def builder(e: Seq[Expression]): PythonUDF = {
+  def builder(e: Seq[Expression]): Expression = {
     PythonUDF(name, func, dataType, e, pythonEvalType, udfDeterministic, udfNullable)
   }
 
