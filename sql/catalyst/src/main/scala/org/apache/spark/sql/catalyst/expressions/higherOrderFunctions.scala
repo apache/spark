@@ -459,7 +459,9 @@ case class ArrayExists(
       > SELECT _FUNC_(array(2, 4, 8), x -> x % 2 == 0);
        true
       > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
-       NULL
+       false
+      > SELECT _FUNC_(array(2, null, 8), x -> x % 2 == 0);
+       null
   """,
   since = "3.0.0")
 case class ArrayForAll(
@@ -481,13 +483,20 @@ case class ArrayForAll(
 
   @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
 
+  /*
+   * true for all non null elements foundNull      result
+   *    F                              F             F
+   *    F                              T             F
+   *    T                              F             T
+   *    T                              T             N
+   */
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
     var forall = true
     var foundNull = false
     var i = 0
-    while (i < arr.numElements && (forall || !foundNull)) {
+    while (i < arr.numElements && forall) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
       val ret = f.eval(inputRow)
       if (ret == null) {
@@ -497,7 +506,7 @@ case class ArrayForAll(
       }
       i += 1
     }
-    if (foundNull) {
+    if (foundNull && forall) {
       null
     } else {
       forall
