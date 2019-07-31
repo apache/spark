@@ -37,6 +37,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
+
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with BeforeAndAfterEach {
   import testImplicits._
 
@@ -588,7 +589,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("create table - partition column names not in table definition") {
     val e = intercept[AnalysisException] {
-      sql(s"CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
+      sql("CREATE TABLE tbl(a int, b string) USING json PARTITIONED BY (c)")
     }
     assert(e.message == "partition column c is not defined in table tbl, " +
       "defined table columns are: a, b")
@@ -596,8 +597,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("create table - bucket column names not in table definition") {
     val e = intercept[AnalysisException] {
-      sql(s"CREATE TABLE tbl(a int, b string) " +
-        s"USING json CLUSTERED BY (c) INTO 4 BUCKETS")
+      sql("CREATE TABLE tbl(a int, b string) USING json CLUSTERED BY (c) INTO 4 BUCKETS")
     }
     assert(e.message == "bucket column c is not defined in table tbl, " +
       "defined table columns are: a, b")
@@ -618,8 +618,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         var errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT) USING parquet " +
-            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
+          sql(s"CREATE TABLE t($c0 INT) USING parquet CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the bucket definition"))
 
@@ -1260,11 +1259,11 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent, isDatasourceTable)
     assert(catalog.listTables("dbx") == Seq(tableIdent))
-    sql(s"DROP TABLE dbx.tab1")
+    sql("DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
-    sql(s"DROP TABLE IF EXISTS dbx.tab1")
+    sql("DROP TABLE IF EXISTS dbx.tab1")
     intercept[AnalysisException] {
-      sql(s"DROP TABLE dbx.tab1")
+      sql("DROP TABLE dbx.tab1")
     }
   }
 
@@ -1299,17 +1298,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
     assert(getProps.isEmpty)
     // set table properties
-    sql(
-      s"ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
+    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
     assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
     // set table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
-    sql(
-      s"ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
+    sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
     assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
+      sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
     }
   }
 
@@ -1329,25 +1326,24 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
     }
     // unset table properties
-    sql(s"ALTER TABLE dbx.tab1 " +
-      s"SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
-    sql(s"ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
+    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
+    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
     assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
     // unset table properties without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
-    sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
+    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
     assert(getProps == Map("c" -> "lan", "x" -> "y"))
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
+      sql("ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
     }
     // property to unset does not exist
     val e = intercept[AnalysisException] {
-      sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
+      sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
     }
     assert(e.getMessage.contains("xyz"))
     // property to unset does not exist, but "IF EXISTS" is specified
-    sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
+    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
     assert(getProps == Map("x" -> "y"))
   }
 
@@ -1379,26 +1375,25 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(storageFormat.locationUri.map(_.getPath) === Some(expected.getPath))
     }
     // set table location
-    sql(s"ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
+    sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
     verifyLocation(new URI("/path/to/your/lovely/heart"))
     // set table partition location
-    sql(s"ALTER TABLE dbx.tab1 " +
-      s"PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
+    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
     verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
-    sql(s"ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
+    sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
     verifyLocation(new URI("/swanky/steak/place"))
     // set table partition location without explicitly specifying database
-    sql(s"ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
+    sql("ALTER TABLE tab1 PARTITION (a='1', b='2') SET LOCATION 'vienna'")
     verifyLocation(new URI("vienna"), Some(partSpec))
     // table to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
+      sql("ALTER TABLE dbx.does_not_exist SET LOCATION '/mister/spark'")
     }
     // partition to alter does not exist
     intercept[AnalysisException] {
-      sql(s"ALTER TABLE dbx.tab1 PARTITION (b='2') SET LOCATION '/mister/spark'")
+      sql("ALTER TABLE dbx.tab1 PARTITION (b='2') SET LOCATION '/mister/spark'")
     }
   }
 
@@ -2527,8 +2522,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   protected def testAddColumn(provider: String): Unit = {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int) USING $provider")
-      sql(s"INSERT INTO t1 VALUES (1)") // add support
-      sql(s"ALTER TABLE t1 ADD COLUMNS (c2 int)")
+      sql("INSERT INTO t1 VALUES (1)")
+      sql("ALTER TABLE t1 ADD COLUMNS (c2 int)")
       checkAnswer(
         spark.table("t1"),
         Seq(Row(1, null))
@@ -2550,7 +2545,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
       sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
-      sql(s"ALTER TABLE t1 ADD COLUMNS (c3 int)")
+      sql("ALTER TABLE t1 ADD COLUMNS (c3 int)")
       checkAnswer(
         spark.table("t1"),
         Seq(Row(1, null, 2))

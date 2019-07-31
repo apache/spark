@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
@@ -478,7 +478,7 @@ object CatalogColumnStat extends Logging {
   val VERSION = 2
 
   private def getTimestampFormatter(): TimestampFormatter = {
-    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
+    TimestampFormatter(format = "uuuu-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
   }
 
   /**
@@ -592,11 +592,10 @@ object CatalogTypes {
  * A placeholder for a table relation, which will be replaced by concrete relation like
  * `LogicalRelation` or `HiveTableRelation`, during analysis.
  */
-case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode with NamedRelation {
+case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
   assert(tableMeta.identifier.database.isDefined)
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
-  override val name: String = tableMeta.identifier.identifier
 }
 
 /**
