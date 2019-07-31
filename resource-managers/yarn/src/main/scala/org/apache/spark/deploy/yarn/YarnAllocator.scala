@@ -132,8 +132,7 @@ private[yarn] class YarnAllocator(
   // Executor memory in MiB.
   protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
   // Additional memory overhead.
-  protected val memoryOverhead: Int = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN)).toInt
+  protected val memoryOverhead: Int = YarnSparkHadoopUtil.executorMemoryOverheadRequested(sparkConf)
   protected val pysparkWorkerMemory: Int = if (sparkConf.get(IS_PYTHON_APP)) {
     sparkConf.get(PYSPARK_EXECUTOR_MEMORY).map(_.toInt).getOrElse(0)
   } else {

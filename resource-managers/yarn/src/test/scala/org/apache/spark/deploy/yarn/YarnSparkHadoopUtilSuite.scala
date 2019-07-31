@@ -24,10 +24,12 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil.{MEMORY_OVERHEAD_FACTOR, MEMORY_OVERHEAD_MIN}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD, MEMORY_OFFHEAP_ENABLED, MEMORY_OFFHEAP_SIZE}
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -139,5 +141,70 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
         fail()
     }
 
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is false, " +
+    "use MEMORY_OVERHEAD_MIN scene") {
+    val executorMemoryOverhead =
+      YarnSparkHadoopUtil.executorMemoryOverheadRequested(new SparkConf())
+    assert(executorMemoryOverhead == MEMORY_OVERHEAD_MIN)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is false, " +
+    "use MEMORY_OVERHEAD_FACTOR * executorMemory scene") {
+    val executorMemory: Long = 5000
+    val sparkConf = new SparkConf().set(EXECUTOR_MEMORY, executorMemory)
+    val executorMemoryOverhead =
+      YarnSparkHadoopUtil.executorMemoryOverheadRequested(sparkConf)
+    assert(executorMemoryOverhead == executorMemory * MEMORY_OVERHEAD_FACTOR)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is false, " +
+    "use EXECUTOR_MEMORY_OVERHEAD config value scene") {
+    val memoryOverhead: Long = 100
+    val sparkConf = new SparkConf().set(EXECUTOR_MEMORY_OVERHEAD, memoryOverhead)
+    val executorMemoryOverhead =
+      YarnSparkHadoopUtil.executorMemoryOverheadRequested(sparkConf)
+    assert(executorMemoryOverhead == memoryOverhead)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
+    "use EXECUTOR_MEMORY_OVERHEAD config value scene") {
+    val memoryOverhead: Long = 100
+    val offHeapMemory: Long = 50 * 1024 * 1024
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_MEMORY_OVERHEAD, memoryOverhead)
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, offHeapMemory)
+    val executorMemoryOverhead =
+      YarnSparkHadoopUtil.executorMemoryOverheadRequested(sparkConf)
+    assert(executorMemoryOverhead == memoryOverhead)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
+    "use MEMORY_OFFHEAP_SIZE config value scene") {
+    val memoryOverhead: Long = 50
+    val offHeapMemoryInMB = 100
+    val offHeapMemory: Long = offHeapMemoryInMB * 1024 * 1024
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_MEMORY_OVERHEAD, memoryOverhead)
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, offHeapMemory)
+    val executorMemoryOverhead =
+      YarnSparkHadoopUtil.executorMemoryOverheadRequested(sparkConf)
+    assert(executorMemoryOverhead == offHeapMemoryInMB)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
+    "but MEMORY_OFFHEAP_SIZE not config scene") {
+    val memoryOverhead: Long = 50
+    val sparkConf = new SparkConf()
+      .set(EXECUTOR_MEMORY_OVERHEAD, memoryOverhead)
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+    val expected = "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true"
+    val message = intercept[IllegalArgumentException] {
+      YarnSparkHadoopUtil.executorMemoryOverheadRequested(sparkConf)
+    }.getMessage
+    assert(message.contains(expected))
   }
 }
