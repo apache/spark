@@ -285,7 +285,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
     val expected = Project(Seq(a, b), Sort(
-      Seq(SortOrder('aggOrder.byte.withNullability(false), Ascending)), true,
+      Seq(SortOrder('aggOrder.byte.withNullability(true), Ascending)), true,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, grouping_a.as("aggOrder")),
         Expand(
