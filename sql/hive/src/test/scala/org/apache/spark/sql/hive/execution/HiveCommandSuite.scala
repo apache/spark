@@ -58,7 +58,11 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
     sql("CREATE TABLE parquet_tab3(col1 int, `col 2` int)")
-    sql("CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)")
+    sql(
+      """
+        |CREATE TABLE parquet_tab4 (price int, qty int) partitioned by (year int, month int)
+        |STORED AS PARQUET
+      """.stripMargin)
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 1) SELECT 1, 1")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2015, month = 2) SELECT 2, 2")
     sql("INSERT INTO parquet_tab4 PARTITION(year = 2016, month = 2) SELECT 3, 3")

@@ -196,9 +196,7 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
-        // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
-          if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
-            !r.isPartitioned && isConvertible(r) =>
+          if query.resolved && DDLUtils.isHiveTable(r.tableMeta) && isConvertible(r) =>
         InsertIntoTable(metastoreCatalog.convert(r), partition,
           query, overwrite, ifPartitionNotExists)
 
