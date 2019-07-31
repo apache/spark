@@ -405,7 +405,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(ctx2.inlinedMutableStates.size == 1)
   }
 
-  test("SPARK-24598: overflow on BigInt returns wrong result") {
+  test("SPARK-24598: overflow on long returns wrong result") {
     val maxLongLiteral = Literal(Long.MaxValue)
     val minLongLiteral = Literal(Long.MinValue)
     val e1 = Add(maxLongLiteral, Literal(1L))
@@ -426,6 +426,78 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(e4, 0L)
       checkEvaluation(e5, 1L)
       checkEvaluation(e6, 0L)
+    }
+  }
+
+  test("SPARK-24598: overflow on integer returns wrong result") {
+    val maxIntLiteral = Literal(Int.MaxValue)
+    val minIntLiteral = Literal(Int.MinValue)
+    val e1 = Add(maxIntLiteral, Literal(1))
+    val e2 = Subtract(maxIntLiteral, Literal(-1))
+    val e3 = Multiply(maxIntLiteral, Literal(2))
+    val e4 = Add(minIntLiteral, minIntLiteral)
+    val e5 = Subtract(minIntLiteral, maxIntLiteral)
+    val e6 = Multiply(minIntLiteral, minIntLiteral)
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+      checkEvaluation(e1, Int.MinValue)
+      checkEvaluation(e2, Int.MinValue)
+      checkEvaluation(e3, -2)
+      checkEvaluation(e4, 0)
+      checkEvaluation(e5, 1)
+      checkEvaluation(e6, 0)
+    }
+  }
+
+  test("SPARK-24598: overflow on short returns wrong result") {
+    val maxShortLiteral = Literal(Short.MaxValue)
+    val minShortLiteral = Literal(Short.MinValue)
+    val e1 = Add(maxShortLiteral, Literal(1.toShort))
+    val e2 = Subtract(maxShortLiteral, Literal((-1).toShort))
+    val e3 = Multiply(maxShortLiteral, Literal(2.toShort))
+    val e4 = Add(minShortLiteral, minShortLiteral)
+    val e5 = Subtract(minShortLiteral, maxShortLiteral)
+    val e6 = Multiply(minShortLiteral, minShortLiteral)
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+      checkEvaluation(e1, Short.MinValue)
+      checkEvaluation(e2, Short.MinValue)
+      checkEvaluation(e3, (-2).toShort)
+      checkEvaluation(e4, 0.toShort)
+      checkEvaluation(e5, 1.toShort)
+      checkEvaluation(e6, 0.toShort)
+    }
+  }
+
+  test("SPARK-24598: overflow on byte returns wrong result") {
+    val maxByteLiteral = Literal(Byte.MaxValue)
+    val minByteLiteral = Literal(Byte.MinValue)
+    val e1 = Add(maxByteLiteral, Literal(1.toByte))
+    val e2 = Subtract(maxByteLiteral, Literal((-1).toByte))
+    val e3 = Multiply(maxByteLiteral, Literal(2.toByte))
+    val e4 = Add(minByteLiteral, minByteLiteral)
+    val e5 = Subtract(minByteLiteral, maxByteLiteral)
+    val e6 = Multiply(minByteLiteral, minByteLiteral)
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true") {
+      Seq(e1, e2, e3, e4, e5, e6).foreach { e =>
+        checkExceptionInExpression[ArithmeticException](e, "overflow")
+      }
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false") {
+      checkEvaluation(e1, Byte.MinValue)
+      checkEvaluation(e2, Byte.MinValue)
+      checkEvaluation(e3, (-2).toByte)
+      checkEvaluation(e4, 0.toByte)
+      checkEvaluation(e5, 1.toByte)
+      checkEvaluation(e6, 0.toByte)
     }
   }
 }
