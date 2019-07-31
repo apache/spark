@@ -185,7 +185,7 @@ object YarnSparkHadoopUtil extends Logging {
   }
 
   /**
-   * If MEMORY_OFFHEAP_ENABLED is true, we should ensure executorOverheadMemory requested valus
+   * If MEMORY_OFFHEAP_ENABLED is true, we should ensure executorOverheadMemory requested value
    * is not less than MEMORY_OFFHEAP_SIZE, otherwise the memory resource requested for executor
    * may be not enough.
    */
