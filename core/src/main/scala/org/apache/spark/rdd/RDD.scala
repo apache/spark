@@ -161,6 +161,15 @@ abstract class RDD[T: ClassTag](
     this
   }
 
+  /** Extra information about the RDD */
+  @transient var extraInfo: Option[String] = None
+
+  /** Assign extraInfo to this RDD */
+  def setExtraInfo(_extraInfo: String): this.type = {
+    extraInfo = Option(_extraInfo)
+    this
+  }
+
   /**
    * Mark this RDD for persisting using the specified level.
    *

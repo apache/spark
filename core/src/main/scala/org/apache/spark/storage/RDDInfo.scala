@@ -31,7 +31,8 @@ class RDDInfo(
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
     val callSite: String = "",
-    val scope: Option[RDDOperationScope] = None)
+    val scope: Option[RDDOperationScope] = None,
+    val extraInfo: Option[String] = None)
   extends Ordered[RDDInfo] {
 
   var numCachedPartitions = 0
@@ -68,6 +69,6 @@ private[spark] object RDDInfo {
       rdd.creationSite.shortForm
     }
     new RDDInfo(rdd.id, rddName, rdd.partitions.length,
-      rdd.getStorageLevel, parentIds, callSite, rdd.scope)
+      rdd.getStorageLevel, parentIds, callSite, rdd.scope, rdd.extraInfo)
   }
 }

@@ -42,7 +42,8 @@ private[spark] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[spark] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
+private[spark] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String,
+                                           extraInfo: Option[String] = None)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -143,7 +144,7 @@ private[spark] object RDDOperationGraph extends Logging {
 
       // TODO: differentiate between the intention to cache an RDD and whether it's actually cached
       val node = nodes.getOrElseUpdate(rdd.id, RDDOperationNode(
-        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.callSite))
+        rdd.id, rdd.name, rdd.storageLevel != StorageLevel.NONE, rdd.callSite, rdd.extraInfo))
       if (rdd.scope.isEmpty) {
         // This RDD has no encompassing scope, so we put it directly in the root cluster
         // This should happen only if an RDD is instantiated outside of a public RDD API
@@ -227,7 +228,10 @@ private[spark] object RDDOperationGraph extends Logging {
     } else {
       ""
     }
-    val label = s"${node.name} [${node.id}]$isCached\n${node.callsite}"
+    val extraInfo = node.extraInfo.getOrElse("")
+
+    val label = s"${node.name} [${node.id}]$isCached\n${node.callsite}\n${extraInfo}"
+
     s"""${node.id} [label="${StringEscapeUtils.escapeJava(label)}"]"""
   }
 

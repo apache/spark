@@ -496,7 +496,7 @@ function connectRDDs(fromRDDId, toRDDId, edgesContainer, svgContainer) {
  * Replace `/n` with `<br/>`
  */
 function replaceLineBreak(str) {
-    return str.replace("\\n", "<br/>");
+    return str.replace(/\\n/g, "<br/>");
 }
 
 /* (Job page only) Helper function to add tooltips for RDDs. */
