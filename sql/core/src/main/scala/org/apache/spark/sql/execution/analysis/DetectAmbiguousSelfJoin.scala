@@ -146,7 +146,7 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
           "to figure out which one. Please alias the Datasets with different names via " +
           "`Dataset.as` before joining them, and specify the column using qualified name, e.g. " +
           """`df.as("a").join(df.as("b"), $"a.id" > $"b.id")`. You can also set """ +
-          s"${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN} to false to disable this check.")
+          s"${SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key} to false to disable this check.")
       }
     }
 

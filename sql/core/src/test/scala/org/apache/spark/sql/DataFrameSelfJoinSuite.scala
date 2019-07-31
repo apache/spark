@@ -127,6 +127,17 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-28344: fail ambiguous self join - Dataset.col with nested field") {
+    val df1 = spark.read.json(Seq("""{"a": {"b": 1, "c": 1}}""").toDS())
+    val df2 = df1.filter($"a.b" > 0)
+
+    withSQLConf(
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN.key -> "true",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      assertAmbiguousSelfJoin(df1.join(df2, df1("a.b") > df2("a.c")))
+    }
+  }
+
   test("SPARK-28344: fail ambiguous self join - column ref in Project") {
     val df1 = spark.range(3)
     val df2 = df1.filter($"id" > 0)

@@ -1332,16 +1332,18 @@ class Dataset[T] private[sql](
   // Attach the dataset id and column position to the column reference, so that we can detect
   // ambiguous self-join correctly.See the rule `DetectAmbbiguousSelfJoin`.
   // This must be called before we return a `Column` that contains `AttributeReference`.
-  private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = expr match {
-    case a: AttributeReference
+  private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
+    val newExpr = expr transform {
+      case a: AttributeReference
         if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN) =>
-      val metadata = new MetadataBuilder()
-        .withMetadata(a.metadata)
-        .putLong(Dataset.ID_PREFIX, id)
-        .putLong(Dataset.COL_POS_PREFIX, logicalPlan.output.indexWhere(a.semanticEquals))
-        .build()
-      a.withMetadata(metadata)
-    case _ => expr
+        val metadata = new MetadataBuilder()
+          .withMetadata(a.metadata)
+          .putLong(Dataset.ID_PREFIX, id)
+          .putLong(Dataset.COL_POS_PREFIX, logicalPlan.output.indexWhere(a.semanticEquals))
+          .build()
+        a.withMetadata(metadata)
+    }
+    newExpr.asInstanceOf[NamedExpression]
   }
 
   /**
