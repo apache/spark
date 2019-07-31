@@ -391,7 +391,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   }
 
   private def getLastCommittedVersion(): Long = {
-    val f = new File(rocksDbPath, "commit")
+    val f = new File(rocksDbPath, RocksDbInstance.COMMIT_FILE_NAME)
     if (f.exists()) {
       try {
         val fileContents = scala.io.Source.fromFile(f.getAbsolutePath).getLines.mkString
