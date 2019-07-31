@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
  * 3. When all necessary tasks completed successfully, the driver calls commitJob. If the job
  *    failed to execute (e.g. too many failed tasks), the job should call abortJob.
  */
-abstract class FileCommitProtocol {
+abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
   /**

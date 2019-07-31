@@ -239,9 +239,7 @@ spark.sql.sources.commitProtocolClass org.apache.spark.internal.io.cloud.PathOut
 spark.sql.parquet.output.committer.class org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter
 ```
 
-Normal dataframe write commands will then use this committer for any format
-which does not its own custom committer. Output formats which are known
-to work are orc, parquet, csv and avro.
+It has been tested with the most common formats supported by Spark.
 
 ```python
 mydataframe.write.format("parquet").save("s3a://bucket/destination")
