@@ -358,7 +358,11 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       > SELECT _FUNC_(0);
        1.0
   """)
-case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "EXP")
+case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "EXP") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.exp($c)")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns exp(`expr`) - 1.",
@@ -367,7 +371,11 @@ case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "E
       > SELECT _FUNC_(0);
        0.0
   """)
-case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1, "EXPM1")
+case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1, "EXPM1") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.expm1($c)")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
