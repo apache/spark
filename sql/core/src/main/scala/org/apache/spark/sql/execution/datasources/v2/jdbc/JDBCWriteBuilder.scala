@@ -75,17 +75,19 @@ class JDBCWriteBuilder(options: JdbcOptionsInWrite,
     this
   }
 
-  def processOverwrite() : Boolean = {
-    /* Overwrite table logic
-        1. Check if table exists. If not create it here. Should create be done??
-        2. If table exists and isTruncate, then just truncate existing table
-        3. If table exists and !isTruncate, then recreate table with new schema
-        Post table creation, send requests to executors to insert data.
-
-        check filters.
-    */
+  def processOverwrite() : Unit = {
     logInfo("***dsv2-flows*** processOverwrite called")
-    false
+    isTruncate match {
+      case true =>
+        logInfo("***dsv2-flows*** truncating Table")
+        JdbcUtils.truncateTable(conn, options)
+
+      case false =>
+        logInfo("***dsv2-flows*** Dropping Table")
+        // JdbcUtils.dropTable(conn, options.table, options)
+        logInfo("***dsv2-flows*** Recreating table with passed schema")
+        Utils.createTable(conn, fwPassedSchema)
+    }
   }
 
   def processAppend() : Unit = {

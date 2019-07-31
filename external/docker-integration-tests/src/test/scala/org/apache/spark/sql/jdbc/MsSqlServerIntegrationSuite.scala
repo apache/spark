@@ -132,41 +132,124 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("JDBCV2 read test") {
-    // Read table with JDBCV2
-    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","dsv2testTbl").load()
+    // Read table with JDBC and JDBCV2. Check that same row counts are returned.
+    val df1 = spark.read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable","dsv2testTbl")
+      .load()
     val numberOfRows = df1.count
     df1.show(10)
-    val df2 = spark.read.format("jdbcv2").option("url",jdbcUrl).option("dbtable","dsv2testTbl").load()
+
+    val df2 = spark.read
+      .format("jdbcv2")
+      .option("url",jdbcUrl)
+      .option("dbtable","dsv2testTbl")
+      .load()
     df2.show(10)
+    // Try column pruning. This fails with error.
+    //df2.select("i").show(10)
     assert(df2.count == numberOfRows)
   }
 
   test("JDBCV2 write append test") {
-    // Read 1 row using JDBC. Write(append) this row using jdbcv2.
-    val df1 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").load()
+    // Read 1 row using JDBC. Write(append) this row using JDBCV2.
+    logInfo(s"***dsv2-flow-test*** Overwrite(append) can append to table with same schema")
+    val df1 = spark.read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable", "dsv2testTbl")
+      .load()
     df1.show(10)
     assert(df1.count == 1)
-    df1.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").save()
-    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").load()
+
+    df1.write.format("jdbcv2")
+      .mode("append")
+      .option("url",jdbcUrl)
+      .option("dbtable", "dsv2testTbl")
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable", "dsv2testTbl")
+      .load()
     df2.show(10)
     assert(df2.count == 2)
 
-    // Create a df with diffirent schema and append this to existing table. No convinced why this
-    // is passing. writing a dataframe with diffirent schema should fail.
+    // Create a df with diffirent schema and append existing table with a diffirent schema. Should fail.
+    // TODO : Writing a dataframe with diffirent schema should fail. Why is this passing.
+    logInfo(s"***dsv2-flow-test*** Overwrite(append) fails writing to table with diffirent schema")
     val df_new = create_test_df()
-    df_new.write.format("jdbcv2").mode("append").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").save()
-    val df2_new = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable", "dsv2testTbl").load()
+    df_new.write
+      .format("jdbcv2")
+      .mode("append")
+      .option("url", jdbcUrl)
+      .option("dbtable", "dsv2testTbl")
+      .save()
+    val df2_new = spark.read
+      .format("jdbc")
+      .option("url", jdbcUrl)
+      .option("dbtable", "dsv2testTbl")
+      .load()
     df2_new.show(10)
     assert(df2_new.count == 4)
   }
 
+  test("JDBCV2 write overwrite(truncate) test") {
+    // Overwrite with truncate - Check orignal table schema is retined.
+    val df_ori_before = spark
+      .read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable","dsv2testTbl")
+      .load()
+    df_ori_before.show()
+    val cl_types_orignal = df_ori_before.schema.fields.map(f=>f.dataType)
+    val t_before = cl_types_orignal.mkString(":")
+    logInfo(s"***dsv2-flow-test*** Column type before was $t_before")
+
+    val df_new = create_test_df()
+    df_new.write
+      .format("jdbcv2")
+      .mode("overwrite")
+      .option("url",jdbcUrl)
+      .option("truncate","true")
+      .option("dbtable","dsv2testTbl")
+      .save()
+
+    val df_ori_after = spark
+      .read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable","dsv2testTbl")
+      .load()
+    df_ori_after.show()
+    val cl_types_after = df_ori_after.schema.fields.map(f=>f.dataType)
+    val t_after = cl_types_after.mkString(":")
+    logInfo(s"***dsv2-flow-test*** Column type after is $t_after")
+
+    assert(df_ori_after.count == df_ori_before.count)
+    assert(cl_types_after.deep == cl_types_orignal.deep)
+  }
+
+  import org.apache.spark.sql.functions._
   test("JDBCV2 write overwrite test") {
-    // Overwrite a existing table with a new schema and values.
+    // Overwrite(w/o truncate) a existing table with a new schema and values.
     val df1 = create_test_df()
-    // Overwrite test. Overwrite mode create a new table if it does not exist
-    df1.write.format("jdbcv2").mode("overwrite").option("url",jdbcUrl).option("dbtable","dsv2testTbl").save()
-    val df2 = spark.read.format("jdbc").option("url",jdbcUrl).option("dbtable","dsv2testTbl").load()
+    df1.filter(col("j") > lit(1)).write
+      .format("jdbcv2")
+      .mode("overwrite")
+      .option("url",jdbcUrl)
+      .option("truncate","false")
+      .option("dbtable","dsv2testTbl")
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable","dsv2testTbl")
+      .load()
     df2.show()
+    assert(df1.count -1 == df2.count)
   }
 
   test("Basic test") {

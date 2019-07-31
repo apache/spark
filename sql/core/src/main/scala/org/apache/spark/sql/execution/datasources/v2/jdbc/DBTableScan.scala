@@ -32,7 +32,7 @@ class DBTableScan(options: JDBCOptions,
 
   def readSchema: StructType = {
     logInfo("***dsv2-flows*** readSchema called")
-    table_schema.getOrElse(StructType(Nil))
+    prunedCols
   }
 
   override def toBatch() : Batch = {

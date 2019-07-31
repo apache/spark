@@ -51,8 +51,8 @@ case class DBTable (sparkSession: SparkSession,
      *  1. Will this be called for every 'append' request to get schema from DBTable.
      *  If so, schema check in append should not be required.
      *  2. This is called in overwrite as well. What if the table does not exist. A empty
-     *     schema would be returned resulting in an exception. Should Overwrite semantics
-     *     not create a table.
+     *     schema would be returned resulting in an exception. Overwrite semantics
+     *     do not create a table. So returning a Nil would result in an error.
      */
     logInfo("***dsv2-flows*** schema called")
     val schemaInDB = JdbcUtils.getSchemaOption(conn, userOptions)
@@ -75,5 +75,5 @@ case class DBTable (sparkSession: SparkSession,
 }
 
 object DBTable {
-  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE, OVERWRITE_BY_FILTER).asJava
+  private val CAPABILITIES = Set(BATCH_READ, BATCH_WRITE, TRUNCATE).asJava
 }

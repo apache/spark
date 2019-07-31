@@ -44,9 +44,10 @@ object Utils extends Logging{
     }
   }
 
-  def createTable(structType: StructType): Unit = {
+  def createTable(conn : Connection, structType: StructType): Unit = {
     /* Create table per passed schema. Raise exception on any failure.
      */
+    logInfo(s"***dsv2-flows*** Create Table is not implemented as yet!!" )
   }
 
   def strictSchemaCheck(schemaInSpark: StructType, dbTableSchema: StructType) : Boolean = {
