@@ -34,6 +34,11 @@ class ImageFileFormatTest(SparkSessionTestCase):
             .load(data_path)
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
+        # compare `schema.simpleString()` instead of directly compare schema,
+        # because the df loaded from datasouce may change schema column nullability.
+        self.assertEqual(df.schema.simpleString(), ImageSchema.imageSchema.simpleString())
+        self.assertEqual(df.schema["image"].dataType.simpleString(),
+                         ImageSchema.columnSchema.simpleString())
         array = ImageSchema.toNDArray(first_row)
         self.assertEqual(len(array), first_row[1])
         self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
