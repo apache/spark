@@ -456,6 +456,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(10, IntegerType)), "Spark SQL_")
     checkEvaluation(Overlay(Literal("Spark SQL"), Literal("_"),
       Literal.create(10, IntegerType), Literal.create(4, IntegerType)), "Spark SQL_")
+    // position is zero
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(0, IntegerType)), "__park SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(0, IntegerType), Literal.create(4, IntegerType)), "__rk SQL")
+    // position is negative
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(-10, IntegerType)), "__park SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("__"),
+      Literal.create(-10, IntegerType), Literal.create(4, IntegerType)), "__rk SQL")
   }
 
   test("overlay for byte array") {
@@ -484,6 +494,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(10, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
     checkEvaluation(Overlay(input, Literal(Array[Byte](-1)), Literal.create(10, IntegerType),
       Literal.create(4, IntegerType)), Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9, -1))
+    // position is zero
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1, -1)),
+      Literal.create(0, IntegerType)), Array[Byte](-1, -1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(0, IntegerType),
+      Literal.create(4, IntegerType)), Array[Byte](-1, -1, 4, 5, 6, 7, 8, 9))
+    // position is negative
+    checkEvaluation(new Overlay(input, Literal(Array[Byte](-1, -1)),
+      Literal.create(-10, IntegerType)), Array[Byte](-1, -1, 2, 3, 4, 5, 6, 7, 8, 9))
+    checkEvaluation(Overlay(input, Literal(Array[Byte](-1, -1)), Literal.create(-10, IntegerType),
+      Literal.create(4, IntegerType)), Array[Byte](-1, -1, 4, 5, 6, 7, 8, 9))
   }
 
   test("Check Overlay.checkInputDataTypes results") {
