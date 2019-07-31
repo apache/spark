@@ -313,14 +313,13 @@ SELECT * FROM v_window;
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude current row) as sum_rows FROM range(1, 10) i;
 
-SELECT * FROM v_window;
+-- SELECT * FROM v_window;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
 -- CREATE OR REPLACE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude group) as sum_rows FROM range(1, 10) i;
-
-SELECT * FROM v_window;
+-- SELECT * FROM v_window;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
 -- CREATE OR REPLACE TEMP VIEW v_window AS
@@ -331,8 +330,7 @@ SELECT * FROM v_window;
 -- CREATE OR REPLACE TEMP VIEW v_window AS
 -- SELECT i, sum(i) over (order by i rows between 1 preceding and 1 following
 --   exclude no others) as sum_rows FROM generate_series(1, 10) i;
-
-SELECT * FROM v_window;
+-- SELECT * FROM v_window;
 
 CREATE OR REPLACE TEMP VIEW v_window AS
 SELECT i.id, sum(i.id) over (order by i.id range between 1 preceding and 1 following) as sum_rows FROM range(1, 10) i;
@@ -938,9 +936,7 @@ SELECT rank() OVER (ORDER BY length('abc'));
 -- SELECT rank() OVER (ORDER BY rank() OVER (ORDER BY random()));
 
 -- some other errors
-select * from
-(select row_number() over (order by salary) rn from empsalary) ss
-where rn < 10;
+SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10;
 
 -- [SPARK-28506] not handling usage of group function and window function at some conditions
 -- SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
@@ -948,7 +944,12 @@ where rn < 10;
 -- [SPARK-28506] not handling usage of group function and window function at some conditions
 -- SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
 
--- SELECT * FROM rank() OVER (ORDER BY random());
+-- Since random() result may change due to seed issues, the behavior is actually unstable
+SELECT * FROM rank() OVER (ORDER BY random());
+
+SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
+
+SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random());
 
 -- Output not being truncated
 -- SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
@@ -960,7 +961,7 @@ where rn < 10;
 -- SELECT count() OVER () FROM tenk1;
 
 -- [SPARK-28065] ntile only accepting positive (>0) values
--- SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
+SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- SELECT nth_value(four, 0) OVER (ORDER BY ten), ten, four FROM tenk1;
