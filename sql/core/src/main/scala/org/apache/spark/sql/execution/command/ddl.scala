@@ -141,7 +141,7 @@ case class AlterDatabasePropertiesCommand(
  *    ALTER (DATABASE|SCHEMA) database_name SET LOCATION path
  * }}}
  */
-case class AlterDatabaseLocationCommand(databaseName: String, location: String)
+case class AlterDatabaseSetLocationCommand(databaseName: String, location: String)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

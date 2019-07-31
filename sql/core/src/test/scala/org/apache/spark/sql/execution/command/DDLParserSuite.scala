@@ -189,7 +189,7 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
     val sql1 = "ALTER DATABASE database_name SET LOCATION '/home/user/db'"
     val parsed1 = parser.parsePlan(sql1)
 
-    val expected1 = AlterDatabaseLocationCommand("database_name", "/home/user/db")
+    val expected1 = AlterDatabaseSetLocationCommand("database_name", "/home/user/db")
     comparePlans(parsed1, expected1)
   }
 

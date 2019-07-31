@@ -730,6 +730,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       try {
         val dbNameWithoutBackTicks = cleanIdentifier(dbName)
         val location = getDBPath(dbNameWithoutBackTicks)
+        val location2 = getDBPath(dbNameWithoutBackTicks + "2")
 
         sql(s"CREATE DATABASE $dbName")
 
@@ -756,6 +757,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           Row("Database Name", dbNameWithoutBackTicks) ::
             Row("Description", "") ::
             Row("Location", CatalogUtils.URIToString(location)) ::
+            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+
+        sql(s"ALTER DATABASE $dbName SET LOCATION '$location2'")
+
+        checkAnswer(
+          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
+          Row("Database Name", dbNameWithoutBackTicks) ::
+            Row("Description", "") ::
+            Row("Location", CatalogUtils.URIToString(location2)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
       } finally {
         catalog.reset()
