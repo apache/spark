@@ -764,8 +764,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           val dbNameWithoutBackTicks = cleanIdentifier(dbName)
           sql(s"ALTER DATABASE $dbName SET LOCATION '$path'")
           val dbPath = makeQualifiedPath(
-            catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri.toString)
-          val expPath = makeQualifiedPath(tmpDir.toString)
+            catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri.toString).getPath
+          val expPath = makeQualifiedPath(tmpDir.toString).getPath
           assert(dbPath === expPath)
         }
       } finally {
