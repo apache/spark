@@ -433,9 +433,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   }
 
   private[this] val maxLongValueAsDecimal = Decimal(Long.MaxValue)
-  private[this] val minongValueAsDecimal = Decimal(Long.MinValue)
+  private[this] val minLongValueAsDecimal = Decimal(Long.MinValue)
   private[this] def castDecimalToLong(d: Decimal): Any =
-    if (d <= maxLongValueAsDecimal && d >= minongValueAsDecimal) {
+    if (d <= maxLongValueAsDecimal && d >= minLongValueAsDecimal) {
       d.toLong
     } else {
       null
