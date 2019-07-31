@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -240,14 +241,25 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+  * Here use the ReentrantLock instead of synchronized to prevent the dead lock
+  * cause by lazy operator.
+  */
+  private val lock = new ReentrantLock()
+
+  /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
    */
-  protected def waitForSubqueries(): Unit = synchronized {
-    // fill in the result of subqueries
-    runningSubqueries.foreach { sub =>
-      sub.updateResult()
+  protected def waitForSubqueries(): Unit = {
+    lock.lock()
+    try {
+      // fill in the result of subqueries
+      runningSubqueries.foreach { sub =>
+        sub.updateResult()
+      }
+      runningSubqueries.clear()
+    } finally {
+      lock.unlock()
     }
-    runningSubqueries.clear()
   }
 
   /**
