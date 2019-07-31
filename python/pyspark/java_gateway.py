@@ -18,7 +18,6 @@
 import atexit
 import os
 import sys
-import select
 import signal
 import shlex
 import shutil
@@ -37,15 +36,21 @@ from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 from pyspark.util import _exception_message
 
 
-def launch_gateway(conf=None):
+def launch_gateway(conf=None, popen_kwargs=None):
     """
     launch jvm gateway
     :param conf: spark configuration passed to spark-submit
+    :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
+        the py4j JVM. This is a developer feature intended for use in
+        customizing how pyspark interacts with the py4j JVM (e.g., capturing
+        stdout/stderr).
     :return:
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
         gateway_secret = os.environ["PYSPARK_GATEWAY_SECRET"]
+        # Process already exists
+        proc = None
     else:
         SPARK_HOME = _find_spark_home()
         # Launch the Py4j gateway using Spark's run command so that we pick up the
@@ -76,15 +81,20 @@ def launch_gateway(conf=None):
             env["_PYSPARK_DRIVER_CONN_INFO_PATH"] = conn_info_file
 
             # Launch the Java gateway.
+            popen_kwargs = {} if popen_kwargs is None else popen_kwargs
             # We open a pipe to stdin so that the Java gateway can die when the pipe is broken
+            popen_kwargs['stdin'] = PIPE
+            # We always set the necessary environment variables.
+            popen_kwargs['env'] = env
             if not on_windows:
                 # Don't send ctrl-c / SIGINT to the Java gateway:
                 def preexec_func():
                     signal.signal(signal.SIGINT, signal.SIG_IGN)
-                proc = Popen(command, stdin=PIPE, preexec_fn=preexec_func, env=env)
+                popen_kwargs['preexec_fn'] = preexec_func
+                proc = Popen(command, **popen_kwargs)
             else:
                 # preexec_fn not supported on Windows
-                proc = Popen(command, stdin=PIPE, env=env)
+                proc = Popen(command, **popen_kwargs)
 
             # Wait for the file to appear, or for the process to exit, whichever happens first.
             while not proc.poll() and not os.path.isfile(conn_info_file):
@@ -119,6 +129,8 @@ def launch_gateway(conf=None):
     gateway = JavaGateway(
         gateway_parameters=GatewayParameters(port=gateway_port, auth_token=gateway_secret,
                                              auto_convert=True))
+    # Store a reference to the Popen object for use by the caller (e.g., in reading stdout/stderr)
+    gateway.proc = proc
 
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.SparkConf")
@@ -166,7 +178,7 @@ def local_connect_and_auth(port, auth_secret):
             sock = socket.socket(af, socktype, proto)
             sock.settimeout(15)
             sock.connect(sa)
-            sockfile = sock.makefile("rwb", 65536)
+            sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
@@ -174,8 +186,7 @@ def local_connect_and_auth(port, auth_secret):
             errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
             sock.close()
             sock = None
-    else:
-        raise Exception("could not open socket: %s" % errors)
+    raise Exception("could not open socket: %s" % errors)
 
 
 def ensure_callback_server_started(gw):

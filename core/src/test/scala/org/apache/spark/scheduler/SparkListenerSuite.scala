@@ -29,6 +29,7 @@ import org.scalatest.Matchers
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Network.RPC_MESSAGE_MAX_SIZE
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -358,7 +359,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    val conf = new SparkConf().set("spark.rpc.message.maxSize", "1")
+    val conf = new SparkConf().set(RPC_MESSAGE_MAX_SIZE, 1)
     sc = new SparkContext("local", "SparkListenerSuite", conf)
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
@@ -534,7 +535,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
-  private def checkNonZeroAvg(m: Traversable[Long], msg: String) {
+  private def checkNonZeroAvg(m: Iterable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 

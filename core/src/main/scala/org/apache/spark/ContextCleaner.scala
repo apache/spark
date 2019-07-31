@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Utils}
 
@@ -83,8 +84,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * on the driver, this may happen very occasionally or not at all. Not cleaning at all may
    * lead to executors running out of disk space after a while.
    */
-  private val periodicGCInterval =
-    sc.conf.getTimeAsSeconds("spark.cleaner.periodicGC.interval", "30min")
+  private val periodicGCInterval = sc.conf.get(CLEANER_PERIODIC_GC_INTERVAL)
 
   /**
    * Whether the cleaning thread will block on cleanup tasks (other than shuffle, which
@@ -96,8 +96,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
    * longer in scope.
    */
-  private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", true)
+  private val blockOnCleanupTasks = sc.conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING)
 
   /**
    * Whether the cleaning thread will block on shuffle cleanup tasks.
@@ -109,8 +108,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * until the real RPC issue (referred to in the comment above `blockOnCleanupTasks`) is
    * resolved.
    */
-  private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking.shuffle", false)
+  private val blockOnShuffleCleanupTasks =
+    sc.conf.get(CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE)
 
   @volatile private var stopped = false
 
@@ -124,9 +123,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
-    periodicGCService.scheduleAtFixedRate(new Runnable {
-      override def run(): Unit = System.gc()
-    }, periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
+    periodicGCService.scheduleAtFixedRate(() => System.gc(),
+      periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
   }
 
   /**

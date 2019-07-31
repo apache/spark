@@ -24,7 +24,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.JavaConverters._
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -412,8 +412,6 @@ private[ui] class StageDataSource(
   }
 
   private def stageRow(stageData: v1.StageData): StageTableRowData = {
-    val description = stageData.description.getOrElse("")
-
     val formattedSubmissionTime = stageData.submissionTime match {
       case Some(t) => UIUtils.formatDate(t)
       case None => "Unknown"

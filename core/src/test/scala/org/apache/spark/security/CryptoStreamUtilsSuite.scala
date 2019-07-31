@@ -75,8 +75,8 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
   test("serializer manager integration") {
     val conf = createConf()
-      .set("spark.shuffle.compress", "true")
-      .set("spark.shuffle.spill.compress", "true")
+      .set(SHUFFLE_COMPRESS, true)
+      .set(SHUFFLE_SPILL_COMPRESS, true)
 
     val plainStr = "hello world"
     val blockId = new TempShuffleBlockId(UUID.randomUUID())

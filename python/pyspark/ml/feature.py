@@ -39,6 +39,7 @@ __all__ = ['Binarizer',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
            'IndexToString',
+           'Interaction',
            'MaxAbsScaler', 'MaxAbsScalerModel',
            'MinHashLSH', 'MinHashLSHModel',
            'MinMaxScaler', 'MinMaxScalerModel',
@@ -48,6 +49,7 @@ __all__ = ['Binarizer',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
+           'RobustScaler', 'RobustScalerModel',
            'RegexTokenizer',
            'RFormula', 'RFormulaModel',
            'SQLTransformer',
@@ -86,7 +88,9 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     """
 
     threshold = Param(Params._dummy(), "threshold",
-                      "threshold in binary classification prediction, in range [0, 1]",
+                      "Param for threshold used to binarize continuous features. " +
+                      "The features greater than the threshold will be binarized to 1.0. " +
+                      "The features equal to or less than the threshold will be binarized to 0.0",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -909,6 +913,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
+    >>> hashingTF.indexOf("b")
+    1
 
     .. versionadded:: 1.3.0
     """
@@ -953,6 +959,14 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         """
         return self.getOrDefault(self.binary)
 
+    @since("3.0.0")
+    def indexOf(self, term):
+        """
+        Returns the index of the input term.
+        """
+        self._transfer_params_to_java()
+        return self._java_obj.indexOf(term)
+
 
 @inherit_doc
 class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -966,6 +980,10 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     >>> model = idf.fit(df)
     >>> model.idf
     DenseVector([0.0, 0.0])
+    >>> model.docFreq
+    [0, 3]
+    >>> model.numDocs == df.count()
+    True
     >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
@@ -1044,6 +1062,22 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
         Returns the IDF vector.
         """
         return self._call_java("idf")
+
+    @property
+    @since("3.0.0")
+    def docFreq(self):
+        """
+        Returns the document frequency.
+        """
+        return self._call_java("docFreq")
+
+    @property
+    @since("3.0.0")
+    def numDocs(self):
+        """
+        Returns number of documents evaluated to compute idf
+        """
+        return self._call_java("numDocs")
 
 
 @inherit_doc
@@ -1203,6 +1237,59 @@ class ImputerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         which are used to replace the missing values in the input DataFrame.
         """
         return self._call_java("surrogateDF")
+
+
+@inherit_doc
+class Interaction(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    """
+    Implements the feature interaction transform. This transformer takes in Double and Vector type
+    columns and outputs a flattened vector of their feature interactions. To handle interaction,
+    we first one-hot encode any nominal features. Then, a vector of the feature cross-products is
+    produced.
+
+    For example, given the input feature values `Double(2)` and `Vector(3, 4)`, the output would be
+    `Vector(6, 8)` if all input features were numeric. If the first feature was instead nominal
+    with four categories, the output would then be `Vector(0, 0, 0, 0, 3, 4, 0, 0)`.
+
+    >>> df = spark.createDataFrame([(0.0, 1.0), (2.0, 3.0)], ["a", "b"])
+    >>> interaction = Interaction(inputCols=["a", "b"], outputCol="ab")
+    >>> interaction.transform(df).show()
+    +---+---+-----+
+    |  a|  b|   ab|
+    +---+---+-----+
+    |0.0|1.0|[0.0]|
+    |2.0|3.0|[6.0]|
+    +---+---+-----+
+    ...
+    >>> interactionPath = temp_path + "/interaction"
+    >>> interaction.save(interactionPath)
+    >>> loadedInteraction = Interaction.load(interactionPath)
+    >>> loadedInteraction.transform(df).head().ab == interaction.transform(df).head().ab
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCols=None, outputCol=None):
+        """
+        __init__(self, inputCols=None, outputCol=None):
+        """
+        super(Interaction, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Interaction", self.uid)
+        self._setDefault()
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, inputCols=None, outputCol=None):
+        """
+        setParams(self, inputCols=None, outputCol=None)
+        Sets params for this Interaction.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
 
 
 @inherit_doc
@@ -1962,6 +2049,167 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
 
 
 @inherit_doc
+class RobustScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    """
+    RobustScaler removes the median and scales the data according to the quantile range.
+    The quantile range is by default IQR (Interquartile Range, quantile range between the
+    1st quartile = 25th quantile and the 3rd quartile = 75th quantile) but can be configured.
+    Centering and scaling happen independently on each feature by computing the relevant
+    statistics on the samples in the training set. Median and quantile range are then
+    stored to be used on later data using the transform method.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(0, Vectors.dense([0.0, 0.0]),),
+    ...         (1, Vectors.dense([1.0, -1.0]),),
+    ...         (2, Vectors.dense([2.0, -2.0]),),
+    ...         (3, Vectors.dense([3.0, -3.0]),),
+    ...         (4, Vectors.dense([4.0, -4.0]),),]
+    >>> df = spark.createDataFrame(data, ["id", "features"])
+    >>> scaler = RobustScaler(inputCol="features", outputCol="scaled")
+    >>> model = scaler.fit(df)
+    >>> model.median
+    DenseVector([2.0, -2.0])
+    >>> model.range
+    DenseVector([2.0, 2.0])
+    >>> model.transform(df).collect()[1].scaled
+    DenseVector([0.5, -0.5])
+    >>> scalerPath = temp_path + "/robust-scaler"
+    >>> scaler.save(scalerPath)
+    >>> loadedScaler = RobustScaler.load(scalerPath)
+    >>> loadedScaler.getWithCentering() == scaler.getWithCentering()
+    True
+    >>> loadedScaler.getWithScaling() == scaler.getWithScaling()
+    True
+    >>> modelPath = temp_path + "/robust-scaler-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = RobustScalerModel.load(modelPath)
+    >>> loadedModel.median == model.median
+    True
+    >>> loadedModel.range == model.range
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    lower = Param(Params._dummy(), "lower", "Lower quantile to calculate quantile range",
+                  typeConverter=TypeConverters.toFloat)
+    upper = Param(Params._dummy(), "upper", "Upper quantile to calculate quantile range",
+                  typeConverter=TypeConverters.toFloat)
+    withCentering = Param(Params._dummy(), "withCentering", "Whether to center data with median",
+                          typeConverter=TypeConverters.toBoolean)
+    withScaling = Param(Params._dummy(), "withScaling", "Whether to scale the data to "
+                        "quantile range", typeConverter=TypeConverters.toBoolean)
+
+    @keyword_only
+    def __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                 inputCol=None, outputCol=None):
+        """
+        __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
+                 inputCol=None, outputCol=None)
+        """
+        super(RobustScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
+        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                  inputCol=None, outputCol=None):
+        """
+        setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
+                  inputCol=None, outputCol=None)
+        Sets params for this RobustScaler.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.0.0")
+    def setLower(self, value):
+        """
+        Sets the value of :py:attr:`lower`.
+        """
+        return self._set(lower=value)
+
+    @since("3.0.0")
+    def getLower(self):
+        """
+        Gets the value of lower or its default value.
+        """
+        return self.getOrDefault(self.lower)
+
+    @since("3.0.0")
+    def setUpper(self, value):
+        """
+        Sets the value of :py:attr:`upper`.
+        """
+        return self._set(upper=value)
+
+    @since("3.0.0")
+    def getUpper(self):
+        """
+        Gets the value of upper or its default value.
+        """
+        return self.getOrDefault(self.upper)
+
+    @since("3.0.0")
+    def setWithCentering(self, value):
+        """
+        Sets the value of :py:attr:`withCentering`.
+        """
+        return self._set(withCentering=value)
+
+    @since("3.0.0")
+    def getWithCentering(self):
+        """
+        Gets the value of withCentering or its default value.
+        """
+        return self.getOrDefault(self.withCentering)
+
+    @since("3.0.0")
+    def setWithScaling(self, value):
+        """
+        Sets the value of :py:attr:`withScaling`.
+        """
+        return self._set(withScaling=value)
+
+    @since("3.0.0")
+    def getWithScaling(self):
+        """
+        Gets the value of withScaling or its default value.
+        """
+        return self.getOrDefault(self.withScaling)
+
+    def _create_model(self, java_model):
+        return RobustScalerModel(java_model)
+
+
+class RobustScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`RobustScaler`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def median(self):
+        """
+        Median of the RobustScalerModel.
+        """
+        return self._call_java("median")
+
+    @property
+    @since("3.0.0")
+    def range(self):
+        """
+        Quantile range of the RobustScalerModel.
+        """
+        return self._call_java("range")
+
+
+@inherit_doc
 @ignore_unicode_prefix
 class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
@@ -2270,7 +2518,8 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("mean")
 
 
-class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol):
+class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol,
+                           HasInputCols, HasOutputCols):
     """
     Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
     """
@@ -2278,7 +2527,10 @@ class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputC
     stringOrderType = Param(Params._dummy(), "stringOrderType",
                             "How to order labels of string column. The first label after " +
                             "ordering is assigned an index of 0. Supported options: " +
-                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc. " +
+                            "Default is frequencyDesc. In case of equal frequency when " +
+                            "under frequencyDesc/Asc, the strings are further sorted " +
+                            "alphabetically",
                             typeConverter=TypeConverters.toString)
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
@@ -2351,16 +2603,37 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
     >>> sorted(set([(i[0], i[1]) for i in result.select(result.id, result.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 2.0)]
+    >>> testData = sc.parallelize([Row(id=0, label1="a", label2="e"),
+    ...                            Row(id=1, label1="b", label2="f"),
+    ...                            Row(id=2, label1="c", label2="e"),
+    ...                            Row(id=3, label1="a", label2="f"),
+    ...                            Row(id=4, label1="a", label2="f"),
+    ...                            Row(id=5, label1="c", label2="f")], 3)
+    >>> multiRowDf = spark.createDataFrame(testData)
+    >>> inputs = ["label1", "label2"]
+    >>> outputs = ["index1", "index2"]
+    >>> stringIndexer = StringIndexer(inputCols=inputs, outputCols=outputs)
+    >>> model = stringIndexer.fit(multiRowDf)
+    >>> result = model.transform(multiRowDf)
+    >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
+    ...     result.index2).collect()]), key=lambda x: x[0])
+    [(0, 0.0, 1.0), (1, 2.0, 0.0), (2, 1.0, 1.0), (3, 0.0, 0.0), (4, 0.0, 0.0), (5, 1.0, 0.0)]
+    >>> fromlabelsModel = StringIndexerModel.from_arrays_of_labels([["a", "b", "c"], ["e", "f"]],
+    ...     inputCols=inputs, outputCols=outputs)
+    >>> result = fromlabelsModel.transform(multiRowDf)
+    >>> sorted(set([(i[0], i[1], i[2]) for i in result.select(result.id, result.index1,
+    ...     result.index2).collect()]), key=lambda x: x[0])
+    [(0, 0.0, 0.0), (1, 1.0, 1.0), (2, 2.0, 0.0), (3, 0.0, 1.0), (4, 0.0, 1.0), (5, 2.0, 1.0)]
 
     .. versionadded:: 1.4.0
     """
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
-                 stringOrderType="frequencyDesc"):
+    def __init__(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None,
+                 handleInvalid="error", stringOrderType="frequencyDesc"):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error", \
-                 stringOrderType="frequencyDesc")
+        __init__(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
+                 handleInvalid="error", stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
@@ -2369,11 +2642,11 @@ class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLW
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
-                  stringOrderType="frequencyDesc"):
+    def setParams(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None,
+                  handleInvalid="error", stringOrderType="frequencyDesc"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error", \
-                  stringOrderType="frequencyDesc")
+        setParams(self, inputCol=None, outputCol=None, inputCols=None, outputCols=None, \
+                  handleInvalid="error", stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
         kwargs = self._input_kwargs
@@ -2416,6 +2689,26 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
             model.setHandleInvalid(handleInvalid)
         return model
 
+    @classmethod
+    @since("3.0.0")
+    def from_arrays_of_labels(cls, arrayOfLabels, inputCols, outputCols=None,
+                              handleInvalid=None):
+        """
+        Construct the model directly from an array of array of label strings,
+        requires an active SparkContext.
+        """
+        sc = SparkContext._active_spark_context
+        java_class = sc._gateway.jvm.java.lang.String
+        jlabels = StringIndexerModel._new_java_array(arrayOfLabels, java_class)
+        model = StringIndexerModel._create_from_java_class(
+            "org.apache.spark.ml.feature.StringIndexerModel", jlabels)
+        model.setInputCols(inputCols)
+        if outputCols is not None:
+            model.setOutputCols(outputCols)
+        if handleInvalid is not None:
+            model.setHandleInvalid(handleInvalid)
+        return model
+
     @property
     @since("1.5.0")
     def labels(self):
@@ -2439,7 +2732,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     corresponding string values.
     The index-string mapping is either from the ML attributes of the input column,
     or from user-supplied labels (which take precedence over ML attributes).
-    See L{StringIndexer} for converting strings into indices.
+    See :class:`StringIndexer` for converting strings into indices.
 
     .. versionadded:: 1.6.0
     """
@@ -2997,24 +3290,24 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   a|[0.09461779892444...|
-    |   b|[1.15474212169647...|
-    |   c|[-0.3794820010662...|
+    |   a|[0.09511678665876...|
+    |   b|[-1.2028766870498...|
+    |   c|[0.30153277516365...|
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
+    [(u'b', 0.015859870240092278), (u'c', -0.5680795907974243)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
     |word|similarity|
     +----+----------+
-    |   b|   0.25053|
-    |   c|  -0.69805|
+    |   b|   0.01586|
+    |   c|  -0.56808|
     +----+----------+
     ...
     >>> model.transform(doc).head().model
-    DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
+    DenseVector([-0.4833, 0.1855, -0.273, -0.0509, -0.4769])
     >>> word2vecPath = temp_path + "/word2vec"
     >>> word2Vec.save(word2vecPath)
     >>> loadedWord2Vec = Word2Vec.load(word2vecPath)
@@ -3302,7 +3595,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
 
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '.', ':', '+', and '-'. Also see the `R formula docs
+    operators, including '~', '.', ':', '+', '-', '*', and '^'.
+    Also see the `R formula docs
     <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
     >>> df = spark.createDataFrame([

@@ -24,8 +24,8 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
 
   test("ContainerInfo fails to parse invalid docker parameters") {
     val conf = new SparkConf()
-    conf.set("spark.mesos.executor.docker.parameters", "a,b")
-    conf.set("spark.mesos.executor.docker.image", "test")
+    conf.set(config.EXECUTOR_DOCKER_PARAMETERS, Seq("a", "b"))
+    conf.set(config.EXECUTOR_DOCKER_IMAGE, "test")
 
     val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(
       conf)
@@ -36,8 +36,8 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
 
   test("ContainerInfo parses docker parameters") {
     val conf = new SparkConf()
-    conf.set("spark.mesos.executor.docker.parameters", "a=1,b=2,c=3")
-    conf.set("spark.mesos.executor.docker.image", "test")
+    conf.set(config.EXECUTOR_DOCKER_PARAMETERS, Seq("a=1", "b=2", "c=3"))
+    conf.set(config.EXECUTOR_DOCKER_IMAGE, "test")
 
     val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(
       conf)

@@ -248,7 +248,7 @@ class LinearSVC @Since("2.2.0") (
         scaledObjectiveHistory += state.adjustedValue
       }
 
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesStd.destroy()
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
         instr.logError(msg)

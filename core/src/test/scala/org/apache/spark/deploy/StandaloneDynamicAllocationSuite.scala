@@ -67,7 +67,7 @@ class StandaloneDynamicAllocationSuite
     master = makeMaster()
     workers = makeWorkers(10, 2048)
     // Wait until all workers register with master successfully
-    eventually(timeout(60.seconds), interval(10.millis)) {
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
       assert(getMasterState.workers.size === numWorkers)
     }
   }
@@ -135,7 +135,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("dynamic allocation with max cores <= cores per worker") {
-    sc = new SparkContext(appConf.set("spark.cores.max", "8"))
+    sc = new SparkContext(appConf.set(config.CORES_MAX, 8))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -190,7 +190,7 @@ class StandaloneDynamicAllocationSuite
   }
 
   test("dynamic allocation with max cores > cores per worker") {
-    sc = new SparkContext(appConf.set("spark.cores.max", "16"))
+    sc = new SparkContext(appConf.set(config.CORES_MAX, 16))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -297,7 +297,7 @@ class StandaloneDynamicAllocationSuite
   test("dynamic allocation with cores per executor AND max cores") {
     sc = new SparkContext(appConf
       .set(config.EXECUTOR_CORES, 2)
-      .set("spark.cores.max", "8"))
+      .set(config.CORES_MAX, 8))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
       val apps = getApplications()
@@ -457,9 +457,9 @@ class StandaloneDynamicAllocationSuite
   test("initial executor limit") {
     val initialExecutorLimit = 1
     val myConf = appConf
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
-      .set("spark.dynamicAllocation.initialExecutors", initialExecutorLimit.toString)
+      .set(config.DYN_ALLOCATION_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS, initialExecutorLimit)
     sc = new SparkContext(myConf)
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
@@ -497,7 +497,8 @@ class StandaloneDynamicAllocationSuite
     val endpointRef = mock(classOf[RpcEndpointRef])
     val mockAddress = mock(classOf[RpcAddress])
     when(endpointRef.address).thenReturn(mockAddress)
-    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty)
+    val message = RegisterExecutor("one", endpointRef, "blacklisted-host", 10, Map.empty, Map.empty,
+      Map.empty)
 
     // Get "localhost" on a blacklist.
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
@@ -621,7 +622,8 @@ class StandaloneDynamicAllocationSuite
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)
-      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty)
+      val message = RegisterExecutor(id, endpointRef, "localhost", 10, Map.empty, Map.empty,
+        Map.empty)
       val backend = sc.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
       backend.driverEndpoint.askSync[Boolean](message)
     }

@@ -28,6 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.config.Network.RPC_ASK_TIMEOUT
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{SparkExitCode, ThreadUtils, Utils}
 
@@ -60,6 +61,10 @@ private class ClientEndpoint(
    private val lostMasters = new HashSet[RpcAddress]
    private var activeMasterEndpoint: RpcEndpointRef = null
 
+  private def getProperty(key: String, conf: SparkConf): Option[String] = {
+    sys.props.get(key).orElse(conf.getOption(key))
+  }
+
   override def onStart(): Unit = {
     driverArgs.cmd match {
       case "launch" =>
@@ -69,18 +74,19 @@ private class ClientEndpoint(
         val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
 
         val classPathConf = config.DRIVER_CLASS_PATH.key
-        val classPathEntries = sys.props.get(classPathConf).toSeq.flatMap { cp =>
+        val classPathEntries = getProperty(classPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
         val libraryPathConf = config.DRIVER_LIBRARY_PATH.key
-        val libraryPathEntries = sys.props.get(libraryPathConf).toSeq.flatMap { cp =>
+        val libraryPathEntries = getProperty(libraryPathConf, conf).toSeq.flatMap { cp =>
           cp.split(java.io.File.pathSeparator)
         }
 
         val extraJavaOptsConf = config.DRIVER_JAVA_OPTIONS.key
-        val extraJavaOpts = sys.props.get(extraJavaOptsConf)
+        val extraJavaOpts = getProperty(extraJavaOptsConf, conf)
           .map(Utils.splitCommandString).getOrElse(Seq.empty)
+
         val sparkJavaOpts = Utils.sparkJavaOpts(conf)
         val javaOpts = sparkJavaOpts ++ extraJavaOpts
         val command = new Command(mainClass,
@@ -226,8 +232,8 @@ private[spark] class ClientApp extends SparkApplication {
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val driverArgs = new ClientArguments(args)
 
-    if (!conf.contains("spark.rpc.askTimeout")) {
-      conf.set("spark.rpc.askTimeout", "10s")
+    if (!conf.contains(RPC_ASK_TIMEOUT)) {
+      conf.set(RPC_ASK_TIMEOUT, "10s")
     }
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 

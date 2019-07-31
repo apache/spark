@@ -21,19 +21,22 @@ import java.io.File
 import java.net.Socket
 import java.util.Locale
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Properties
 
 import com.google.common.collect.MapMaker
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
-import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.netty.NettyBlockTransferService
+import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
+import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
+import org.apache.spark.network.shuffle.ExternalShuffleClient
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
@@ -49,9 +52,6 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * including the serializer, RpcEnv, block manager, map output tracker, etc. Currently
  * Spark code finds the SparkEnv through a global variable, so all the threads can access the same
  * SparkEnv. It can be accessed by SparkEnv.get (e.g. after creating a SparkContext).
- *
- * NOTE: This is not intended for external use. This is exposed for Shark and may be made private
- *       in a future release.
  */
 @DeveloperApi
 class SparkEnv (
@@ -274,14 +274,13 @@ object SparkEnv extends Logging {
       }
     }
 
-    // Create an instance of the class named by the given SparkConf property, or defaultClassName
+    // Create an instance of the class named by the given SparkConf property
     // if the property is not set, possibly initializing it with our conf
-    def instantiateClassFromConf[T](propertyName: String, defaultClassName: String): T = {
-      instantiateClass[T](conf.get(propertyName, defaultClassName))
+    def instantiateClassFromConf[T](propertyName: ConfigEntry[String]): T = {
+      instantiateClass[T](conf.get(propertyName))
     }
 
-    val serializer = instantiateClassFromConf[Serializer](
-      "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
+    val serializer = instantiateClassFromConf[Serializer](SERIALIZER)
     logDebug(s"Using serializer: ${serializer.getClass}")
 
     val serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey)
@@ -317,7 +316,7 @@ object SparkEnv extends Logging {
     val shortShuffleMgrNames = Map(
       "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
       "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
-    val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
+    val shuffleMgrName = conf.get(config.SHUFFLE_MANAGER)
     val shuffleMgrClass =
       shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase(Locale.ROOT), shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
@@ -330,31 +329,58 @@ object SparkEnv extends Logging {
       conf.get(BLOCK_MANAGER_PORT)
     }
 
-    val blockTransferService =
-      new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
-        blockManagerPort, numUsableCores)
+    val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
+      Some(new ExternalShuffleClient(transConf, securityManager,
+        securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
+    } else {
+      None
+    }
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-      new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, listenerBus)),
+      new BlockManagerMasterEndpoint(
+        rpcEnv,
+        isLocal,
+        conf,
+        listenerBus,
+        if (conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)) {
+          externalShuffleClient
+        } else {
+          None
+        })),
       conf, isDriver)
 
+    val blockTransferService =
+      new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
+        blockManagerPort, numUsableCores, blockManagerMaster.driverEndpoint)
+
     // NB: blockManager is not valid until initialize() is called later.
-    val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
-      serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
-      blockTransferService, securityManager, numUsableCores)
+    val blockManager = new BlockManager(
+      executorId,
+      rpcEnv,
+      blockManagerMaster,
+      serializerManager,
+      conf,
+      memoryManager,
+      mapOutputTracker,
+      shuffleManager,
+      blockTransferService,
+      securityManager,
+      externalShuffleClient)
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
       // We need to wait for the task scheduler to give us an app ID.
       // Then we can start the metrics system.
-      MetricsSystem.createMetricsSystem("driver", conf, securityManager)
+      MetricsSystem.createMetricsSystem(MetricsSystemInstances.DRIVER, conf, securityManager)
     } else {
       // We need to set the executor ID before the MetricsSystem is created because sources and
       // sinks specified in the metrics configuration file will want to incorporate this executor's
       // ID into the metrics they report.
       conf.set(EXECUTOR_ID, executorId)
-      val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
+      val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.EXECUTOR, conf,
+        securityManager)
       ms.start()
       ms
     }
@@ -401,6 +427,7 @@ object SparkEnv extends Logging {
   private[spark]
   def environmentDetails(
       conf: SparkConf,
+      hadoopConf: Configuration,
       schedulingMode: String,
       addedJars: Seq[String],
       addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
@@ -415,8 +442,8 @@ object SparkEnv extends Logging {
     // Spark properties
     // This includes the scheduling mode whether or not it is configured (used by SparkUI)
     val schedulerMode =
-      if (!conf.contains("spark.scheduler.mode")) {
-        Seq(("spark.scheduler.mode", schedulingMode))
+      if (!conf.contains(SCHEDULER_MODE)) {
+        Seq((SCHEDULER_MODE.key, schedulingMode))
       } else {
         Seq.empty[(String, String)]
       }
@@ -436,9 +463,14 @@ object SparkEnv extends Logging {
     val addedJarsAndFiles = (addedJars ++ addedFiles).map((_, "Added By User"))
     val classPaths = (addedJarsAndFiles ++ classPathEntries).sorted
 
+    // Add Hadoop properties, it will not ignore configs including in Spark. Some spark
+    // conf starting with "spark.hadoop" may overwrite it.
+    val hadoopProperties = hadoopConf.asScala
+      .map(entry => (entry.getKey, entry.getValue)).toSeq.sorted
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,
       "Spark Properties" -> sparkProperties,
+      "Hadoop Properties" -> hadoopProperties,
       "System Properties" -> otherProperties,
       "Classpath Entries" -> classPaths)
   }

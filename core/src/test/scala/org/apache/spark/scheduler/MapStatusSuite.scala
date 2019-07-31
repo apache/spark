@@ -181,7 +181,7 @@ class MapStatusSuite extends SparkFunSuite {
 
   test("SPARK-21133 HighlyCompressedMapStatus#writeExternal throws NPE") {
     val conf = new SparkConf()
-      .set("spark.serializer", classOf[KryoSerializer].getName)
+      .set(config.SERIALIZER, classOf[KryoSerializer].getName)
       .setMaster("local")
       .setAppName("SPARK-21133")
     withSpark(new SparkContext(conf)) { sc =>

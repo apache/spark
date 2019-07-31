@@ -65,6 +65,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
       authConfPrefix,
+      SparkKubernetesClientFactory.ClientType.Driver,
       sc.conf,
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt)

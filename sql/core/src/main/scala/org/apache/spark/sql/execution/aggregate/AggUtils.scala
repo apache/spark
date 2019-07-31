@@ -35,20 +35,12 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-    // `groupingExpressions` is not extracted during logical phase.
-    val normalizedGroupingExpressions = groupingExpressions.map { e =>
-      NormalizeFloatingNumbers.normalize(e) match {
-        case n: NamedExpression => n
-        case other => Alias(other, e.name)(exprId = e.exprId)
-      }
-    }
     val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
     if (useHash) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-        groupingExpressions = normalizedGroupingExpressions,
+        groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
@@ -61,7 +53,7 @@ object AggUtils {
       if (objectHashEnabled && useObjectHash) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = normalizedGroupingExpressions,
+          groupingExpressions = groupingExpressions,
           aggregateExpressions = aggregateExpressions,
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
@@ -70,7 +62,7 @@ object AggUtils {
       } else {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = normalizedGroupingExpressions,
+          groupingExpressions = groupingExpressions,
           aggregateExpressions = aggregateExpressions,
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,

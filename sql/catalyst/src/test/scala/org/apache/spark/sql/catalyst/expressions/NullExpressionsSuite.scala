@@ -53,7 +53,7 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("AssertNotNUll") {
     val ex = intercept[RuntimeException] {
-      evaluateWithoutCodegen(AssertNotNull(Literal(null), Seq.empty[String]))
+      evaluateWithoutCodegen(AssertNotNull(Literal(null)))
     }.getMessage
     assert(ex.contains("Null value appeared in non-nullable field"))
   }

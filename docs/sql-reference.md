@@ -2,6 +2,21 @@
 layout: global
 title: Reference
 displayTitle: Reference
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -31,8 +46,10 @@ Spark SQL and DataFrames support the following data types:
   - `BooleanType`: Represents boolean values.
 * Datetime type
   - `TimestampType`: Represents values comprising values of fields year, month, day,
-  hour, minute, and second.
-  - `DateType`: Represents values comprising values of fields year, month, day.
+  hour, minute, and second, with the session local time-zone. The timestamp value represents an
+  absolute point in time.
+  - `DateType`: Represents values comprising values of fields year, month and day, without a
+  time-zone.
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
   elements with the type of `elementType`. `containsNull` is used to indicate if

@@ -70,9 +70,9 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
-      task.run(0, 0, null)
+      task.run(0, 0, null, null)
     }
-    assert(TaskContextSuite.completed === true)
+    assert(TaskContextSuite.completed)
   }
 
   test("calls TaskFailureListeners after failure") {
@@ -92,7 +92,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
-      task.run(0, 0, null)
+      task.run(0, 0, null, null)
     }
     assert(TaskContextSuite.lastError.getMessage == "damn error")
   }

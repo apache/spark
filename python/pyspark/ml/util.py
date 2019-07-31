@@ -78,14 +78,6 @@ class BaseReadWrite(object):
     def __init__(self):
         self._sparkSession = None
 
-    def context(self, sqlContext):
-        """
-        Sets the Spark SQLContext to use for saving/loading.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        raise NotImplementedError("Read/Write is not yet implemented for type: %s" % type(self))
-
     def session(self, sparkSession):
         """
         Sets the Spark Session to use for saving/loading.
@@ -191,18 +183,6 @@ class JavaMLWriter(MLWriter):
         self._jwrite.option(key, value)
         return self
 
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for saving.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.1 and will be removed in 3.0, use session instead.",
-            DeprecationWarning)
-        self._jwrite.context(sqlContext._ssql_ctx)
-        return self
-
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
         self._jwrite.session(sparkSession._jsparkSession)
@@ -302,18 +282,6 @@ class JavaMLReader(MLReader):
             raise NotImplementedError("This Java ML type cannot be loaded into Python currently: %r"
                                       % self._clazz)
         return self._clazz._from_java(java_obj)
-
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for loading.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        warnings.warn(
-            "Deprecated in 2.1 and will be removed in 3.0, use session instead.",
-            DeprecationWarning)
-        self._jread.context(sqlContext._ssql_ctx)
-        return self
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for loading."""
@@ -611,3 +579,29 @@ class DefaultParamsReader(MLReader):
         py_type = DefaultParamsReader.__get_class(pythonClassName)
         instance = py_type.load(path)
         return instance
+
+
+@inherit_doc
+class HasTrainingSummary(object):
+    """
+    Base class for models that provides Training summary.
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("2.1.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @property
+    @since("2.1.0")
+    def summary(self):
+        """
+        Gets summary of the model trained on the training set. An exception is thrown if
+        no summary exists.
+        """
+        return (self._call_java("summary"))

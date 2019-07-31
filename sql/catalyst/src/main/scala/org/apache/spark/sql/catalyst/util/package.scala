@@ -35,12 +35,8 @@ package object util extends Logging {
     val origErr = System.err
     val origOut = System.out
     try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
+      System.setErr(new PrintStream((_: Int) => {}))
+      System.setOut(new PrintStream((_: Int) => {}))
 
       f
     } finally {
@@ -97,9 +93,9 @@ package object util extends Logging {
   }
 
   def stringToFile(file: File, str: String): File = {
-    val out = new PrintWriter(file)
-    out.write(str)
-    out.close()
+    Utils.tryWithResource(new PrintWriter(file)) { out =>
+      out.write(str)
+    }
     file
   }
 
@@ -119,22 +115,11 @@ package object util extends Logging {
 
   def stackTraceToString(t: Throwable): String = {
     val out = new java.io.ByteArrayOutputStream
-    val writer = new PrintWriter(out)
-    t.printStackTrace(writer)
-    writer.flush()
+    Utils.tryWithResource(new PrintWriter(out)) { writer =>
+      t.printStackTrace(writer)
+      writer.flush()
+    }
     new String(out.toByteArray, StandardCharsets.UTF_8)
-  }
-
-  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
-
-  def benchmark[A](f: => A): A = {
-    val startTime = System.nanoTime()
-    val ret = f
-    val endTime = System.nanoTime()
-    // scalastyle:off println
-    println(s"${(endTime - startTime).toDouble / 1000000}ms")
-    // scalastyle:on println
-    ret
   }
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
@@ -157,7 +142,6 @@ package object util extends Logging {
   }
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
-
 
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder
@@ -203,11 +187,4 @@ package object util extends Logging {
   def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
     truncatedString(seq, "", sep, "", maxFields)
   }
-
-  /* FIX ME
-  implicit class debugLogging(a: Any) {
-    def debugLogging() {
-      org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
-    }
-  } */
 }

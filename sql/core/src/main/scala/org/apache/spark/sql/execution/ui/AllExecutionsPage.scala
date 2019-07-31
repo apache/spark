@@ -158,9 +158,11 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     showSucceededJobs: Boolean,
     showFailedJobs: Boolean): Seq[Node] = {
 
-    val parameterOtherTable = request.getParameterMap().asScala.map { case (name, vals) =>
-      name + "=" + vals(0)
-    }
+    val parameterOtherTable = request.getParameterMap().asScala
+      .filterNot(_._1.startsWith(executionTag))
+      .map { case (name, vals) =>
+        name + "=" + vals(0)
+      }
 
     val parameterExecutionPage = request.getParameter(s"$executionTag.page")
     val parameterExecutionSortColumn = request.getParameter(s"$executionTag.sort")
@@ -386,14 +388,15 @@ private[ui] class ExecutionPagedTable(
         +details
       </span> ++
       <div class="stage-details collapsed">
-        <pre>{execution.details}</pre>
+        <pre>{execution.description}<br></br>{execution.details}</pre>
       </div>
     } else {
       Nil
     }
 
     val desc = if (execution.description != null && execution.description.nonEmpty) {
-      <a href={executionURL(execution.executionId)}>{execution.description}</a>
+      <a href={executionURL(execution.executionId)} class="description-input">
+        {execution.description}</a>
     } else {
       <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
     }

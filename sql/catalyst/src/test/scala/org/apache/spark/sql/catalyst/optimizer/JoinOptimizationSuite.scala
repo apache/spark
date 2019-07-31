@@ -34,7 +34,7 @@ class JoinOptimizationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         BooleanSimplification,
         ReorderJoin,
         PushPredicateThroughJoin,
@@ -66,7 +66,7 @@ class JoinOptimizationSuite extends PlanTest {
     def testExtractCheckCross
         (plan: LogicalPlan, expected: Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]) {
       assert(
-        ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2, Map.empty)))
+        ExtractFiltersAndInnerJoins.unapply(plan) === expected.map(e => (e._1, e._2)))
     }
 
     testExtract(x, None)

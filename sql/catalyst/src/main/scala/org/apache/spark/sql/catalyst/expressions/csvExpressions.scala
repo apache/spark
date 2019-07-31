@@ -117,8 +117,7 @@ case class CsvToStructs(
       input => Seq(rawParser.parse(input)),
       mode,
       nullableSchema,
-      parsedOptions.columnNameOfCorruptRecord,
-      parsedOptions.multiLine)
+      parsedOptions.columnNameOfCorruptRecord)
   }
 
   override def dataType: DataType = nullableSchema

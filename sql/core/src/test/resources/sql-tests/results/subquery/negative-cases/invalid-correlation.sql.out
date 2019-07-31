@@ -70,9 +70,10 @@ Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2
 SELECT t1a 
 FROM   t1
 GROUP  BY 1
-HAVING EXISTS (SELECT 1 
+HAVING EXISTS (SELECT t2a
                FROM  t2
-               WHERE t2a < min(t1a + t2a))
+               GROUP BY 1
+               HAVING t2a < min(t1a + t2a))
 -- !query 5 schema
 struct<>
 -- !query 5 output

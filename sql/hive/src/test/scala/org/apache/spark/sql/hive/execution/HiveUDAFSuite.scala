@@ -31,6 +31,7 @@ import test.org.apache.spark.sql.MyDoubleAvg
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
@@ -40,6 +41,7 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     super.beforeAll()
     sql(s"CREATE TEMPORARY FUNCTION mock AS '${classOf[MockUDAF].getName}'")
     sql(s"CREATE TEMPORARY FUNCTION hive_max AS '${classOf[GenericUDAFMax].getName}'")
+    sql(s"CREATE TEMPORARY FUNCTION mock2 AS '${classOf[MockUDAF2].getName}'")
 
     Seq(
       (0: Integer) -> "val_0",
@@ -92,6 +94,35 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     ))
   }
 
+  test("SPARK-24935: customized Hive UDAF with two aggregation buffers") {
+    withTempView("v") {
+      spark.range(100).createTempView("v")
+      val df = sql("SELECT id % 2, mock2(id) FROM v GROUP BY id % 2")
+
+      val aggs = df.queryExecution.executedPlan.collect {
+        case agg: ObjectHashAggregateExec => agg
+      }
+
+      // There should be two aggregate operators, one for partial aggregation, and the other for
+      // global aggregation.
+      assert(aggs.length == 2)
+
+      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+        checkAnswer(df, Seq(
+          Row(0, Row(50, 0)),
+          Row(1, Row(50, 0))
+        ))
+      }
+
+      withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "100") {
+        checkAnswer(df, Seq(
+          Row(0, Row(50, 0)),
+          Row(1, Row(50, 0))
+        ))
+      }
+    }
+  }
+
   test("call JAVA UDAF") {
     withTempView("temp") {
       withUserDefinedFunction("myDoubleAvg" -> false) {
@@ -118,6 +149,16 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-27907 HiveUDAF with 0 rows throws NPE") {
+    withTable("abc") {
+      sql("create table abc(a int)")
+      checkAnswer(sql("select histogram_numeric(a,2) from abc"), Row(null))
+      sql("insert into abc values (1)")
+      checkAnswer(sql("select histogram_numeric(a,2) from abc"), Row(Row(1.0, 1.0) :: Nil))
+      checkAnswer(sql("select histogram_numeric(a,2) from abc where a=3"), Row(null))
+    }
+  }
 }
 
 /**
@@ -127,7 +168,17 @@ class MockUDAF extends AbstractGenericUDAFResolver {
   override def getEvaluator(info: Array[TypeInfo]): GenericUDAFEvaluator = new MockUDAFEvaluator
 }
 
+class MockUDAF2 extends AbstractGenericUDAFResolver {
+  override def getEvaluator(info: Array[TypeInfo]): GenericUDAFEvaluator = new MockUDAFEvaluator2
+}
+
 class MockUDAFBuffer(var nonNullCount: Long, var nullCount: Long)
+  extends GenericUDAFEvaluator.AbstractAggregationBuffer {
+
+  override def estimate(): Int = JavaDataModel.PRIMITIVES2 * 2
+}
+
+class MockUDAFBuffer2(var nonNullCount: Long, var nullCount: Long)
   extends GenericUDAFEvaluator.AbstractAggregationBuffer {
 
   override def estimate(): Int = JavaDataModel.PRIMITIVES2 * 2
@@ -183,4 +234,81 @@ class MockUDAFEvaluator extends GenericUDAFEvaluator {
   }
 
   override def terminate(agg: AggregationBuffer): AnyRef = terminatePartial(agg)
+}
+
+// Same as MockUDAFEvaluator but using two aggregation buffers, one for PARTIAL1 and the other
+// for PARTIAL2.
+class MockUDAFEvaluator2 extends GenericUDAFEvaluator {
+  private val nonNullCountOI = PrimitiveObjectInspectorFactory.javaLongObjectInspector
+
+  private val nullCountOI = PrimitiveObjectInspectorFactory.javaLongObjectInspector
+  private var aggMode: Mode = null
+
+  private val bufferOI = {
+    val fieldNames = Seq("nonNullCount", "nullCount").asJava
+    val fieldOIs = Seq(nonNullCountOI: ObjectInspector, nullCountOI: ObjectInspector).asJava
+    ObjectInspectorFactory.getStandardStructObjectInspector(fieldNames, fieldOIs)
+  }
+
+  private val nonNullCountField = bufferOI.getStructFieldRef("nonNullCount")
+
+  private val nullCountField = bufferOI.getStructFieldRef("nullCount")
+
+  override def getNewAggregationBuffer: AggregationBuffer = {
+    // These 2 modes consume original data.
+    if (aggMode == Mode.PARTIAL1 || aggMode == Mode.COMPLETE) {
+      new MockUDAFBuffer(0L, 0L)
+    } else {
+      new MockUDAFBuffer2(0L, 0L)
+    }
+  }
+
+  override def reset(agg: AggregationBuffer): Unit = {
+    val buffer = agg.asInstanceOf[MockUDAFBuffer]
+    buffer.nonNullCount = 0L
+    buffer.nullCount = 0L
+  }
+
+  override def init(mode: Mode, parameters: Array[ObjectInspector]): ObjectInspector = {
+    aggMode = mode
+    bufferOI
+  }
+
+  override def iterate(agg: AggregationBuffer, parameters: Array[AnyRef]): Unit = {
+    val buffer = agg.asInstanceOf[MockUDAFBuffer]
+    if (parameters.head eq null) {
+      buffer.nullCount += 1L
+    } else {
+      buffer.nonNullCount += 1L
+    }
+  }
+
+  override def merge(agg: AggregationBuffer, partial: Object): Unit = {
+    if (partial ne null) {
+      val nonNullCount = nonNullCountOI.get(bufferOI.getStructFieldData(partial, nonNullCountField))
+      val nullCount = nullCountOI.get(bufferOI.getStructFieldData(partial, nullCountField))
+      val buffer = agg.asInstanceOf[MockUDAFBuffer2]
+      buffer.nonNullCount += nonNullCount
+      buffer.nullCount += nullCount
+    }
+  }
+
+  // As this method is called for both states, Partial1 and Partial2, the hack in the method
+  // to check for class of aggregation buffer was necessary.
+  override def terminatePartial(agg: AggregationBuffer): AnyRef = {
+    var result: AnyRef = null
+    if (agg.getClass.toString.contains("MockUDAFBuffer2")) {
+      val buffer = agg.asInstanceOf[MockUDAFBuffer2]
+      result = Array[Object](buffer.nonNullCount: java.lang.Long, buffer.nullCount: java.lang.Long)
+    } else {
+      val buffer = agg.asInstanceOf[MockUDAFBuffer]
+      result = Array[Object](buffer.nonNullCount: java.lang.Long, buffer.nullCount: java.lang.Long)
+    }
+    result
+  }
+
+  override def terminate(agg: AggregationBuffer): AnyRef = {
+    val buffer = agg.asInstanceOf[MockUDAFBuffer2]
+    Array[Object](buffer.nonNullCount: java.lang.Long, buffer.nullCount: java.lang.Long)
+  }
 }

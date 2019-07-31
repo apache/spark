@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
-
-import scala.collection.mutable
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -52,28 +51,12 @@ case class HadoopFsRelation(
 
   override def sqlContext: SQLContext = sparkSession.sqlContext
 
-  private def getColName(f: StructField): String = {
-    if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      f.name
-    } else {
-      f.name.toLowerCase(Locale.ROOT)
-    }
-  }
-
-  val overlappedPartCols = mutable.Map.empty[String, StructField]
-  partitionSchema.foreach { partitionField =>
-    if (dataSchema.exists(getColName(_) == getColName(partitionField))) {
-      overlappedPartCols += getColName(partitionField) -> partitionField
-    }
-  }
-
   // When data and partition schemas have overlapping columns, the output
   // schema respects the order of the data schema for the overlapping columns, and it
   // respects the data types of the partition schema.
-  val schema: StructType = {
-    StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)) ++
-      partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f))))
-  }
+  val (schema: StructType, overlappedPartCols: Map[String, StructField]) =
+    PartitioningUtils.mergeDataAndPartitionSchema(dataSchema,
+      partitionSchema, sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
   def partitionSchemaOption: Option[StructType] =
     if (partitionSchema.isEmpty) None else Some(partitionSchema)
@@ -87,7 +70,13 @@ case class HadoopFsRelation(
 
   override def sizeInBytes: Long = {
     val compressionFactor = sqlContext.conf.fileCompressionFactor
-    (location.sizeInBytes * compressionFactor).toLong
+    val defaultSize = (location.sizeInBytes * compressionFactor).toLong
+    location match {
+      case cfi: CatalogFileIndex if sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled =>
+        CommandUtils.getSizeInBytesFallBackToHdfs(sparkSession, new Path(cfi.table.location),
+          defaultSize)
+      case _ => defaultSize
+    }
   }
 
 

@@ -29,9 +29,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * nullable field can be actually set as non-nullable, which cause illegal optimization
  * (e.g., NULL propagation) and wrong answers.
  * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
- *
- * This rule should be executed again at the end of optimization phase, as optimizer may change
- * some expressions and their nullabilities as well. See SPARK-21351 for more details.
  */
 object UpdateAttributeNullability extends Rule[LogicalPlan] {
 
@@ -40,7 +37,7 @@ object UpdateAttributeNullability extends Rule[LogicalPlan] {
     case p if !p.resolved => p
     // Skip leaf node, as it has no child and no need to update nullability.
     case p: LeafNode => p
-    case p: LogicalPlan =>
+    case p: LogicalPlan if p.childrenResolved =>
       val nullabilities = p.children.flatMap(c => c.output).groupBy(_.exprId).map {
         // If there are multiple Attributes having the same ExprId, we need to resolve
         // the conflict of nullable field. We do not really expect this to happen.

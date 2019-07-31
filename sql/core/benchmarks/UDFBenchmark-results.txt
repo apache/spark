@@ -1,0 +1,59 @@
+================================================================================================
+UDF with mixed input types
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int/string to string:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int/string to string wholestage off            194            248          76          0,5        1941,4       1,0X
+long/nullable int/string to string wholestage on            127            136           8          0,8        1269,5       1,5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int/string to option:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int/string to option wholestage off             91             97           8          1,1         910,1       1,0X
+long/nullable int/string to option wholestage on             60             79          29          1,7         603,8       1,5X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int/string to primitive:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int/string to primitive wholestage off             55             63          12          1,8         547,9       1,0X
+long/nullable int/string to primitive wholestage on             43             44           2          2,3         428,0       1,3X
+
+
+================================================================================================
+UDF with primitive types
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int to string:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int to string wholestage off             46             48           2          2,2         461,2       1,0X
+long/nullable int to string wholestage on             49             56           8          2,0         488,9       0,9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int to option:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int to option wholestage off             41             47           9          2,4         408,2       1,0X
+long/nullable int to option wholestage on             26             28           2          3,9         256,7       1,6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+long/nullable int to primitive:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+long/nullable int to primitive wholestage off             26             27           0          3,8         263,7       1,0X
+long/nullable int to primitive wholestage on             26             31           5          3,8         262,2       1,0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+UDF identity overhead:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Baseline                                             20             22           1          4,9         204,3       1,0X
+With identity UDF                                    24             26           2          4,1         241,3       0,8X
+
+

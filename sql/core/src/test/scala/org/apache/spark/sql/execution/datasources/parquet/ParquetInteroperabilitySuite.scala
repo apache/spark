@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import scala.language.existentials
-
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -120,8 +118,12 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
       ).map { s => java.sql.Timestamp.valueOf(s) }
       import testImplicits._
       // match the column names of the file from impala
-      val df = spark.createDataset(ts).toDF().repartition(1).withColumnRenamed("value", "ts")
-      df.write.parquet(tableDir.getAbsolutePath)
+      withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+        SQLConf.ParquetOutputTimestampType.INT96.toString) {
+        val df = spark.createDataset(ts).toDF().repartition(1)
+          .withColumnRenamed("value", "ts")
+        df.write.parquet(tableDir.getAbsolutePath)
+      }
       FileUtils.copyFile(new File(impalaPath), new File(tableDir, "part-00001.parq"))
 
       Seq(false, true).foreach { int96TimestampConversion =>
@@ -182,12 +184,11 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 assert(typeName === PrimitiveTypeName.INT96)
                 val oneBlockMeta = oneFooter.getBlocks().get(0)
                 val oneBlockColumnMeta = oneBlockMeta.getColumns().get(0)
-                val columnStats = oneBlockColumnMeta.getStatistics
                 // This is the important assert.  Column stats are written, but they are ignored
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
                 // assert makes sure this holds even if we change parquet versions (if eg. there
                 // were ever statistics even on unsigned columns).
-                assert(!columnStats.hasNonNullValue)
+                assert(!oneBlockColumnMeta.getStatistics.hasNonNullValue)
               }
 
               // These queries should return the entire dataset with the conversion applied,

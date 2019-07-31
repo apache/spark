@@ -511,8 +511,8 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
     assert(rdd.isCheckpointed === false)
     assert(rdd.isCheckpointedAndMaterialized === false)
     assert(rdd.count() === 0)
-    assert(rdd.isCheckpointed === true)
-    assert(rdd.isCheckpointedAndMaterialized === true)
+    assert(rdd.isCheckpointed)
+    assert(rdd.isCheckpointedAndMaterialized)
     assert(rdd.partitions.size === 0)
   }
 
@@ -531,7 +531,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
       checkpoint(rdd2, reliableCheckpoint)
       rdd2.count()
       assert(rdd1.isCheckpointed === checkpointAllMarkedAncestors)
-      assert(rdd2.isCheckpointed === true)
+      assert(rdd2.isCheckpointed)
     } finally {
       sc.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, null)
     }

@@ -48,8 +48,6 @@ class GaussianMixtureModel @Since("1.3.0") (
 
   require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
 
-  override protected def formatVersion = "1.0"
-
   @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
     GaussianMixtureModel.SaveLoadV1_0.save(sc, path, weights, gaussians)

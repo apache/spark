@@ -50,7 +50,7 @@ class PartitionBatchPruningSuite
     // Enable in-memory partition pruning
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
     // Enable in-memory table scan accumulators
-    spark.conf.set("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    spark.conf.set(SQLConf.IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED.key, "true")
   }
 
   override protected def afterAll(): Unit = {
@@ -170,6 +170,15 @@ class PartitionBatchPruningSuite
     }
   }
 
+  // Support `StartsWith` predicate
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s like '18%'", 1, 1)(
+    180 to 189
+  )
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE s like '%'", 5, 11)(
+    100 to 200
+  )
+  checkBatchPruning("SELECT CAST(s AS INT) FROM pruningStringData WHERE '18%' like s", 5, 11)(Seq())
+
   // With disable IN_MEMORY_PARTITION_PRUNING option
   test("disable IN_MEMORY_PARTITION_PRUNING") {
     spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, false)
@@ -178,7 +187,7 @@ class PartitionBatchPruningSuite
     val result = df.collect().map(_(0)).toArray
     assert(result.length === 1)
 
-    val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+    val (readPartitions, readBatches) = df.queryExecution.executedPlan.collect {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
     assert(readPartitions === 5)
@@ -199,7 +208,7 @@ class PartitionBatchPruningSuite
         df.collect().map(_(0)).toArray
       }
 
-      val (readPartitions, readBatches) = df.queryExecution.sparkPlan.collect {
+      val (readPartitions, readBatches) = df.queryExecution.executedPlan.collect {
         case in: InMemoryTableScanExec => (in.readPartitions.value, in.readBatches.value)
       }.head
 

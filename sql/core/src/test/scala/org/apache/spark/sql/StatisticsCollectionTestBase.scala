@@ -18,7 +18,9 @@
 package org.apache.spark.sql
 
 import java.{lang => jl}
+import java.io.File
 import java.sql.{Date, Timestamp}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.util.Random
@@ -26,12 +28,10 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.types.Decimal
-
 
 /**
  * The base for statistics test cases that we want to include in both the hive module (for
@@ -42,14 +42,18 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   private val dec1 = new java.math.BigDecimal("1.000000000000000000")
   private val dec2 = new java.math.BigDecimal("8.000000000000000000")
-  private val d1 = Date.valueOf("2016-05-08")
-  private val d2 = Date.valueOf("2016-05-09")
-  private val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
-  private val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
-  private val d1Internal = DateTimeUtils.fromJavaDate(d1)
-  private val d2Internal = DateTimeUtils.fromJavaDate(d2)
-  private val t1Internal = DateTimeUtils.fromJavaTimestamp(t1)
-  private val t2Internal = DateTimeUtils.fromJavaTimestamp(t2)
+  private val d1Str = "2016-05-08"
+  private val d1Internal = days(2016, 5, 8)
+  private val d1 = Date.valueOf(d1Str)
+  private val d2Str = "2016-05-09"
+  private val d2Internal = days(2016, 5, 9)
+  private val d2 = Date.valueOf(d2Str)
+  private val t1Str = "2016-05-08 00:00:01.000000"
+  private val t1Internal = date(2016, 5, 8, 0, 0, 1)
+  private val t1 = new Timestamp(TimeUnit.MICROSECONDS.toMillis(t1Internal))
+  private val t2Str = "2016-05-09 00:00:02.000000"
+  private val t2Internal = date(2016, 5, 9, 0, 0, 2)
+  private val t2 = new Timestamp(TimeUnit.MICROSECONDS.toMillis(t2Internal))
 
   /**
    * Define a very simple 3 row table used for testing column serialization.
@@ -78,10 +82,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       Some(16), Some(16)),
     "cstring" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
     "cbinary" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
-    "cdate" -> CatalogColumnStat(Some(2), Some(d1.toString), Some(d2.toString), Some(1), Some(4),
-      Some(4)),
-    "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1.toString), Some(t2.toString), Some(1),
-      Some(8), Some(8))
+    "cdate" -> CatalogColumnStat(Some(2), Some(d1Str), Some(d2Str),
+      Some(1), Some(4), Some(4)),
+    "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1Str),
+      Some(t2Str), Some(1), Some(8), Some(8))
   )
 
   /**
@@ -113,87 +117,88 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     colStats
   }
 
+  private val strVersion = CatalogColumnStat.VERSION.toString
   val expectedSerializedColStats = Map(
     "spark.sql.statistics.colStats.cbinary.avgLen" -> "3",
     "spark.sql.statistics.colStats.cbinary.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cbinary.maxLen" -> "3",
     "spark.sql.statistics.colStats.cbinary.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cbinary.version" -> "1",
+    "spark.sql.statistics.colStats.cbinary.version" -> strVersion,
     "spark.sql.statistics.colStats.cbool.avgLen" -> "1",
     "spark.sql.statistics.colStats.cbool.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cbool.max" -> "true",
     "spark.sql.statistics.colStats.cbool.maxLen" -> "1",
     "spark.sql.statistics.colStats.cbool.min" -> "false",
     "spark.sql.statistics.colStats.cbool.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cbool.version" -> "1",
+    "spark.sql.statistics.colStats.cbool.version" -> strVersion,
     "spark.sql.statistics.colStats.cbyte.avgLen" -> "1",
     "spark.sql.statistics.colStats.cbyte.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cbyte.max" -> "2",
     "spark.sql.statistics.colStats.cbyte.maxLen" -> "1",
     "spark.sql.statistics.colStats.cbyte.min" -> "1",
     "spark.sql.statistics.colStats.cbyte.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cbyte.version" -> "1",
+    "spark.sql.statistics.colStats.cbyte.version" -> strVersion,
     "spark.sql.statistics.colStats.cdate.avgLen" -> "4",
     "spark.sql.statistics.colStats.cdate.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cdate.max" -> "2016-05-09",
     "spark.sql.statistics.colStats.cdate.maxLen" -> "4",
     "spark.sql.statistics.colStats.cdate.min" -> "2016-05-08",
     "spark.sql.statistics.colStats.cdate.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cdate.version" -> "1",
+    "spark.sql.statistics.colStats.cdate.version" -> strVersion,
     "spark.sql.statistics.colStats.cdecimal.avgLen" -> "16",
     "spark.sql.statistics.colStats.cdecimal.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cdecimal.max" -> "8.000000000000000000",
     "spark.sql.statistics.colStats.cdecimal.maxLen" -> "16",
     "spark.sql.statistics.colStats.cdecimal.min" -> "1.000000000000000000",
     "spark.sql.statistics.colStats.cdecimal.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cdecimal.version" -> "1",
+    "spark.sql.statistics.colStats.cdecimal.version" -> strVersion,
     "spark.sql.statistics.colStats.cdouble.avgLen" -> "8",
     "spark.sql.statistics.colStats.cdouble.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cdouble.max" -> "6.0",
     "spark.sql.statistics.colStats.cdouble.maxLen" -> "8",
     "spark.sql.statistics.colStats.cdouble.min" -> "1.0",
     "spark.sql.statistics.colStats.cdouble.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cdouble.version" -> "1",
+    "spark.sql.statistics.colStats.cdouble.version" -> strVersion,
     "spark.sql.statistics.colStats.cfloat.avgLen" -> "4",
     "spark.sql.statistics.colStats.cfloat.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cfloat.max" -> "7.0",
     "spark.sql.statistics.colStats.cfloat.maxLen" -> "4",
     "spark.sql.statistics.colStats.cfloat.min" -> "1.0",
     "spark.sql.statistics.colStats.cfloat.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cfloat.version" -> "1",
+    "spark.sql.statistics.colStats.cfloat.version" -> strVersion,
     "spark.sql.statistics.colStats.cint.avgLen" -> "4",
     "spark.sql.statistics.colStats.cint.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cint.max" -> "4",
     "spark.sql.statistics.colStats.cint.maxLen" -> "4",
     "spark.sql.statistics.colStats.cint.min" -> "1",
     "spark.sql.statistics.colStats.cint.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cint.version" -> "1",
+    "spark.sql.statistics.colStats.cint.version" -> strVersion,
     "spark.sql.statistics.colStats.clong.avgLen" -> "8",
     "spark.sql.statistics.colStats.clong.distinctCount" -> "2",
     "spark.sql.statistics.colStats.clong.max" -> "5",
     "spark.sql.statistics.colStats.clong.maxLen" -> "8",
     "spark.sql.statistics.colStats.clong.min" -> "1",
     "spark.sql.statistics.colStats.clong.nullCount" -> "1",
-    "spark.sql.statistics.colStats.clong.version" -> "1",
+    "spark.sql.statistics.colStats.clong.version" -> strVersion,
     "spark.sql.statistics.colStats.cshort.avgLen" -> "2",
     "spark.sql.statistics.colStats.cshort.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cshort.max" -> "3",
     "spark.sql.statistics.colStats.cshort.maxLen" -> "2",
     "spark.sql.statistics.colStats.cshort.min" -> "1",
     "spark.sql.statistics.colStats.cshort.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cshort.version" -> "1",
+    "spark.sql.statistics.colStats.cshort.version" -> strVersion,
     "spark.sql.statistics.colStats.cstring.avgLen" -> "3",
     "spark.sql.statistics.colStats.cstring.distinctCount" -> "2",
     "spark.sql.statistics.colStats.cstring.maxLen" -> "3",
     "spark.sql.statistics.colStats.cstring.nullCount" -> "1",
-    "spark.sql.statistics.colStats.cstring.version" -> "1",
+    "spark.sql.statistics.colStats.cstring.version" -> strVersion,
     "spark.sql.statistics.colStats.ctimestamp.avgLen" -> "8",
     "spark.sql.statistics.colStats.ctimestamp.distinctCount" -> "2",
-    "spark.sql.statistics.colStats.ctimestamp.max" -> "2016-05-09 00:00:02.0",
+    "spark.sql.statistics.colStats.ctimestamp.max" -> "2016-05-09 00:00:02.000000",
     "spark.sql.statistics.colStats.ctimestamp.maxLen" -> "8",
-    "spark.sql.statistics.colStats.ctimestamp.min" -> "2016-05-08 00:00:01.0",
+    "spark.sql.statistics.colStats.ctimestamp.min" -> "2016-05-08 00:00:01.000000",
     "spark.sql.statistics.colStats.ctimestamp.nullCount" -> "1",
-    "spark.sql.statistics.colStats.ctimestamp.version" -> "1"
+    "spark.sql.statistics.colStats.ctimestamp.version" -> strVersion
   )
 
   val expectedSerializedHistograms = Map(
@@ -288,6 +293,14 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         assert(table.stats.get.colStats(k) == v)
       }
     }
+  }
+
+  // Filter out the checksum file refer to ChecksumFileSystem#isChecksumFile.
+  def getDataSize(file: File): Long = {
+    file.listFiles.filter { f =>
+      val name = f.getName
+      !(name.startsWith(".") && name.endsWith(".crc"))
+    }.map(_.length).sum
   }
 
   // This test will be run twice: with and without Hive support

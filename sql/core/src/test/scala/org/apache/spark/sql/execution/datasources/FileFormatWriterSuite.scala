@@ -18,9 +18,14 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.test.SharedSQLContext
 
-class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
+class FileFormatWriterSuite
+  extends QueryTest
+  with SharedSQLContext
+  with CodegenInterpretedPlanTest{
+
   import testImplicits._
 
   test("empty file should be skipped while write to file") {
@@ -42,6 +47,18 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
+    }
+  }
+
+  test("Null and '' values should not cause dynamic partition failure of string types") {
+    withTable("t1", "t2") {
+      Seq((0, None), (1, Some("")), (2, None)).toDF("id", "p")
+        .write.partitionBy("p").saveAsTable("t1")
+      checkAnswer(spark.table("t1").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
+
+      sql("create table t2(id long, p string) using parquet partitioned by (p)")
+      sql("insert overwrite table t2 partition(p) select id, p from t1")
+      checkAnswer(spark.table("t2").sort("id"), Seq(Row(0, null), Row(1, null), Row(2, null)))
     }
   }
 }

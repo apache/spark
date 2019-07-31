@@ -43,8 +43,13 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
-  }
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
+  },
+  "attributes" : { }
 }, {
   "id" : "7",
   "hostPort" : "node6340.grid.company.com:5933",
@@ -76,7 +81,8 @@
     "totalOnHeapStorageMemory" : 956615884,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "6",
   "hostPort" : "node6644.grid.company.com:8445",
@@ -108,7 +114,8 @@
     "totalOnHeapStorageMemory" : 956615884,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "5",
   "hostPort" : "node2477.grid.company.com:20123",
@@ -140,7 +147,8 @@
     "totalOnHeapStorageMemory" : 956615884,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ]
+  "blacklistedInStages" : [ ],
+  "attributes" : { }
 }, {
   "id" : "4",
   "hostPort" : "node4243.grid.company.com:16084",
@@ -189,8 +197,13 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
-  }
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
+  },
+  "attributes" : { }
 }, {
   "id" : "3",
   "hostPort" : "node0998.grid.company.com:45265",
@@ -239,8 +252,13 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
-  }
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
+  },
+  "attributes" : { }
 }, {
   "id" : "2",
   "hostPort" : "node4045.grid.company.com:29262",
@@ -289,8 +307,13 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
-  }
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
+  },
+  "attributes" : { }
 }, {
   "id" : "1",
   "hostPort" : "node1404.grid.company.com:34043",
@@ -339,6 +362,11 @@
     "ProcessTreePythonVMemory": 0,
     "ProcessTreePythonRSSMemory": 0,
     "ProcessTreeOtherVMemory": 0,
-    "ProcessTreeOtherRSSMemory": 0
-  }
+    "ProcessTreeOtherRSSMemory": 0,
+    "MinorGCCount": 0,
+    "MinorGCTime": 0,
+    "MajorGCCount": 0,
+    "MajorGCTime": 0
+  },
+  "attributes" : { }
 } ]

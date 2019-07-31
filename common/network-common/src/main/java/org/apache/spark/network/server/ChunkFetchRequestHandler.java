@@ -90,8 +90,10 @@ public class ChunkFetchRequestHandler extends SimpleChannelInboundHandler<ChunkF
     ManagedBuffer buf;
     try {
       streamManager.checkAuthorization(client, msg.streamChunkId.streamId);
-      streamManager.registerChannel(channel, msg.streamChunkId.streamId);
       buf = streamManager.getChunk(msg.streamChunkId.streamId, msg.streamChunkId.chunkIndex);
+      if (buf == null) {
+        throw new IllegalStateException("Chunk was not found");
+      }
     } catch (Exception e) {
       logger.error(String.format("Error opening block %s for request from %s",
         msg.streamChunkId, getRemoteAddress(channel)), e);

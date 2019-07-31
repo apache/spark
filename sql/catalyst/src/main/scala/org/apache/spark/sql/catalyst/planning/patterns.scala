@@ -118,19 +118,23 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         // Replace null with default value for joining key, then those rows with null in it could
         // be joined together
         case EqualNullSafe(l, r) if canEvaluate(l, left) && canEvaluate(r, right) =>
-          Some((Coalesce(Seq(l, Literal.default(l.dataType))),
-            Coalesce(Seq(r, Literal.default(r.dataType)))))
+          Seq((Coalesce(Seq(l, Literal.default(l.dataType))),
+            Coalesce(Seq(r, Literal.default(r.dataType)))),
+            (IsNull(l), IsNull(r))
+          )
         case EqualNullSafe(l, r) if canEvaluate(l, right) && canEvaluate(r, left) =>
-          Some((Coalesce(Seq(r, Literal.default(r.dataType))),
-            Coalesce(Seq(l, Literal.default(l.dataType)))))
+          Seq((Coalesce(Seq(r, Literal.default(r.dataType))),
+            Coalesce(Seq(l, Literal.default(l.dataType)))),
+            (IsNull(r), IsNull(l))
+          )
         case other => None
       }
       val otherPredicates = predicates.filterNot {
         case EqualTo(l, r) if l.references.isEmpty || r.references.isEmpty => false
-        case EqualTo(l, r) =>
+        case Equality(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
-        case other => false
+        case _ => false
       }
 
       if (joinKeys.nonEmpty) {
@@ -166,35 +170,27 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    * was involved in an explicit cross join. Also returns the entire list of join conditions for
    * the left-deep tree.
    */
-  def flattenJoin(
-      plan: LogicalPlan,
-      hintMap: mutable.HashMap[AttributeSet, HintInfo],
-      parentJoinType: InnerLike = Inner)
+  def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond, hint) =>
-      val (plans, conditions) = flattenJoin(left, hintMap, joinType)
-      hint.leftHint.map(hintMap.put(left.outputSet, _))
-      hint.rightHint.map(hintMap.put(right.outputSet, _))
+    case Join(left, right, joinType: InnerLike, cond, hint) if hint == JoinHint.NONE =>
+      val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, _)) =>
-      val (plans, conditions) = flattenJoin(j, hintMap)
+    case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
+      val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
   def unapply(plan: LogicalPlan)
-      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression], Map[AttributeSet, HintInfo])]
+      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
       = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, _)) =>
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
-      val flattened = flattenJoin(f, hintMap)
-      Some((flattened._1, flattened._2, hintMap.toMap))
-    case j @ Join(_, _, joinType, _, _) =>
-      val hintMap = new mutable.HashMap[AttributeSet, HintInfo]
-      val flattened = flattenJoin(j, hintMap)
-      Some((flattened._1, flattened._2, hintMap.toMap))
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, hint))
+        if hint == JoinHint.NONE =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
+      Some(flattenJoin(j))
     case _ => None
   }
 }

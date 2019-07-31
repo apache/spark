@@ -27,7 +27,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -850,14 +850,14 @@ class JDBCSuite extends QueryTest
 
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val md = new MetadataBuilder().putLong("scale", 0)
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_numeric", 0, md) ==
+      Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
-    val errMsg = intercept[IllegalArgumentException] {
-      Postgres.getJDBCType(ByteType)
-    }
-    assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
+    assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
   }
 
   test("DerbyDialect jdbc type mapping") {
@@ -880,6 +880,29 @@ class JDBCSuite extends QueryTest
       Some(DoubleType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+  }
+
+  test("MsSqlServerDialect jdbc type mapping") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    assert(msSqlServerDialect.getJDBCType(TimestampType).map(_.databaseTypeDefinition).get ==
+      "DATETIME")
+    assert(msSqlServerDialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get ==
+      "NVARCHAR(MAX)")
+    assert(msSqlServerDialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get ==
+      "BIT")
+    assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get ==
+      "VARBINARY(MAX)")
+    assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
+      "SMALLINT")
+  }
+
+  test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+      metadata).get == ShortType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+      metadata).get == FloatType)
   }
 
   test("table exists query by jdbc dialect") {
@@ -1307,7 +1330,7 @@ class JDBCSuite extends QueryTest
 
     testJdbcParitionColumn("THEID", "THEID")
     testJdbcParitionColumn("\"THEID\"", "THEID")
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testJdbcParitionColumn("ThEiD", "THEID")
     }
     testJdbcParitionColumn("THE ID", "THE ID")
@@ -1519,5 +1542,37 @@ class JDBCSuite extends QueryTest
     }.getMessage
     assert(e.contains("The driver could not open a JDBC connection. " +
       "Check the URL: jdbc:mysql://localhost/db"))
+  }
+
+  test("support casting patterns for lower/upper bounds of TimestampType") {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+        Seq(
+          ("1972-07-04 03:30:00", "1972-07-15 20:50:32.5", "1972-07-27 14:11:05"),
+          ("2019-01-20 12:00:00.502", "2019-01-20 12:00:00.751", "2019-01-20 12:00:01.000"),
+          ("2019-01-20T00:00:00.123456", "2019-01-20 00:05:00.123456",
+            "2019-01-20T00:10:00.123456"),
+          ("1500-01-20T00:00:00.123456", "1500-01-20 00:05:00.123456", "1500-01-20T00:10:00.123456")
+        ).foreach { case (lower, middle, upper) =>
+          val df = spark.read.format("jdbc")
+            .option("url", urlWithUserAndPass)
+            .option("dbtable", "TEST.DATETIME")
+            .option("partitionColumn", "t")
+            .option("lowerBound", lower)
+            .option("upperBound", upper)
+            .option("numPartitions", 2)
+            .load()
+
+          df.logicalPlan match {
+            case lr: LogicalRelation if lr.relation.isInstanceOf[JDBCRelation] =>
+              val jdbcRelation = lr.relation.asInstanceOf[JDBCRelation]
+              val whereClauses = jdbcRelation.parts.map(_.asInstanceOf[JDBCPartition].whereClause)
+              assert(whereClauses.toSet === Set(
+                s""""T" < '$middle' or "T" is null""",
+                s""""T" >= '$middle'"""))
+          }
+        }
+      }
+    }
   }
 }

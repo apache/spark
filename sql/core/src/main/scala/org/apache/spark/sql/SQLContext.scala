@@ -325,15 +325,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Creates a DataFrame from an RDD[Row]. User can specify whether the input rows should be
-   * converted to Catalyst rows.
-   */
-  private[sql]
-  def createDataFrame(rowRDD: RDD[Row], schema: StructType, needsConversion: Boolean) = {
-    sparkSession.createDataFrame(rowRDD, schema, needsConversion)
-  }
-
-  /**
    * :: Experimental ::
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)

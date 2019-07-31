@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{Instant, ZoneId}
+import java.time.LocalDate
 import java.util.Locale
 
 sealed trait DateFormatter extends Serializable {
@@ -31,27 +31,26 @@ class Iso8601DateFormatter(
 
   @transient
   private lazy val formatter = getOrCreateFormatter(pattern, locale)
-  private val UTC = ZoneId.of("UTC")
-
-  private def toInstant(s: String): Instant = {
-    val temporalAccessor = formatter.parse(s)
-    toInstantWithZoneId(temporalAccessor, UTC)
-  }
 
   override def parse(s: String): Int = {
-    val seconds = toInstant(s).getEpochSecond
-    val days = Math.floorDiv(seconds, DateTimeUtils.SECONDS_PER_DAY)
-    days.toInt
+    val localDate = LocalDate.parse(s, formatter)
+    DateTimeUtils.localDateToDays(localDate)
   }
 
   override def format(days: Int): String = {
-    val instant = Instant.ofEpochSecond(days * DateTimeUtils.SECONDS_PER_DAY)
-    formatter.withZone(UTC).format(instant)
+    LocalDate.ofEpochDay(days).format(formatter)
   }
 }
 
 object DateFormatter {
+  val defaultPattern: String = "uuuu-MM-dd"
+  val defaultLocale: Locale = Locale.US
+
   def apply(format: String, locale: Locale): DateFormatter = {
     new Iso8601DateFormatter(format, locale)
   }
+
+  def apply(format: String): DateFormatter = apply(format, defaultLocale)
+
+  def apply(): DateFormatter = apply(defaultPattern)
 }
