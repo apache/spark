@@ -24,10 +24,10 @@ public class FileUtility {
 
   /**
    * Extract an input tar file into an output files and directories.
-   * @param inputTarFileLoc the input file location for the tar file
-   * @param destDirLoc destination for the extracted files
+   * inputTarFileLoc:  the input file location for the tar file
+   * destDirLoc: destination for the extracted files
    *
-   * @throws IllegalStateException
+   * throws IllegalStateException
    */
   public static final String ENCODING = "utf-8";
 
@@ -71,10 +71,10 @@ public class FileUtility {
 
   /**
    * create a tar file for input source directory location .
-   * @param source the source directory location
-   * @param destFileLoc destination of the created tarball
+   * source: the source directory location
+   * destFileLoc: destination of the created tarball
    *
-   * @throws IllegalStateException
+   * throws IllegalStateException
    */
 
   public static void createTarFile(String source, String destFileLoc)
