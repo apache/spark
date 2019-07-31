@@ -50,15 +50,12 @@ case class CSVScan(
     CSVDataSource(parsedOptions).isSplitable && super.isSplitable(path)
   }
 
-  override def getFileUnSplittableReason(path: Path): Option[String] = {
+  override def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
     if (!super.isSplitable(path)) {
       super.getFileUnSplittableReason(path)
     } else {
-      if (!CSVDataSource(parsedOptions).isSplitable) {
-        Some("the csv datasource is set multiLine mode")
-      } else {
-        None
-      }
+      "the csv datasource is set multiLine mode"
     }
   }
 

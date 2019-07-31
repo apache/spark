@@ -39,11 +39,8 @@ abstract class TextBasedFileScan(
 
   override def isSplitable(path: Path): Boolean = Utils.isFileSplittable(path, codecFactory)
 
-  override def getFileUnSplittableReason(path: Path): Option[String] = {
-    if (!isSplitable(path)) {
-      Some("the file is compressed by unsplittable compression codec")
-    } else {
-      None
-    }
+  override def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
+    "the file is compressed by unsplittable compression codec"
   }
 }

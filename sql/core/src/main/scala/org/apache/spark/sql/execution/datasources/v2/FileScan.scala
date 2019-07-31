@@ -50,9 +50,9 @@ abstract class FileScan(
    * If a file with `path` is unsplittable, return the unsplittable reason,
    * otherwise return `None`.
    */
-  def getFileUnSplittableReason(path: Path): Option[String] = {
+  def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))
-    Some("undefined")
+    "undefined"
   }
 
   override def description(): String = {
@@ -108,7 +108,7 @@ abstract class FileScan(
       if (!isSplitable(path) && splitFiles(0).length >
         sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
         logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
-          s"partition, the reason is: ${getFileUnSplittableReason(path).get}")
+          s"partition, the reason is: ${getFileUnSplittableReason(path)}")
       }
     }
 
