@@ -219,7 +219,7 @@ class ImputerModel private[ml] (
     val newCols = $(inputCols).zip($(outputCols)).zip(surrogates).map {
       case ((inputCol, outputCol), surrogate) =>
         val inputType = dataset.schema(inputCol).dataType
-        val ic = col(inputCol)
+        val ic = col(inputCol).cast(DoubleType)
         when(ic.isNull, surrogate)
           .when(ic === $(missingValue), surrogate)
           .otherwise(ic)

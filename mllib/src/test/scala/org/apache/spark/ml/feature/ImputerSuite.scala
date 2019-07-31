@@ -179,22 +179,48 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Imputer for Numeric with default missing Value NaN") {
-    val df = spark.createDataFrame( Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 1.0, 1.0, 1.0),
       (1, 11.0, 11.0, 11.0),
-      (2, 3.0, 3.0, 3.0),
-      (3, Double.NaN, 5.0, 3.0)
+      (2, 3.6, 3.6, 3.6),
+      (3, Double.NaN, 5.2, 3.6)
     )).toDF("id", "value1", "expected_mean_value1", "expected_median_value1")
+
     val imputer = new Imputer()
       .setInputCols(Array("value1"))
       .setOutputCols(Array("out1"))
 
     val types = Seq(ShortType, IntegerType, LongType, FloatType, DoubleType,
       ByteType, DecimalType(10, 0))
+
     for (mType <- types) {
+      // cast `value` to desired data type for testing
       val df2 = df.withColumn("value1", col("value1").cast(mType))
         .withColumn("value1", when(col("value1").equalTo(0), null).otherwise(col("value1")))
-      ImputerSuite.iterateStrategyTest(imputer, df2)
+
+
+      Seq("mean", "median").foreach { strategy =>
+        imputer.setStrategy(strategy)
+        val model = imputer.fit(df)
+        val resultDF = model.transform(df)
+
+        imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
+
+          // check dataType is consistent between input and output
+          val inputType = resultDF.schema(inputCol).dataType
+          val outputType = resultDF.schema(outputCol).dataType
+          assert(inputType === outputType, "Output type is not the same as input type.")
+
+          // check value
+          val expectedDoubleColumn = s"texpected_${strategy}_$inputCol"
+          resultDF.select(col(expectedDoubleColumn), col(outputCol).cast(DoubleType))
+            .collect().foreach {
+              case Row(exp: Double, out: Double) =>
+                assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
+                  s"Imputed values differ. Expected: $exp, actual: $out")
+          }
+        }
+      }
     }
   }
 }
