@@ -276,6 +276,7 @@ Below is a list of all the keywords in Spark SQL.
   <tr><td>UNCACHE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNION</td><td>reserved</td><td>strict-non-reserved</td><td>reserved</td></tr>
   <tr><td>UNIQUE</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
+  <tr><td>UNKNOWN</td><td>reserved</td><td>non-reserved</td><td>reserved</td></tr>
   <tr><td>UNLOCK</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>UNSET</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
   <tr><td>USE</td><td>non-reserved</td><td>non-reserved</td><td>non-reserved</td></tr>
