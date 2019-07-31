@@ -100,6 +100,7 @@ private[spark] abstract class Task[T](
       taskContext
     }
 
+    InputFileBlockHolder.initialize()
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
