@@ -759,14 +759,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
 
-        sql(s"ALTER DATABASE $dbName SET LOCATION '$location2'")
-
-        checkAnswer(
-          sql(s"DESCRIBE DATABASE EXTENDED $dbName"),
-          Row("Database Name", dbNameWithoutBackTicks) ::
-            Row("Description", "") ::
-            Row("Location", CatalogUtils.URIToString(location2)) ::
-            Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
+        withTempDir { tmpDir =>
+          val path = new Path(tmpDir.getCanonicalPath).toUri
+          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
+          sql(s"ALTER DATABASE $dbName SET LOCATION '$path'")
+          val dbPath = makeQualifiedPath(
+            catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri.toString)
+          val expPath = makeQualifiedPath(tmpDir.toString)
+          assert(dbPath === expPath)
+        }
       } finally {
         catalog.reset()
       }
