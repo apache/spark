@@ -25,6 +25,11 @@ import org.apache.spark.sql.types._
 
 class VectorUDTSuite extends QueryTest {
 
+  override def afterAll(): Unit = {
+    this.afterAll()
+    spark.stop()
+  }
+
   test("preloaded VectorUDT") {
     val dv1 = Vectors.dense(Array.empty[Double])
     val dv2 = Vectors.dense(1.0, 2.0)
@@ -48,7 +53,6 @@ class VectorUDTSuite extends QueryTest {
 
   test("SPARK-28158 Hive UDFs supports UDT type") {
     val functionName = "Logistic_Regression"
-    val sql = spark.sql _
     try {
       val df = spark.read.format("libsvm").options(Map("vectorType" -> "dense"))
         .load(TestHive.getHiveFile("test-data/libsvm/sample_libsvm_data.txt").getPath)
@@ -57,7 +61,7 @@ class VectorUDTSuite extends QueryTest {
       // `Logistic_Regression` accepts features (with Vector type), and returns the
       // prediction value. To simplify the UDF implementation, the `Logistic_Regression`
       // will return 0.95d directly.
-      sql(
+      spark.sql(
         s"""
            |CREATE FUNCTION Logistic_Regression
            |AS 'org.apache.spark.sql.hive.LogisticRegressionUDF'
@@ -65,7 +69,7 @@ class VectorUDTSuite extends QueryTest {
         """.stripMargin)
 
       checkAnswer(
-        sql("SELECT Logistic_Regression(features) FROM src"),
+        spark.sql("SELECT Logistic_Regression(features) FROM src"),
         Row(0.95) :: Nil)
     } catch {
       case cause: Throwable => throw cause
@@ -76,6 +80,7 @@ class VectorUDTSuite extends QueryTest {
       assert(
         !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
         s"Function $functionName should have been dropped. But, it still exists.")
+      spark.stop()
     }
   }
 
