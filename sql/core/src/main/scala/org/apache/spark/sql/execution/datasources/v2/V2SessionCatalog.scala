@@ -18,30 +18,27 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.TableChange.{RemoveProperty, SetProperty}
 import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, Resolver, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
-import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
 class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
-
   def this() = {
     this(SparkSession.active.sessionState)
   }
@@ -127,20 +124,14 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
     }
 
     val properties = CatalogV2Util.applyPropertiesChanges(catalogTable.properties, changes)
-    val schema = V2SessionCatalog.applySchemaChanges(
-      catalogTable, changes, sessionState.conf.caseSensitiveAnalysis)
-    val storage = V2SessionCatalog.applyStorageChanges(catalogTable.storage, changes)
+    val schema = CatalogV2Util.applySchemaChanges(catalogTable.schema, changes)
 
     try {
-      catalog.alterTable(catalogTable.copy(
-        storage = storage,
-        properties = properties,
-        schema = schema))
+      catalog.alterTable(catalogTable.copy(properties = properties, schema = schema))
     } catch {
       case _: NoSuchTableException =>
         throw new NoSuchTableException(ident)
     }
-    catalog.refreshTable(ident.asTableIdentifier)
 
     loadTable(ident)
   }
@@ -259,30 +250,5 @@ private[sql] object V2SessionCatalog {
     }
 
     (identityCols, bucketSpec)
-  }
-
-  /**
-   * Makes the provided schema changes and ensures that we don't end up in an ambiguous situation
-   * depending on case sensitivity with respect to the schema.
-   */
-  private def applySchemaChanges(
-      table: CatalogTable,
-      changes: Seq[TableChange],
-      caseSensitive: Boolean): StructType = {
-    val newDataSchema = CatalogV2Util.applySchemaChanges(table.schema, changes)
-    SchemaUtils.checkV2ColumnNameDuplication(
-      newDataSchema,
-      "after schema changes",
-      caseSensitive)
-    newDataSchema
-  }
-
-  private def applyStorageChanges(
-      storage: CatalogStorageFormat,
-      changes: Seq[TableChange]): CatalogStorageFormat = changes.foldLeft(storage) {
-    case (strg, c: SetProperty) if c.property() == "location" =>
-      strg.copy(locationUri = Some(CatalogUtils.stringToURI(c.value())))
-    case (strg, _) =>
-      strg
   }
 }
