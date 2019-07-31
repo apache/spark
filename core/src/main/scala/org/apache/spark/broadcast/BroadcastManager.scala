@@ -59,18 +59,18 @@ private[spark] class BroadcastManager(
     new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
   }
 
-  private def attachBroadcastIdForPython[T: ClassTag](value_ : T, bid: Long): Unit = {
-    try {
-      value_.asInstanceOf[PythonBroadcast].setBroadcastId(bid)
-    } catch {
-      case e: ClassCastException =>
-        // is not a PythonBroadcast
-    }
-  }
-
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
     val bid = nextBroadcastId.getAndIncrement()
-    attachBroadcastIdForPython(value_, bid)
+    value_ match {
+      case pb: PythonBroadcast =>
+        // SPARK-28486: attach this new broadcast variable's id to the PythonBroadcast,
+        // so that underlying data file of PythonBroadcast could be mapped to the
+        // BroadcastBlockId according to this id. Please see the specific usage of the
+        // id in PythonBroadcast.readObject().
+        pb.setBroadcastId(bid)
+
+      case _ => // do nothing
+    }
     broadcastFactory.newBroadcast[T](value_, isLocal, bid)
   }
 
