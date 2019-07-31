@@ -242,7 +242,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("deprecated configs") {
-    val conf = new SparkConf()
+    val conf = new SparkConf(false)
     val newName = UPDATE_INTERVAL_S.key
 
     assert(!conf.contains(newName))
@@ -387,6 +387,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
         |spark.hadoop.javax.jdo.option.ConnectionPassword=${Utils.REDACTION_REPLACEMENT_TEXT}
         |spark.regular.property=regular_value
       """.stripMargin.trim)
+  }
+
+  test("SPARK-28355: Use Spark conf for threshold at which UDFs are compressed by broadcast") {
+    val conf = new SparkConf()
+
+    // Check the default value
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024 * 1024)
+
+    // Set the conf
+    conf.set(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD, 1L * 1024)
+
+    // Verify that it has been set properly
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024)
   }
 
   val defaultIllegalValue = "SomeIllegalValue"

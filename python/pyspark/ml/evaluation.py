@@ -28,7 +28,7 @@ from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
            'MulticlassClassificationEvaluator', 'MultilabelClassificationEvaluator',
-           'ClusteringEvaluator']
+           'ClusteringEvaluator', 'RankingEvaluator']
 
 
 @inherit_doc
@@ -585,6 +585,99 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         Gets the value of `distanceMeasure`
         """
         return self.getOrDefault(self.distanceMeasure)
+
+
+@inherit_doc
+class RankingEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+                       JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Evaluator for Ranking, which expects two input
+    columns: prediction and label.
+
+    >>> scoreAndLabels = [([1.0, 6.0, 2.0, 7.0, 8.0, 3.0, 9.0, 10.0, 4.0, 5.0],
+    ...     [1.0, 2.0, 3.0, 4.0, 5.0]),
+    ...     ([4.0, 1.0, 5.0, 6.0, 2.0, 7.0, 3.0, 8.0, 9.0, 10.0], [1.0, 2.0, 3.0]),
+    ...     ([1.0, 2.0, 3.0, 4.0, 5.0], [])]
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["prediction", "label"])
+    ...
+    >>> evaluator = RankingEvaluator(predictionCol="prediction")
+    >>> evaluator.evaluate(dataset)
+    0.35...
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "precisionAtK", evaluator.k: 2})
+    0.33...
+    >>> ranke_path = temp_path + "/ranke"
+    >>> evaluator.save(ranke_path)
+    >>> evaluator2 = RankingEvaluator.load(ranke_path)
+    >>> str(evaluator2.getPredictionCol())
+    'prediction'
+
+    .. versionadded:: 3.0.0
+    """
+    metricName = Param(Params._dummy(), "metricName",
+                       "metric name in evaluation "
+                       "(meanAveragePrecision|meanAveragePrecisionAtK|"
+                       "precisionAtK|ndcgAtK|recallAtK)",
+                       typeConverter=TypeConverters.toString)
+    k = Param(Params._dummy(), "k",
+              "The ranking position value used in meanAveragePrecisionAtK|precisionAtK|"
+              "ndcgAtK|recallAtK. Must be > 0. The default value is 10.",
+              typeConverter=TypeConverters.toInt)
+
+    @keyword_only
+    def __init__(self, predictionCol="prediction", labelCol="label",
+                 metricName="meanAveragePrecision", k=10):
+        """
+        __init__(self, predictionCol="prediction", labelCol="label", \
+                 metricName="meanAveragePrecision", k=10)
+        """
+        super(RankingEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.RankingEvaluator", self.uid)
+        self._setDefault(metricName="meanAveragePrecision", k=10)
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+
+    @since("3.0.0")
+    def setMetricName(self, value):
+        """
+        Sets the value of :py:attr:`metricName`.
+        """
+        return self._set(metricName=value)
+
+    @since("3.0.0")
+    def getMetricName(self):
+        """
+        Gets the value of metricName or its default value.
+        """
+        return self.getOrDefault(self.metricName)
+
+    @since("3.0.0")
+    def setK(self, value):
+        """
+        Sets the value of :py:attr:`k`.
+        """
+        return self._set(k=value)
+
+    @since("3.0.0")
+    def getK(self):
+        """
+        Gets the value of k or its default value.
+        """
+        return self.getOrDefault(self.k)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, predictionCol="prediction", labelCol="label",
+                  metricName="meanAveragePrecision", k=10):
+        """
+        setParams(self, predictionCol="prediction", labelCol="label", \
+                  metricName="meanAveragePrecision", k=10)
+        Sets params for ranking evaluator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
 
 
 if __name__ == "__main__":

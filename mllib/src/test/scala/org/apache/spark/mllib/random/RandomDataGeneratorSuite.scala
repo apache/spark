@@ -20,9 +20,9 @@ package org.apache.spark.mllib.random
 import org.apache.commons.math3.special.Gamma
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.StatCounter
 
-// TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
 class RandomDataGeneratorSuite extends SparkFunSuite {
 
   def apiChecks(gen: RandomDataGenerator[Double]) {
@@ -61,8 +61,8 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
       gen.setSeed(seed.toLong)
       val sample = (0 until 100000).map { _ => gen.nextValue()}
       val stats = new StatCounter(sample)
-      assert(math.abs(stats.mean - mean) < epsilon)
-      assert(math.abs(stats.stdev - stddev) < epsilon)
+      assert(stats.mean ~== mean absTol epsilon)
+      assert(stats.stdev ~== stddev absTol epsilon)
     }
   }
 

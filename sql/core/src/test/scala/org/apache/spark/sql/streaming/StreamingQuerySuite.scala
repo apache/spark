@@ -413,9 +413,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       sources.nonEmpty
     }
     // Disabled by default
-    assert(spark.conf.get("spark.sql.streaming.metricsEnabled").toBoolean === false)
+    assert(spark.conf.get(SQLConf.STREAMING_METRICS_ENABLED.key).toBoolean === false)
 
-    withSQLConf("spark.sql.streaming.metricsEnabled" -> "false") {
+    withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "false") {
       testStream(inputData.toDF)(
         AssertOnQuery { q => !isMetricsRegistered(q) },
         StopStream,
@@ -424,7 +424,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     // Registered when enabled
-    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+    withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "true") {
       testStream(inputData.toDF)(
         AssertOnQuery { q => isMetricsRegistered(q) },
         StopStream,
@@ -434,7 +434,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
-    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+    withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "true") {
       BlockingSource.latch = new CountDownLatch(1)
       withTempDir { tempDir =>
         val sq = spark.readStream
@@ -995,59 +995,56 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       // Reading a file sink output in a batch query should detect the legacy _spark_metadata
       // directory and throw an error
-      // TODO: test file source V2 as well.
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
-        val e = intercept[SparkException] {
-          spark.read.load(outputDir.getCanonicalPath).as[Int]
-        }
-        assertMigrationError(e.getMessage, sparkMetadataDir, legacySparkMetadataDir)
+      val e = intercept[SparkException] {
+        spark.read.load(outputDir.getCanonicalPath).as[Int]
+      }
+      assertMigrationError(e.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
-        // Restarting the streaming query should detect the legacy _spark_metadata directory and
-        // throw an error
-        val inputData = MemoryStream[Int]
-        val e2 = intercept[SparkException] {
-          inputData.toDF()
-            .writeStream
-            .format("parquet")
-            .option("checkpointLocation", checkpointDir.getCanonicalPath)
-            .start(outputDir.getCanonicalPath)
-        }
-        assertMigrationError(e2.getMessage, sparkMetadataDir, legacySparkMetadataDir)
-
-        // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
-        FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
-
-        // Restarting the streaming query should detect the legacy
-        // checkpoint path and throw an error.
-        val e3 = intercept[SparkException] {
-          inputData.toDF()
-            .writeStream
-            .format("parquet")
-            .option("checkpointLocation", checkpointDir.getCanonicalPath)
-            .start(outputDir.getCanonicalPath)
-        }
-        assertMigrationError(e3.getMessage, checkpointDir, legacyCheckpointDir)
-
-        // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
-        FileUtils.moveDirectory(legacyCheckpointDir, checkpointDir)
-
-        val q = inputData.toDF()
+      // Restarting the streaming query should detect the legacy _spark_metadata directory and
+      // throw an error
+      val inputData = MemoryStream[Int]
+      val e2 = intercept[SparkException] {
+        inputData.toDF()
           .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .start(outputDir.getCanonicalPath)
-        try {
-          q.processAllAvailable()
-          // Check the query id to make sure it did use checkpoint
-          assert(q.id.toString == "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+      }
+      assertMigrationError(e2.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
-          // Verify that the batch query can read "_spark_metadata" correctly after migration.
-          val df = spark.read.load(outputDir.getCanonicalPath)
-          assert(df.queryExecution.executedPlan.toString contains "MetadataLogFileIndex")
-          checkDatasetUnorderly(df.as[Int], 1, 2, 3)
-        } finally {
-          q.stop()
-        }
+      // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
+      FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
+
+      // Restarting the streaming query should detect the legacy
+      // checkpoint path and throw an error.
+      val e3 = intercept[SparkException] {
+        inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(outputDir.getCanonicalPath)
+      }
+      assertMigrationError(e3.getMessage, checkpointDir, legacyCheckpointDir)
+
+      // Fix the checkpoint path and verify that the user can migrate the issue by moving files.
+      FileUtils.moveDirectory(legacyCheckpointDir, checkpointDir)
+
+      val q = inputData.toDF()
+        .writeStream
+        .format("parquet")
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .start(outputDir.getCanonicalPath)
+      try {
+        q.processAllAvailable()
+        // Check the query id to make sure it did use checkpoint
+        assert(q.id.toString == "09be7fb3-49d8-48a6-840d-e9c2ad92a898")
+
+        // Verify that the batch query can read "_spark_metadata" correctly after migration.
+        val df = spark.read.load(outputDir.getCanonicalPath)
+        assert(df.queryExecution.executedPlan.toString contains "MetadataLogFileIndex")
+        checkDatasetUnorderly(df.as[Int], 1, 2, 3)
+      } finally {
+        q.stop()
       }
     }
   }

@@ -170,6 +170,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("add FS jar files not exists") {
+    try {
+      val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath)
+      assert(sc.listJars().forall(!_.contains("TestUDTF.jar")))
+    } finally {
+      sc.stop()
+    }
+  }
+
   test("SPARK-17650: malformed url's throw exceptions before bricking Executors") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -750,9 +761,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      eventually(timeout(10.seconds)) {
-        assert(sc.statusTracker.getExecutorInfos.size == 1)
-      }
+      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))
       assert(sc.resources.get(GPU).get.name === "gpu")
@@ -780,9 +789,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      eventually(timeout(10.seconds)) {
-        assert(sc.statusTracker.getExecutorInfos.size == 1)
-      }
+      TestUtils.waitUntilExecutorsUp(sc, 1, 10000)
       // driver gpu resources file should take precedence over the script
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("0", "1", "8"))
@@ -855,9 +862,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
-      eventually(timeout(60.seconds)) {
-        assert(sc.statusTracker.getExecutorInfos.size == 3)
-      }
+      TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
 
       val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
         val context = TaskContext.get()

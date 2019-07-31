@@ -398,7 +398,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     }
   }
 
-  private def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
+  def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
     val interpret = try {
       evaluateWithoutCodegen(expr, inputRow)
     } catch {

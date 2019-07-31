@@ -179,7 +179,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             validUdfs.forall(PythonUDF.isScalarPythonUDF),
             "Can only extract scalar vectorized udf or sql batch udf")
 
-          val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
+          val resultAttrs = validUdfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
 

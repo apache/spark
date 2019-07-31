@@ -21,12 +21,15 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.SparkException
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.v2.Identifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 
 class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -36,8 +39,10 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set(
+        "spark.sql.catalog.testcat_atomic", classOf[TestStagingInMemoryCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set(V2_SESSION_CATALOG.key, classOf[TestInMemoryTableCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -47,8 +52,8 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   after {
     spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
-    spark.sql("DROP TABLE source")
-    spark.sql("DROP TABLE source2")
+    spark.catalog("testcat_atomic").asInstanceOf[TestInMemoryTableCatalog].clearTables()
+    spark.catalog("session").asInstanceOf[TestInMemoryTableCatalog].clearTables()
   }
 
   test("CreateTable: use v2 plan because catalog is set") {
@@ -66,13 +71,13 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("CreateTable: use v2 plan because provider is v2") {
+  test("CreateTable: use v2 plan and session catalog when provider is v2") {
     spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $orc2")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = spark.catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(table.name == "testcat.table_name")
+    assert(table.name == "session.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> orc2).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
@@ -137,48 +142,197 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq.empty)
   }
 
-  test("CreateTable: fail analysis when default catalog is needed but missing") {
-    val originalDefaultCatalog = conf.getConfString("spark.sql.default.catalog")
-    try {
-      conf.unsetConf("spark.sql.default.catalog")
+  test("CreateTable: use default catalog for v2 sources when default catalog is set") {
+    val sparkSession = spark.newSession()
+    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
+    sparkSession.sql(s"CREATE TABLE table_name (id bigint, data string) USING foo")
 
-      val exc = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
-      }
-
-      assert(exc.getMessage.contains("No catalog specified for table"))
-      assert(exc.getMessage.contains("table_name"))
-      assert(exc.getMessage.contains("no default catalog is set"))
-
-    } finally {
-      conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
-    }
-  }
-
-  test("CreateTableAsSelect: use v2 plan because catalog is set") {
-    spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
-
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = sparkSession.catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
-    assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
-    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    // check that the table is empty
+    val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
-  test("CreateTableAsSelect: use v2 plan because provider is v2") {
-    spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
+  test("CreateTableAsSelect: use v2 plan because catalog is set") {
+    val basicCatalog = spark.catalog("testcat").asTableCatalog
+    val atomicCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.schema == new StructType()
+          .add("id", LongType, nullable = false)
+          .add("data", StringType))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: basic v2 implementation.") {
+    val basicCatalog = spark.catalog("testcat").asTableCatalog
+    val atomicCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+        val originalTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        spark.sql(s"REPLACE TABLE $identifier USING foo AS SELECT id FROM source")
+        val replacedTable = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(replacedTable != originalTable, "Table should have been replaced.")
+        assert(replacedTable.name == identifier)
+        assert(replacedTable.partitioning.isEmpty)
+        assert(replacedTable.properties == Map("provider" -> "foo").asJava)
+        assert(replacedTable.schema == new StructType()
+          .add("id", LongType, nullable = false))
+
+        val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(
+          spark.internalCreateDataFrame(rdd, replacedTable.schema),
+          spark.table("source").select("id"))
+    }
+  }
+
+  test("ReplaceTableAsSelect: Non-atomic catalog drops the table if the write fails.") {
+    spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
+    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat.table_name" +
+        s" USING foo OPTIONS (`${TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
+        "Table should have been dropped as a result of the replace.")
+  }
+
+  test("ReplaceTableAsSelect: Non-atomic catalog drops the table permanently if the" +
+    " subsequent table creation fails.") {
+    spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
+    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat.table_name" +
+        s" USING foo" +
+        s" TBLPROPERTIES (`${TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
+      "Table should have been dropped and failed to be created.")
+  }
+
+  test("ReplaceTableAsSelect: Atomic catalog does not drop the table when replace fails.") {
+    spark.sql("CREATE TABLE testcat_atomic.table_name USING foo AS SELECT id, data FROM source")
+    val testCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat_atomic.table_name" +
+        s" USING foo OPTIONS (`${TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION}=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    var maybeReplacedTable = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(maybeReplacedTable === table, "Table should not have changed.")
+
+    intercept[Exception] {
+      spark.sql("REPLACE TABLE testcat_atomic.table_name" +
+        s" USING foo" +
+        s" TBLPROPERTIES (`${TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
+        s" AS SELECT id FROM source")
+    }
+
+    maybeReplacedTable = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(maybeReplacedTable === table, "Table should not have changed.")
+  }
+
+  test("ReplaceTable: Erases the table contents and changes the metadata.") {
+    spark.sql(s"CREATE TABLE testcat.table_name USING $orc2 AS SELECT id, data FROM source")
 
     val testCatalog = spark.catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+    assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
-    assert(table.name == "testcat.table_name")
+    spark.sql("REPLACE TABLE testcat.table_name (id bigint) USING foo")
+    val replaced = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+    assert(replaced.asInstanceOf[InMemoryTable].rows.isEmpty,
+        "Replaced table should have no rows after committing.")
+    assert(replaced.schema().fields.length === 1,
+        "Replaced table should have new schema.")
+    assert(replaced.schema().fields(0).name === "id",
+      "Replaced table should have new schema.")
+  }
+
+  test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
+    Seq("testcat", "testcat_atomic").foreach { catalog =>
+      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      spark.sql(
+        s"CREATE OR REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+
+      val testCatalog = spark.catalog(catalog).asTableCatalog
+      val createdTable = testCatalog.loadTable(Identifier.of(Array(), "created"))
+      val replacedTable = testCatalog.loadTable(Identifier.of(Array(), "replaced"))
+
+      assert(createdTable.asInstanceOf[InMemoryTable].rows ===
+        replacedTable.asInstanceOf[InMemoryTable].rows)
+      assert(createdTable.schema === replacedTable.schema)
+    }
+  }
+
+  test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table does not exist.") {
+    Seq("testcat", "testcat_atomic").foreach { catalog =>
+      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      intercept[CannotReplaceMissingTableException] {
+        spark.sql(s"REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+      }
+    }
+  }
+
+  test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
+    import TestInMemoryTableCatalog._
+    spark.sql(s"CREATE TABLE testcat_atomic.created USING $orc2 AS SELECT id, data FROM source")
+    intercept[CannotReplaceMissingTableException] {
+      spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
+        s" USING $orc2" +
+        s" TBLPROPERTIES (`$SIMULATE_DROP_BEFORE_REPLACE_PROPERTY`=true)" +
+        s" AS SELECT id, data FROM source")
+    }
+  }
+
+  test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
+    spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
+
+    val testCatalog = spark.catalog("session").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+    assert(table.name == "session.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> orc2).asJava)
     assert(table.schema == new StructType()
@@ -251,22 +405,43 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), spark.table("source"))
   }
 
-  test("CreateTableAsSelect: fail analysis when default catalog is needed but missing") {
-    val originalDefaultCatalog = conf.getConfString("spark.sql.default.catalog")
-    try {
-      conf.unsetConf("spark.sql.default.catalog")
+  test("CreateTableAsSelect: use default catalog for v2 sources when default catalog is set") {
+    val sparkSession = spark.newSession()
+    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
 
-      val exc = intercept[AnalysisException] {
-        spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
-      }
+    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
 
-      assert(exc.getMessage.contains("No catalog specified for table"))
-      assert(exc.getMessage.contains("table_name"))
-      assert(exc.getMessage.contains("no default catalog is set"))
+    // setting the default catalog breaks the reference to source because the default catalog is
+    // used and AsTableIdentifier no longer matches
+    sparkSession.sql(s"CREATE TABLE table_name USING foo AS SELECT id, data FROM source")
 
-    } finally {
-      conf.setConfString("spark.sql.default.catalog", originalDefaultCatalog)
-    }
+    val testCatalog = sparkSession.catalog("testcat").asTableCatalog
+    val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+
+    assert(table.name == "testcat.table_name")
+    assert(table.partitioning.isEmpty)
+    assert(table.properties == Map("provider" -> "foo").asJava)
+    assert(table.schema == new StructType()
+        .add("id", LongType, nullable = false)
+        .add("data", StringType))
+
+    val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), sparkSession.table("source"))
+  }
+
+  test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
+    val sparkSession = spark.newSession()
+    sparkSession.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
+
+    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df.createOrReplaceTempView("source")
+
+    sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
+
+    // use the catalog name to force loading with the v2 catalog
+    checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
   }
 
   test("DropTable: basic") {
@@ -342,6 +517,1133 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
           |WHERE t1.id + 1 = t2.id
         """.stripMargin),
         df_joined)
+    }
+  }
+
+  test("AlterTable: table does not exist") {
+    val exc = intercept[AnalysisException] {
+      sql(s"ALTER TABLE testcat.ns1.table_name DROP COLUMN id")
+    }
+
+    assert(exc.getMessage.contains("testcat.ns1.table_name"))
+    assert(exc.getMessage.contains("Table or view not found"))
+  }
+
+  test("AlterTable: change rejected by implementation") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[SparkException] {
+        sql(s"ALTER TABLE $t DROP COLUMN id")
+      }
+
+      assert(exc.getMessage.contains("Unsupported table change"))
+      assert(exc.getMessage.contains("Cannot drop all fields")) // from the implementation
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType().add("id", IntegerType))
+    }
+  }
+
+  test("AlterTable: add top-level column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN data string")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType().add("id", IntegerType).add("data", StringType))
+    }
+  }
+
+  test("AlterTable: add column with comment") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN data string COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("data", StringType).withComment("doc"))))
+    }
+  }
+
+  test("AlterTable: add multiple columns") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMNS data string COMMENT 'doc', ts timestamp")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == StructType(Seq(
+        StructField("id", IntegerType),
+        StructField("data", StringType).withComment("doc"),
+        StructField("ts", TimestampType))))
+    }
+  }
+
+  test("AlterTable: add nested column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN point.z double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: add nested column to map key") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<struct<x: double, y: double>, bigint>) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN points.key.z double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType))), LongType)))
+    }
+  }
+
+  test("AlterTable: add nested column to map value") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN points.value.z double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: add nested column to array element") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN points.element.z double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: add complex column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN points array<struct<x: double, y: double>>")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: add nested column with comment") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ADD COLUMN points.element.z double COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType),
+            StructField("z", DoubleType).withComment("doc"))))))
+    }
+  }
+
+  test("AlterTable: add nested column parent must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMN point.z double")
+      }
+
+      assert(exc.getMessage.contains("point"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: update column type int -> long") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType().add("id", LongType))
+    }
+  }
+
+  test("AlterTable: update nested type float -> double") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: float, y: double>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: update column with struct type fails") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN point TYPE struct<x: double, y: double, z: double>")
+      }
+
+      assert(exc.getMessage.contains("point"))
+      assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: update column with array type fails") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<int>) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN points TYPE array<long>")
+      }
+
+      assert(exc.getMessage.contains("update the element by updating points.element"))
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(IntegerType)))
+    }
+  }
+
+  test("AlterTable: update column array element type") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<int>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.element TYPE long")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(LongType)))
+    }
+  }
+
+  test("AlterTable: update column with map type fails") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, m map<string, int>) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN m TYPE map<string, long>")
+      }
+
+      assert(exc.getMessage.contains("update a map by updating m.key or m.value"))
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("m", MapType(StringType, IntegerType)))
+    }
+  }
+
+  test("AlterTable: update column map value type") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, m map<string, int>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN m.value TYPE long")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("m", MapType(StringType, LongType)))
+    }
+  }
+
+  test("AlterTable: update nested type in map key") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<struct<x: float, y: double>, bigint>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.key.x TYPE double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))), LongType)))
+    }
+  }
+
+  test("AlterTable: update nested type in map value") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<string, struct<x: float, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.value.x TYPE double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: update nested type in array") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<struct<x: float, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.element.x TYPE double")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: update column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN data TYPE string")
+      }
+
+      assert(exc.getMessage.contains("data"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: nested update column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
+      }
+
+      assert(exc.getMessage.contains("point.x"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: update column type must be compatible") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN id TYPE boolean")
+      }
+
+      assert(exc.getMessage.contains("id"))
+      assert(exc.getMessage.contains("int cannot be cast to boolean"))
+    }
+  }
+
+  test("AlterTable: update column comment") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN id COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == StructType(Seq(StructField("id", IntegerType).withComment("doc"))))
+    }
+  }
+
+  test("AlterTable: update column type and comment") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == StructType(Seq(StructField("id", LongType).withComment("doc"))))
+    }
+  }
+
+  test("AlterTable: update nested column comment") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN point.y COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType).withComment("doc")))))
+    }
+  }
+
+  test("AlterTable: update nested column comment in map key") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<struct<x: double, y: double>, bigint>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.key.y COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType).withComment("doc"))), LongType)))
+    }
+  }
+
+  test("AlterTable: update nested column comment in map value") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.value.y COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType).withComment("doc"))))))
+    }
+  }
+
+  test("AlterTable: update nested column comment in array") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t ALTER COLUMN points.element.y COMMENT 'doc'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType).withComment("doc"))))))
+    }
+  }
+
+  test("AlterTable: comment update column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'")
+      }
+
+      assert(exc.getMessage.contains("data"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: nested comment update column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'")
+      }
+
+      assert(exc.getMessage.contains("point.x"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: rename column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t RENAME COLUMN id TO user_id")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType().add("user_id", IntegerType))
+    }
+  }
+
+  test("AlterTable: rename nested column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
+      sql(s"ALTER TABLE $t RENAME COLUMN point.y TO t")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("t", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: rename nested column in map key") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) USING foo")
+      sql(s"ALTER TABLE $t RENAME COLUMN point.key.y TO t")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", MapType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("t", DoubleType))), LongType)))
+    }
+  }
+
+  test("AlterTable: rename nested column in map value") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t RENAME COLUMN points.value.y TO t")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("t", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: rename nested column in array element") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t RENAME COLUMN points.element.y TO t")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("t", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: rename column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t RENAME COLUMN data TO some_string")
+      }
+
+      assert(exc.getMessage.contains("data"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: nested rename column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t RENAME COLUMN point.x TO z")
+      }
+
+      assert(exc.getMessage.contains("point.x"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: drop column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, data string) USING foo")
+      sql(s"ALTER TABLE $t DROP COLUMN data")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType().add("id", IntegerType))
+    }
+  }
+
+  test("AlterTable: drop nested column") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double, t: double>) USING foo")
+      sql(s"ALTER TABLE $t DROP COLUMN point.t")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", StructType(Seq(
+            StructField("x", DoubleType),
+            StructField("y", DoubleType)))))
+    }
+  }
+
+  test("AlterTable: drop nested column in map key") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) USING foo")
+      sql(s"ALTER TABLE $t DROP COLUMN point.key.y")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("point", MapType(StructType(Seq(
+            StructField("x", DoubleType))), LongType)))
+    }
+  }
+
+  test("AlterTable: drop nested column in map value") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t DROP COLUMN points.value.y")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", MapType(StringType, StructType(Seq(
+            StructField("x", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: drop nested column in array element") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
+      sql(s"ALTER TABLE $t DROP COLUMN points.element.y")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.schema == new StructType()
+          .add("id", IntegerType)
+          .add("points", ArrayType(StructType(Seq(
+            StructField("x", DoubleType))))))
+    }
+  }
+
+  test("AlterTable: drop column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP COLUMN data")
+      }
+
+      assert(exc.getMessage.contains("data"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: nested drop column must exist") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t DROP COLUMN point.x")
+      }
+
+      assert(exc.getMessage.contains("point.x"))
+      assert(exc.getMessage.contains("missing field"))
+    }
+  }
+
+  test("AlterTable: set location") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.properties == Map("provider" -> "foo", "location" -> "s3://bucket/path").asJava)
+    }
+  }
+
+  test("AlterTable: set table property") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo")
+      sql(s"ALTER TABLE $t SET TBLPROPERTIES ('test'='34')")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.properties == Map("provider" -> "foo", "test" -> "34").asJava)
+    }
+  }
+
+  test("AlterTable: remove table property") {
+    val t = "testcat.ns1.table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING foo TBLPROPERTIES('test' = '34')")
+
+      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(table.name == "testcat.ns1.table_name")
+      assert(table.properties == Map("provider" -> "foo", "test" -> "34").asJava)
+
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('test')")
+
+      val updated = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
+
+      assert(updated.name == "testcat.ns1.table_name")
+      assert(updated.properties == Map("provider" -> "foo").asJava)
+    }
+  }
+
+  test("InsertInto: append") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $t1 SELECT id, data FROM source")
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("InsertInto: append - across catalog") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    val t2 = "testcat2.db.tbl"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT * FROM source")
+      sql(s"CREATE TABLE $t2 (id bigint, data string) USING foo")
+      sql(s"INSERT INTO $t2 SELECT * FROM $t1")
+      checkAnswer(spark.table(t2), spark.table("source"))
+    }
+  }
+
+  test("InsertInto: append to partitioned table - without PARTITION clause") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+      sql(s"INSERT INTO TABLE $t1 SELECT * FROM source")
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("InsertInto: append to partitioned table - with PARTITION clause") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+      sql(s"INSERT INTO TABLE $t1 PARTITION (id) SELECT * FROM source")
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("InsertInto: dynamic PARTITION clause fails with non-partition column") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM source")
+      }
+
+      assert(spark.table(t1).count === 0)
+      assert(exc.getMessage.contains("PARTITION clause cannot contain a non-partition column name"))
+      assert(exc.getMessage.contains("data"))
+    }
+  }
+
+  test("InsertInto: static PARTITION clause fails with non-partition column") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (data)")
+
+      val exc = intercept[AnalysisException] {
+        sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM source")
+      }
+
+      assert(spark.table(t1).count === 0)
+      assert(exc.getMessage.contains("PARTITION clause cannot contain a non-partition column name"))
+      assert(exc.getMessage.contains("id"))
+    }
+  }
+
+  test("InsertInto: fails when missing a column") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING foo")
+      val exc = intercept[AnalysisException] {
+        sql(s"INSERT INTO $t1 SELECT id, data FROM source")
+      }
+
+      assert(spark.table(t1).count === 0)
+      assert(exc.getMessage.contains(s"Cannot write to '$t1', not enough data columns"))
+    }
+  }
+
+  test("InsertInto: fails when an extra column is present") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val exc = intercept[AnalysisException] {
+        sql(s"INSERT INTO $t1 SELECT id, data, 'fruit' FROM source")
+      }
+
+      assert(spark.table(t1).count === 0)
+      assert(exc.getMessage.contains(s"Cannot write to '$t1', too many data columns"))
+    }
+  }
+
+  test("InsertInto: append to partitioned table - static clause") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+      sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM source")
+      checkAnswer(spark.table(t1), sql("SELECT 23, data FROM source"))
+    }
+  }
+
+  test("InsertInto: overwrite non-partitioned table") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT * FROM source")
+      sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source2")
+      checkAnswer(spark.table(t1), spark.table("source2"))
+    }
+  }
+
+  test("InsertInto: overwrite - dynamic clause - static mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a"),
+          Row(2, "b"),
+          Row(3, "c")))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - dynamic clause - dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a"),
+          Row(2, "b"),
+          Row(3, "c"),
+          Row(4, "keep")))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - missing clause - static mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
+        sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a"),
+          Row(2, "b"),
+          Row(3, "c")))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - missing clause - dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
+        sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a"),
+          Row(2, "b"),
+          Row(3, "c"),
+          Row(4, "keep")))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - static clause") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string, p1 int) USING foo PARTITIONED BY (p1)")
+      sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 23), (4L, 'keep', 2)")
+      sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p1 = 23) SELECT * FROM source")
+      checkAnswer(spark.table(t1), Seq(
+        Row(1, "a", 23),
+        Row(2, "b", 23),
+        Row(3, "c", 23),
+        Row(4, "keep", 2)))
+    }
+  }
+
+  test("InsertInto: overwrite - mixed clause - static mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a", 2),
+          Row(2, "b", 2),
+          Row(3, "c", 2)))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - mixed clause reordered - static mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a", 2),
+          Row(2, "b", 2),
+          Row(3, "c", 2)))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - implicit dynamic partition - static mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a", 2),
+          Row(2, "b", 2),
+          Row(3, "c", 2)))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - mixed clause - dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a", 2),
+          Row(2, "b", 2),
+          Row(3, "c", 2),
+          Row(4, "keep", 2)))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - mixed clause reordered - dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a", 2),
+          Row(2, "b", 2),
+          Row(3, "c", 2),
+          Row(4, "keep", 2)))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - implicit dynamic partition - dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(1, "a", 2),
+          Row(2, "b", 2),
+          Row(3, "c", 2),
+          Row(4, "keep", 2)))
+      }
+    }
+  }
+
+  test("InsertInto: overwrite - multiple static partitions - dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "testcat.ns1.ns2.tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM source")
+        checkAnswer(spark.table(t1), Seq(
+          Row(2, "a", 2),
+          Row(2, "b", 2),
+          Row(2, "c", 2),
+          Row(4, "keep", 2)))
+      }
     }
   }
 }

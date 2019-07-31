@@ -44,9 +44,14 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
   }
 
   // A scan plan tree is a plan tree that has a leaf node under zero or more Project/Filter nodes.
-  private def isScanPlanTree(plan: SparkPlan): Boolean = plan match {
-    case p: ProjectExec => isScanPlanTree(p.child)
-    case f: FilterExec => isScanPlanTree(f.child)
+  // Because of how codegen and columnar to row transitions work, we may have InputAdaptors
+  // and ColumnarToRow transformations in the middle of it, but they will not have the tag
+  // we want, so skip them if they are the first thing we see
+  private def isScanPlanTree(plan: SparkPlan, first: Boolean): Boolean = plan match {
+    case i: InputAdapter if !first => isScanPlanTree(i.child, false)
+    case c: ColumnarToRowExec if !first => isScanPlanTree(c.child, false)
+    case p: ProjectExec => isScanPlanTree(p.child, false)
+    case f: FilterExec => isScanPlanTree(f.child, false)
     case _: LeafExecNode => true
     case _ => false
   }
@@ -87,7 +92,7 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite {
       case _: SubqueryExec | _: ReusedSubqueryExec =>
         assert(plan.getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isEmpty)
 
-      case _ if isScanPlanTree(plan) =>
+      case _ if isScanPlanTree(plan, true) =>
         // The strategies for planning scan can remove or add FilterExec/ProjectExec nodes,
         // so it's not simple to check. Instead, we only check that the origin LogicalPlan
         // contains the corresponding leaf node of the SparkPlan.

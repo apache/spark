@@ -1122,17 +1122,16 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     writeFile(accessGranted, true, None,
       SparkListenerApplicationStart("accessGranted", Some("accessGranted"), 1L, "test", None),
       SparkListenerApplicationEnd(5L))
+    var isReadable = false
     val mockedFs = spy(provider.fs)
     doThrow(new AccessControlException("Cannot read accessDenied file")).when(mockedFs).open(
-      argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied"))
+      argThat((path: Path) => path.getName.toLowerCase(Locale.ROOT) == "accessdenied" &&
+        !isReadable))
     val mockedProvider = spy(provider)
     when(mockedProvider.fs).thenReturn(mockedFs)
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
     }
-    writeFile(accessDenied, true, None,
-      SparkListenerApplicationStart("accessDenied", Some("accessDenied"), 1L, "test", None),
-      SparkListenerApplicationEnd(5L))
     // Doing 2 times in order to check the blacklist filter too
     updateAndCheck(mockedProvider) { list =>
       list.size should be(1)
@@ -1140,8 +1139,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     val accessDeniedPath = new Path(accessDenied.getPath)
     assert(mockedProvider.isBlacklisted(accessDeniedPath))
     clock.advance(24 * 60 * 60 * 1000 + 1) // add a bit more than 1d
+    isReadable = true
     mockedProvider.cleanLogs()
-    assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+    updateAndCheck(mockedProvider) { list =>
+      assert(!mockedProvider.isBlacklisted(accessDeniedPath))
+      assert(list.exists(_.name == "accessDenied"))
+      assert(list.exists(_.name == "accessGranted"))
+      list.size should be(2)
+    }
   }
 
   test("check in-progress event logs absolute length") {
@@ -1178,6 +1183,56 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     // fs.open throws exception
     when(mockedFs.open(path)).thenThrow(new IOException("Throwing intentionally"))
     assert(!mockedProvider.shouldReloadLog(logInfo, fileStatus))
+  }
+
+  test("log cleaner with the maximum number of log files") {
+    val clock = new ManualClock(0)
+    (5 to 0 by -1).foreach { num =>
+      val log1_1 = newLogFile("app1", Some("attempt1"), inProgress = false)
+      writeFile(log1_1, true, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
+        SparkListenerApplicationEnd(2L)
+      )
+      log1_1.setLastModified(2L)
+
+      val log2_1 = newLogFile("app2", Some("attempt1"), inProgress = false)
+      writeFile(log2_1, true, None,
+        SparkListenerApplicationStart("app2", Some("app2"), 3L, "test", Some("attempt1")),
+        SparkListenerApplicationEnd(4L)
+      )
+      log2_1.setLastModified(4L)
+
+      val log3_1 = newLogFile("app3", Some("attempt1"), inProgress = false)
+      writeFile(log3_1, true, None,
+        SparkListenerApplicationStart("app3", Some("app3"), 5L, "test", Some("attempt1")),
+        SparkListenerApplicationEnd(6L)
+      )
+      log3_1.setLastModified(6L)
+
+      val log1_2_incomplete = newLogFile("app1", Some("attempt2"), inProgress = false)
+      writeFile(log1_2_incomplete, true, None,
+        SparkListenerApplicationStart("app1", Some("app1"), 7L, "test", Some("attempt2"))
+      )
+      log1_2_incomplete.setLastModified(8L)
+
+      val log3_2 = newLogFile("app3", Some("attempt2"), inProgress = false)
+      writeFile(log3_2, true, None,
+        SparkListenerApplicationStart("app3", Some("app3"), 9L, "test", Some("attempt2")),
+        SparkListenerApplicationEnd(10L)
+      )
+      log3_2.setLastModified(10L)
+
+      val provider = new FsHistoryProvider(createTestConf().set(MAX_LOG_NUM.key, s"$num"), clock)
+      updateAndCheck(provider) { list =>
+        assert(log1_1.exists() == (num > 4))
+        assert(log1_2_incomplete.exists())  // Always exists for all configurations
+
+        assert(log2_1.exists() == (num > 3))
+
+        assert(log3_1.exists() == (num > 2))
+        assert(log3_2.exists() == (num > 2))
+      }
+    }
   }
 
   /**
