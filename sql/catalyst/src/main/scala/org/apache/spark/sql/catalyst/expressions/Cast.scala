@@ -432,15 +432,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[UTF8String](_, s => CalendarInterval.fromString(s.toString))
   }
 
-  private[this] val maxLongValueAsDecimal = Decimal(Long.MaxValue)
-  private[this] val minLongValueAsDecimal = Decimal(Long.MinValue)
-  private[this] def castDecimalToLong(d: Decimal): Any =
-    if (d <= maxLongValueAsDecimal && d >= minLongValueAsDecimal) {
-      d.toLong
-    } else {
-      null
-    }
-
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
     case StringType =>
@@ -458,10 +449,32 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       b => b.asInstanceOf[Short].toLong
     case IntegerType =>
       b => b.asInstanceOf[Int].toLong
+    case FloatType =>
+      buildCast[Float](_, f =>
+        if (f <= Long.MaxValue && f >= Long.MinValue) {
+          f.toLong
+        } else {
+          null
+        }
+      )
+    case DoubleType =>
+      buildCast[Double](_, d =>
+        if (d <= Long.MaxValue && d >= Long.MinValue) {
+          d.toLong
+        } else {
+          null
+        }
+      )
     case _: DecimalType =>
-      b => castDecimalToLong(b.asInstanceOf[Decimal])
-    case x: NumericType =>
-      b => castDecimalToLong(Decimal(b.toString))
+      val longMaxValueAsDecimal = Decimal(Long.MaxValue)
+      val longMinValueAsDecimal = Decimal(Long.MinValue)
+      buildCast[Decimal](_, d =>
+        if (d <= longMaxValueAsDecimal && d >= longMinValueAsDecimal) {
+          d.toLong
+        } else {
+          null
+        }
+      )
   }
 
   // IntConverter
@@ -494,7 +507,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           null
         }
       )
-    case x: FloatType =>
+    case FloatType =>
       buildCast[Float](_, f =>
         if (f <= Int.MaxValue && f >= Int.MinValue) {
           f.toInt
@@ -502,7 +515,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           null
         }
       )
-    case x: DoubleType =>
+    case DoubleType =>
       buildCast[Double](_, d =>
         if (d <= Int.MaxValue && d >= Int.MinValue) {
           d.toInt
@@ -562,7 +575,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           null
         }
       })
-    case x: FloatType =>
+    case FloatType =>
       buildCast[Float](_, f =>
         if (f <= Short.MaxValue && f >= Short.MinValue) {
           f.toShort
@@ -570,7 +583,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           null
         }
       )
-    case x: DoubleType =>
+    case DoubleType =>
       buildCast[Double](_, d =>
         if (d <= Short.MaxValue && d >= Short.MinValue) {
           d.toShort
@@ -636,7 +649,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           null
         }
       })
-    case x: FloatType =>
+    case FloatType =>
       buildCast[Float](_, f =>
         if (f <= Byte.MaxValue && f >= Byte.MinValue) {
           f.toByte
@@ -644,7 +657,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           null
         }
       )
-    case x: DoubleType =>
+    case DoubleType =>
       buildCast[Double](_, d =>
         if (d <= Byte.MaxValue && d >= Byte.MinValue) {
           d.toByte
