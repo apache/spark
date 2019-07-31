@@ -151,7 +151,7 @@
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
-      <version>6.0.1</version>
+      <version>${rocksdb.version}</version>
     </dependency>
   </dependencies>
   <build>

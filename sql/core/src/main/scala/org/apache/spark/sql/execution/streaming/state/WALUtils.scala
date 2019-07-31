@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.StructType
 object WALUtils {
 
   case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
-  val EOF_MARKER = -1
+  private val EOF_MARKER = -1
 
   /** Files needed to recover the given version of the store */
   def filesForVersion(allFiles: Seq[StoreFile], version: Long): Seq[StoreFile] = {

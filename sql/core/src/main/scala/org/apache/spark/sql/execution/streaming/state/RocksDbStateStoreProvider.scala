@@ -56,6 +56,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   private lazy val baseDir: Path = stateStoreId.storeCheckpointLocation()
   private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
   import WALUtils._
@@ -65,9 +66,13 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
     /** Trait and classes representing the internal state of the store */
     trait STATE
+
     case object LOADED extends STATE
+
     case object UPDATING extends STATE
+
     case object COMMITTED extends STATE
+
     case object ABORTED extends STATE
 
     private val newVersion = version + 1
@@ -91,9 +96,12 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     private def initTransaction(): Unit = {
       if (state == LOADED && rocksDbWriteInstance == null) {
         logDebug(s"Creating Transactional DB for batch $version")
-        rocksDbWriteInstance =
-          new OptimisticTransactionDbInstance(keySchema, valueSchema, newVersion.toString)
-        rocksDbWriteInstance.open(rocksDbPath, rocksDbConf)
+        rocksDbWriteInstance = new OptimisticTransactionDbInstance(
+          keySchema,
+          valueSchema,
+          newVersion.toString,
+          rocksDbConf)
+        rocksDbWriteInstance.open(rocksDbPath)
         state = UPDATING
         rocksDbWriteInstance.startTransactions()
       }
@@ -106,10 +114,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
       initTransaction()
-      verify(
-        state == UPDATING,
-        s"Current state of the store is $state. " +
-          s"Cannot put after already committed or aborted")
+      verify(state == UPDATING, s"Cannot put after already committed or aborted")
       val keyCopy = key.copy()
       val valueCopy = value.copy()
       rocksDbWriteInstance.put(keyCopy, valueCopy)
@@ -120,7 +125,6 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       initTransaction()
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       rocksDbWriteInstance.remove(key)
-      // TODO check if removed value is null
       writeRemoveToDeltaFile(compressedStream, key)
     }
 
@@ -134,17 +138,14 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
       initTransaction()
-      verify(
-        state == UPDATING,
-        s"Current state of the store is $state " +
-          s"Cannot commit after already committed or aborted")
+      verify(state == UPDATING, s"Cannot commit after already committed or aborted")
       try {
         synchronized {
           rocksDbWriteInstance.commit(Some(getBackupPath(newVersion)))
           finalizeDeltaFile(compressedStream)
         }
         state = COMMITTED
-        numEntriesInDb = rocksDbWriteInstance.otdb.getLongProperty("rocksdb.estimate-num-keys")
+        numEntriesInDb = rocksDbWriteInstance.getApproxEntriesInDb()
         bytesUsedByDb = numEntriesInDb * (keySchema.defaultSize + valueSchema.defaultSize)
         newVersion
       } catch {
@@ -208,8 +209,9 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
             Iterator.empty
           } else {
             val path = getBackupPath(version)
-            val r: RocksDbInstance = new RocksDbInstance(keySchema, valueSchema, version.toString)
-            r.open(path, rocksDbConf, readOnly = true)
+            val r: RocksDbInstance =
+              new RocksDbInstance(keySchema, valueSchema, version.toString, rocksDbConf)
+            r.open(path, readOnly = true)
             r.iterator(closeDbOnCompletion = true)
           }
         case COMMITTED =>
@@ -217,8 +219,8 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           // use check-pointed db for current updated version
           val path = getBackupPath(newVersion)
           val r: RocksDbInstance =
-            new RocksDbInstance(keySchema, valueSchema, newVersion.toString)
-          r.open(path, rocksDbConf, readOnly = true)
+            new RocksDbInstance(keySchema, valueSchema, newVersion.toString, rocksDbConf)
+          r.open(path, readOnly = true)
           r.iterator(closeDbOnCompletion = true)
 
         case _ => Iterator.empty
@@ -284,7 +286,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     this.localDirectory = this.rocksDbConf
       .getOrElse(
         "spark.sql.streaming.stateStore.rocksDb.localDirectory".toLowerCase(Locale.ROOT),
-        RocksDbStateStoreProvider.ROCKS_DB_BASE_PATH)
+        Utils.createTempDir().getAbsoluteFile.toString)
   }
 
   /*
@@ -340,91 +342,71 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
   private def createStore(version: Long): RocksDbStateStore = {
     val newStore = new RocksDbStateStore(version)
-    logInfo(
-      s"Creating a new Store for version $version and partition ${stateStoreId_.partitionId}")
-    if (version > 0 & !checkIfStateExists(version)) {
-      // load the data in the rocksDB
-      logInfo(s"Loading state for $version and partition ${stateStoreId_.partitionId}")
-      loadState(version)
+    if (version > 0) {
+      // load the data into the rocksDB
+      logInfo(
+        s"Loading state into the db for $version and partition ${stateStoreId_.partitionId}")
+      loadIntoRocksDB(version)
     }
     newStore
   }
 
-  def checkIfStateExists(version: Long): Boolean = {
-    new File(rocksDbPath, version.toString).exists()
-  }
-
-  def loadState(version: Long): Unit = {
-    // search for state on snapshot
-    var rocksDbWriteInstance: OptimisticTransactionDbInstance = null
-    var lastAvailableVersion = version
-    var found = false
+  private def loadIntoRocksDB(version: Long): Unit = {
+    /*
+       1. Get last available/committed Rocksdb version in local folder
+       2. If last committed version = version, we already have loaded rocksdb state.
+       3. If last committed version = version - 1,
+          we have to apply delta for version in the existing rocksdb
+       4. Otherwise we have to recreate a new rocksDB store by using Snapshots/Delta
+     */
     val (_, elapsedMs) = Utils.timeTakenMs {
-      try {
-        if (checkIfStateExists(version - 1)) {
-          found = true
-          lastAvailableVersion = version - 1
-        } else {
-          // Destroy DB so that we can reconstruct it using snapshot and delta files
-          RocksDbInstance.destroyDB(rocksDbPath)
-        }
-
-        // Check for snapshot files starting from "version"
-        while (!found && lastAvailableVersion > 0) {
+      var lastAvailableVersion = getLastCommittedVersion()
+      if (lastAvailableVersion == -1L || lastAvailableVersion <= version - 2) {
+        // Destroy existing DB so that we can reconstruct it using snapshot and delta files
+        RocksDbInstance.destroyDB(rocksDbPath)
+        var lastAvailableSnapShotVersion: Long = version + 1
+        // load from snapshot
+        var found = false
+        while (!found && lastAvailableSnapShotVersion > 0) {
           try {
-            found = loadSnapshotFile(lastAvailableVersion)
+            lastAvailableSnapShotVersion = lastAvailableSnapShotVersion - 1
+            found = loadSnapshotFile(lastAvailableSnapShotVersion)
+            logDebug(
+              s"Snapshot for version $lastAvailableSnapShotVersion " +
+                "and partition ${stateStoreId_.partitionId}:  found = $found")
           } catch {
             case e: Exception =>
               logError(s"$e while reading snapshot file")
               throw e
           }
-          if (!found) {
-            lastAvailableVersion = lastAvailableVersion - 1
-          }
-          logDebug(
-            s"Snapshot for $lastAvailableVersion for " +
-              s"partition ${stateStoreId_.partitionId} found = $found")
         }
-
-        rocksDbWriteInstance =
-          new OptimisticTransactionDbInstance(keySchema, valueSchema, version.toString)
-        rocksDbWriteInstance.open(rocksDbPath, rocksDbConf)
-        rocksDbWriteInstance.startTransactions()
-
-        // Load all the deltas from the version after the last available
-        // one up to the target version.
-        // The last available version is the one with a full snapshot, so it doesn't need deltas.
-        for (deltaVersion <- (lastAvailableVersion + 1) to version) {
-          val fileToRead = deltaFile(baseDir, deltaVersion)
-          updateFromDeltaFile(
-            fm,
-            fileToRead,
-            keySchema,
-            valueSchema,
-            rocksDbWriteInstance,
-            sparkConf)
-          logInfo(s"Read delta file for version $version of $this from $fileToRead")
-        }
-
-        rocksDbWriteInstance.commit(Some(getBackupPath(version)))
-        rocksDbWriteInstance.close()
-        rocksDbWriteInstance = null
-      } catch {
-        case e: IllegalStateException =>
-          logError(s"Exception while loading state ${e.getMessage}")
-          if (rocksDbWriteInstance != null) {
-            rocksDbWriteInstance.abort()
-            rocksDbWriteInstance.close()
-          }
-          throw e
+        lastAvailableVersion = lastAvailableSnapShotVersion
+      }
+      if (lastAvailableVersion < version) {
+        applyDelta(version, lastAvailableVersion)
       }
     }
-    logInfo(s"Loading state for $version takes $elapsedMs ms.")
+    logInfo(
+      s"Loading state for $version and partition ${stateStoreId_.partitionId} took $elapsedMs ms.")
+  }
+
+  private def getLastCommittedVersion(): Long = {
+    val f = new File(rocksDbPath, "commit")
+    if (f.exists()) {
+      try {
+        val fileContents = scala.io.Source.fromFile(f.getAbsolutePath).getLines.mkString
+        return fileContents.toLong
+      } catch {
+        case e: Exception =>
+          logWarning("Exception while reading committed file")
+      }
+    }
+    return -1L
   }
 
   private def loadSnapshotFile(version: Long): Boolean = {
     val fileToRead = snapshotFile(baseDir, version)
-    if (!fm.exists(fileToRead)) {
+    if (version == 0 || !fm.exists(fileToRead)) {
       return false
     }
     val versionTempPath = getTempPath(version)
@@ -433,7 +415,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     try {
       logInfo(s"Will download $fileToRead at location ${tmpLocFile.toString()}")
       if (downloadFile(fm, fileToRead, new Path(tmpLocFile.getAbsolutePath), sparkConf)) {
-        FileUtility.extractTarFile(s"{versionTempPath}.tar", versionTempPath)
+        FileUtility.extractTarFile(tmpLocFile.getAbsolutePath, versionTempPath)
         if (!tmpLocDir.list().exists(_.endsWith(".sst"))) {
           logWarning("Snapshot files are corrupted")
           throw new IOException(
@@ -441,7 +423,9 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
               s" No SST files found")
         }
         FileUtils.moveDirectory(tmpLocDir, new File(rocksDbPath))
-        return true
+        true
+      } else {
+        false
       }
     } catch {
       case e: Exception =>
@@ -453,7 +437,42 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       }
       FileUtils.deleteDirectory(tmpLocDir)
     }
-    return false
+  }
+
+  private def applyDelta(version: Long, lastAvailableVersion: Long): Unit = {
+    var rocksDbWriteInstance: OptimisticTransactionDbInstance = null
+    try {
+      rocksDbWriteInstance =
+        new OptimisticTransactionDbInstance(keySchema, valueSchema, version.toString, rocksDbConf)
+      rocksDbWriteInstance.open(rocksDbPath)
+      rocksDbWriteInstance.startTransactions()
+      // Load all the deltas from the version after the last available
+      // one up to the target version.
+      // The last available version is the one with a full snapshot, so it doesn't need deltas.
+      for (deltaVersion <- (lastAvailableVersion + 1) to version) {
+        val fileToRead = deltaFile(baseDir, deltaVersion)
+        updateFromDeltaFile(
+          fm,
+          fileToRead,
+          keySchema,
+          valueSchema,
+          rocksDbWriteInstance,
+          sparkConf)
+        logInfo(s"Read delta file for version $version of $this from $fileToRead")
+      }
+      rocksDbWriteInstance.commit(Some(getBackupPath(version)))
+    } catch {
+      case e: Exception =>
+        logError(s"Exception while loading state ${e.getMessage}")
+        if (rocksDbWriteInstance != null) {
+          rocksDbWriteInstance.abort()
+        }
+        throw e
+    } finally {
+      if (rocksDbWriteInstance != null) {
+        rocksDbWriteInstance.close()
+      }
+    }
   }
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
@@ -552,97 +571,61 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     val versionsInFiles = fetchFiles(fm, baseDir).map(_.version).toSet
     if (versionsInFiles.nonEmpty) {
       val maxVersion = versionsInFiles.max
-      if (maxVersion == 0) {
-        return Iterator.empty
-      }
-      // FIXME assuming maxVersion exists in rocksDB
-      val path = getBackupPath(maxVersion)
-      val r: RocksDbInstance = new RocksDbInstance(keySchema, valueSchema, maxVersion.toString)
-      try {
-        r.open(path, rocksDbConf, readOnly = true)
-        return r.iterator(false)
-      } catch {
-        case e: Exception =>
-        // do nothing
+      if (maxVersion > 0) {
+        loadIntoRocksDB(maxVersion)
+        val r: RocksDbInstance =
+          new RocksDbInstance(keySchema, valueSchema, maxVersion.toString, rocksDbConf)
+        try {
+          r.open(rocksDbPath, readOnly = true)
+          return r.iterator(false)
+        } catch {
+          case e: Exception =>
+            logWarning(s"Exception ${e.getMessage} while getting latest Iterator")
+        }
       }
     }
     Iterator.empty
   }
 
-  // making it public for unit tests
+  private[sql] def getLocalDirectory: String = localDirectory
+
   private[sql] lazy val rocksDbPath: String = {
-    val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
-    val basePath = new Path(
-      localDirectory,
-      new Path(
-        "db",
-        checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
-
-    val dir = basePath.toString + Path.SEPARATOR +
-      stateStoreId_.operatorId + Path.SEPARATOR +
-      stateStoreId_.partitionId
-
-    val f: File = new File(dir)
-
-    if (!f.exists()) {
-      logInfo(s"creating rocksDb directory at : $dir")
-      f.mkdirs()
-    }
-    dir
+    getPath("db")
   }
 
   private def getBackupPath(version: Long): String = {
-    val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
-
-    val basePath = new Path(
-      localDirectory,
-      new Path(
-        "backup",
-        checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
-
-    val dir = basePath.toString + Path.SEPARATOR +
-      stateStoreId_.operatorId + Path.SEPARATOR +
-      stateStoreId_.partitionId
-
-    val f: File = new File(dir)
-
-    if (!f.exists()) {
-      logInfo(s"creating rocksDb directory at : $dir")
-      f.mkdirs()
-    }
-
-    dir + Path.SEPARATOR + version
+    getPath("backup", version.toString)
   }
 
   private def getTempPath(version: Long): String = {
+    getPath("tmp", version.toString)
+  }
+
+  private def getPath(parentFolderName: String, version: String = null): String = {
     val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
 
     val basePath = new Path(
       localDirectory,
       new Path(
-        "tmp",
+        parentFolderName,
         checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
 
-    val dir = basePath.toString + Path.SEPARATOR +
-      stateStoreId_.operatorId + Path.SEPARATOR +
-      stateStoreId_.partitionId
+    val dirPath = new Path(
+      basePath,
+      new Path(stateStoreId_.operatorId.toString, stateStoreId_.partitionId.toString))
 
-    val f: File = new File(dir)
-
+    val f: File = new File(dirPath.toString)
     if (!f.exists()) {
-      logInfo(s"creating rocksDb directory at : $dir")
+      logInfo(s"creating rocksDb directory at : ${dirPath.toString}")
       f.mkdirs()
     }
 
-    dir + Path.SEPARATOR + version
+    val path = if (version != null) {
+      new Path(dirPath, version)
+    } else {
+      dirPath
+    }
+    path.toString
   }
-
-  // making it public for unit tests
-  def getLocalDirectory: String = localDirectory
-}
-
-object RocksDbStateStoreProvider {
-
-  val ROCKS_DB_BASE_PATH: String = "/media/ephemeral0/spark/rocksdb"
 
 }
