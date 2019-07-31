@@ -617,7 +617,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
   }
 
   def addExtraInfo: RDD[InternalRow] => RDD[InternalRow] = {
-    _.setExtraInfo(s"Union(${output.mkString(",")})")
+    _.setExtraInfo(s"Union(${output.mkString(", ")})")
   }
 
   protected override def doExecute(): RDD[InternalRow] = addExtraInfo {

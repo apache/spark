@@ -141,6 +141,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val attributes = Map("ContainerId" -> "ct1", "User" -> "spark").toMap
     testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L))
+    testRDDInfo(makeRddInfo(2, 3, 4, 5L, 6L, Some("Extra Info")))
     testStageInfo(makeStageInfo(10, 20, 30, 40L, 50L))
     testTaskInfo(makeTaskInfo(999L, 888, 55, 777L, false))
     testTaskMetrics(makeTaskMetrics(
@@ -840,8 +841,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
     )
   }
 
-  private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7), a.toString)
+  private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long,
+                          extraInfo: Option[String] = None) = {
+    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7),
+      a.toString, None, extraInfo)
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
