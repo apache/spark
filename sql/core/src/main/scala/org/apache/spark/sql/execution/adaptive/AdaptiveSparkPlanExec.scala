@@ -61,7 +61,8 @@ case class AdaptiveSparkPlanExec(
     initialPlan: SparkPlan,
     @transient session: SparkSession,
     @transient subqueryMap: Map[Long, ExecSubqueryExpression],
-    @transient stageCache: TrieMap[SparkPlan, QueryStageExec])
+    @transient stageCache: TrieMap[SparkPlan, QueryStageExec],
+    @transient queryExecution: QueryExecution)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -119,7 +120,11 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan.execute()
     } else {
       val executionId = Option(
-        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
+        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).flatMap { idStr =>
+        val id = idStr.toLong
+        val qe = SQLExecution.getQueryExecution(id)
+        if (qe.eq(queryExecution)) Some(id) else None
+      }
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
