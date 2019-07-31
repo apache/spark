@@ -22,12 +22,13 @@ import java.util.{Locale, Properties, UUID}
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertIntoTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -485,7 +486,80 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    saveAsTable(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
+    val session = df.sparkSession
+    val useV1Sources =
+      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
+    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
+    val shouldUseV1Source = cls.newInstance() match {
+      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
+      case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
+    }
+
+    val canUseV2 = !shouldUseV1Source && classOf[TableProvider].isAssignableFrom(cls)
+    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
+
+    session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
+      case CatalogObjectIdentifier(Some(catalog), ident) =>
+        saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
+
+      case CatalogObjectIdentifier(None, ident) if canUseV2 && sessionCatalogOpt.isDefined =>
+        // We pass in the modeForDSV1, as using the V2 session catalog should maintain compatibility
+        // for now.
+        saveAsTable(sessionCatalogOpt.get.asTableCatalog, ident, modeForDSV1)
+
+      case AsTableIdentifier(tableIdentifier) =>
+        saveAsTable(tableIdentifier)
+    }
+  }
+
+
+  private def saveAsTable(catalog: TableCatalog, ident: Identifier, mode: SaveMode): Unit = {
+    val partitioning = partitioningColumns.map { colNames =>
+      colNames.map(name => IdentityTransform(FieldReference(name)))
+    }.getOrElse(Seq.empty[Transform])
+    val bucketing = bucketColumnNames.map { cols =>
+      Seq(BucketTransform(LiteralValue(numBuckets.get, IntegerType), cols.map(FieldReference(_))))
+    }.getOrElse(Seq.empty[Transform])
+    val partitionTransforms = partitioning ++ bucketing
+
+    val tableOpt = try Option(catalog.loadTable(ident)) catch {
+      case _: NoSuchTableException => None
+    }
+
+    val command = (mode, tableOpt) match {
+      case (SaveMode.Append, Some(table)) =>
+        AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan)
+
+      case (SaveMode.Overwrite, _) =>
+        ReplaceTableAsSelect(
+          catalog,
+          ident,
+          partitionTransforms,
+          df.queryExecution.analyzed,
+          Map.empty,            // properties can't be specified through this API
+          extraOptions.toMap,
+          orCreate = true)      // Create the table if it doesn't exist
+
+      case (other, _) =>
+        // We have a potential race condition here in AppendMode, if the table suddenly gets
+        // created between our existence check and physical execution, but this can't be helped
+        // in any case.
+        CreateTableAsSelect(
+          catalog,
+          ident,
+          partitionTransforms,
+          df.queryExecution.analyzed,
+          Map.empty,
+          extraOptions.toMap,
+          ignoreIfExists = other == SaveMode.Ignore)
+    }
+
+    runCommand(df.sparkSession, "saveAsTable") {
+      command
+    }
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {

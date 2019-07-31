@@ -17,14 +17,22 @@
 
 package org.apache.spark.sql.sources.v2
 
+import java.util.concurrent.CountDownLatch
+
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetDataSourceV2, ParquetTable}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.util.QueryExecutionListener
 
 class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
+
+  private val v2Format = classOf[TestV2ParquetWrapper].getName
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
@@ -104,4 +112,58 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
       }
     }
   }
+
+  test("saveAsTable: with defined catalog and table doesn't exist") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      spark.table("source").select("id", "data").write.saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with defined catalog and table exists") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      spark.table("source").select("id", "data").write.saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with session catalog and v2 table - table doesn't exist") {
+    val t1 = "tbl"
+    withTable(t1) {
+      spark.table("source").select("id", "data").write.format(v2Format).saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with session catalog and v2 table - table exists") {
+    val t1 = "tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      intercept[TableAlreadyExistsException] {
+        spark.table("source").select("id", "data").write.format(v2Format).saveAsTable(t1)
+      }
+      spark.table("source").select("id", "data")
+        .write.format(v2Format).mode("append").saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+}
+
+class SingleSQLExecutionListener extends QueryExecutionListener {
+
+  private var qe: QueryExecution = _
+  // A latch that callers can wait on for an async message to be processed.
+  val latch = new CountDownLatch(1)
+
+  override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {}
+
+  override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {
+    this.qe = qe
+    latch.countDown()
+  }
+
+  def getExecutedQuery: QueryExecution = qe
 }
