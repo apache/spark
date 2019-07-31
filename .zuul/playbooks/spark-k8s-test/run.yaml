@@ -1,0 +1,47 @@
+- hosts: all
+  become: yes
+  roles:
+    - install-openjdk
+    - role: install-docker
+      #docker_version: 18.06
+    - create-single-k8s-cluster-with-minikube
+  tasks:
+    - name: Run integration tests of Spark with k8s cluster manager
+      shell: |
+        set -ex
+
+        sed -i -e '/127.0.0.1/ s/\(localhost\)/'$(hostname)' \1/' /etc/hosts
+        echo '{{ zuul.project.src_dir }}'
+        # make tar
+        export DATE=`date "+%Y%m%d"`
+        export REVISION=`git rev-parse --short HEAD`
+        export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  
+        ./dev/make-distribution.sh --name ${DATE}-${REVISION} --pip --tgz -DzincPort=${ZINC_PORT} \
+             -Phadoop-2.7 -Pkubernetes -Pkinesis-asl -Phive -Phive-thriftserver
+        
+        # run k8s tests using tar
+        PVC_TMP_DIR=$(mktemp -d)
+        export PVC_TESTS_HOST_PATH=$PVC_TMP_DIR
+        export PVC_TESTS_VM_PATH=$PVC_TMP_DIR
+  
+        minikube --vm-driver=none start --memory 6000 --cpus 8
+  
+        minikube mount ${PVC_TESTS_HOST_PATH}:${PVC_TESTS_VM_PATH} --9p-version=9p2000.L --gid=0 --uid=185 &
+  
+        MOUNT_PID=$(jobs -rp)
+        
+        kubectl create clusterrolebinding serviceaccounts-cluster-admin --clusterrole=cluster-admin --group=system:serviceaccounts || true
+        
+        echo `pwd`
+        export SPARK_HOME='{{ ansible_user_dir }}/{{ zuul.project.src_dir }}'
+        
+        ./resource-managers/kubernetes/integration-tests/dev/dev-run-integration-tests.sh \
+            --spark-tgz ${SPARK_HOME}/spark-*.tgz
+  
+        kill -9 $MOUNT_PID
+        minikube stop
+      args:
+        executable: /bin/bash
+        chdir: '{{ zuul.project.src_dir }}'
+      environment: '{{ global_env }}'

@@ -1,0 +1,19 @@
+- project:
+    name: theopenlab/spark
+    check:
+      jobs:
+        - spark-k8s-test
+
+- job:
+    name: spark-k8s-test
+    parent: init-test
+    description: |
+      Run integration tests of spark of v2.4.0 against v1.10.0 k8s cluster deployed by v0.30.0 minikube
+    run: .zuul/playbooks/spark-k8s-test/run.yaml
+    override-checkout: branch-2.4
+    vars:
+      k8s_log_dir: '{{ ansible_user_dir }}/workspace/logs/kubernetes'
+      # the supported latest version of minikube is v0.30.0, and then the minikube can start
+      # k8s in v1.10.0
+      minikube_version: v0.34.1
+      kubernetes_version: v1.13.3
