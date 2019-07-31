@@ -197,8 +197,8 @@ object YarnSparkHadoopUtil extends Logging {
       val size =
         sparkConf.getSizeAsMb(MEMORY_OFFHEAP_SIZE.key, MEMORY_OFFHEAP_SIZE.defaultValueString)
       require(size > 0,
-        "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true")
-      logInfo(s"spark.memory.offHeap.enabled is true, spark.memory.offHeap.size is $size, " +
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      logInfo(s"${MEMORY_OFFHEAP_ENABLED.key} is true, ${MEMORY_OFFHEAP_SIZE.key} is $size, " +
         s"overhead is $overhead, will choose the bigger as memoryOverhead.")
       size
     } else 0
