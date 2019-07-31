@@ -178,49 +178,46 @@ class ImputerSuite extends MLTest with DefaultReadWriteTest {
     assert(newInstance.surrogateDF.collect() === instance.surrogateDF.collect())
   }
 
-  test("Imputer for Numeric with default missing Value NaN") {
-    val df = spark.createDataFrame(Seq(
-      (0, 1.0, 1.0, 1.0),
-      (1, 11.0, 11.0, 11.0),
-      (2, 3.6, 3.6, 3.6),
-      (3, Double.NaN, 5.2, 3.6)
-    )).toDF("id", "value1", "expected_mean_value1_double", "expected_median_value1_double")
+  test("Imputer for IntegerType with default missing value null") {
+
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
+      (1, 1, 1),
+      (11, 11, 11),
+      (3, 3, 3),
+      (null, 5, 3)
+    )).toDF("value1", "expected_mean_value1", "expected_median_value1")
 
     val imputer = new Imputer()
       .setInputCols(Array("value1"))
       .setOutputCols(Array("out1"))
 
-    val types = Seq(ShortType, IntegerType, LongType, FloatType, DoubleType,
-      ByteType, DecimalType(10, 0))
-
+    val types = Seq(IntegerType, LongType)
     for (mType <- types) {
-      // cast `value` to desired data type for testing
-      val df2 = df.withColumn("value1", col("value1").cast(mType))
-        .withColumn("value1", when(col("value1").equalTo(0), null).otherwise(col("value1")))
+      // cast all columns to desired data type for testing
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      ImputerSuite.iterateStrategyTest(imputer, df2)
+    }
+  }
 
-      Seq("mean", "median").foreach { strategy =>
-        imputer.setStrategy(strategy)
-        val model = imputer.fit(df2)
-        val resultDF = model.transform(df2)
+  test("Imputer for IntegerType with missing value -1") {
 
-        imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
+    val df = spark.createDataFrame(Seq[(Integer, Integer, Integer)](
+      (1, 1, 1),
+      (11, 11, 11),
+      (3, 3, 3),
+      (-1, 5, 3)
+    )).toDF("value1", "expected_mean_value1", "expected_median_value1")
 
-          // check dataType is consistent between input and output
-          val inputType = resultDF.schema(inputCol).dataType
-          val outputType = resultDF.schema(outputCol).dataType
-          assert(inputType === outputType, "Output type is not the same as input type.")
+    val imputer = new Imputer()
+      .setInputCols(Array("value1"))
+      .setOutputCols(Array("out1"))
+      .setMissingValue(-1.0)
 
-          // check value
-          val expectedDoubleColumn = s"expected_${strategy}_${inputCol}_double"
-          resultDF.select(col(expectedDoubleColumn).cast(mType).cast(DoubleType),
-            col(outputCol).cast(DoubleType))
-            .collect().foreach {
-              case Row(exp: Double, out: Double) =>
-                assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
-                  s"Imputed values differ. Expected: $exp, actual: $out")
-          }
-        }
-      }
+    val types = Seq(IntegerType, LongType)
+    for (mType <- types) {
+      // cast all columns to desired data type for testing
+      val df2 = df.select(df.columns.map(c => col(c).cast(mType)): _*)
+      ImputerSuite.iterateStrategyTest(imputer, df2)
     }
   }
 }
@@ -237,12 +234,25 @@ object ImputerSuite {
       val model = imputer.fit(df)
       val resultDF = model.transform(df)
       imputer.getInputCols.zip(imputer.getOutputCols).foreach { case (inputCol, outputCol) =>
+
+        // check dataType is consistent between input and output
+        val inputType = resultDF.schema(inputCol).dataType
+        val outputType = resultDF.schema(outputCol).dataType
+        assert(inputType == outputType, "Output type is not the same as input type.")
+
+        // check value
         resultDF.select(s"expected_${strategy}_$inputCol", outputCol).collect().foreach {
           case Row(exp: Float, out: Float) =>
             assert((exp.isNaN && out.isNaN) || (exp == out),
               s"Imputed values differ. Expected: $exp, actual: $out")
           case Row(exp: Double, out: Double) =>
             assert((exp.isNaN && out.isNaN) || (exp ~== out absTol 1e-5),
+              s"Imputed values differ. Expected: $exp, actual: $out")
+          case Row(exp: Integer, out: Integer) =>
+            assert(exp == out,
+              s"Imputed values differ. Expected: $exp, actual: $out")
+          case Row(exp: Long, out: Long) =>
+            assert(exp == out,
               s"Imputed values differ. Expected: $exp, actual: $out")
         }
       }

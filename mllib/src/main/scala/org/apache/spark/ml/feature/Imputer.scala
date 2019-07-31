@@ -87,10 +87,8 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
  * numeric type. Currently Imputer does not support categorical features
  * (SPARK-15041) and possibly creates incorrect values for a categorical feature.
  *
- * Note that the input columns are converted to Double data type internally to compute
- * the mean/median value and impute the missing values, which are then casted back to
- * the original data type in the output. So the output column always has the same data
- * type as the input. As an example, if the input column is IntegerType (1, 2, 4, null),
+ * Note when an input column is integer, the imputed value is casted (truncated) to an integer type.
+ * For example, if the input column is IntegerType (1, 2, 4, null),
  * the output will be IntegerType (1, 2, 4, 2) after mean imputation.
  *
  * Note that the mean/median value is computed after filtering out missing values.
