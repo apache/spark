@@ -141,7 +141,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       verify(state == UPDATING, s"Cannot commit after already committed or aborted")
       try {
         synchronized {
-          rocksDbWriteInstance.commit(Some(getBackupPath(newVersion)))
+          rocksDbWriteInstance.commit(Some(getCheckpointPath(newVersion)))
           finalizeDeltaFile(compressedStream)
         }
         state = COMMITTED
@@ -208,7 +208,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           if (version == 0) {
             Iterator.empty
           } else {
-            val path = getBackupPath(version)
+            val path = getCheckpointPath(version)
             val r: RocksDbInstance =
               new RocksDbInstance(keySchema, valueSchema, version.toString, rocksDbConf)
             r.open(path, readOnly = true)
@@ -217,7 +217,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
         case COMMITTED =>
           logDebug(s"state = committed using check-pointed DB with version $newVersion")
           // use check-pointed db for current updated version
-          val path = getBackupPath(newVersion)
+          val path = getCheckpointPath(newVersion)
           val r: RocksDbInstance =
             new RocksDbInstance(keySchema, valueSchema, newVersion.toString, rocksDbConf)
           r.open(path, readOnly = true)
@@ -460,7 +460,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           sparkConf)
         logInfo(s"Read delta file for version $version of $this from $fileToRead")
       }
-      rocksDbWriteInstance.commit(Some(getBackupPath(version)))
+      rocksDbWriteInstance.commit(Some(getCheckpointPath(version)))
     } catch {
       case e: Exception =>
         logError(s"Exception while loading state ${e.getMessage}")
@@ -495,7 +495,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       val deltaFilesForLastVersion =
         filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
       if (deltaFilesForLastVersion.size > storeConf.minDeltasForSnapshot) {
-        val dbPath = getBackupPath(lastVersion)
+        val dbPath = getCheckpointPath(lastVersion)
         val snapShotFileName = s"{getTempPath(lastVersion)}.snapshot"
         val f = new File(snapShotFileName)
         try {
@@ -555,9 +555,9 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
         val earliestVersionToRetain = files.last.version - storeConf.minVersionsToRetain
         if (earliestVersionToRetain > 0) {
           for (v <- (earliestVersionToRetain - 1) to 1 by -1) {
-            // Destroy the backup path
-            logDebug(s"Destroying backup version = $v")
-            RocksDbInstance.destroyDB(getBackupPath(v))
+            // Destroy the checkpointed path
+            logDebug(s"Destroying checkpoint version = $v")
+            RocksDbInstance.destroyDB(getCheckpointPath(v))
           }
         }
       }
@@ -593,8 +593,8 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     getPath("db")
   }
 
-  private def getBackupPath(version: Long): String = {
-    getPath("backup", version.toString)
+  private def getCheckpointPath(version: Long): String = {
+    getPath("checkpoint", version.toString)
   }
 
   private def getTempPath(version: Long): String = {

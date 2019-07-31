@@ -290,8 +290,6 @@ class RocksDbStateStoreSuite
       sqlConf.setConfString(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
-      val localdir = Utils.createTempDir().getAbsoluteFile.toString
-      sqlConf.setConfString("spark.sql.streaming.stateStore.rocksDb.localDirectory", localdir)
       val storeConf = new StateStoreConf(sqlConf)
       assert(
         storeConf.providerClass ===
@@ -356,9 +354,6 @@ class RocksDbStateStoreSuite
       SQLConf.STATE_STORE_PROVIDER_CLASS.key,
       "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
-    sqlConf.setConfString(
-      "spark.sql.streaming.stateStore.rocksDb.localDirectory",
-      Utils.createTempDir().getAbsoluteFile.toString)
     val storeConf = StateStoreConf(sqlConf)
     val hadoopConf = new Configuration()
     val provider = newStoreProvider(storeProviderId.storeId)
@@ -472,9 +467,6 @@ class RocksDbStateStoreSuite
       spark.conf.set(
         SQLConf.STATE_STORE_PROVIDER_CLASS.key,
         "org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider")
-      spark.conf.set(
-        "spark.sql.streaming.stateStore.rocksDb.localDirectory",
-        Utils.createTempDir().getAbsoluteFile.toString)
       import spark.implicits._
       val inputData = MemoryStream[Int]
 
