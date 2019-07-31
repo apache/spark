@@ -36,20 +36,12 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * executor's task runner threads concurrently with the polling thread. One thread may
  * update one of these maps while another reads it, so the reading thread may not get
  * the latest metrics, but this is ok.
- * One ConcurrentHashMap tracks the number of running tasks and the executor metric
- * peaks for each stage. A positive task count means the stage is active. When the task
- * count reaches zero for a stage, we remove the entry from the map. That way, the map
- * only contains entries for active stages and does not grow without bound. On every
- * heartbeat, the executor gets the per-stage metric peaks from this class and sends
- * them and the peaks are reset.
- * The other ConcurrentHashMap tracks the executor metric peaks for each task (the peaks
- * seen while each task is running). At task end, these peaks are sent with the task
- * result by the task runner.
- * The reason we track executor metric peaks per task in addition to per stage is:
- * If between heartbeats, a stage completes, so there are no more running tasks for that
- * stage, then in the next heartbeat, there are no metrics sent for that stage; however,
- * at the end of a task that belonged to that stage, the metrics would have been sent
- * in the task result, so we do not lose those peaks.
+ * We track executor metric peaks per stage, as well as per task. The per-stage peaks
+ * are sent in executor heartbeats. That way, we get incremental updates of the metrics
+ * as the tasks are running, and if the executor dies we still have some metrics. The
+ * per-task peaks are sent in the task result at task end. These are useful for short
+ * tasks. If there are no heartbeats during the task, we still get the metrics polled
+ * for the task.
  *
  * @param memoryManager the memory manager used by the executor.
  * @param pollingInterval the polling interval in milliseconds.
