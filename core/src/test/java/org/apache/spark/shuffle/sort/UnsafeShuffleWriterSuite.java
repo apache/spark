@@ -90,7 +90,6 @@ public class UnsafeShuffleWriterSuite {
 
   @After
   public void tearDown() {
-    TaskContext$.MODULE$.unset();
     Utils.deleteRecursively(tempDir);
     final long leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
     if (leakedMemory != 0) {
@@ -172,8 +171,6 @@ public class UnsafeShuffleWriterSuite {
     when(shuffleDep.serializer()).thenReturn(serializer);
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
-
-    TaskContext$.MODULE$.setTaskContext(taskContext);
   }
 
   private UnsafeShuffleWriter createWriter(boolean transferToEnabled) {
