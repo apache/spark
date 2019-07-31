@@ -1067,6 +1067,9 @@ Apart from these, the following properties are also available, and may be useful
     Show the progress bar in the console. The progress bar shows the progress of stages
     that run for longer than 500ms. If multiple stages run at the same time, multiple
     progress bars will be displayed on the same line.
+    <br/>
+    <em>Note:</em> In non-shell environment, the default value of spark.ui.showConsoleProgress is true or
+    specified by user.
   </td>
 </tr>
 <tr>
