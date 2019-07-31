@@ -458,7 +458,6 @@ case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExp
 object Overlay {
 
   def calculate(input: UTF8String, replace: UTF8String, pos: Int, len: Int): UTF8String = {
-    require(pos > 0, "If you specify `pos`, it must be a positive whole number.")
     val builder = new UTF8StringBuilder
     builder.append(input.substringSQL(1, pos - 1))
     builder.append(replace)
@@ -475,7 +474,6 @@ object Overlay {
   }
 
   def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
-    require(pos > 0, "If you specify `pos`, it must be a positive whole number.")
     // If you specify length, it must be a positive whole number or zero.
     // Otherwise it will be ignored.
     // The default value for length is the length of replace.
