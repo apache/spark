@@ -96,7 +96,6 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
  * Note that the mean/median value is computed after filtering out missing values.
  * All Null values in the input columns are treated as missing, and so are also imputed. For
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
- * The output column is always of Double type regardless of the input column type.
  */
 @Experimental
 @Since("2.2.0")
