@@ -22,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
 
-import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
 import org.mockito.stubbing.Answer;
 import scala.Option;
 import scala.Product2;
@@ -42,7 +41,6 @@ import org.apache.spark.HashPartitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
-import org.apache.spark.TaskContext$;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.io.CompressionCodec$;
@@ -57,6 +55,7 @@ import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.security.CryptoStreamUtils;
 import org.apache.spark.serializer.*;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 

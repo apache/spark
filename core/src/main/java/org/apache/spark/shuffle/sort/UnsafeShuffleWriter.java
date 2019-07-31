@@ -24,8 +24,6 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
 
-import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
-import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -54,6 +52,8 @@ import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriter;
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
+import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
