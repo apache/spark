@@ -427,36 +427,6 @@ class V2SessionCatalogSuite
     assert(catalog.loadTable(testIdent).schema == schema)
   }
 
-
-  test("alterTable add columns with existing column name") {
-    val catalog = newCatalog()
-
-    val testSchema = new StructType().add("foo", "int")
-    val table = catalog.createTable(testIdent, testSchema, Array.empty, emptyProps)
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      Seq("foo", "fOo", "FOO").foreach { name =>
-        val e = intercept[AnalysisException] {
-          val tc = TableChange.addColumn(Array(name), LongType)
-          catalog.alterTable(testIdent, tc)
-        }.getMessage
-        assert(e.contains("Found duplicate column(s)"))
-      }
-    }
-
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val e = intercept[AnalysisException] {
-        val tc = TableChange.addColumn(Array("foo"), LongType)
-        catalog.alterTable(testIdent, tc)
-      }.getMessage
-      assert(e.contains("Found duplicate column(s)"))
-
-      Seq("fOo", "FOO").foreach { name =>
-       val tc = TableChange.addColumn(Array(name), LongType)
-        catalog.alterTable(testIdent, tc)
-      }
-    }
-  }
-
   test("alterTable: add field to missing column fails") {
     val catalog = newCatalog()
 
