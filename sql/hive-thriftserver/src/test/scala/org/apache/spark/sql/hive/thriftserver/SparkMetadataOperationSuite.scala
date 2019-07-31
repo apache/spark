@@ -187,8 +187,11 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     def checkResult(rs: ResultSet, functionName: Seq[String]): Unit = {
       for (i <- functionName.indices) {
         assert(rs.next())
+        assert(rs.getString("FUNCTION_SCHEM") === "default")
         assert(rs.getString("FUNCTION_NAME") === functionName(i))
+        assert(rs.getString("REMARKS").startsWith(s"${functionName(i)}("))
         assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+        assert(rs.getString("SPECIFIC_NAME").startsWith("org.apache.spark.sql.catalyst"))
       }
       // Make sure there are no more elements
       assert(!rs.next())
@@ -202,6 +205,8 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
       checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "default", "shift*"),
+        Seq("shiftleft", "shiftright", "shiftrightunsigned"))
     }
   }
 }

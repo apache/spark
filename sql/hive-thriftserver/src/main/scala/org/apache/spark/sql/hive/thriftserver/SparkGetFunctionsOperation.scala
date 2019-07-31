@@ -25,6 +25,7 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetFunctionsOperation
+import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
@@ -82,14 +83,15 @@ private[hive] class SparkGetFunctionsOperation(
     try {
       matchingDbs.foreach { db =>
         catalog.listFunctions(db, functionPattern).foreach {
-          case (functionIdentifier, _) =>
+          case (funcIdentifier, _) =>
+            val info = catalog.lookupFunctionInfo(funcIdentifier)
             val rowData = Array[AnyRef](
-              null, // FUNCTION_CAT
+              DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
-              functionIdentifier.funcName, // FUNCTION_NAME
-              "", // REMARKS
+              funcIdentifier.funcName, // FUNCTION_NAME
+              info.getUsage, // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
-              "")
+              info.getClassName) // SPECIFIC_NAME
             rowSet.addRow(rowData);
         }
       }
