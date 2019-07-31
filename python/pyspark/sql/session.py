@@ -653,6 +653,11 @@ class SparkSession(object):
 
         .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
+        .. note:: When Arrow optimization is enabled, strings inside Pandas DataFrame in Python
+            2 are converted into bytes as they are bytes in Python 2 whereas regular strings are
+            left as strings. When using strings in Python 2, use unicode `u""` as Python standard
+            practice.
+
         >>> l = [('Alice', 1)]
         >>> spark.createDataFrame(l).collect()
         [Row(_1=u'Alice', _2=1)]

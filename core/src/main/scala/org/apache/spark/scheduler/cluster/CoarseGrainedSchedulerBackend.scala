@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.Future
 

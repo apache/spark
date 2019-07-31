@@ -1120,6 +1120,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(redactedCmdArgMap("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
   }
 
+  test("redact sensitive information in sequence of key value pairs") {
+    val secretKeys = Some("my.password".r)
+    assert(Utils.redact(secretKeys, Seq(("spark.my.password", "12345"))) ===
+      Seq(("spark.my.password", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(Utils.redact(secretKeys, Seq(("anything", "spark.my.password=12345"))) ===
+      Seq(("anything", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(Utils.redact(secretKeys, Seq((999, "spark.my.password=12345"))) ===
+      Seq((999, Utils.REDACTION_REPLACEMENT_TEXT)))
+    // Do not redact when value type is not string
+    assert(Utils.redact(secretKeys, Seq(("my.password", 12345))) ===
+      Seq(("my.password", 12345)))
+  }
+
   test("tryWithSafeFinally") {
     var e = new Error("Block0")
     val finallyBlockError = new Error("Finally Block")

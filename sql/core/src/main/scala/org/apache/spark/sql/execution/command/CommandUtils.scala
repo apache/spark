@@ -67,7 +67,7 @@ object CommandUtils extends Logging {
           override def accept(path: Path): Boolean = isDataPath(path, stagingDir)
         }
         val fileStatusSeq = InMemoryFileIndex.bulkListLeafFiles(
-          paths, sessionState.newHadoopConf(), pathFilter, spark)
+          paths, sessionState.newHadoopConf(), pathFilter, spark, areRootPaths = true)
         fileStatusSeq.flatMap(_._2.map(_.getLen)).sum
       } else {
         partitions.map { p =>
@@ -343,5 +343,16 @@ object CommandUtils extends Logging {
 
   private def isDataPath(path: Path, stagingDir: String): Boolean = {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
+  }
+
+  def getSizeInBytesFallBackToHdfs(session: SparkSession, path: Path, defaultSize: Long): Long = {
+    try {
+      val hadoopConf = session.sessionState.newHadoopConf()
+      path.getFileSystem(hadoopConf).getContentSummary(path).getLength
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Failed to get table size from hdfs. Using the default size, $defaultSize.", e)
+        defaultSize
+    }
   }
 }

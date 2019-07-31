@@ -71,7 +71,8 @@ private[sql] class SessionState(
     val listenerManager: ExecutionListenerManager,
     resourceLoaderBuilder: () => SessionResourceLoader,
     createQueryExecution: LogicalPlan => QueryExecution,
-    createClone: (SparkSession, SessionState) => SessionState) {
+    createClone: (SparkSession, SessionState) => SessionState,
+    val columnarRules: Seq[ColumnarRule]) {
 
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()

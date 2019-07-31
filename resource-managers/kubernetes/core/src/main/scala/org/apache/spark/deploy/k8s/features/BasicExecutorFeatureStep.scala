@@ -96,7 +96,7 @@ private[spark] class BasicExecutorFeatureStep(
       .build()
 
     val executorResourceQuantities =
-      KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_RESOURCE_PREFIX,
+      KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_PREFIX,
         kubernetesConf.sparkConf)
 
     val executorEnv: Seq[EnvVar] = {

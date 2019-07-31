@@ -38,7 +38,7 @@ trait OrcFiltersBase {
 
   // Since ORC 1.5.0 (ORC-323), we need to quote for column names with `.` characters
   // in order to distinguish predicate pushdown for nested columns.
-  protected def quoteAttributeNameIfNeeded(name: String) : String = {
+  protected[sql] def quoteAttributeNameIfNeeded(name: String) : String = {
     if (!name.contains("`") && name.contains(".")) {
       s"`$name`"
     } else {
@@ -50,7 +50,7 @@ trait OrcFiltersBase {
    * Return true if this is a searchable type in ORC.
    * Both CharType and VarcharType are cleaned at AstBuilder.
    */
-  protected def isSearchableType(dataType: DataType) = dataType match {
+  protected[sql] def isSearchableType(dataType: DataType) = dataType match {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false

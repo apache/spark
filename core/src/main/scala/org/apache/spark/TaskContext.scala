@@ -24,6 +24,7 @@ import org.apache.spark.annotation.{DeveloperApi, Evolving}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
@@ -178,7 +179,8 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Resources allocated to the task. The key is the resource name and the value is information
-   * about the resource. Please refer to [[ResourceInformation]] for specifics.
+   * about the resource. Please refer to [[org.apache.spark.resource.ResourceInformation]] for
+   * specifics.
    */
   @Evolving
   def resources(): Map[String, ResourceInformation]

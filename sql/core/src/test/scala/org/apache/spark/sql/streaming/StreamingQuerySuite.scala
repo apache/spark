@@ -413,9 +413,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       sources.nonEmpty
     }
     // Disabled by default
-    assert(spark.conf.get("spark.sql.streaming.metricsEnabled").toBoolean === false)
+    assert(spark.conf.get(SQLConf.STREAMING_METRICS_ENABLED.key).toBoolean === false)
 
-    withSQLConf("spark.sql.streaming.metricsEnabled" -> "false") {
+    withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "false") {
       testStream(inputData.toDF)(
         AssertOnQuery { q => !isMetricsRegistered(q) },
         StopStream,
@@ -424,7 +424,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
 
     // Registered when enabled
-    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+    withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "true") {
       testStream(inputData.toDF)(
         AssertOnQuery { q => isMetricsRegistered(q) },
         StopStream,
@@ -434,7 +434,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
   }
 
   test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
-    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+    withSQLConf(SQLConf.STREAMING_METRICS_ENABLED.key -> "true") {
       BlockingSource.latch = new CountDownLatch(1)
       withTempDir { tempDir =>
         val sq = spark.readStream
@@ -1000,8 +1000,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       }
       assertMigrationError(e.getMessage, sparkMetadataDir, legacySparkMetadataDir)
 
-      // Restarting the streaming query should detect the legacy _spark_metadata directory and throw
-      // an error
+      // Restarting the streaming query should detect the legacy _spark_metadata directory and
+      // throw an error
       val inputData = MemoryStream[Int]
       val e2 = intercept[SparkException] {
         inputData.toDF()
@@ -1015,7 +1015,8 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       // Move "_spark_metadata" to fix the file sink and test the checkpoint path.
       FileUtils.moveDirectory(legacySparkMetadataDir, sparkMetadataDir)
 
-      // Restarting the streaming query should detect the legacy checkpoint path and throw an error
+      // Restarting the streaming query should detect the legacy
+      // checkpoint path and throw an error.
       val e3 = intercept[SparkException] {
         inputData.toDF()
           .writeStream

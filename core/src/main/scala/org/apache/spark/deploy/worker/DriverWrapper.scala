@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
+import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util._

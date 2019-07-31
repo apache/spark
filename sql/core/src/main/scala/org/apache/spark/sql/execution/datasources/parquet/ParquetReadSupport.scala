@@ -49,7 +49,7 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
+class ParquetReadSupport(val convertTz: Option[TimeZone],
     enableVectorizedReader: Boolean)
   extends ReadSupport[UnsafeRow] with Logging {
   private var catalystRequestedSchema: StructType = _
@@ -130,7 +130,7 @@ private[parquet] class ParquetReadSupport(val convertTz: Option[TimeZone],
   }
 }
 
-private[parquet] object ParquetReadSupport {
+object ParquetReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"

@@ -102,7 +102,7 @@ private[spark] object SerDe {
   def readBytes(in: DataInputStream): Array[Byte] = {
     val len = readInt(in)
     val out = new Array[Byte](len)
-    val bytesRead = in.readFully(out)
+    in.readFully(out)
     out
   }
 

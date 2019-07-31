@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
+import java.lang.reflect.{InvocationTargetException, UndeclaredThrowableException}
 import java.net.{URI, URL}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
@@ -26,7 +26,7 @@ import java.util.{ServiceLoader, UUID}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Properties, Try}
 
 import org.apache.commons.io.FilenameUtils
@@ -317,7 +317,6 @@ private[spark] class SparkSubmit extends Logging {
     val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
     val isKubernetesClusterModeDriver = isKubernetesClient &&
       sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
-    val isMesosClient = clusterManager == MESOS && deployMode == CLIENT
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files

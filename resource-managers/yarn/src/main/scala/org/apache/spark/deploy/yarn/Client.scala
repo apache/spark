@@ -51,7 +51,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -241,14 +241,14 @@ private[spark] class Client(
       newApp: YarnClientApplication,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
 
-    val yarnAMResources =
-      if (isClusterMode) {
-        sparkConf.getAllWithPrefix(config.YARN_DRIVER_RESOURCE_TYPES_PREFIX).toMap
-      } else {
-        sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
-      }
+    val componentName = if (isClusterMode) {
+      config.YARN_DRIVER_RESOURCE_TYPES_PREFIX
+    } else {
+      config.YARN_AM_RESOURCE_TYPES_PREFIX
+    }
+    val yarnAMResources = getYarnResourcesAndAmounts(sparkConf, componentName)
     val amResources = yarnAMResources ++
-      getYarnResourcesFromSparkResources(SPARK_DRIVER_RESOURCE_PREFIX, sparkConf)
+      getYarnResourcesFromSparkResources(SPARK_DRIVER_PREFIX, sparkConf)
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))

@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.{Authenticator, PasswordAuthentication}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Base64

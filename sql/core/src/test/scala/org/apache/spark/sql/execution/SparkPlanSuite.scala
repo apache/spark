@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SparkPlanSuite extends QueryTest with SharedSQLContext {
@@ -35,27 +37,50 @@ class SparkPlanSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-23731 plans should be canonicalizable after being (de)serialized") {
-    withTempPath { path =>
-      spark.range(1).write.parquet(path.getAbsolutePath)
-      val df = spark.read.parquet(path.getAbsolutePath)
-      val fileSourceScanExec =
-        df.queryExecution.sparkPlan.collectFirst { case p: FileSourceScanExec => p }.get
-      val serializer = SparkEnv.get.serializer.newInstance()
-      val readback =
-        serializer.deserialize[FileSourceScanExec](serializer.serialize(fileSourceScanExec))
-      try {
-        readback.canonicalized
-      } catch {
-        case e: Throwable => fail("FileSourceScanExec was not canonicalizable", e)
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(1).write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        val fileSourceScanExec =
+          df.queryExecution.sparkPlan.collectFirst { case p: FileSourceScanExec => p }.get
+        val serializer = SparkEnv.get.serializer.newInstance()
+        val readback =
+          serializer.deserialize[FileSourceScanExec](serializer.serialize(fileSourceScanExec))
+        try {
+          readback.canonicalized
+        } catch {
+          case e: Throwable => fail("FileSourceScanExec was not canonicalizable", e)
+        }
+      }
+    }
+  }
+
+  test("SPARK-27418 BatchScanExec should be canonicalizable after being (de)serialized") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+      withTempPath { path =>
+        spark.range(1).write.parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath)
+        val batchScanExec =
+          df.queryExecution.sparkPlan.collectFirst { case p: BatchScanExec => p }.get
+        val serializer = SparkEnv.get.serializer.newInstance()
+        val readback =
+          serializer.deserialize[BatchScanExec](serializer.serialize(batchScanExec))
+        try {
+          readback.canonicalized
+        } catch {
+          case e: Throwable => fail("BatchScanExec was not canonicalizable", e)
+        }
       }
     }
   }
 
   test("SPARK-25357 SparkPlanInfo of FileScan contains nonEmpty metadata") {
-    withTempPath { path =>
-      spark.range(5).write.parquet(path.getAbsolutePath)
-      val f = spark.read.parquet(path.getAbsolutePath)
-      assert(SparkPlanInfo.fromSparkPlan(f.queryExecution.sparkPlan).metadata.nonEmpty)
+    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+      withTempPath { path =>
+        spark.range(5).write.parquet(path.getAbsolutePath)
+        val f = spark.read.parquet(path.getAbsolutePath)
+        assert(SparkPlanInfo.fromSparkPlan(f.queryExecution.sparkPlan).metadata.nonEmpty)
+      }
     }
   }
 }

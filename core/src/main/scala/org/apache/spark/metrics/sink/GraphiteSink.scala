@@ -17,7 +17,6 @@
 
 package org.apache.spark.metrics.sink
 
-import java.net.InetSocketAddress
 import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 

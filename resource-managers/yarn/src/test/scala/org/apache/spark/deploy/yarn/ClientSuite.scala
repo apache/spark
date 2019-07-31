@@ -23,7 +23,6 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap => MutableHashMap}
-import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -39,9 +38,11 @@ import org.mockito.Mockito.{spy, verify}
 import org.scalatest.Matchers
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils.AMOUNT
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers {
@@ -372,7 +373,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
       val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, deployMode)
       resources.foreach { case (name, v) =>
-        conf.set(prefix + name, v.toString)
+        conf.set(s"${prefix}${name}.${AMOUNT}", v.toString)
       }
 
       val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
@@ -397,19 +398,19 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.keys.foreach { yarnName =>
-      conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}", "2")
+      conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_DRIVER_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      conf.set(ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
 
     val error = intercept[SparkException] {
       ResourceRequestHelper.validateResources(conf)
     }.getMessage()
 
-    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/fpga," +
+    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/fpga.amount," +
       " please use spark.driver.resource.fpga.amount"))
-    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/gpu," +
+    assert(error.contains("Do not use spark.yarn.driver.resource.yarn.io/gpu.amount," +
       " please use spark.driver.resource.gpu.amount"))
   }
 
@@ -420,19 +421,19 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.keys.foreach { yarnName =>
-      conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}", "2")
+      conf.set(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${yarnName}.${AMOUNT}", "2")
     }
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_EXECUTOR_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      conf.set(ResourceID(SPARK_EXECUTOR_PREFIX, rName).amountConf, "3")
     }
 
     val error = intercept[SparkException] {
       ResourceRequestHelper.validateResources(conf)
     }.getMessage()
 
-    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/fpga," +
+    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/fpga.amount," +
       " please use spark.executor.resource.fpga.amount"))
-    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/gpu," +
+    assert(error.contains("Do not use spark.yarn.executor.resource.yarn.io/gpu.amount," +
       " please use spark.executor.resource.gpu.amount"))
   }
 
@@ -447,10 +448,10 @@ class ClientSuite extends SparkFunSuite with Matchers {
 
     val conf = new SparkConf().set(SUBMIT_DEPLOY_MODE, "cluster")
     resources.values.foreach { rName =>
-      conf.set(s"${SPARK_DRIVER_RESOURCE_PREFIX}${rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}", "3")
+      conf.set(ResourceID(SPARK_DRIVER_PREFIX, rName).amountConf, "3")
     }
     // also just set yarn one that we don't convert
-    conf.set(YARN_DRIVER_RESOURCE_TYPES_PREFIX + yarnMadeupResource, "5")
+    conf.set(s"${YARN_DRIVER_RESOURCE_TYPES_PREFIX}${yarnMadeupResource}.${AMOUNT}", "5")
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
     val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])

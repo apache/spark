@@ -94,6 +94,17 @@ private[sql] final case class BucketTransform(
   override def toString: String = describe
 }
 
+private[sql] object BucketTransform {
+  def unapply(transform: Transform): Option[(Int, NamedReference)] = transform match {
+    case NamedTransform("bucket", Seq(
+        Lit(value: Int, IntegerType),
+        Ref(seq: Seq[String]))) =>
+      Some((value, FieldReference(seq)))
+    case _ =>
+      None
+  }
+}
+
 private[sql] final case class ApplyTransform(
     name: String,
     args: Seq[Expression]) extends Transform {
@@ -111,10 +122,46 @@ private[sql] final case class ApplyTransform(
   override def toString: String = describe
 }
 
+/**
+ * Convenience extractor for any Literal.
+ */
+private object Lit {
+  def unapply[T](literal: Literal[T]): Some[(T, DataType)] = {
+    Some((literal.value, literal.dataType))
+  }
+}
+
+/**
+ * Convenience extractor for any NamedReference.
+ */
+private object Ref {
+  def unapply(named: NamedReference): Some[Seq[String]] = {
+    Some(named.fieldNames)
+  }
+}
+
+/**
+ * Convenience extractor for any Transform.
+ */
+private object NamedTransform {
+  def unapply(transform: Transform): Some[(String, Seq[Expression])] = {
+    Some((transform.name, transform.arguments))
+  }
+}
+
 private[sql] final case class IdentityTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "identity"
   override def describe: String = ref.describe
+}
+
+private[sql] object IdentityTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("identity", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
 }
 
 private[sql] final case class YearsTransform(
@@ -122,9 +169,27 @@ private[sql] final case class YearsTransform(
   override val name: String = "years"
 }
 
+private[sql] object YearsTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("years", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
+}
+
 private[sql] final case class MonthsTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "months"
+}
+
+private[sql] object MonthsTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("months", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
 }
 
 private[sql] final case class DaysTransform(
@@ -132,9 +197,27 @@ private[sql] final case class DaysTransform(
   override val name: String = "days"
 }
 
+private[sql] object DaysTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("days", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
+}
+
 private[sql] final case class HoursTransform(
     ref: NamedReference) extends SingleColumnTransform(ref) {
   override val name: String = "hours"
+}
+
+private[sql] object HoursTransform {
+  def unapply(transform: Transform): Option[FieldReference] = transform match {
+    case NamedTransform("hours", Seq(Ref(parts))) =>
+      Some(FieldReference(parts))
+    case _ =>
+      None
+  }
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {

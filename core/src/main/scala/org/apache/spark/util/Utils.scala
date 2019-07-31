@@ -24,7 +24,7 @@ import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, FileChannel}
+import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
@@ -394,10 +394,14 @@ private[spark] object Utils extends Logging {
 
   def copyFileStreamNIO(
       input: FileChannel,
-      output: FileChannel,
+      output: WritableByteChannel,
       startPosition: Long,
       bytesToCopy: Long): Unit = {
-    val initialPos = output.position()
+    val outputInitialState = output match {
+      case outputFileChannel: FileChannel =>
+        Some((outputFileChannel.position(), outputFileChannel))
+      case _ => None
+    }
     var count = 0L
     // In case transferTo method transferred less data than we have required.
     while (count < bytesToCopy) {
@@ -412,15 +416,17 @@ private[spark] object Utils extends Logging {
     // kernel version 2.6.32, this issue can be seen in
     // https://bugs.openjdk.java.net/browse/JDK-7052359
     // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
-    val finalPos = output.position()
-    val expectedPos = initialPos + bytesToCopy
-    assert(finalPos == expectedPos,
-      s"""
-         |Current position $finalPos do not equal to expected position $expectedPos
-         |after transferTo, please check your kernel version to see if it is 2.6.32,
-         |this is a kernel bug which will lead to unexpected behavior when using transferTo.
-         |You can set spark.file.transferTo = false to disable this NIO feature.
-           """.stripMargin)
+    outputInitialState.foreach { case (initialPos, outputFileChannel) =>
+      val finalPos = outputFileChannel.position()
+      val expectedPos = initialPos + bytesToCopy
+      assert(finalPos == expectedPos,
+        s"""
+           |Current position $finalPos do not equal to expected position $expectedPos
+           |after transferTo, please check your kernel version to see if it is 2.6.32,
+           |this is a kernel bug which will lead to unexpected behavior when using transferTo.
+           |You can set spark.file.transferTo = false to disable this NIO feature.
+         """.stripMargin)
+    }
   }
 
   /**
@@ -1389,7 +1395,9 @@ private[spark] object Utils extends Logging {
         originalThrowable = cause
         try {
           logError("Aborting task", originalThrowable)
-          TaskContext.get().markTaskFailed(originalThrowable)
+          if (TaskContext.get() != null) {
+            TaskContext.get().markTaskFailed(originalThrowable)
+          }
           catchBlock
         } catch {
           case t: Throwable =>
@@ -2596,7 +2604,7 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  def redact[K, V](regex: Option[Regex], kvs: Seq[(K, V)]): Seq[(K, V)] = {
     regex match {
       case None => kvs
       case Some(r) => redact(r, kvs)
@@ -2618,7 +2626,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  private def redact[K, V](redactionPattern: Regex, kvs: Seq[(K, V)]): Seq[(K, V)] = {
     // If the sensitive information regex matches with either the key or the value, redact the value
     // While the original intent was to only redact the value if the key matched with the regex,
     // we've found that especially in verbose mode, the value of the property may contain sensitive
@@ -2632,12 +2640,19 @@ private[spark] object Utils extends Logging {
     // arbitrary property contained the term 'password', we may redact the value from the UI and
     // logs. In order to work around it, user would have to make the spark.redaction.regex property
     // more specific.
-    kvs.map { case (key, value) =>
-      redactionPattern.findFirstIn(key)
-        .orElse(redactionPattern.findFirstIn(value))
-        .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
-        .getOrElse((key, value))
-    }
+    kvs.map {
+      case (key: String, value: String) =>
+        redactionPattern.findFirstIn(key)
+          .orElse(redactionPattern.findFirstIn(value))
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+      case (key, value: String) =>
+        redactionPattern.findFirstIn(value)
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+      case (key, value) =>
+        (key, value)
+    }.asInstanceOf[Seq[(K, V)]]
   }
 
   /**

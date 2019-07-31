@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.metastore.api.{EnvironmentContext, Function => HiveFunction, FunctionType}
 import org.apache.hadoop.hive.metastore.api.{MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
@@ -160,6 +161,8 @@ private[client] sealed abstract class Shim {
     method
   }
 
+  def getMSC(hive: Hive): IMetaStoreClient
+
   protected def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     klass.getMethod(name, args: _*)
   }
@@ -170,6 +173,17 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   protected lazy val holdDDLTime = JBoolean.FALSE
   // deletes the underlying data along with metadata
   protected lazy val deleteDataInDropIndex = JBoolean.TRUE
+
+  protected lazy val getMSCMethod = {
+    // Since getMSC() in Hive 0.12 is private, findMethod() could not work here
+    val msc = classOf[Hive].getDeclaredMethod("getMSC")
+    msc.setAccessible(true)
+    msc
+  }
+
+  override def getMSC(hive: Hive): IMetaStoreClient = {
+    getMSCMethod.invoke(hive).asInstanceOf[IMetaStoreClient]
+  }
 
   private lazy val startMethod =
     findStaticMethod(
@@ -1181,7 +1195,7 @@ private[client] class Shim_v2_2 extends Shim_v2_1
 
 private[client] class Shim_v2_3 extends Shim_v2_1
 
-private[client] class Shim_v3_1 extends Shim_v2_3 {
+private[client] class Shim_v3_0 extends Shim_v2_3 {
   // Spark supports only non-ACID operations
   protected lazy val isAcidIUDoperation = JBoolean.FALSE
 
@@ -1305,3 +1319,5 @@ private[client] class Shim_v3_1 extends Shim_v2_3 {
       replace: JBoolean)
   }
 }
+
+private[client] class Shim_v3_1 extends Shim_v3_0

@@ -29,13 +29,14 @@ import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySe
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.reader.{Scan, ScanBuilder}
+import org.apache.spark.sql.sources.v2.reader.{Batch, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
-import org.apache.spark.sql.sources.v2.writer.WriteBuilder
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, WriteBuilder}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -106,7 +107,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   }
 
   override def getTable(options: CaseInsensitiveStringMap): KafkaTable = {
-    new KafkaTable(strategy(options.asScala.toMap))
+    new KafkaTable
   }
 
   /**
@@ -216,7 +217,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           + STRATEGY_OPTION_KEYS.mkString(", ") + ". See the docs for more details.")
     }
 
-    val strategy = caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+    caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
       case (ASSIGN, value) =>
         if (!value.trim.startsWith("{")) {
           throw new IllegalArgumentException(
@@ -353,15 +354,18 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  class KafkaTable(strategy: => ConsumerStrategy) extends Table
-    with SupportsRead with SupportsWrite {
+  class KafkaTable extends Table with SupportsRead with SupportsWrite {
 
-    override def name(): String = s"Kafka $strategy"
+    override def name(): String = "KafkaTable"
 
     override def schema(): StructType = KafkaOffsetReader.kafkaSchema
 
     override def capabilities(): ju.Set[TableCapability] = {
-      Set(MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE).asJava
+      // ACCEPT_ANY_SCHEMA is needed because of the following reasons:
+      // * Kafka writer validates the schema instead of the SQL analyzer (the schema is fixed)
+      // * Read schema differs from write schema (please see Kafka integration guide)
+      Set(BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, CONTINUOUS_READ, STREAMING_WRITE,
+        ACCEPT_ANY_SCHEMA).asJava
     }
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
@@ -370,18 +374,21 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
       new WriteBuilder {
         private var inputSchema: StructType = _
+        private val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
+        private val producerParams = kafkaParamsForProducer(options.asScala.toMap)
 
         override def withInputDataSchema(schema: StructType): WriteBuilder = {
           this.inputSchema = schema
           this
         }
 
-        override def buildForStreaming(): StreamingWrite = {
-          import scala.collection.JavaConverters._
-
+        override def buildForBatch(): BatchWrite = {
           assert(inputSchema != null)
-          val topic = Option(options.get(TOPIC_OPTION_KEY)).map(_.trim)
-          val producerParams = kafkaParamsForProducer(options.asScala.toMap)
+          new KafkaBatchWrite(topic, producerParams, inputSchema)
+        }
+
+        override def buildForStreaming(): StreamingWrite = {
+          assert(inputSchema != null)
           new KafkaStreamingWrite(topic, producerParams, inputSchema)
         }
       }
@@ -391,6 +398,26 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   class KafkaScan(options: CaseInsensitiveStringMap) extends Scan {
 
     override def readSchema(): StructType = KafkaOffsetReader.kafkaSchema
+
+    override def toBatch(): Batch = {
+      val caseInsensitiveOptions = CaseInsensitiveMap(options.asScala.toMap)
+      validateBatchOptions(caseInsensitiveOptions)
+      val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveOptions)
+
+      val startingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveOptions, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit)
+
+      val endingRelationOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(
+        caseInsensitiveOptions, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+
+      new KafkaBatch(
+        strategy(caseInsensitiveOptions),
+        caseInsensitiveOptions,
+        specifiedKafkaParams,
+        failOnDataLoss(caseInsensitiveOptions),
+        startingRelationOffsets,
+        endingRelationOffsets)
+    }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
       val parameters = options.asScala.toMap
@@ -449,7 +476,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       new KafkaContinuousStream(
         kafkaOffsetReader,
         kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-        parameters,
+        options,
         checkpointLocation,
         startingStreamOffsets,
         failOnDataLoss(caseInsensitiveParams))
@@ -560,7 +587,17 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .build()
 
   /**
-   * Returns a unique consumer group (group.id), allowing the user to set the prefix of
+   * Returns a unique batch consumer group (group.id), allowing the user to set the prefix of
+   * the consumer group
+   */
+  private[kafka010] def batchUniqueGroupId(parameters: Map[String, String]): String = {
+    val groupIdPrefix = parameters
+      .getOrElse(GROUP_ID_PREFIX, "spark-kafka-relation")
+    s"${groupIdPrefix}-${UUID.randomUUID}"
+  }
+
+  /**
+   * Returns a unique streaming consumer group (group.id), allowing the user to set the prefix of
    * the consumer group
    */
   private def streamingUniqueGroupId(

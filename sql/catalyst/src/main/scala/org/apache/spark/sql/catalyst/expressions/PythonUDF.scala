@@ -27,7 +27,8 @@ import org.apache.spark.sql.types.DataType
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
-    PythonEvalType.SQL_SCALAR_PANDAS_UDF
+    PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+    PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {

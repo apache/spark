@@ -227,7 +227,7 @@ private[spark] class MapOutputTrackerMasterEndpoint(
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = context.senderAddress.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
-      val mapOutputStatuses = tracker.post(new GetMapOutputMessage(shuffleId, context))
+      tracker.post(new GetMapOutputMessage(shuffleId, context))
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerMasterEndpoint stopped!")

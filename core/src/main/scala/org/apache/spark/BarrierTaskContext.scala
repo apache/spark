@@ -26,6 +26,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._

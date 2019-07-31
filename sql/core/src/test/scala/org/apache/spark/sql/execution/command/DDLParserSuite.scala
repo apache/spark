@@ -1136,6 +1136,8 @@ class DDLParserSuite extends AnalysisTest with SharedSQLContext {
       "month 32 outside range [0, 11]")
     assertError("select interval '5 49:12:15' day to second",
       "hour 49 outside range [0, 23]")
+    assertError("select interval '23:61:15' hour to second",
+      "minute 61 outside range [0, 59]")
     assertError("select interval '.1111111111' second",
       "nanosecond 1111111111 outside range")
   }

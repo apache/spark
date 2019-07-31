@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.fs.FileStatus
 
 import org.apache.spark.sql.SparkSession
@@ -39,7 +41,7 @@ case class OrcTable(
     new OrcScanBuilder(sparkSession, fileIndex, schema, dataSchema, options)
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] =
-    OrcUtils.readSchema(sparkSession, files)
+    OrcUtils.inferSchema(sparkSession, files, options.asScala.toMap)
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder =
     new OrcWriteBuilder(options, paths, formatName, supportsDataType)
