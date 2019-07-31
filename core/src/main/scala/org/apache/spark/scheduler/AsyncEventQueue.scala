@@ -49,9 +49,14 @@ private class AsyncEventQueue(
   // The capacity can be configured by spark.scheduler.listenerbus.eventqueue.${name}.capacity,
   // if no such conf is specified, use the value specified in
   // LISTENER_BUS_EVENT_QUEUE_CAPACITY
-  protected def capacity: Int = conf.getInt(
-    s"spark.scheduler.listenerbus.eventqueue.${name}.capacity",
-     conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+  private[scheduler] def capacity: Int = {
+    val queuesize = conf.getInt(s"spark.scheduler.listenerbus.eventqueue.${name}.capacity",
+                                conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+    assert(queuesize > 0, s"capacity for event queue $name must be greater than 0," +
+      s"but $queuesize is configured.")
+    queuesize
+  }
+
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](capacity)
 
   // Keep the event count separately, so that waitUntilEmpty() can be implemented properly;
