@@ -362,9 +362,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
         OutputStream partitionOutput = writer.openStream();
         try {
-          // Shield the underlying output stream from close() calls, so that we can close the
-          // higher level streams to make sure all data is really flushed and internal state
-          // is cleaned
           partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
           if (compressionCodec != null) {
             partitionOutput = compressionCodec.compressedOutputStream(partitionOutput);
