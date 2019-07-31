@@ -246,6 +246,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Limit clause without a ordering, which causes failure.
     "orc_predicate_pushdown",
 
+    // On casting a out-of-range value to a integral type, Hive returns the low-order bits, while
+    // Spark returns null.
+    "udf_to_byte",
+
     // Requires precision decimal support:
     "udf_when",
     "udf_case",
@@ -1086,7 +1090,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_sum",
     "udf_tan",
     "udf_tinyint",
-    "udf_to_byte",
     "udf_to_date",
     "udf_to_double",
     "udf_to_float",
