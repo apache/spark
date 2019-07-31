@@ -33,8 +33,8 @@ trait ShuffleBlockResolver {
   /**
    * Retrieve the data for the specified block.
    *
-   * When the dirs param is None then the disk manager's local directories are used and this way
-   * local blocks are read otherwise via the specified directories host-local blocks can be read.
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
    *
    * If the data for that block is not available, throws an unspecified exception.
    */

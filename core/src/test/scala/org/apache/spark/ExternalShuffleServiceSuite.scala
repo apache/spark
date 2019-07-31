@@ -81,7 +81,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     // Therefore, we should wait until all slaves are up
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
-    val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
+    val rdd = sc.parallelize(0 until 1000, 10)
+      .map { i => (i, 1) }
+      .reduceByKey(_ + _)
 
     rdd.count()
     rdd.count()
@@ -113,7 +115,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     // Therefore, we should wait until all slaves are up
     TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
-    val rdd = sc.parallelize(0 until 1000, 10).map(i => (i, 1)).reduceByKey(_ + _)
+    val rdd = sc.parallelize(0 until 1000, 10)
+      .map { i => (i, 1) }
+      .reduceByKey(_ + _)
 
     rdd.count()
     rdd.count()

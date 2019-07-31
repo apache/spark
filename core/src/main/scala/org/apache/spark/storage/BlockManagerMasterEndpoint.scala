@@ -50,7 +50,7 @@ class BlockManagerMasterEndpoint(
   extends IsolatedRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
-  private val executorIdLocalDirs = new mutable.HashMap[String, Array[String]]
+  private val executorIdToLocalDirs = new mutable.HashMap[String, Array[String]]
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
@@ -399,8 +399,8 @@ class BlockManagerMasterEndpoint(
       topologyMapper.getTopologyForHost(idWithoutTopologyInfo.host))
 
     val time = System.currentTimeMillis()
-    if (!executorIdLocalDirs.contains(id.executorId)) {
-      executorIdLocalDirs(id.executorId) = localDirs
+    if (!executorIdToLocalDirs.contains(id.executorId)) {
+      executorIdToLocalDirs(id.executorId) = localDirs
     }
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -492,7 +492,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def getLocalDirs(executorIds: Array[String]): BlockManagerLocalDirs = {
-    BlockManagerLocalDirs(executorIds.map(executorIdLocalDirs(_)))
+    BlockManagerLocalDirs(executorIds.map { id => id -> executorIdToLocalDirs(id) }.toMap)
   }
 
   private def getLocationsAndStatus(
@@ -518,7 +518,7 @@ class BlockManagerMasterEndpoint(
               .get(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
               .getOrElse(false))
-      }.map(bmId => executorIdLocalDirs(bmId.executorId))
+      }.map { bmId => executorIdToLocalDirs(bmId.executorId) }
       Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None

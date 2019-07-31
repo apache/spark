@@ -456,8 +456,11 @@ final class ShuffleBlockFetcherIterator(
 
     val localDirsByExec =
       blockManager.master.getHostLocalDirs(hostLocalBlocksByExecutor.keySet.toArray).localDirs
-    for ((localDirs, blocks) <- localDirsByExec.zip(hostLocalBlocksByExecutor.values);
-      blockId <- blocks) {
+    for (
+      (execId, blocks) <- hostLocalBlocksByExecutor;
+      localDirs = localDirsByExec(execId);
+      blockId <- blocks
+    ) {
       try {
         val buf =
           blockManager.getHostLocalShuffleData(blockId.asInstanceOf[ShuffleBlockId], localDirs)

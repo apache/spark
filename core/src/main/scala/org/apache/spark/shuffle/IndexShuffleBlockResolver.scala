@@ -58,10 +58,8 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the shuffle data file.
    *
-   * When the dirs param is None then the disk manager's local directories are used and this way
-   * local data files are read otherwise via the specified directories host-local blocks can be read
-   * (but this can be used only for reading as non-existing parent directory storing the data
-   * file won't be created this way).
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
    */
    def getDataFile(
       shuffleId: Int,
@@ -76,10 +74,8 @@ private[spark] class IndexShuffleBlockResolver(
   /**
    * Get the shuffle index file.
    *
-   * When the dirs param is None then the disk manager's local directories are used and this way
-   * local index files are read otherwise via the specified directories host-local blocks can be
-   * read (but this can be used only for reading as non-existing parent directory storing the index
-   * file won't be created this way).
+   * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
+   * read from the specified directories.
    */
   private def getIndexFile(
       shuffleId: Int,

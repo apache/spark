@@ -113,7 +113,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         .getHostLocalShuffleData(meq(blockId.asInstanceOf[ShuffleBlockId]), any())
     }
     val master = mock(classOf[BlockManagerMaster])
-    doReturn(BlockManagerLocalDirs(Seq(Array("")))).when(master).getHostLocalDirs(any())
+    doReturn(BlockManagerLocalDirs(Map("test-client-1" -> Array(""))))
+      .when(master).getHostLocalDirs(any())
     doReturn(master).when(blockManager).master
 
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](

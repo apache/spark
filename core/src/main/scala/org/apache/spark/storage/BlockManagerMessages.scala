@@ -101,10 +101,8 @@ private[spark] object BlockManagerMessages {
 
   /**
    * The response message of `GetLocalDirs` request.
-   *
-   * @param localDirs follows the order of the block manager IDs used in the `GetLocalDirs` request.
    */
-  case class BlockManagerLocalDirs(localDirs: Seq[Array[String]])
+  case class BlockManagerLocalDirs(localDirs: Map[String, Array[String]])
 
   /**
    * The response message of `GetLocationsAndStatus` request.

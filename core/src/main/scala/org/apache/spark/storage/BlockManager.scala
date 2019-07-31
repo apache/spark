@@ -545,7 +545,7 @@ private[spark] class BlockManager(
   override def getHostLocalShuffleData(
       blockId: ShuffleBlockId,
       dirs: Array[String]): ManagedBuffer = {
-      shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
+    shuffleManager.shuffleBlockResolver.getBlockData(blockId, Some(dirs))
   }
 
   /**
