@@ -844,3 +844,85 @@ case class GreaterThanOrEqual(left: Expression, right: Expression)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gteq(input1, input2)
 }
+
+trait BooleanTest extends UnaryExpression with Predicate with ExpectsInputTypes {
+
+  def boolValueForComparison: Boolean
+  def boolValueWhenNull: Boolean
+
+  override def nullable: Boolean = false
+  override def inputTypes: Seq[DataType] = Seq(BooleanType)
+
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    Option(value) match {
+      case None => boolValueWhenNull
+      case other => if (boolValueWhenNull) {
+        value == !boolValueForComparison
+      } else {
+        value == boolValueForComparison
+      }
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    ev.copy(code = code"""
+      ${eval.code}
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+      if (${eval.isNull}) {
+        ${ev.value} = $boolValueWhenNull;
+      } else if ($boolValueWhenNull) {
+        ${ev.value} = ${eval.value} == !$boolValueForComparison;
+      } else {
+        ${ev.value} = ${eval.value} == $boolValueForComparison;
+      }
+      """, isNull = FalseLiteral)
+  }
+}
+
+case class IsTrue(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = true
+  override def boolValueWhenNull: Boolean = false
+  override def sql: String = s"(${child.sql} IS TRUE)"
+}
+
+case class IsNotTrue(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = true
+  override def boolValueWhenNull: Boolean = true
+  override def sql: String = s"(${child.sql} IS NOT TRUE)"
+}
+
+case class IsFalse(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = false
+  override def boolValueWhenNull: Boolean = false
+  override def sql: String = s"(${child.sql} IS FALSE)"
+}
+
+case class IsNotFalse(child: Expression) extends BooleanTest {
+  override def boolValueForComparison: Boolean = false
+  override def boolValueWhenNull: Boolean = true
+  override def sql: String = s"(${child.sql} IS NOT FALSE)"
+}
+
+/**
+ * IS UNKNOWN and IS NOT UNKNOWN are the same as IS NULL and IS NOT NULL, respectively,
+ * except that the input expression must be of a boolean type.
+ */
+object IsUnknown {
+  def apply(child: Expression): Predicate = {
+    new IsNull(child) with ExpectsInputTypes {
+      override def inputTypes: Seq[DataType] = Seq(BooleanType)
+      override def sql: String = s"(${child.sql} IS UNKNOWN)"
+    }
+  }
+}
+
+object IsNotUnknown {
+  def apply(child: Expression): Predicate = {
+    new IsNotNull(child) with ExpectsInputTypes {
+      override def inputTypes: Seq[DataType] = Seq(BooleanType)
+      override def sql: String = s"(${child.sql} IS NOT UNKNOWN)"
+    }
+  }
+}
