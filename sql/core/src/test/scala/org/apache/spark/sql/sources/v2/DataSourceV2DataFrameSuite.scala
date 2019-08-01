@@ -254,6 +254,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
       val tableName = s"$catalogName.$t1"
       checkAnswer(session.table(tableName), Nil)
       intercept[TableAlreadyExistsException] {
+        // Make sure default save mode is same as before
         session.table("source").write.format(v2Format).saveAsTable(tableName)
       }
       session.table("source").write.format(v2Format).mode("append").saveAsTable(tableName)
