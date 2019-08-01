@@ -531,9 +531,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val command = (mode, tableOpt) match {
       case (SaveMode.Append, Some(table)) =>
+        println("Append code path")
         AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan)
 
       case (SaveMode.Overwrite, _) =>
+        println("Overwrite code path")
         ReplaceTableAsSelect(
           catalog,
           ident,
@@ -544,6 +546,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           orCreate = true)      // Create the table if it doesn't exist
 
       case (other, _) =>
+        println(s"Others: ignoreIfExists = ${other == SaveMode.Ignore}")
         // We have a potential race condition here in AppendMode, if the table suddenly gets
         // created between our existence check and physical execution, but this can't be helped
         // in any case.
