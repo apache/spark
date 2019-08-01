@@ -42,12 +42,12 @@ class JoinReorderGASuite extends PlanTest with StatsEstimationTestBase {
         EliminateResolvedHint) ::
           Batch("Operator Optimizations", FixedPoint(100),
             CombineFilters,
-            PushDownPredicate,
+            PushPredicateThroughNonJoin,
             ReorderJoin,
             PushPredicateThroughJoin,
             ColumnPruning,
             CollapseProject) ::
-          Batch("Join Reorder", Once,
+          Batch("Join Reorder", FixedPoint(1),
             CostBasedJoinReorder) :: Nil
   }
 
