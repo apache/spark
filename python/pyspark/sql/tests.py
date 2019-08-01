@@ -847,6 +847,14 @@ class SQLTests(ReusedSQLTestCase):
         for result in results:
             self.assertEqual(result[0], '')
 
+    def test_input_file_name_udf(self):
+        from pyspark.sql.functions import udf, input_file_name
+
+        df = self.spark.read.text('python/test_support/hello/hello.txt')
+        df = df.select(udf(lambda x: x)("value"), input_file_name().alias('file'))
+        file_name = df.collect()[0].file
+        self.assertTrue("python/test_support/hello/hello.txt" in file_name)
+
     def test_udf_defers_judf_initialization(self):
         # This is separate of  UDFInitializationTests
         # to avoid context initialization
