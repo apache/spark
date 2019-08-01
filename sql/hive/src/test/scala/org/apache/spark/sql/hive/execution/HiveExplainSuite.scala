@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -32,7 +32,6 @@ import org.apache.spark.util.Utils
  * A set of tests that validates support for Hive Explain command.
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import testImplicits._
 
   test("show cost in explain command") {
     val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
@@ -205,6 +204,16 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         }
         checkKeywordsExist(df, keywords: _*)
       }
+    }
+  }
+
+  test("SPARK-28595: explain should not trigger partition listing") {
+    HiveCatalogMetrics.reset()
+    withTable("t") {
+      sql("CREATE TABLE t USING json PARTITIONED BY (j) AS SELECT 1 i, 2 j")
+      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+      spark.table("t").explain()
+      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
     }
   }
 }
