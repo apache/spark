@@ -951,14 +951,14 @@ SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
 
 SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random());
 
--- Output not being truncated
--- SELECT count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
+-- The original query currently outputs too many rows, so just count the output number
+SELECT count(*) FROM (select count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1));
 
--- Output not being truncated
--- SELECT rank() OVER (PARTITION BY four ORDER BY ten) FROM tenk1;
+-- The original query currently outputs too many rows, so just count the output number
+SELECT count(*) FROM (select rank() OVER (PARTITION BY four ORDER BY ten) FROM tenk1);
 
--- Output not being truncated
--- SELECT count() OVER () FROM tenk1;
+-- The original query currently outputs too many rows, so just count the output number
+SELECT count(*) FROM (select count() OVER () FROM tenk1);
 
 -- [SPARK-28065] ntile only accepting positive (>0) values
 SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
@@ -1034,7 +1034,7 @@ SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1.5),(2,2.5),(3,NULL),(4,NULL)) t(i,v);
 
-SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+SELECT i,AVG(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
 
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
@@ -1046,10 +1046,11 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 
-SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
-  FROM (VALUES(1,'1.10'),(2,'2.20'),(3,NULL),(4,NULL)) t(i,v);
+-- The cast syntax is present in PgSQL for legacy reasons and Spark will not recognize a money field
+-- SELECT i,SUM(v::money) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+--   FROM (VALUES(1,'1.10'),(2,'2.20'),(3,NULL),(4,NULL)) t(i,v);
 
-SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+SELECT i,SUM(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
 
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
