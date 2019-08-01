@@ -20,7 +20,7 @@ package org.apache.spark.internal.io
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Package object to assist in switching to the Hadoop Hadoop 3
+ * Package object to assist in switching to the Hadoop 3
  * [[org.apache.hadoop.mapreduce.lib.output.PathOutputCommitterFactory]] factory
  * mechanism for dynamically loading committers for the destination stores.
  *

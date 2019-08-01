@@ -23,13 +23,12 @@ import java.lang.reflect.InvocationTargetException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.IOUtils
+import org.apache.hadoop.mapreduce.{Job, JobStatus, MRJobConfig, TaskAttemptID}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.hadoop.mapreduce.{Job, JobStatus, MRJobConfig, TaskAttemptID}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.io.{FileCommitProtocol, cloud}
-import org.apache.spark.internal.io.cloud.PathCommitterConstants._
+import org.apache.spark.internal.io.{cloud, FileCommitProtocol}
 
 /**
  * Test committer binding logic.
@@ -40,6 +39,8 @@ class CommitterBindingSuite extends SparkFunSuite {
   private val taskAttempt0 = "attempt_" + jobId + "_m_000000_0"
   private val taskAttemptId0 = TaskAttemptID.forName(taskAttempt0)
 
+  /** hadoop-mapreduce option to enable the _SUCCESS marker. */
+  private val successMarker = "mapreduce.fileoutputcommitter.marksuccessfuljobs"
   /**
    * Does the
    * [[BindingParquetOutputCommitter]] committer bind to the schema-specific
@@ -82,7 +83,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     val job = Job.getInstance(new Configuration())
     val conf = job.getConfiguration
     conf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttempt0)
-    conf.setBoolean(CREATE_SUCCESSFUL_JOB_OUTPUT_DIR_MARKER, true)
+    conf.setBoolean(successMarker, true)
     FileOutputFormat.setOutputPath(job, outDir)
     job
   }
@@ -137,9 +138,10 @@ class CommitterBindingSuite extends SparkFunSuite {
     }
     val cause = ex.getCause
     if (cause == null || !cause.isInstanceOf[IOException]
-      || !cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
+        || !cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
       throw ex
     }
   }
 
 }
+

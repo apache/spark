@@ -19,8 +19,8 @@ package org.apache.spark.internal.io.cloud
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.lib.output.{PathOutputCommitter, PathOutputCommitterFactory}
 import org.apache.hadoop.mapreduce.{JobContext, JobStatus, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.{PathOutputCommitter, PathOutputCommitterFactory}
 
 /**
  * A local path output committer which tracks its state, for use in
@@ -79,7 +79,7 @@ class StubPathOutputCommitter(
     needsTaskCommit
   }
 
-  override def toString(): String  = s"StubPathOutputCommitter(setup=$jobSetup," +
+  override def toString(): String = s"StubPathOutputCommitter(setup=$jobSetup," +
     s" committed=$jobCommitted, aborted=$jobAborted)"
 }
 
@@ -95,10 +95,22 @@ class StubPathOutputCommitterFactory extends PathOutputCommitterFactory {
   }
 
 
-  private def workPath(out: Path): Path = new Path(out, PathCommitterConstants.TEMP_DIR_NAME)
+  private def workPath(out: Path): Path = new Path(out,
+    StubPathOutputCommitterFactory.TEMP_DIR_NAME)
 }
 
 object StubPathOutputCommitterFactory {
+
+  /**
+   * This is the "Pending" directory of the FileOutputCommitter;
+   * data written here is, in that algorithm, renamed into place.
+   */
+  val TEMP_DIR_NAME = "_temporary"
+
+  /**
+   * Scheme prefix for per-filesystem scheme committers.
+   */
+  val OUTPUTCOMMITTER_FACTORY_SCHEME = "mapreduce.outputcommitter.factory.scheme"
 
   /**
    * Given a hadoop configuration, set up the factory binding for the scheme.
@@ -106,9 +118,9 @@ object StubPathOutputCommitterFactory {
    * @param scheme filesystem scheme.
    */
   def bind(conf: Configuration, scheme: String): Unit = {
-    val key = String.format(
-      PathCommitterConstants.OUTPUTCOMMITTER_FACTORY_SCHEME_PATTERN, scheme)
+    val key = OUTPUTCOMMITTER_FACTORY_SCHEME + "." + scheme
     conf.set(key, classOf[StubPathOutputCommitterFactory].getName())
   }
+
 
 }
