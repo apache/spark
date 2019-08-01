@@ -590,19 +590,19 @@ object FunctionRegistry {
           val validParametersCount = constructors
             .filter(_.getParameterTypes.forall(_ == classOf[Expression]))
             .map(_.getParameterCount).distinct.sorted
-          val expectedErrorMsg = validParametersCount.length match {
-            case 0 =>
-              ""
-            case 1 =>
-              s" Expected: ${validParametersCount.head.toString}; Found: ${params.length}"
-            case _ =>
-              val expectedNumberOfParameters =
-                validParametersCount.init.mkString("one of ", ", ", " and ") +
-                  validParametersCount.last
-              s" Expected: $expectedNumberOfParameters; Found: ${params.length}"
+          val invalidArgumentsMsg = if (validParametersCount.length == 0) {
+            s"Invalid arguments for function $name"
+          } else {
+            val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+              validParametersCount.head.toString
+            } else {
+              validParametersCount.init.mkString("one of ", ", ", " and ") +
+                validParametersCount.last
+            }
+            s"Invalid number of arguments for function $name. " +
+              s"Expected: $expectedNumberOfParameters; Found: ${params.length}"
           }
-          throw new AnalysisException(s"Invalid number of arguments for function $name." +
-            s"$expectedErrorMsg")
+          throw new AnalysisException(invalidArgumentsMsg)
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
