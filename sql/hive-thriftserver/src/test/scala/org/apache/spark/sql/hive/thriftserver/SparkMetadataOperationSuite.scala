@@ -208,5 +208,19 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       checkResult(metaData.getFunctions(null, "default", "shift*"),
         Seq("shiftleft", "shiftright", "shiftrightunsigned"))
     }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getFunctions(null, "default", "upPer")
+      assert(rs.next())
+      assert(rs.getString("FUNCTION_SCHEM") === "default")
+      assert(rs.getString("FUNCTION_NAME") === "upper")
+      assert(rs.getString("REMARKS") ===
+        "upper(str) - Returns `str` with all characters changed to uppercase.")
+      assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+      assert(rs.getString("SPECIFIC_NAME") === "org.apache.spark.sql.catalyst.expressions.Upper")
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
   }
 }
