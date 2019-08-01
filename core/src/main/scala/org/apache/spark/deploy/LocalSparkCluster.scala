@@ -64,8 +64,7 @@ class LocalSparkCluster(
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
       val workerEnv = Worker.startRpcEnvAndEndpoint(localHostname, 0, 0, coresPerWorker,
-        memoryPerWorker, masters, null, Some(workerNum), _conf,
-        conf.get(config.Worker.SPARK_WORKER_RESOURCE_FILE))
+        memoryPerWorker, masters, null, Some(workerNum), _conf, None)
       workerRpcEnvs += workerEnv
     }
 
