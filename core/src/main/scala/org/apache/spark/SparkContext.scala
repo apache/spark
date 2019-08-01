@@ -396,12 +396,7 @@ class SparkContext(config: SparkConf) extends Logging {
       // SPARK_RESOURCES/SPARK_RESOURCES_COORDINATE_DIR/ to avoid collision.
       if (isClientStandalone) {
         val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
-        try {
-          acquireResources(_conf, SPARK_DRIVER_PREFIX, discovered, requests, Utils.getProcessId)
-        } catch {
-          case NonFatal(e) =>
-            throw e
-        }
+        acquireResources(_conf, SPARK_DRIVER_PREFIX, discovered, requests, Utils.getProcessId)
       } else {
         discovered
       }
