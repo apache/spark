@@ -130,7 +130,7 @@ private[spark] class BlockManager(
     shuffleManager: ShuffleManager,
     val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
-    externalShuffleClient: Option[ExternalShuffleClient])
+    externalShuffleClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
@@ -392,7 +392,7 @@ private[spark] class BlockManager(
    * the appId may not be known at BlockManager instantiation time (in particular for the driver,
    * where it is only learned after registration with the TaskScheduler).
    *
-   * This method initializes the BlockTransferService and ShuffleClient, registers with the
+   * This method initializes the BlockTransferService and BlockStoreClient, registers with the
    * BlockManagerMaster, starts the BlockManagerWorker endpoint, and registers with a local shuffle
    * service if configured.
    */
@@ -459,7 +459,7 @@ private[spark] class BlockManager(
     for (i <- 1 to MAX_ATTEMPTS) {
       try {
         // Synchronous and will throw an exception if we cannot connect.
-        shuffleClient.asInstanceOf[ExternalShuffleClient].registerWithShuffleServer(
+        shuffleClient.asInstanceOf[ExternalBlockStoreClient].registerWithShuffleServer(
           shuffleServerId.host, shuffleServerId.port, shuffleServerId.executorId, shuffleConfig)
         return
       } catch {
