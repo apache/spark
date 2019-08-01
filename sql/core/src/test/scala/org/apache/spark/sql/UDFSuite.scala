@@ -535,4 +535,11 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(info.getNote === "")
     assert(info.getExtended.contains("> SELECT upper('SparkSql');"))
   }
+
+  test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
+    val e = intercept[AnalysisException] {
+      spark.sql("SELECT CAST(1)")
+    }
+    assert(e.getMessage.contains("Invalid arguments for function cast"))
+  }
 }
