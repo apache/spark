@@ -347,9 +347,9 @@ case class FileSourceScanExec(
     override def hasNext: Boolean = {
       // The `FileScanRDD` returns an iterator which scans the file during the `hasNext` call.
       val startNs = System.nanoTime()
-      val re = fileScanIterator.hasNext
-      scanTimeMetrics += ((System.nanoTime() - startNs) / (1000 * 1000))
-      re
+      val res = fileScanIterator.hasNext
+      scanTimeMetrics += NANOSECONDS.toMillis(System.nanoTime() - startNs)
+      res
     }
   }
 
