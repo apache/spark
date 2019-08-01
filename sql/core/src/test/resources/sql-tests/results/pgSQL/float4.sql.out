@@ -63,7 +63,7 @@ SELECT float('nan')
 -- !query 7 schema
 struct<CAST(nan AS FLOAT):float>
 -- !query 7 output
-NULL
+NaN
 
 
 -- !query 8
@@ -71,7 +71,7 @@ SELECT float('   NAN  ')
 -- !query 8 schema
 struct<CAST(   NAN   AS FLOAT):float>
 -- !query 8 output
-NULL
+NaN
 
 
 -- !query 9
@@ -79,7 +79,7 @@ SELECT float('infinity')
 -- !query 9 schema
 struct<CAST(infinity AS FLOAT):float>
 -- !query 9 output
-NULL
+Infinity
 
 
 -- !query 10
@@ -87,7 +87,7 @@ SELECT float('          -INFINiTY   ')
 -- !query 10 schema
 struct<CAST(          -INFINiTY    AS FLOAT):float>
 -- !query 10 output
-NULL
+-Infinity
 
 
 -- !query 11
@@ -135,7 +135,7 @@ SELECT float('nan') / float('nan')
 -- !query 16 schema
 struct<(CAST(CAST(nan AS FLOAT) AS DOUBLE) / CAST(CAST(nan AS FLOAT) AS DOUBLE)):double>
 -- !query 16 output
-NULL
+NaN
 
 
 -- !query 17

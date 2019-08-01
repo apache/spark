@@ -563,7 +563,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try s.toString.toDouble catch {
-        case _: NumberFormatException => null
+        case _: NumberFormatException =>
+          val str = s.trim.toString
+          if (str.equalsIgnoreCase("infinity")) {
+            Double.PositiveInfinity
+          } else if (str.equalsIgnoreCase("-infinity")) {
+            Double.NegativeInfinity
+          } else if (str.equalsIgnoreCase("nan")) {
+            Double.NaN
+          } else {
+            null
+          }
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1d else 0d)
@@ -579,7 +589,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, s => try s.toString.toFloat catch {
-        case _: NumberFormatException => null
+        case _: NumberFormatException =>
+          val str = s.trim.toString
+          if (str.equalsIgnoreCase("infinity")) {
+            Float.PositiveInfinity
+          } else if (str.equalsIgnoreCase("-infinity")) {
+            Float.NegativeInfinity
+          } else if (str.equalsIgnoreCase("nan")) {
+            Float.NaN
+          } else {
+            null
+          }
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1f else 0f)
@@ -717,9 +737,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
     case IntegerType => castToIntCode(from, ctx)
-    case FloatType => castToFloatCode(from)
+    case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
-    case DoubleType => castToDoubleCode(from)
+    case DoubleType => castToDoubleCode(from, ctx)
 
     case array: ArrayType =>
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
@@ -1259,48 +1279,72 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
 
-  private[this] def castToFloatCode(from: DataType): CastFunction = from match {
-    case StringType =>
-      (c, evPrim, evNull) =>
-        code"""
+  private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case StringType =>
+        val str = ctx.freshVariable("str", StringType)
+        (c, evPrim, evNull) =>
+          code"""
           try {
             $evPrim = Float.valueOf($c.toString());
           } catch (java.lang.NumberFormatException e) {
-            $evNull = true;
+              final String $str = $c.toString().trim();
+              if ($str.equalsIgnoreCase("infinity")) {
+                $evPrim = Float.POSITIVE_INFINITY;
+              } else if ($str.equalsIgnoreCase("-infinity")) {
+                $evPrim = Float.NEGATIVE_INFINITY;
+              } else if ($str.equalsIgnoreCase("nan")) {
+                $evPrim = Float.NaN;
+              } else {
+                $evNull = true;
+              }
           }
         """
-    case BooleanType =>
-      (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (float) (${timestampToDoubleCode(c)});"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toFloat();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (float) $c;"
+      case BooleanType =>
+        (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
+      case DateType =>
+        (c, evPrim, evNull) => code"$evNull = true;"
+      case TimestampType =>
+        (c, evPrim, evNull) => code"$evPrim = (float) (${timestampToDoubleCode(c)});"
+      case DecimalType() =>
+        (c, evPrim, evNull) => code"$evPrim = $c.toFloat();"
+      case x: NumericType =>
+        (c, evPrim, evNull) => code"$evPrim = (float) $c;"
+    }
   }
 
-  private[this] def castToDoubleCode(from: DataType): CastFunction = from match {
-    case StringType =>
-      (c, evPrim, evNull) =>
-        code"""
+  private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case StringType =>
+        val str = ctx.freshVariable("str", StringType)
+        (c, evPrim, evNull) =>
+          code"""
           try {
             $evPrim = Double.valueOf($c.toString());
           } catch (java.lang.NumberFormatException e) {
-            $evNull = true;
+            final String $str = $c.toString().trim();
+            if ($str.equalsIgnoreCase("infinity")) {
+              $evPrim = Double.POSITIVE_INFINITY;
+            } else if ($str.equalsIgnoreCase("-infinity")) {
+              $evPrim = Double.NEGATIVE_INFINITY;
+            } else if ($str.equalsIgnoreCase("nan")) {
+              $evPrim = Double.NaN;
+            } else {
+              $evNull = true;
+            }
           }
         """
-    case BooleanType =>
-      (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (double) $c;"
+      case BooleanType =>
+        (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
+      case DateType =>
+        (c, evPrim, evNull) => code"$evNull = true;"
+      case TimestampType =>
+        (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
+      case DecimalType() =>
+        (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
+      case x: NumericType =>
+        (c, evPrim, evNull) => code"$evPrim = (double) $c;"
+    }
   }
 
   private[this] def castArrayCode(
