@@ -219,10 +219,10 @@ private[spark] object StandaloneResourceUtils extends Logging {
                   .map(_.addresses).getOrElse(Array.empty))
                 rName -> retained
               }
-                .filter(_._2.nonEmpty)
-                .map { case (rName, addresses) =>
-                  ResourceAllocation(ResourceID(componentName, rName), addresses)
-                }.toSeq
+              .filter(_._2.nonEmpty)
+              .map { case (rName, addresses) =>
+                ResourceAllocation(ResourceID(componentName, rName), addresses)
+              }.toSeq
             }
             if (allocations.nonEmpty) {
               val newAllocation = StandaloneResourceAllocation(pid, allocations)
@@ -237,6 +237,9 @@ private[spark] object StandaloneResourceUtils extends Logging {
                 writeResourceAllocationJson(componentName, others, resourcesFile)
               }
             }
+            logDebug(s"$componentName(pid=$pid) released resources: ${toRelease.mkString("\n")}")
+          } else {
+            logWarning(s"$componentName(pid=$pid) has already released its resources.")
           }
         }
       } finally {
