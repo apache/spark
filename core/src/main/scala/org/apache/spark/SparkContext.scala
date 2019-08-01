@@ -392,8 +392,8 @@ class SparkContext(config: SparkConf) extends Logging {
     val discovered = getOrDiscoverAllResources(_conf, SPARK_DRIVER_PREFIX, resourcesFileOpt)
     _resources = {
       // driver submitted in client mode under Standalone may have conflicting resources with
-      // workers on this host. We should sync driver's resources info into SPARK_RESOURCES
-      // to avoid collision.
+      // other drivers/workers on this host. We should sync driver's resources info into
+      // SPARK_RESOURCES/SPARK_RESOURCES_COORDINATE_DIR/ to avoid collision.
       if (isClientStandalone) {
         val requests = parseResourceRequirements(_conf, SPARK_DRIVER_PREFIX)
         try {
