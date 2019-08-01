@@ -1371,7 +1371,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: FloatType | _: DoubleType =>
       (c, evPrim, evNull) =>
         code"""
-          if ($c > ${Byte.MinValue + 1} && $c < ${Byte.MaxValue + 1}) {
+          if ($c > ${Byte.MinValue - 1} && $c < ${Byte.MaxValue + 1}) {
             $evPrim = (byte) $c;
           } else {
             $evNull = true;
