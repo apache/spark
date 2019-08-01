@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoUnit, IsoFields}
+import java.time.temporal.TemporalAdjusters._
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -648,40 +649,29 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    var millis = MICROSECONDS.toMillis(t)
+    val zonedDateTime = microsToInstant(t).atZone(timeZone.toZoneId)
     val truncated = level match {
       case TRUNC_TO_YEAR =>
-        val dDays = millisToDays(millis, timeZone)
-        daysToMillis(truncDate(dDays, level), timeZone)
+        zonedDateTime.`with`(firstDayOfYear()).truncatedTo(ChronoUnit.DAYS)
       case TRUNC_TO_MONTH =>
-        val dDays = millisToDays(millis, timeZone)
-        daysToMillis(truncDate(dDays, level), timeZone)
-      case TRUNC_TO_DAY =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_DAY - offset
-      case TRUNC_TO_HOUR =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_HOUR - offset
-      case TRUNC_TO_MINUTE =>
-        millis - millis % MILLIS_PER_MINUTE
-      case TRUNC_TO_SECOND =>
-        millis - millis % MILLIS_PER_SECOND
-      case TRUNC_TO_WEEK =>
-        val dDays = millisToDays(millis, timeZone)
-        val prevMonday = getNextDateForDayOfWeek(dDays - 7, MONDAY)
-        daysToMillis(prevMonday, timeZone)
+        zonedDateTime.`with`(firstDayOfMonth()).truncatedTo(ChronoUnit.DAYS)
       case TRUNC_TO_QUARTER =>
-        val dDays = millisToDays(millis, timeZone)
-        val daysOfQuarter = LocalDate.ofEpochDay(dDays)
-          .`with`(IsoFields.DAY_OF_QUARTER, 1L).toEpochDay.toInt
-        daysToMillis(daysOfQuarter, timeZone)
+        zonedDateTime.`with`(IsoFields.DAY_OF_QUARTER, 1L).truncatedTo(ChronoUnit.DAYS)
+      case TRUNC_TO_WEEK =>
+        zonedDateTime.`with`(DayOfWeek.MONDAY).truncatedTo(ChronoUnit.DAYS)
+      case TRUNC_TO_DAY =>
+        zonedDateTime.truncatedTo(ChronoUnit.DAYS)
+      case TRUNC_TO_HOUR =>
+        zonedDateTime.truncatedTo(ChronoUnit.HOURS)
+      case TRUNC_TO_MINUTE =>
+        zonedDateTime.truncatedTo(ChronoUnit.MINUTES)
+      case TRUNC_TO_SECOND =>
+        zonedDateTime.truncatedTo(ChronoUnit.SECONDS)
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
     }
-    truncated * MICROS_PER_MILLIS
+    instantToMicros(truncated.toInstant)
   }
 
   /**
