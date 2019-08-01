@@ -21,6 +21,7 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Locale
 
 import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.sql.types._
 
