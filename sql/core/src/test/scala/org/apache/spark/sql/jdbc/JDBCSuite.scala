@@ -1602,5 +1602,23 @@ class JDBCSuite extends QueryTest
 
     assert(get("jdbc:mysql://localhost/db") == MySQLDialect)
     assert(get("jdbc:MySQL://localhost/db") == MySQLDialect)
+
+    assert(get("jdbc:postgresql://localhost/db") == PostgresDialect)
+    assert(get("jdbc:postGresql://localhost/db") == PostgresDialect)
+
+    assert(get("jdbc:db2://localhost/db") == DB2Dialect)
+    assert(get("jdbc:DB2://localhost/db") == DB2Dialect)
+
+    assert(get("jdbc:sqlserver://localhost/db") == MsSqlServerDialect)
+    assert(get("jdbc:sqlServer://localhost/db") == MsSqlServerDialect)
+
+    assert(get("jdbc:derby://localhost/db") == DerbyDialect)
+    assert(get("jdbc:derBy://localhost/db") == DerbyDialect)
+
+    assert(get("jdbc:oracle://localhost/db") == OracleDialect)
+    assert(get("jdbc:Oracle://localhost/db") == OracleDialect)
+
+    assert(get("jdbc:teradata://localhost/db") == TeradataDialect)
+    assert(get("jdbc:Teradata://localhost/db") == TeradataDialect)
   }
 }

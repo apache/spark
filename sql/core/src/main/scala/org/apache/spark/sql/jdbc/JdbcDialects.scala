@@ -18,9 +18,9 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
+import java.util.Locale
 
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.sql.types._
 
@@ -58,13 +58,27 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
 @DeveloperApi
 @Evolving
 abstract class JdbcDialect extends Serializable {
+
+  /**
+    * The tag of the database, it must be lowercase，the subsequent will match
+    * the corresponding dialect through this tag, so it must be strictly one-to-one
+    * correspondence with jdbc url,such as:
+    * mysql  url:  jdbc:mysql://localhost/db  --> mysql
+    * oracle url:  jdbc:oracle://localhost/db --> oracle
+    * db2    url:  jdbc:db2://localhost/db    --> db2
+    * ......
+    */
+  def dbTag: String
+
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
    * @return True if the dialect can be applied on the given jdbc url.
    * @throws NullPointerException if the url is null.
    */
-  def canHandle(url : String): Boolean
+  def canHandle(url : String): Boolean = {
+    url.toLowerCase(Locale.ROOT).startsWith(s"jdbc:$dbTag")
+  }
 
   /**
    * Get the custom datatype mapping for the given jdbc meta information.
