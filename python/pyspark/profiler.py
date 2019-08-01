@@ -110,6 +110,12 @@ class Profiler(object):
         """ Return the collected profiling stats (pstats.Stats)"""
         raise NotImplementedError
 
+    def set_sort_stats_sorters(self, sorter):
+        self._sort_stats_sorters = sorter
+
+    def get_sort_stats_sorters(self):
+        return self._sort_stats_sorters
+
     def show(self, id):
         """ Print the profile stats to stdout, id is the RDD id """
         stats = self.stats()
@@ -117,7 +123,9 @@ class Profiler(object):
             print("=" * 60)
             print("Profile of RDD<id=%d>" % id)
             print("=" * 60)
-            stats.sort_stats("time", "cumulative").print_stats()
+
+            sorter = self.get_sort_stats_sorters()
+            stats.sort_stats(*sorter).print_stats()
 
     def dump(self, id, path):
         """ Dump the profile into path, id is the RDD id """
