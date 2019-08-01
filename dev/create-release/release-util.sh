@@ -102,7 +102,7 @@ function get_release_info {
   NEXT_VERSION="$VERSION"
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
-  local REV=$(echo "$VERSION" | cut -d . -f 3)
+  local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
 
   # Find out what rc is being prepared.
   # - If the current version is "x.y.0", then this is rc1 of the "x.y.0" release.

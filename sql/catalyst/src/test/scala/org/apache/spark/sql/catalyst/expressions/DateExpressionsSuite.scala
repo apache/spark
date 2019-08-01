@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -927,5 +927,37 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MakeDate(Literal(Int.MaxValue), Literal(13), Literal(19)), null)
     checkEvaluation(MakeDate(Literal(2019), Literal(13), Literal(19)), null)
     checkEvaluation(MakeDate(Literal(2019), Literal(7), Literal(32)), null)
+  }
+
+  test("creating values of TimestampType via make_timestamp") {
+    var makeTimestampExpr = MakeTimestamp(
+      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15), Literal(23.5),
+      Some(Literal(ZoneId.systemDefault().getId)))
+    val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
+    checkEvaluation(makeTimestampExpr, expected)
+    checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
+
+    checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(year = Literal(Int.MaxValue)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(month = Literal(13)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(day = Literal(32)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(hour = Literal(25)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
+    checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
+
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DoubleType)), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(70.0)), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
+      Literal(23), Literal(59), Literal(60.0))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(60.5)), null)
   }
 }
