@@ -2595,6 +2595,21 @@ object functions {
   }
 
   /**
+   * Returns the date that is `numMonths` after `startDate`.
+   *
+   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
+   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param numMonths A column of the number of months to add to `startDate`, can be negative to
+   *                  subtract months
+   * @return A date, or null if `startDate` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.0.0
+   */
+  def add_month(startDate: Column, numMonths: Column): Column = withExpr {
+    AddMonths(startDate.expr, numMonths.expr)
+  }
+
+  /**
    * Returns the current date as a date column.
    *
    * @group datetime_funcs
@@ -2643,6 +2658,18 @@ object functions {
   def date_add(start: Column, days: Int): Column = withExpr { DateAdd(start.expr, Literal(days)) }
 
   /**
+   * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.0.0
+   */
+  def date_add(start: Column, days: Column): Column = withExpr { DateAdd(start.expr, days.expr) }
+
+  /**
    * Returns the date that is `days` days before `start`
    *
    * @param start A date, timestamp or string. If a string, the data must be in a format that
@@ -2653,6 +2680,19 @@ object functions {
    * @since 1.5.0
    */
   def date_sub(start: Column, days: Int): Column = withExpr { DateSub(start.expr, Literal(days)) }
+
+  /**
+   * Returns the date that is `days` days before `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  A column of the number of days to subtract from `start`, can be negative to add
+   *              days
+   * @return A date, or null if `start` was a string that could not be cast to a date
+   * @group datetime_funcs
+   * @since 3.0.0
+   */
+  def date_sub(start: Column, days: Column): Column = withExpr { DateSub(start.expr, days.expr) }
 
   /**
    * Returns the number of days from `start` to `end`.
