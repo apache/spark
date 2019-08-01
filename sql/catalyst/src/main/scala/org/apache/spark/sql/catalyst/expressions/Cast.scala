@@ -516,18 +516,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
       )
     case DoubleType =>
+      val upperBound = Int.MaxValue + 1L
+      val lowerBound = Int.MinValue - 1L
       buildCast[Double](_, d =>
-        if (d <= Int.MaxValue && d >= Int.MinValue) {
+        if (d < upperBound && d > lowerBound) {
           d.toInt
         } else {
           null
         }
       )
     case _: DecimalType =>
-      val intMaxValueAsDecimal = Decimal(Int.MaxValue)
-      val intMinValueAsDecimal = Decimal(Int.MinValue)
+      val upperBound = Decimal(Int.MaxValue + 1L)
+      val lowerBound = Decimal(Int.MinValue - 1L)
       buildCast[Decimal](_, d =>
-        if (d <= intMaxValueAsDecimal && d >= intMinValueAsDecimal) {
+        if (d < upperBound && d > lowerBound) {
           d.toInt
         } else {
           null
@@ -576,26 +578,30 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
       })
     case FloatType =>
+      val upperBound = Short.MaxValue + 1
+      val lowerBound = Short.MinValue - 1
       buildCast[Float](_, f =>
-        if (f <= Short.MaxValue && f >= Short.MinValue) {
+        if (f < upperBound && f > lowerBound) {
           f.toShort
         } else {
           null
         }
       )
     case DoubleType =>
+      val upperBound = Short.MaxValue + 1
+      val lowerBound = Short.MinValue - 1
       buildCast[Double](_, d =>
-        if (d <= Short.MaxValue && d >= Short.MinValue) {
+        if (d < upperBound && d > lowerBound) {
           d.toShort
         } else {
           null
         }
       )
     case _: DecimalType =>
-      val shortMaxValueAsDecimal = Decimal(Short.MaxValue)
-      val shortMinValueAsDecimal = Decimal(Short.MinValue)
+      val upperBound = Decimal(Short.MaxValue + 1)
+      val lowerBound = Decimal(Short.MinValue - 1)
       buildCast[Decimal](_, d =>
-        if (d <= shortMaxValueAsDecimal && d >= shortMinValueAsDecimal) {
+        if (d < upperBound && d > lowerBound) {
           d.toShort
         } else {
           null
@@ -650,26 +656,30 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         }
       })
     case FloatType =>
+      val upperBound = Byte.MaxValue + 1
+      val lowerBound = Byte.MinValue - 1
       buildCast[Float](_, f =>
-        if (f <= Byte.MaxValue && f >= Byte.MinValue) {
+        if (f < upperBound && f > lowerBound) {
           f.toByte
         } else {
           null
         }
       )
     case DoubleType =>
+      val upperBound = Byte.MaxValue + 1
+      val lowerBound = Byte.MinValue - 1
       buildCast[Double](_, d =>
-        if (d <= Byte.MaxValue && d >= Byte.MinValue) {
+        if (d < upperBound && d > lowerBound) {
           d.toByte
         } else {
           null
         }
       )
     case _: DecimalType =>
-      val byteMaxValueAsDecimal = Decimal(Byte.MaxValue)
-      val byteMinValueAsDecimal = Decimal(Byte.MinValue)
+      val upperBound = Decimal(Byte.MaxValue + 1)
+      val lowerBound = Decimal(Byte.MinValue - 1)
       buildCast[Decimal](_, d =>
-        if (d <= byteMaxValueAsDecimal && d >= byteMinValueAsDecimal) {
+        if (d < upperBound && d > lowerBound) {
           d.toByte
         } else {
           null
@@ -1343,7 +1353,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           float $floatValue = $c.toFloat();
-          if ($floatValue <= ${Byte.MaxValue} && $floatValue >= ${Byte.MinValue}) {
+          if ($floatValue < ${Byte.MaxValue + 1} && $floatValue > ${Byte.MinValue - 1}) {
             $evPrim = $c.toByte();
           } else {
             $evNull = true;
@@ -1361,7 +1371,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: FloatType | _: DoubleType =>
       (c, evPrim, evNull) =>
         code"""
-          if ($c >= ${Byte.MinValue} && $c <= ${Byte.MaxValue}) {
+          if ($c > ${Byte.MinValue + 1} && $c < ${Byte.MaxValue + 1}) {
             $evPrim = (byte) $c;
           } else {
             $evNull = true;
@@ -1404,7 +1414,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           float $floatValue = $c.toFloat();
-          if ($floatValue <= ${Short.MaxValue} && $floatValue >= ${Short.MinValue}) {
+          if ($floatValue < ${Short.MaxValue + 1} && $floatValue > ${Short.MinValue - 1}) {
             $evPrim = $c.toShort();
           } else {
             $evNull = true;
@@ -1424,7 +1434,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case _: FloatType | _: DoubleType =>
       (c, evPrim, evNull) =>
         code"""
-          if ($c >= ${Short.MinValue} && $c <= ${Short.MaxValue}) {
+          if ($c > ${Short.MinValue - 1} && $c < ${Short.MaxValue + 1}) {
             $evPrim = (short) $c;
           } else {
             $evNull = true;
@@ -1465,7 +1475,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""
           double $doubleValue = $c.toDouble();
-          if ($doubleValue <= ${Int.MaxValue} && $doubleValue >= ${Int.MinValue}) {
+          if ($doubleValue > ${Int.MinValue - 1L}L && $doubleValue < ${Int.MaxValue + 1L}L) {
             $evPrim = $c.toInt();
           } else {
             $evNull = true;
@@ -1482,10 +1492,19 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             $evNull = true;
           }
         """
-    case _: FloatType | _: DoubleType =>
+    case _: FloatType =>
       (c, evPrim, evNull) =>
         code"""
           if ($c >= ${Int.MinValue} && $c <= ${Int.MaxValue}) {
+            $evPrim = (int) $c;
+          } else {
+            $evNull = true;
+          }
+        """
+    case _: DoubleType =>
+      (c, evPrim, evNull) =>
+        code"""
+          if ($c > ${Int.MinValue - 1L}L && $c < ${Int.MaxValue + 1L}L) {
             $evPrim = (int) $c;
           } else {
             $evNull = true;

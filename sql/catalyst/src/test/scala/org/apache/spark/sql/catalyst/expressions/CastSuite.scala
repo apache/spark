@@ -1101,6 +1101,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
       checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
     }
+    checkEvaluation(cast(2147483647.4f, IntegerType), 2147483647)
+    checkEvaluation(cast(-2147483648.4f, IntegerType), -2147483648)
+    checkEvaluation(cast(2147483647.4D, IntegerType), 2147483647)
+    checkEvaluation(cast(-2147483648.4D, IntegerType), -2147483648)
   }
 
   test("Cast to long") {
@@ -1113,5 +1117,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(Literal(value, TimestampType), LongType),
         Math.floorDiv(value, MICROS_PER_SECOND))
     }
+    checkEvaluation(cast(9223372036854775807.4f, LongType), 9223372036854775807L)
+    checkEvaluation(cast(-9223372036854775808.4f, LongType), -9223372036854775808L)
+    checkEvaluation(cast(9223372036854775807.4D, LongType), 9223372036854775807L)
+    checkEvaluation(cast(-9223372036854775808.4D, LongType), -9223372036854775808L)
   }
 }

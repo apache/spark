@@ -828,7 +828,7 @@ SELECT bigint(double('-9223372036854780000'))
 -- !query 93 schema
 struct<CAST(CAST(-9223372036854780000 AS DOUBLE) AS BIGINT):bigint>
 -- !query 93 output
--9223372036854775808
+NULL
 
 
 -- !query 94

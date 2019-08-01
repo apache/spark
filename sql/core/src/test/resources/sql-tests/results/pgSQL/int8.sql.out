@@ -606,10 +606,10 @@ SELECT CAST(q1 AS int) FROM int8_tbl WHERE q2 <> 456
 -- !query 60 schema
 struct<q1:int>
 -- !query 60 output
--869367531
--869367531
--869367531
 123
+NULL
+NULL
+NULL
 
 
 -- !query 61
@@ -625,10 +625,10 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 -- !query 62 schema
 struct<q1:smallint>
 -- !query 62 output
--32491
--32491
--32491
 123
+NULL
+NULL
+NULL
 
 
 -- !query 63
@@ -664,7 +664,7 @@ SELECT CAST(double('922337203685477580700.0') AS bigint)
 -- !query 66 schema
 struct<CAST(CAST(922337203685477580700.0 AS DOUBLE) AS BIGINT):bigint>
 -- !query 66 output
-9223372036854775807
+NULL
 
 
 -- !query 67
@@ -730,7 +730,7 @@ SELECT string(int(shiftleft(bigint(-1), 63))+1)
 -- !query 72 schema
 struct<CAST((CAST(shiftleft(CAST(-1 AS BIGINT), 63) AS INT) + 1) AS STRING):string>
 -- !query 72 output
-1
+NULL
 
 
 -- !query 73

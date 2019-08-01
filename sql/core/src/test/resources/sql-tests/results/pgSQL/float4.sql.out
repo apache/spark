@@ -336,7 +336,7 @@ SELECT int(float('-2147483900'))
 -- !query 37 schema
 struct<CAST(CAST(-2147483900 AS FLOAT) AS INT):int>
 -- !query 37 output
--2147483648
+NULL
 
 
 -- !query 38
@@ -368,7 +368,7 @@ SELECT bigint(float('-9223380000000000000'))
 -- !query 41 schema
 struct<CAST(CAST(-9223380000000000000 AS FLOAT) AS BIGINT):bigint>
 -- !query 41 output
--9223372036854775808
+NULL
 
 
 -- !query 42
