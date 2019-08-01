@@ -259,5 +259,6 @@ object JdbcDialects {
  * NOOP dialect object, always returning the neutral element.
  */
 private object NoopDialect extends JdbcDialect {
+  override def dbTag: String = ""
   override def canHandle(url : String): Boolean = true
 }

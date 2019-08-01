@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{DataType, MetadataBuilder}
  */
 private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect {
 
-  override def dbTag: String = "_NULL"
+  override def dbTag: String = ""
 
   require(dialects.nonEmpty)
 
