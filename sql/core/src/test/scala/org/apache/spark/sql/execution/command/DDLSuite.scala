@@ -760,13 +760,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
 
         withTempDir { tmpDir =>
-          val path = new Path(tmpDir.getCanonicalPath).toUri
-          val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-          sql(s"ALTER DATABASE $dbName SET LOCATION '$path'")
-          val dbPath = makeQualifiedPath(
-            catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri.toString).getPath
-          val expPath = makeQualifiedPath(tmpDir.toString).getPath
-          assert(dbPath === expPath)
+          val path = tmpDir.getCanonicalPath
+          val uri = tmpDir.toURI
+          sql(s"ALTER DATABASE $dbName SET LOCATION '$uri'")
+          val pathInCatalog = new Path(
+            catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri).toUri
+          assert("file" === pathInCatalog.getScheme)
+          val expectedPath = new Path(path).toUri
+          assert(expectedPath.getPath === pathInCatalog.getPath)
         }
       } finally {
         catalog.reset()
