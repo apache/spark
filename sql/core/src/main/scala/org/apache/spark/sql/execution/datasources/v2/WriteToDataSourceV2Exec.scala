@@ -80,9 +80,8 @@ case class CreateTableAsSelectExec(
     }
 
     Utils.tryWithSafeFinallyAndFailureCallbacks({
-      val t = catalog.createTable(
-        ident, query.schema, partitioning.toArray, properties.asJava)
-      t match {
+      catalog.createTable(
+        ident, query.schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
           val batchWrite = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
