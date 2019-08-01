@@ -1288,16 +1288,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           try {
             $evPrim = Float.valueOf($c.toString());
           } catch (java.lang.NumberFormatException e) {
-              final String $str = $c.toString().trim();
-              if ($str.equalsIgnoreCase("infinity")) {
-                $evPrim = Float.POSITIVE_INFINITY;
-              } else if ($str.equalsIgnoreCase("-infinity")) {
-                $evPrim = Float.NEGATIVE_INFINITY;
-              } else if ($str.equalsIgnoreCase("nan")) {
-                $evPrim = Float.NaN;
-              } else {
-                $evNull = true;
-              }
+            final String $str = $c.toString().trim();
+            if ($str.equalsIgnoreCase("infinity")) {
+              $evPrim = Float.POSITIVE_INFINITY;
+            } else if ($str.equalsIgnoreCase("-infinity")) {
+              $evPrim = Float.NEGATIVE_INFINITY;
+            } else if ($str.equalsIgnoreCase("nan")) {
+              $evPrim = Float.NaN;
+            } else {
+              $evNull = true;
+            }
           }
         """
       case BooleanType =>
