@@ -70,7 +70,7 @@ struct<min(CASE WHEN (unique1 > 100) THEN unique1 END):int>
 -- !query 7
 select sum(CASE WHEN ten > 0 THEN cast(1/ten as integer) END) from tenk1
 -- !query 7 schema
-struct<sum(CASE WHEN (ten > 0) THEN CAST((CAST(1 AS DOUBLE) / CAST(ten AS DOUBLE)) AS INT) END):bigint>
+struct<sum(CASE WHEN (ten > 0) THEN CAST((1 div ten) AS INT) END):bigint>
 -- !query 7 output
 1000
 
