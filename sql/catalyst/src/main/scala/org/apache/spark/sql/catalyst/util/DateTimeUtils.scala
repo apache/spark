@@ -648,8 +648,8 @@ object DateTimeUtils {
    * Returns the trunc date time from original date time and trunc level.
    * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
    */
-  def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
-    val zonedDateTime = microsToInstant(t).atZone(timeZone.toZoneId)
+  def truncTimestamp(t: SQLTimestamp, level: Int, zoneId: ZoneId): SQLTimestamp = {
+    val zonedDateTime = microsToInstant(t).atZone(zoneId)
     val truncated = level match {
       case TRUNC_TO_YEAR =>
         zonedDateTime.`with`(firstDayOfYear()).truncatedTo(ChronoUnit.DAYS)
