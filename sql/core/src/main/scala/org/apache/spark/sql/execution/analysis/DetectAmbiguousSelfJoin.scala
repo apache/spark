@@ -41,15 +41,15 @@ class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
   // Dataset column reference is an `AttributeReference` with 2 special metadata.
   private def isColumnReference(a: AttributeReference): Boolean = {
-    a.metadata.contains(Dataset.ID_PREFIX) && a.metadata.contains(Dataset.COL_POS_PREFIX)
+    a.metadata.contains(Dataset.DATASET_ID_KEY) && a.metadata.contains(Dataset.COL_POS_KEY)
   }
 
   private case class ColumnReference(datasetId: Long, colPos: Int, exprId: ExprId)
 
   private def toColumnReference(a: AttributeReference): ColumnReference = {
     ColumnReference(
-      a.metadata.getLong(Dataset.ID_PREFIX),
-      a.metadata.getLong(Dataset.COL_POS_PREFIX).toInt,
+      a.metadata.getLong(Dataset.DATASET_ID_KEY),
+      a.metadata.getLong(Dataset.COL_POS_KEY).toInt,
       a.exprId)
   }
 

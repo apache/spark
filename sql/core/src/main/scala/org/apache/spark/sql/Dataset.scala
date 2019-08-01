@@ -64,8 +64,8 @@ import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
-  val ID_PREFIX = "__dataset_id"
-  val COL_POS_PREFIX = "__col_position"
+  val DATASET_ID_KEY = "__dataset_id"
+  val COL_POS_KEY = "__col_position"
   val DATASET_ID_TAG = TreeNodeTag[Long]("dataset_id")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
@@ -1338,8 +1338,8 @@ class Dataset[T] private[sql](
         if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN) =>
         val metadata = new MetadataBuilder()
           .withMetadata(a.metadata)
-          .putLong(Dataset.ID_PREFIX, id)
-          .putLong(Dataset.COL_POS_PREFIX, logicalPlan.output.indexWhere(a.semanticEquals))
+          .putLong(Dataset.DATASET_ID_KEY, id)
+          .putLong(Dataset.COL_POS_KEY, logicalPlan.output.indexWhere(a.semanticEquals))
           .build()
         a.withMetadata(metadata)
     }
