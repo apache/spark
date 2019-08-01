@@ -25,10 +25,12 @@ import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, SparkSession}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetDataSourceV2, ParquetTable}
@@ -43,9 +45,10 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
 
   private val v2Format = classOf[InMemoryTableProvider].getName
   private val dfData = Seq((1L, "a"), (2L, "b"), (3L, "c"))
+  private val catalogName = "testcat"
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.$catalogName", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
 
     spark.createDataFrame(dfData).toDF("id", "data").createOrReplaceTempView("source")
@@ -138,7 +141,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
   test("saveAsTable: with defined catalog and table doesn't exist") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
-      spark.table("source").select("id", "data").write.saveAsTable(t1)
+      spark.table("source").write.saveAsTable(t1)
       checkAnswer(spark.table(t1), spark.table("source"))
     }
   }
@@ -147,26 +150,115 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
-      spark.table("source").select("id", "data").write.saveAsTable(t1)
+      // Default saveMode is append, therefore this doesn't throw a table already exists eception
+      spark.table("source").write.saveAsTable(t1)
       checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with defined catalog + table overwrite and table doesn't exist") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      spark.table("source").write.mode("overwrite").saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with defined catalog + table overwrite and table exists") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
+      spark.table("source").write.mode("overwrite").saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with defined catalog + ignore mode and table doesn't exist") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      spark.table("source").write.mode("ignore").saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source"))
+    }
+  }
+
+  test("saveAsTable: with defined catalog + ignore mode and table exists") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
+      spark.table("source").write.mode("ignore").saveAsTable(t1)
+      checkAnswer(spark.table(t1), Seq(Row("c", "d")))
     }
   }
 
   sessionCatalogTest("saveAsTable and v2 table - table doesn't exist") { session =>
     val t1 = "tbl"
-    session.table("source").select("id", "data").write.format(v2Format).saveAsTable(t1)
+    session.table("source").write.format(v2Format).saveAsTable(t1)
     checkAnswer(session.table(t1), session.table("source"))
   }
 
-  sessionCatalogTest("saveAsTable: with session catalog and v2 table - table exists") { session =>
+  sessionCatalogTest("saveAsTable: v2 table - table exists") { session =>
     val t1 = "tbl"
     session.sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
     intercept[TableAlreadyExistsException] {
       session.table("source").select("id", "data").write.format(v2Format).saveAsTable(t1)
     }
-    session.table("source").select("id", "data")
-      .write.format(v2Format).mode("append").saveAsTable(t1)
+    session.table("source").write.format(v2Format).mode("append").saveAsTable(t1)
     checkAnswer(session.table(t1), session.table("source"))
+  }
+
+  sessionCatalogTest("saveAsTable: v2 table - table overwrite and table doesn't exist") { session =>
+    val t1 = "tbl"
+    session.table("source").write.format(v2Format).mode("overwrite").saveAsTable(t1)
+    checkAnswer(session.table(t1), session.table("source"))
+  }
+
+  sessionCatalogTest("saveAsTable: v2 table - table overwrite and table exists") { session =>
+    val t1 = "tbl"
+    session.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
+    session.table("source").write.format(v2Format).mode("overwrite").saveAsTable(t1)
+    checkAnswer(session.table(t1), session.table("source"))
+  }
+
+  sessionCatalogTest("saveAsTable: v2 table - ignore mode and table doesn't exist") { session =>
+    val t1 = "tbl"
+    session.table("source").write.format(v2Format).mode("ignore").saveAsTable(t1)
+    checkAnswer(session.table(t1), session.table("source"))
+  }
+
+  sessionCatalogTest("saveAsTable: v2 table - ignore mode and table exists") { session =>
+    val t1 = "tbl"
+    session.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
+    session.table("source").write.format(v2Format).mode("ignore").saveAsTable(t1)
+    checkAnswer(session.table(t1), Seq(Row("c", "d")))
+  }
+
+  sessionCatalogTest("saveAsTable: old table defined in a database colliding " +
+      "with a catalog name") { session =>
+    // Make sure the database name conflicts with a catalog name
+    val dbPath = session.sessionState.catalog.getDefaultDBPath(catalogName)
+    session.sessionState.catalog.createDatabase(
+      CatalogDatabase(catalogName, "", dbPath, Map.empty), ignoreIfExists = false)
+    val t1 = "tbl"
+    withTable(t1) {
+      // Create the table in the built in catalog, in the given database
+      session.sessionState.catalog.createTable(
+        CatalogTable(
+          identifier = TableIdentifier(t1, Some(catalogName)),
+          tableType = CatalogTableType.MANAGED,
+          provider = Some(v2Format),
+          storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
+          schema = session.table("source").schema
+        ),
+        ignoreIfExists = false
+      )
+      val tableName = s"$catalogName.$t1"
+      checkAnswer(session.table(tableName), Nil)
+      intercept[TableAlreadyExistsException] {
+        session.table("source").write.format(v2Format).saveAsTable(tableName)
+      }
+      session.table("source").write.format(v2Format).mode("append").saveAsTable(tableName)
+      checkAnswer(session.table(tableName), session.table("source"))
+    }
   }
 }
 
@@ -186,7 +278,11 @@ class TestV2SessionCatalog extends V2SessionCatalog {
     if (tables.containsKey(ident)) {
       tables.get(ident)
     } else {
-      super.loadTable(ident)
+      // Table was created through the built-in catalog
+      val t = super.loadTable(ident)
+      val table = new InMemoryTable(t.name(), t.schema(), t.partitioning(), t.properties())
+      tables.put(ident, table)
+      table
     }
   }
 
@@ -201,6 +297,7 @@ class TestV2SessionCatalog extends V2SessionCatalog {
   }
 
   def clearTables(): Unit = {
+    assert(!tables.isEmpty, "Tables were empty, maybe didn't use the session catalog code path?")
     tables.keySet().asScala.foreach(super.dropTable)
     tables.clear()
   }

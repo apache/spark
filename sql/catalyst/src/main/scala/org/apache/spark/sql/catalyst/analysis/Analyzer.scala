@@ -649,11 +649,12 @@ class Analyzer(
         u // temporary views take precedence over catalog table names
 
       case u @ UnresolvedRelation(CatalogObjectIdentifier(maybeCatalog, ident)) =>
-        maybeCatalog.orElse(sessionCatalog) match {
-          case Some(catalogPlugin) =>
-            loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
-          case None => u
-        }
+        // First try loading the table with a loadable catalog, then fallback to the session
+        // catalog if that exists
+        maybeCatalog.flatMap(loadTable(_, ident))
+          .orElse(sessionCatalog.flatMap(loadTable(_, ident)))
+          .map(DataSourceV2Relation.create)
+          .getOrElse(u)
     }
   }
 
