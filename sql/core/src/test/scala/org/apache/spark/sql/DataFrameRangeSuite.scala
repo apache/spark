@@ -113,11 +113,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val random = new Random(seed)
 
     def randomBound(): Long = {
-      val n = if (random.nextBoolean()) {
-        random.nextLong() % (Long.MaxValue / (100 * MAX_NUM_STEPS))
-      } else {
-        random.nextLong() / 2
-      }
+      val n = random.nextLong() % (Long.MaxValue / (100 * MAX_NUM_STEPS))
       if (random.nextBoolean()) n else -n
     }
 
