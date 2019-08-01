@@ -2580,11 +2580,12 @@ private[spark] object Utils extends Logging {
    * Returns the pid of this JVM process.
    */
   def getProcessId: Int = {
-    try {
-      getProcessName().split("@")(0).toInt
-    } catch {
-      case e: Exception =>
-        throw new SparkException("Error while getting process id.", e)
+    val PROCESS = "(\\d+)@(.*)".r
+    val name = getProcessName()
+    name match {
+      case PROCESS(pid, _) => pid.toInt
+      case _ =>
+        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
     }
   }
 
