@@ -22,19 +22,17 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import org.apache.spark.sql.{Column, SparkSession}
+
 import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingTableCatalog, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.{IdentityTransform, Transform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, Literal, Not}
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
-import org.apache.spark.sql.types.{BooleanType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.unsafe.types.UTF8String
 
 // this is currently in the spark-sql module because the read and write API is not in catalyst
 // TODO(rdblue): when the v2 source API is in catalyst, merge with TestTableCatalog/InMemoryTable
