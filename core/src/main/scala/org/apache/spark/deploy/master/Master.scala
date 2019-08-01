@@ -308,7 +308,6 @@ private[deploy] class Master(
               appInfo.removeExecutor(exec)
             }
             exec.worker.removeExecutor(exec)
-            releaseResourcesIfPossible(exec.worker)
 
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
@@ -869,18 +868,7 @@ private[deploy] class Master(
     apps.filterNot(completedApps.contains(_)).foreach { app =>
       app.driver.send(WorkerRemoved(worker.id, worker.host, msg))
     }
-    releaseResourcesIfPossible(worker)
     persistenceEngine.removeWorker(worker)
-  }
-
-  private def releaseResourcesIfPossible(worker: WorkerInfo): Unit = {
-    if (!worker.isAlive() && worker.resourcesCanBeReleased.nonEmpty) {
-      val brothers = Random.shuffle(idToWorker.filter(_._2.host == worker.host))
-      if (brothers.nonEmpty) {
-        val delegate = brothers.head._2
-        delegate.endpoint.send(ReleaseResources(worker.pid, worker.resourcesCanBeReleased))
-      }
-    }
   }
 
   private def relaunchDriver(driver: DriverInfo) {

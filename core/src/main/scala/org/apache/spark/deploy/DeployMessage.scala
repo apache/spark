@@ -122,16 +122,6 @@ private[deploy] object DeployMessages {
 
   case class ReconnectWorker(masterUrl: String) extends DeployMessage
 
-  /**
-   * Ask the worker to release the indicated resources in ALLOCATED_RESOURCES_JSON_FILE
-   * @param pid process id of the target worker
-   * @param toRelease the resources expected to release
-   */
-  case class ReleaseResources(
-      pid: Int,
-      toRelease: Map[String, ResourceInformation])
-    extends DeployMessage
-
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 
   case class LaunchExecutor(

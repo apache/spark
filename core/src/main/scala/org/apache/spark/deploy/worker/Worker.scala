@@ -653,9 +653,6 @@ private[deploy] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
-
-    case ReleaseResources(pid, toRelease) =>
-      releaseResources(conf, SPARK_WORKER_PREFIX, toRelease, pid)
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
