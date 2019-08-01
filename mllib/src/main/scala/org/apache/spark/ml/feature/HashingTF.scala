@@ -100,19 +100,21 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashUDF = udf { terms: Seq[_] =>
-      val numOfFeatures = $(numFeatures)
-      val isBinary = $(binary)
-      val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
-      terms.foreach { term =>
-        val i = indexOf(term)
-        if (isBinary) {
-          termFrequencies(i) = 1.0
-        } else {
-          termFrequencies(i) += 1.0
-        }
+    val localNumFeatures = $(numFeatures)
+    val indexOfFunc = getIndexOfFunc(localNumFeatures)
+
+    val hashUDF = if ($(binary)) {
+      udf { terms: Seq[_] =>
+        val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
+        terms.foreach { term => termFrequencies(indexOfFunc(term)) = 1.0 }
+        Vectors.sparse(localNumFeatures, termFrequencies.toSeq)
       }
-      Vectors.sparse($(numFeatures), termFrequencies.toSeq)
+    } else {
+      udf { terms: Seq[_] =>
+        val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
+        terms.foreach { term => termFrequencies(indexOfFunc(term)) += 1.0 }
+        Vectors.sparse(localNumFeatures, termFrequencies.toSeq)
+      }
     }
 
     dataset.withColumn($(outputCol), hashUDF(col($(inputCol))),
@@ -134,6 +136,10 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("3.0.0")
   def indexOf(term: Any): Int = {
     Utils.nonNegativeMod(hashFunc(term), $(numFeatures))
+  }
+
+  private def getIndexOfFunc(numFeatures: Int): Any => Int = {
+    term: Any => Utils.nonNegativeMod(hashFunc(term), numFeatures)
   }
 
   @Since("1.4.1")
