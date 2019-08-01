@@ -138,7 +138,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable: with defined catalog and table doesn't exist") {
+  testQuietly("saveAsTable: with defined catalog and table doesn't exist") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       spark.table("source").write.saveAsTable(t1)
@@ -146,7 +146,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable: with defined catalog and table exists") {
+  testQuietly("saveAsTable: with defined catalog and table exists") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
@@ -156,7 +156,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable: with defined catalog + table overwrite and table doesn't exist") {
+  testQuietly("saveAsTable: with defined catalog + table overwrite and table doesn't exist") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       spark.table("source").write.mode("overwrite").saveAsTable(t1)
@@ -164,7 +164,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable: with defined catalog + table overwrite and table exists") {
+  testQuietly("saveAsTable: with defined catalog + table overwrite and table exists") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
@@ -173,7 +173,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable: with defined catalog + ignore mode and table doesn't exist") {
+  testQuietly("saveAsTable: with defined catalog + ignore mode and table doesn't exist") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       spark.table("source").write.mode("ignore").saveAsTable(t1)
@@ -181,7 +181,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  test("saveAsTable: with defined catalog + ignore mode and table exists") {
+  testQuietly("saveAsTable: with defined catalog + ignore mode and table exists") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
