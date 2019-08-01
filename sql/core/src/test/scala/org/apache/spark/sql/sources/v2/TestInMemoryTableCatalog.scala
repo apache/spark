@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-
 import org.apache.spark.sql.{Column, SparkSession}
 import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingTableCatalog, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.{IdentityTransform, Transform}
@@ -30,7 +29,7 @@ import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{EqualNullSafe, Literal, Not}
-import org.apache.spark.sql.sources.{And, EqualTo, Filter}
+import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.{BooleanType, StructType}
@@ -272,6 +271,8 @@ class InMemoryTable(
             case _ =>
               throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
           }
+        case IsNotNull(_) =>
+          true
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
       }

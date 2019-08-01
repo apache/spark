@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.BooleanType
@@ -49,6 +49,11 @@ object V2WriteSupportCheck extends (LogicalPlan => Unit) {
             failAnalysis(s"Table does not support overwrite expression ${expr.sql} " +
                 s"in batch mode: ${rel.table}")
           }
+      }
+
+    case DeleteFromTable(_, filter) =>
+      if (SubqueryExpression.hasSubquery(filter.condition)) {
+        failAnalysis(s"Delete by condition with subquery is not supported: $filter")
       }
 
     case _ => // OK

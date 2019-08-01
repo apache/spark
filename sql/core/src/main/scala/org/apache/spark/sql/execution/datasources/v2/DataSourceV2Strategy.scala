@@ -222,11 +222,12 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
       OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
 
-    case DeleteFromTable(r: DataSourceV2Relation, deleteExpr) =>
+    case DeleteFromTable(r: DataSourceV2Relation, filter) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
-      val filters = splitConjunctivePredicates(deleteExpr).map {
-        filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
-          throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
+      val filters = splitConjunctivePredicates(filter.condition).map {
+        f => DataSourceStrategy.translateFilter(f).getOrElse(
+          throw new AnalysisException(s"Exec delete failed:" +
+              s" cannot translate expression to source filter: $f"))
       }.toArray
       DeleteFromTableExec(r.table.asDeletable, r.options, filters) :: Nil
 
