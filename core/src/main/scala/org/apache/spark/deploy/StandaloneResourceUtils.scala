@@ -231,7 +231,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
             } else {
               if (others.isEmpty) {
                 if (!resourcesFile.delete()) {
-                  logWarning(s"Failed to delete $ALLOCATED_RESOURCES_FILE.")
+                  logError(s"Failed to delete $ALLOCATED_RESOURCES_FILE.")
                 }
               } else {
                 writeResourceAllocationJson(componentName, others, resourcesFile)
@@ -284,7 +284,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
       logInfo(s"Released lock on $RESOURCES_LOCK_FILE.")
     } catch {
       case e: Exception =>
-        logWarning(s"Error while releasing lock on $RESOURCES_LOCK_FILE.", e)
+        logError(s"Error while releasing lock on $RESOURCES_LOCK_FILE.", e)
     }
   }
 
