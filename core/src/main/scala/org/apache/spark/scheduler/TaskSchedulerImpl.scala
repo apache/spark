@@ -552,7 +552,7 @@ private[spark] class TaskSchedulerImpl(
       taskSet: TaskSetManager,
       taskIndex: Int): TimerTask = {
     new TimerTask() {
-      override def run() {
+      override def run(): Unit = TaskSchedulerImpl.this.synchronized {
         if (unschedulableTaskSetToExpiryTime.contains(taskSet) &&
             unschedulableTaskSetToExpiryTime(taskSet) <= clock.getTimeMillis()) {
           logInfo("Cannot schedule any task because of complete blacklisting. " +
