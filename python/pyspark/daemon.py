@@ -160,6 +160,21 @@ def manager():
                 if pid == 0:
                     # in child process
                     listen_sock.close()
+
+                    # It should close the standard input in the child process so that
+                    # Python native function executions stay intact.
+                    #
+                    # Note that if we just close the standard input (file descriptor 0),
+                    # the lowest file descriptor (file descriptor 0) will be allocated,
+                    # later when other file descriptors should happen to open.
+                    #
+                    # Therefore, here we redirects it to '/dev/null' by duplicating
+                    # another file descriptor for '/dev/null' to the standard input (0).
+                    # See SPARK-26175.
+                    devnull = open(os.devnull, 'r')
+                    os.dup2(devnull.fileno(), 0)
+                    devnull.close()
+
                     try:
                         # Acknowledge that the fork was successful
                         outfile = sock.makefile(mode="wb")

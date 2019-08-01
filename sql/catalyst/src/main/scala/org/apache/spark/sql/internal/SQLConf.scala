@@ -1780,6 +1780,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW =
+    buildConf("spark.sql.arithmeticOperations.failOnOverFlow")
+      .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
+        "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
+        "result is returned.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
       .internal()
@@ -2286,6 +2295,8 @@ class SQLConf extends Serializable with Logging {
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
+
+  def arithmeticOperationsFailOnOverflow: Boolean = getConf(ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
