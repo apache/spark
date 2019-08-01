@@ -2365,7 +2365,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(null)))
       checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
         Seq(
-          Row(null),
+          Row(false),
           Row(null),
           Row(true),
           Row(true),
