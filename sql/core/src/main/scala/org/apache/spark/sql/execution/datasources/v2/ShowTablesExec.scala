@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
@@ -42,12 +43,14 @@ case class ShowTablesExec(catalog: TableCatalog, ident: Identifier, pattern: Opt
     val tables = catalog.listTables(ident.namespace() :+ ident.name())
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
-        rows += encoder.toRow(
-          new GenericRowWithSchema(
-            // TODO: there is no v2 catalog API to retrieve 'isTemporary',
-            //  and it is set to false for the time being.
-            Array(table.namespace().mkString("."), table.name(), false),
-            ShowTablesSchema.schema)).copy()
+        rows += encoder
+          .toRow(
+            new GenericRowWithSchema(
+              // TODO: there is no v2 catalog API to retrieve 'isTemporary',
+              //  and it is set to false for the time being.
+              Array(table.namespace().quoted, table.name(), false),
+              ShowTablesSchema.schema))
+          .copy()
       }
     }
 

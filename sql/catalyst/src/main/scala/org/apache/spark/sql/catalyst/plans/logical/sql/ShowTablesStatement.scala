@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.ShowTablesSchema
 /**
  * A SHOW TABLES statement, as parsed from SQL.
  */
-case class ShowTablesStatement(database: Option[Seq[String]], pattern: Option[String])
+case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
     extends ParsedStatement {
   override val output: Seq[Attribute] = ShowTablesSchema.attributes()
 }

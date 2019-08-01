@@ -163,15 +163,22 @@ case class DataSourceResolution(
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)
 
-    // If the database name is not provided, fallback to v1 catalog.
     case ShowTablesStatement(None, pattern) =>
-      ShowTablesCommand(None, pattern)
+      defaultCatalog match {
+        case Some(_) => throw new AnalysisException(
+          "v2 catalog doesn't support getCurrentDatabase yet, " +
+            "so the default database name cannot be deduced.")
+        case None =>
+          ShowTablesCommand(None, pattern)
+      }
 
-    case ShowTablesStatement(Some(CatalogObjectIdentifier(Some(catalog), ident)), pattern) =>
-      ShowTables(catalog.asTableCatalog, ident, pattern)
-
-    case ShowTablesStatement(Some(db), pattern) =>
-      ShowTablesCommand(Some(db.mkString(".")), pattern)
+    case ShowTablesStatement(Some(namespace), pattern) =>
+      val CatalogObjectIdentifier(maybeCatalog, identifier) = namespace
+      val catalog = maybeCatalog.orElse(defaultCatalog)
+      catalog match {
+        case Some(v2Catalog) => ShowTables(v2Catalog.asTableCatalog, identifier, pattern)
+        case None => ShowTablesCommand(Some(namespace.quoted), pattern)
+      }
   }
 
   object V1WriteProvider {
