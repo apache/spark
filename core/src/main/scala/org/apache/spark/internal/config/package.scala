@@ -1204,6 +1204,14 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
+    ConfigBuilder("spark.io.warning.largeFileThreshold")
+      .internal()
+      .doc("When spark loading one single large file, if file size exceed this " +
+        "threshold, then log warning with possible reasons.")
+      .longConf
+      .createWithDefault(1024 * 1024 * 1024)
+
   private[spark] val EVENT_LOG_COMPRESSION_CODEC =
     ConfigBuilder("spark.eventLog.compression.codec")
       .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
