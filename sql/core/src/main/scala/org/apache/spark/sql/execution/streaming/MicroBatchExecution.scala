@@ -127,7 +127,8 @@ class MicroBatchExecution(
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
       case s: SupportsWrite =>
-        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
+        val streamingWrite =
+          createWriteBuilder(s, extraOptions, _logicalPlan).buildForStreaming(false)
         WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
 
       case _ => _logicalPlan

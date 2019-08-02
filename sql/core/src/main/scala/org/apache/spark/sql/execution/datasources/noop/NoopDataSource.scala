@@ -54,7 +54,8 @@ private[noop] object NoopTable extends Table with SupportsWrite {
 private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate {
   override def truncate(): WriteBuilder = this
   override def buildForBatch(): BatchWrite = NoopBatchWrite
-  override def buildForStreaming(): StreamingWrite = NoopStreamingWrite
+  override def buildForStreaming(isContinuous: Boolean): StreamingWrite =
+    NoopStreamingWrite
 }
 
 private[noop] object NoopBatchWrite extends BatchWrite {

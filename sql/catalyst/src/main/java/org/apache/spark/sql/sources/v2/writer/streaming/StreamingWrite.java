@@ -81,4 +81,8 @@ public interface StreamingWrite {
    * clean up the data left by data writers.
    */
   void abort(long epochId, WriterCommitMessage[] messages);
+
+  default Integer getOptionalPartitionNum() {
+    return null;
+  }
 }

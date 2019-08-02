@@ -31,7 +31,6 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -284,7 +283,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   test("read Kafka transactional messages: read_committed") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       val df = spark
         .read
         .format("kafka")
@@ -333,7 +332,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   test("read Kafka transactional messages: read_uncommitted") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       val df = spark
         .read
         .format("kafka")

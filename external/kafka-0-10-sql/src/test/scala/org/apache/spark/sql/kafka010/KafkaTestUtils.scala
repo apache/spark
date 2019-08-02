@@ -351,7 +351,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
   }
 
   /** Call `f` with a `KafkaProducer` that has initialized transactions. */
-  def withTranscationalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
+  def withTransactionalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
     val props = producerConfiguration
     props.put("transactional.id", UUID.randomUUID().toString)
     val producer = new KafkaProducer[String, String](props)
@@ -361,6 +361,23 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     } finally {
       producer.close()
     }
+  }
+
+  /** Call `f` with a `InternalKafkaProducer`. */
+  def withInternalKafkaProducer(
+      f: InternalKafkaProducer[String, String] => ProducerTransactionMetaData,
+      config: Map[String, String] = Map()): ProducerTransactionMetaData = {
+    import scala.collection.mutable
+    val props = mutable.Map[String, Object]()
+    for (entry <- producerConfiguration.entrySet().asScala) {
+      props.put(entry.getKey.toString, entry.getValue)
+    }
+    props.put("transactional.id", UUID.randomUUID().toString)
+    config.foreach(c => {
+      props.put(c._1, c._2)
+    })
+    val producer = new InternalKafkaProducer[String, String](props.asJava)
+    f(producer)
   }
 
   private def consumerConfiguration: Properties = {

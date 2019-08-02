@@ -50,5 +50,6 @@ trait V1WriteBuilder extends WriteBuilder {
   // an Unsupported OperationException
   override final def buildForBatch(): BatchWrite = super.buildForBatch()
 
-  override final def buildForStreaming(): StreamingWrite = super.buildForStreaming()
+  override final def buildForStreaming(isContinuous: Boolean): StreamingWrite =
+    super.buildForStreaming(isContinuous: Boolean)
 }

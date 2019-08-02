@@ -19,7 +19,7 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.producer.{Callback, KafkaProducer, ProducerRecord, RecordMetadata}
+import org.apache.kafka.clients.producer.{Callback, ProducerRecord, RecordMetadata}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
@@ -35,7 +35,7 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
+  private var producer: InternalKafkaProducer[Array[Byte], Array[Byte]] = _
 
   /**
    * Writes key value data out to topics.
@@ -79,7 +79,7 @@ private[kafka010] abstract class KafkaRowWriter(
    * assuming the row is in Kafka.
    */
   protected def sendRow(
-      row: InternalRow, producer: KafkaProducer[Array[Byte], Array[Byte]]): Unit = {
+      row: InternalRow, producer: InternalKafkaProducer[Array[Byte], Array[Byte]]): Unit = {
     val projectedRow = projection(row)
     val topic = projectedRow.getUTF8String(0)
     val key = projectedRow.getBinary(1)

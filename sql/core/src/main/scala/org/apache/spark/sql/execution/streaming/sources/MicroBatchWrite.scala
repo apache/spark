@@ -39,6 +39,10 @@ class MicroBatchWrite(eppchId: Long, val writeSupport: StreamingWrite) extends B
   override def createBatchWriterFactory(): DataWriterFactory = {
     new MicroBatchWriterFactory(eppchId, writeSupport.createStreamingWriterFactory())
   }
+
+  override def getOptionalPartitionNum(): Integer = {
+    writeSupport.getOptionalPartitionNum()
+  }
 }
 
 class MicroBatchWriterFactory(epochId: Long, streamingWriterFactory: StreamingDataWriterFactory)

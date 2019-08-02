@@ -20,7 +20,6 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.concurrent.ConcurrentMap
 
-import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.PrivateMethodTester
 
@@ -28,7 +27,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 class CachedKafkaProducerSuite extends SharedSparkSession with PrivateMethodTester with KafkaTest {
 
-  type KP = KafkaProducer[Array[Byte], Array[Byte]]
+  type KP = InternalKafkaProducer[Array[Byte], Array[Byte]]
 
   protected override def beforeEach(): Unit = {
     super.beforeEach()

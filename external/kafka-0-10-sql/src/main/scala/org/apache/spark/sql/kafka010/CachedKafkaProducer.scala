@@ -20,11 +20,11 @@ package org.apache.spark.sql.kafka010
 import java.{util => ju}
 import java.util.concurrent.{ConcurrentMap, ExecutionException, TimeUnit}
 
-import com.google.common.cache._
-import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.apache.kafka.clients.producer.KafkaProducer
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
+
+import com.google.common.cache._
+import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -32,7 +32,7 @@ import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaRedactionUtil}
 
 private[kafka010] object CachedKafkaProducer extends Logging {
 
-  private type Producer = KafkaProducer[Array[Byte], Array[Byte]]
+  private type Producer = InternalKafkaProducer[Array[Byte], Array[Byte]]
 
   private val defaultCacheExpireTimeout = TimeUnit.MINUTES.toMillis(10)
 

@@ -68,7 +68,7 @@ class MemorySink extends Table with SupportsWrite with Logging {
         this
       }
 
-      override def buildForStreaming(): StreamingWrite = {
+      override def buildForStreaming(isContinuous: Boolean): StreamingWrite = {
         new MemoryStreamingWrite(MemorySink.this, inputSchema, needTruncate)
       }
     }

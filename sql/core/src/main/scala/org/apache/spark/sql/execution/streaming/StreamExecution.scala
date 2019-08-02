@@ -22,7 +22,7 @@ import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.locks.{Condition, ReentrantLock}
+import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{Map => MutableMap}
@@ -42,8 +42,7 @@ import org.apache.spark.sql.execution.datasources.v2.StreamWriterCommitProgress
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, SparkDataStream}
-import org.apache.spark.sql.sources.v2.writer.SupportsTruncate
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
+import org.apache.spark.sql.sources.v2.writer.{SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -582,28 +581,28 @@ abstract class StreamExecution(
       s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
   }
 
-  protected def createStreamingWrite(
+  protected def createWriteBuilder(
       table: SupportsWrite,
       options: Map[String, String],
-      inputPlan: LogicalPlan): StreamingWrite = {
+      inputPlan: LogicalPlan): WriteBuilder = {
     val writeBuilder = table.newWriteBuilder(new CaseInsensitiveStringMap(options.asJava))
       .withQueryId(id.toString)
       .withInputDataSchema(inputPlan.schema)
     outputMode match {
       case Append =>
-        writeBuilder.buildForStreaming()
+        writeBuilder
 
       case Complete =>
         // TODO: we should do this check earlier when we have capability API.
         require(writeBuilder.isInstanceOf[SupportsTruncate],
           table.name + " does not support Complete mode.")
-        writeBuilder.asInstanceOf[SupportsTruncate].truncate().buildForStreaming()
+        writeBuilder.asInstanceOf[SupportsTruncate].truncate()
 
       case Update =>
         // Although no v2 sinks really support Update mode now, but during tests we do want them
         // to pretend to support Update mode, and treat Update mode same as Append mode.
         if (Utils.isTesting) {
-          writeBuilder.buildForStreaming()
+          writeBuilder
         } else {
           throw new IllegalArgumentException(
             "Data source v2 streaming sinks does not support Update mode.")

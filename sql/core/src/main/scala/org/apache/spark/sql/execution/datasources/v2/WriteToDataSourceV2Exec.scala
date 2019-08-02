@@ -362,7 +362,12 @@ trait V2TableWriteExec extends UnaryExecNode {
     val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
       sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
-      rdd
+      val partitionNum = batchWrite.getOptionalPartitionNum
+      if (partitionNum != null && partitionNum < rdd.partitions.length) {
+        rdd.coalesce(partitionNum)
+      } else {
+        rdd
+      }
     }
     val messages = new Array[WriterCommitMessage](rddWithNonEmptyPartitions.partitions.length)
     val totalNumRowsAccumulator = new LongAccumulator()

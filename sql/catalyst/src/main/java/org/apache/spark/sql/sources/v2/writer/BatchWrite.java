@@ -98,4 +98,8 @@ public interface BatchWrite {
    * clean up the data left by data writers.
    */
   void abort(WriterCommitMessage[] messages);
+
+  default Integer getOptionalPartitionNum() {
+    return null;
+  }
 }

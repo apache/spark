@@ -394,9 +394,20 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           new KafkaBatchWrite(topic, producerParams, inputSchema)
         }
 
-        override def buildForStreaming(): StreamingWrite = {
+        override def buildForStreaming(isContinuous: Boolean): StreamingWrite = {
           assert(inputSchema != null)
-          new KafkaStreamingWrite(topic, producerParams, inputSchema)
+          val transactional = producerParams.containsKey(ProducerConfig.TRANSACTIONAL_ID_CONFIG)
+          if (transactional) {
+            if (isContinuous) {
+              logWarning(s"Kafka Transaction is not supported in continuous mode ," +
+                s"skip config kafka.${ProducerConfig.TRANSACTIONAL_ID_CONFIG}.")
+              new KafkaStreamingWrite(topic, producerParams, inputSchema)
+            } else {
+              new KafkaTransactionStreamingWrite(topic, producerParams, inputSchema)
+            }
+          } else {
+            new KafkaStreamingWrite(topic, producerParams, inputSchema)
+          }
         }
       }
     }
@@ -622,10 +633,17 @@ private[kafka010] object KafkaSourceProvider extends Logging {
 
     val specifiedKafkaParams = convertToSpecifiedParams(params)
 
-    KafkaConfigUpdater("executor", specifiedKafkaParams)
-      .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
-      .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
-      .build()
+    val updater = if (params.contains("checkpointLocation")) {
+      KafkaConfigUpdater("executor", specifiedKafkaParams)
+        .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
+        .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
+        .set("checkpointLocation", params("checkpointlocation"))
+    } else {
+      KafkaConfigUpdater("executor", specifiedKafkaParams)
+        .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
+        .set(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, serClassName)
+    }
+    updater.build()
   }
 
   private def convertToSpecifiedParams(parameters: Map[String, String]): Map[String, String] = {

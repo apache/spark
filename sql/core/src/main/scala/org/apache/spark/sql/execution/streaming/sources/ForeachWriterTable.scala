@@ -67,7 +67,7 @@ case class ForeachWriterTable[T](
       // ForeachWriter.
       override def truncate(): WriteBuilder = this
 
-      override def buildForStreaming(): StreamingWrite = {
+      override def buildForStreaming(isContinuous: Boolean): StreamingWrite = {
         new StreamingWrite {
           override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
           override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}

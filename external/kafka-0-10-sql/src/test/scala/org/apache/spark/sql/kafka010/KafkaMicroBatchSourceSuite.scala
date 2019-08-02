@@ -807,7 +807,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val topicPartition = new TopicPartition(topic, 0)
     // The message values are the same as their offsets to make the test easy to follow
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       testStream(mapped)(
         StartStream(Trigger.ProcessingTime(100), clock),
         waitUntilBatchProcessed,
@@ -930,7 +930,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
     val topicPartition = new TopicPartition(topic, 0)
     // The message values are the same as their offsets to make the test easy to follow
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       testStream(mapped)(
         StartStream(Trigger.ProcessingTime(100), clock),
         waitUntilBatchProcessed,
@@ -1021,7 +1021,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .load()
       .select($"value".as[String])
 
-    testUtils.withTranscationalProducer { producer =>
+    testUtils.withTransactionalProducer { producer =>
       producer.beginTransaction()
       (0 to 3).foreach { i =>
         producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -1037,7 +1037,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         // this case, if we forget to reset `FetchedData._nextOffsetInFetchedData` or
         // `FetchedData._offsetAfterPoll` (See SPARK-25495), the next batch will see incorrect
         // values and return wrong results hence fail the test.
-        testUtils.withTranscationalProducer { producer =>
+        testUtils.withTransactionalProducer { producer =>
           producer.beginTransaction()
           (4 to 7).foreach { i =>
             producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
@@ -1539,7 +1539,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withTranscationalProducer { producer =>
+      testUtils.withTransactionalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")

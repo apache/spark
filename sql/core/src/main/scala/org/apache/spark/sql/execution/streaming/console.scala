@@ -83,7 +83,7 @@ object ConsoleTable extends Table with SupportsWrite {
       // Do nothing for truncate. Console sink is special that it just prints all the records.
       override def truncate(): WriteBuilder = this
 
-      override def buildForStreaming(): StreamingWrite = {
+      override def buildForStreaming(isContinuous: Boolean): StreamingWrite = {
         assert(inputSchema != null)
         new ConsoleWrite(inputSchema, options)
       }

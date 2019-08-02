@@ -67,7 +67,7 @@ class FakeScanBuilder extends ScanBuilder with Scan {
 }
 
 class FakeWriteBuilder extends WriteBuilder with StreamingWrite {
-  override def buildForStreaming(): StreamingWrite = this
+  override def buildForStreaming(isContinuous: Boolean): StreamingWrite = this
   override def createStreamingWriterFactory(): StreamingDataWriterFactory = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }

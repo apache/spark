@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.kafka010
 
-import java.util.Locale
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.producer.{ProducerConfig, ProducerRecord}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.scalatest.time.SpanSugar._
 
@@ -334,6 +335,186 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
     }
     assert(ex.getCause.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'value.serializer' is not supported"))
+  }
+
+  test("streaming - write to transaction kafka") {
+    val input = MemoryStream[String]
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val writer = createKafkaWriter(
+      input.toDF(),
+      withTopic = Some(topic),
+      withOutputMode = Some(OutputMode.Append),
+      Map("kafka.transactional.id" -> UUID.randomUUID().toString))(
+      withSelectExpr = "value")
+
+    val df = spark
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.isolation.level", "read_committed")
+      .option("subscribe", topic)
+      .load()
+      .selectExpr("CAST(value AS STRING)").as[String]
+
+    try {
+      input.addData("1", "2", "3", "4", "5")
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
+      checkDatasetUnorderly(df, (1 to 5).map(_.toString): _*)
+
+      input.addData("6", "7", "8", "9", "10")
+      failAfter(streamingTimeout) {
+        writer.processAllAvailable()
+      }
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
+      checkDatasetUnorderly(df, (1 to 10).map(_.toString): _*)
+    } finally {
+      writer.stop()
+    }
+  }
+
+  test("streaming - restart from failed send, resend data") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    testUtils.withInternalKafkaProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.initTransactions()
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.abortTransaction()
+      producer.close()
+
+      // Should not read any messages before they are committed
+      assert(df.isEmpty)
+      new ProducerTransactionMetaData(producer.getTransactionalId, producer.getEpoch,
+        producer.getProducerId)
+    }
+
+    testUtils.withInternalKafkaProducer ({ producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+      producer.initTransactions()
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.commitTransaction()
+
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 12)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      new ProducerTransactionMetaData(producer.getTransactionalId, producer.getEpoch,
+        producer.getProducerId)
+    })
+  }
+
+  test("streaming - recover from failed commit, resume producer and commit") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val metaData = testUtils.withInternalKafkaProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.initTransactions()
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+
+      // Should not read any messages before they are committed
+      assert(df.isEmpty)
+      new ProducerTransactionMetaData(producer.getTransactionalId, producer.getEpoch,
+        producer.getProducerId)
+    }
+
+    testUtils.withInternalKafkaProducer ({ producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+      producer.resumeTransaction(metaData.producerId, metaData.epoch)
+      producer.commitTransaction()
+
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+
+      new ProducerTransactionMetaData(producer.getTransactionalId, producer.getEpoch,
+        producer.getProducerId)
+    }, Map("transactional.id" -> metaData.transactionalId))
+  }
+
+
+  test("streaming - recover from other task failed commit, resume producer and recommit") {
+    val topic = newTopic()
+    testUtils.createTopic(topic)
+
+    val metaData = testUtils.withInternalKafkaProducer { producer =>
+      val df = spark
+        .read
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("kafka.isolation.level", "read_committed")
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+
+      producer.initTransactions()
+      producer.beginTransaction()
+      (1 to 5).foreach { i =>
+        producer.send(new ProducerRecord[String, String](topic, i.toString)).get()
+      }
+      producer.flush()
+      producer.commitTransaction()
+
+      // Should read all messages
+      testUtils.waitUntilOffsetAppears(new TopicPartition(topic, 0), 6)
+      checkAnswer(df, (1 to 5).map(_.toString).toDF)
+      new ProducerTransactionMetaData(producer.getTransactionalId, producer.getEpoch,
+        producer.getProducerId)
+    }
+
+    testUtils.withInternalKafkaProducer ({ producer =>
+      producer.resumeTransaction(metaData.producerId, metaData.epoch)
+      // Should not throw exception
+      producer.commitTransaction()
+
+      new ProducerTransactionMetaData(producer.getTransactionalId, producer.getEpoch,
+        producer.getProducerId)
+    }, Map("transactional.id" -> metaData.transactionalId))
+
+
   }
 
   private def createKafkaWriter(
