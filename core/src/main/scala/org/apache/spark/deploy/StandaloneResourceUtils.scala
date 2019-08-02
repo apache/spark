@@ -213,34 +213,12 @@ private[spark] object StandaloneResourceUtils extends Logging {
           val (target, others) =
             allocatedStandaloneResources(resourcesFile.getPath).partition(_.pid == pid)
           if (target.nonEmpty) {
-            val rNameToAddresses = {
-              target.head.allocations.map { allocation =>
-                allocation.id.resourceName -> allocation.addresses
-              }.toMap
-            }
-            val allocations = {
-              rNameToAddresses.map { case (rName, addresses) =>
-                val retained = addresses.diff(Option(toRelease.getOrElse(rName, null))
-                  .map(_.addresses).getOrElse(Array.empty))
-                rName -> retained
+            if (others.isEmpty) {
+              if (!resourcesFile.delete()) {
+                logError(s"Failed to delete $ALLOCATED_RESOURCES_FILE.")
               }
-              .filter(_._2.nonEmpty)
-              .map { case (rName, addresses) =>
-                ResourceAllocation(ResourceID(componentName, rName), addresses)
-              }.toSeq
-            }
-            if (allocations.nonEmpty) {
-              val newAllocation = StandaloneResourceAllocation(pid, allocations)
-              writeResourceAllocationJson(
-                componentName, others ++ Seq(newAllocation), resourcesFile)
             } else {
-              if (others.isEmpty) {
-                if (!resourcesFile.delete()) {
-                  logError(s"Failed to delete $ALLOCATED_RESOURCES_FILE.")
-                }
-              } else {
-                writeResourceAllocationJson(componentName, others, resourcesFile)
-              }
+              writeResourceAllocationJson(componentName, others, resourcesFile)
             }
             logDebug(s"$componentName(pid=$pid) released resources: ${toRelease.mkString("\n")}")
           } else {
