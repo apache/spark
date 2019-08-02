@@ -239,6 +239,21 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(date_add(col("ss"), 7)),
       Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
 
+    val df2 = df.withColumn("x", lit(1))
+    checkAnswer(
+      df2.select(date_add(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-06-02")), Row(Date.valueOf("2015-06-03"))))
+    checkAnswer(
+      df2.select(date_add(col("t"), col("x") * 3)),
+      Seq(Row(Date.valueOf("2015-06-04")), Row(Date.valueOf("2015-06-05"))))
+    checkAnswer(
+      df2.select(date_add(col("s"), col("x") * 5)),
+      Seq(Row(Date.valueOf("2015-06-06")), Row(Date.valueOf("2015-06-07"))))
+    checkAnswer(
+      df2.select(date_add(col("ss"), col("x") * 7)),
+      Seq(Row(Date.valueOf("2015-06-08")), Row(Date.valueOf("2015-06-09"))))
+
+
     checkAnswer(df.selectExpr("DATE_ADD(null, 1)"), Seq(Row(null), Row(null)))
     checkAnswer(
       df.selectExpr("""DATE_ADD(d, 1)"""),
@@ -269,6 +284,22 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
     checkAnswer(
       df.select(date_sub(lit(null), 1)).limit(1), Row(null))
+
+    val df2 = df.withColumn("x", lit(1))
+    checkAnswer(
+      df2.select(date_sub(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df2.select(date_sub(col("t"), col("x"))),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df2.select(date_sub(col("s"), col("x"))),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df2.select(date_sub(col("ss"), col("x"))),
+      Seq(Row(Date.valueOf("2015-05-31")), Row(Date.valueOf("2015-06-01"))))
+    checkAnswer(
+      df2.select(date_sub(lit(null), col("x"))).limit(1), Row(null))
 
     checkAnswer(df.selectExpr("""DATE_SUB(d, null)"""), Seq(Row(null), Row(null)))
     checkAnswer(
@@ -318,6 +349,9 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("add_months(d, -1)"),
       Seq(Row(Date.valueOf("2015-07-31")), Row(Date.valueOf("2015-01-28"))))
+    checkAnswer(
+      df.withColumn("x", lit(1)).select(add_months(col("d"), col("x"))),
+      Seq(Row(Date.valueOf("2015-09-30")), Row(Date.valueOf("2015-03-28"))))
   }
 
   test("function months_between") {

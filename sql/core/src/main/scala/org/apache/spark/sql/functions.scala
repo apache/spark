@@ -2590,9 +2590,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def add_months(startDate: Column, numMonths: Int): Column = withExpr {
-    AddMonths(startDate.expr, Literal(numMonths))
-  }
+  def add_months(startDate: Column, numMonths: Int): Column = add_months(startDate, lit(numMonths))
 
   /**
    * Returns the date that is `numMonths` after `startDate`.
@@ -2605,7 +2603,7 @@ object functions {
    * @group datetime_funcs
    * @since 3.0.0
    */
-  def add_month(startDate: Column, numMonths: Column): Column = withExpr {
+  def add_months(startDate: Column, numMonths: Column): Column = withExpr {
     AddMonths(startDate.expr, numMonths.expr)
   }
 
@@ -2655,7 +2653,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_add(start: Column, days: Int): Column = withExpr { DateAdd(start.expr, Literal(days)) }
+  def date_add(start: Column, days: Int): Column = date_add(start, lit(days))
 
   /**
    * Returns the date that is `days` days after `start`
@@ -2679,7 +2677,7 @@ object functions {
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def date_sub(start: Column, days: Int): Column = withExpr { DateSub(start.expr, Literal(days)) }
+  def date_sub(start: Column, days: Int): Column = date_sub(start, lit(days))
 
   /**
    * Returns the date that is `days` days before `start`
