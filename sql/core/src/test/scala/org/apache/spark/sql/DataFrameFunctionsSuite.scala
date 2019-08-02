@@ -2380,6 +2380,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(
           Row(true),
           Row(false),
+          Row(null),
           Row(false),
           Row(null)))
     }
