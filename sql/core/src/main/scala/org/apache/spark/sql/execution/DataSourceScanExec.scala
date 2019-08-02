@@ -337,44 +337,33 @@ case class FileSourceScanExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
-    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time"),
-    "scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
-
-  private abstract class ScanTimeTrackingIterator[T](
-      fileScanIterator: Iterator[T],
-      scanTimeMetrics: SQLMetric) extends Iterator[T] {
-
-    override def hasNext: Boolean = {
-      // The `FileScanRDD` returns an iterator which scans the file during the `hasNext` call.
-      val startNs = System.nanoTime()
-      val res = fileScanIterator.hasNext
-      scanTimeMetrics += NANOSECONDS.toMillis(System.nanoTime() - startNs)
-      res
+    "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time")
+  ) ++ {
+    // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
+    // it for each batch.
+    if (supportsColumnar) {
+      Some("scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+    } else {
+      None
     }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val scanTime = longMetric("scanTime")
     if (needsUnsafeRowConversion) {
       inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
-        val proj = UnsafeProjection.create(schema)
-        proj.initialize(index)
-
-        new ScanTimeTrackingIterator[InternalRow](iter, scanTime) {
-          override def next(): InternalRow = {
-            numOutputRows += 1
-            proj(iter.next())
-          }
+        val toUnsafe = UnsafeProjection.create(schema)
+        toUnsafe.initialize(index)
+        iter.map { row =>
+          numOutputRows += 1
+          toUnsafe(row)
         }
       }
     } else {
       inputRDD.mapPartitionsInternal { iter =>
-        new ScanTimeTrackingIterator[InternalRow](iter, scanTime) {
-          override def next(): InternalRow = {
-            numOutputRows += 1
-            iter.next()
-          }
+        iter.map { row =>
+          numOutputRows += 1
+          row
         }
       }
     }
@@ -384,7 +373,16 @@ case class FileSourceScanExec(
     val numOutputRows = longMetric("numOutputRows")
     val scanTime = longMetric("scanTime")
     inputRDD.asInstanceOf[RDD[ColumnarBatch]].mapPartitionsInternal { batches =>
-      new ScanTimeTrackingIterator[ColumnarBatch](batches, scanTime) {
+      new Iterator[ColumnarBatch] {
+
+        override def hasNext: Boolean = {
+          // The `FileScanRDD` returns an iterator which scans the file during the `hasNext` call.
+          val startNs = System.nanoTime()
+          val res = batches.hasNext
+          scanTime += NANOSECONDS.toMillis(System.nanoTime() - startNs)
+          res
+        }
+
         override def next(): ColumnarBatch = {
           val batch = batches.next()
           numOutputRows += batch.numRows()

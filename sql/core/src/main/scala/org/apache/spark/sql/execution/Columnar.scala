@@ -82,11 +82,11 @@ case class ColumnarToRowExec(child: SparkPlan) extends UnaryExecNode with Codege
     // plan (this) in the closure.
     val localOutput = this.output
     child.executeColumnar().mapPartitionsInternal { batches =>
-      val outputProject = UnsafeProjection.create(localOutput, localOutput)
+      val toUnsafe = UnsafeProjection.create(localOutput, localOutput)
       batches.flatMap { batch =>
         numInputBatches += 1
         numOutputRows += batch.numRows()
-        batch.rowIterator().asScala.map(outputProject)
+        batch.rowIterator().asScala.map(toUnsafe)
       }
     }
   }

@@ -519,7 +519,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
 
   // `InputAdapter` can only generate code to process the rows from its child. If the child produces
   // columnar batches, there must be a `ColumnarToRowExec` above `InputAdapter` to handle it by
-  // overriding `inputRDD`.
+  // overriding `inputRDDs` and calling `InputAdapter#executeColumnar` directly.
   override def inputRDD: RDD[InternalRow] = child.execute()
 
   // This is a leaf node so the node can produce limit not reached checks.
