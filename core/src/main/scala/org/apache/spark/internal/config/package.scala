@@ -35,6 +35,14 @@ package object config {
   private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
 
+  private[spark] val SPARK_RESOURCES_COORDINATE =
+    ConfigBuilder("spark.resources.coordinate.enable")
+      .doc("Whether to coordinate resources automatically among worker/drivers(client only) " +
+        "in Standalone. If not, user should be responsible for assigning different resources " +
+        "for workers/drivers while using resource discovery script.")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SPARK_RESOURCES_DIR =
     ConfigBuilder("spark.resources.dir")
       .doc("Directory used to coordinate resources among workers/drivers(client only) in " +

@@ -30,9 +30,9 @@ import org.json4s.jackson.JsonMethods.{compact, parse, render}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.SPARK_RESOURCES_DIR
+import org.apache.spark.internal.config.{SPARK_RESOURCES_COORDINATE, SPARK_RESOURCES_DIR}
 import org.apache.spark.resource.{ResourceAllocation, ResourceID, ResourceInformation, ResourceRequirement}
-import org.apache.spark.resource.ResourceUtils.withResourcesJson
+import org.apache.spark.resource.ResourceUtils.{parseResourceRequirements, withResourcesJson}
 import org.apache.spark.util.Utils
 
 private[spark] object StandaloneResourceUtils extends Logging {
@@ -72,7 +72,6 @@ private[spark] object StandaloneResourceUtils extends Logging {
    * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
    * @param resources the resources found by worker/driver on the host
-   * @param resourceRequirements the resource requirements asked by the worker/driver
    * @param pid the process id of worker/driver to acquire resources.
    * @return allocated resources for the worker/driver or throws exception if can't
    *         meet worker/driver's requirement
@@ -81,9 +80,12 @@ private[spark] object StandaloneResourceUtils extends Logging {
       conf: SparkConf,
       componentName: String,
       resources: Map[String, ResourceInformation],
-      resourceRequirements: Seq[ResourceRequirement],
       pid: Int)
     : Map[String, ResourceInformation] = {
+    if (!needCoordinate(conf)) {
+      return resources
+    }
+    val resourceRequirements = parseResourceRequirements(conf, componentName)
     if (resourceRequirements.isEmpty) {
       return Map.empty
     }
@@ -200,6 +202,9 @@ private[spark] object StandaloneResourceUtils extends Logging {
       toRelease: Map[String, ResourceInformation],
       pid: Int)
     : Unit = {
+    if (!needCoordinate(conf)) {
+      return
+    }
     if (toRelease != null && toRelease.nonEmpty) {
       val lock = acquireLock(conf)
       try {
@@ -355,5 +360,10 @@ private[spark] object StandaloneResourceUtils extends Logging {
     implicit val formats = DefaultFormats
     val allocationJson = Extraction.decompose(allocations)
     Files.write(jsonFile.toPath, compact(render(allocationJson)).getBytes())
+  }
+
+  /** Whether needs to coordinate resources among workers and drivers for user */
+  def needCoordinate(conf: SparkConf): Boolean = {
+    conf.get(SPARK_RESOURCES_COORDINATE)
   }
 }

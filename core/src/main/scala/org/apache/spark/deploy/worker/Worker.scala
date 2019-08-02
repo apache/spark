@@ -232,9 +232,7 @@ private[deploy] class Worker(
   private def setupWorkerResources(): Unit = {
     try {
       val allResources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
-      val resourceRequirements = parseResourceRequirements(conf, SPARK_WORKER_PREFIX)
-      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources,
-        resourceRequirements, pid)
+      resources = acquireResources(conf, SPARK_WORKER_PREFIX, allResources, pid)
       logResourceInfo(SPARK_WORKER_PREFIX, resources)
     } catch {
       case e: Exception =>
