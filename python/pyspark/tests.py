@@ -1939,12 +1939,9 @@ class DaemonTests(unittest.TestCase):
         # daemon should accept connections
         self.assertTrue(self.connect(port))
 
-        # wait worker process spawned from daemon exit.
-        time.sleep(1)
-
         # request shutdown
         terminator(daemon)
-        daemon.wait(5)
+        time.sleep(1)
 
         # daemon should no longer accept connections
         try:
