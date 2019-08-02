@@ -361,16 +361,11 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
-    val location = CatalogUtils.URIToString(database.locationUri)
-    val dbName = database.name
-    client.alterDatabase(
-      dbName,
-      new HiveDatabase(
-        dbName,
-        database.description,
-        location,
-        Option(database.properties).map(_.asJava).orNull))
-    client.getDatabase(dbName).setLocationUri(location)
+    val hiveDb = client.getDatabase(database.name)
+    hiveDb.setDescription(database.description)
+    hiveDb.setLocationUri(CatalogUtils.URIToString(database.locationUri))
+    hiveDb.setParameters(Option(database.properties).map(_.asJava).orNull)
+    client.alterDatabase(database.name, hiveDb)
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {
