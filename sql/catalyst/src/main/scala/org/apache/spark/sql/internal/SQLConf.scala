@@ -312,6 +312,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val META_DATA_NUM_RETRIES = buildConf("spark.sql.metadata.num.retries")
+    .doc("the number of meta data log retries.")
+    .intConf
+    .checkValue(_ > 0, "The minimum number of metadata retries " +
+      "must be a positive integer.")
+    .createWithDefault(3)
+
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.reducePostShufflePartitions.enabled")
     .doc("When true and adaptive execution is enabled, this enables reducing the number of " +
@@ -1993,6 +2000,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def metaDataNumRetries: Int = getConf(META_DATA_NUM_RETRIES)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 

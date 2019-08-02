@@ -62,6 +62,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   protected val fileManager =
     CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf)
 
+  protected val metaDataNumRetries = sparkSession.sessionState.conf.metaDataNumRetries
+
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
   }
@@ -114,12 +116,16 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-  /** Write a batch to a temp file then rename it to the batch file.
-   *
-   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
-   * valid behavior, we still need to prevent it from destroying the files.
-   */
   private def writeBatchToFile(metadata: T, path: Path): Unit = {
+    writeBatchToFileWithRetries(metadata, path, 1)
+  }
+
+  /** Write a batch to a temp file then rename it to the batch file.
+    *
+    * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+    * valid behavior, we still need to prevent it from destroying the files.
+    */
+  private def writeBatchToFileWithRetries(metadata: T, path: Path, retryCount: Int): Unit = {
     val output = fileManager.createAtomic(path, overwriteIfPossible = false)
     try {
       serialize(metadata, output)
@@ -133,7 +139,12 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           s"Multiple streaming queries are concurrently using $path", e)
       case e: Throwable =>
         output.cancel()
-        throw e
+        if (retryCount > metaDataNumRetries) {
+          throw new IOException(
+            s"Failed to write meta data log after retry $metaDataNumRetries count", e)
+        } else {
+          writeBatchToFileWithRetries(metadata, path, retryCount + 1)
+        }
     }
   }
 
