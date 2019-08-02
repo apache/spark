@@ -205,12 +205,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    */
   override def alterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
     val existingDb = getDatabase(dbDefinition.name)
-    if (existingDb.properties == dbDefinition.properties) {
+    if (existingDb.properties == dbDefinition.properties &&
+      existingDb.locationUri == dbDefinition.locationUri) {
       logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
         s"the provided database properties are the same as the old ones. Hive does not " +
-        s"currently support altering other database fields.")
+        s"currently support altering other database fields and database location.")
     }
     client.alterDatabase(dbDefinition)
+    client
   }
 
   override def getDatabase(db: String): CatalogDatabase = withClient {
