@@ -27,7 +27,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class DeleteFromTableExec(
     table: SupportsDelete,
-    options: CaseInsensitiveStringMap,
     deleteWhere: Array[Filter]) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {

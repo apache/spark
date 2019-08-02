@@ -229,7 +229,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
           throw new AnalysisException(s"Exec delete failed:" +
               s" cannot translate expression to source filter: $f"))
       }.toArray
-      DeleteFromTableExec(r.table.asDeletable, r.options, filters) :: Nil
+      DeleteFromTableExec(r.table.asDeletable, filters) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil

@@ -24,7 +24,6 @@ import scala.collection.mutable
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
@@ -327,8 +326,7 @@ case class DataSourceResolution(
       catalog: TableCatalog,
       identifier: Identifier,
       delete: DeleteFromStatement): DeleteFromTable = {
-    val relation = CatalogV2Util.loadTable(catalog, identifier)
-        .map(DataSourceV2Relation.create).getOrElse(UnresolvedRelation(delete.tableName))
+    val relation = UnresolvedRelation(delete.tableName)
     val aliased = delete.tableAlias.map { SubqueryAlias(_, relation) }.getOrElse(relation)
     val filter = Filter(delete.condition, aliased)
     DeleteFromTable(aliased, filter)

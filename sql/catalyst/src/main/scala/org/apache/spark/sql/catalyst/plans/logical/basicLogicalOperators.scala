@@ -569,8 +569,7 @@ case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Comm
 
 case class DeleteFromTable(
     child: LogicalPlan,
-    condition: Filter)
-    extends Command {
+    condition: Filter) extends Command {
 
   override def children: Seq[LogicalPlan] = child :: condition :: Nil
   override def output: Seq[Attribute] = Seq.empty
