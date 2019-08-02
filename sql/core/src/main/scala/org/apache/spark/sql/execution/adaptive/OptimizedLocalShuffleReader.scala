@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildLeft, BuildRight}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -40,5 +41,31 @@ case class OptimizedLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
         }
         bhj
     }
+
+    val afterEnsureRequirements = EnsureRequirements(conf).apply(plan)
+    val numExchanges = afterEnsureRequirements.collect {
+      case e: ShuffleExchangeExec => e
+    }.length
+    if (numExchanges > 0) {
+      logWarning("Local shuffle reader optimization is not applied due" +
+        " to additional shuffles will be introduced.")
+      revertLocalShuffleReader(plan)
+    } else {
+      plan
+    }
+  }
+  private def revertLocalShuffleReader(plan: SparkPlan): SparkPlan = {
+    plan.transformUp {
+      case bhj: BroadcastHashJoinExec =>
+        bhj.buildSide match {
+          case BuildLeft if (bhj.right.isInstanceOf[CoalescedShuffleReaderExec]) =>
+            bhj.right.asInstanceOf[CoalescedShuffleReaderExec].isLocal = false
+          case BuildRight if (bhj.left.isInstanceOf[CoalescedShuffleReaderExec]) =>
+            bhj.left.asInstanceOf[CoalescedShuffleReaderExec].isLocal = false
+          case _ => None
+        }
+        bhj
+    }
+    plan
   }
 }

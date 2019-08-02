@@ -355,6 +355,22 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("Change merge join to broadcast join and optimize the shuffle" +
+    " reader to local shuffle reader") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.OPTIMIZED_LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "30") {
+      runAdaptiveAndVerifyResult(
+        """
+          |SELECT * FROM testData t1 join testData2 t2
+          |ON t1.key = t2.a join testData3 t3 on t2.a = t3.a
+          |where t1.value = 1
+        """.stripMargin
+      )
+    }
+  }
+
   test("Avoid changing merge join to broadcast join if too many empty partitions on build plan") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",

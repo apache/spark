@@ -19,14 +19,15 @@ package org.apache.spark.sql.execution.adaptive.rule
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.Duration
+
 import org.apache.spark.MapOutputStatistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.execution.adaptive.{LocalShuffledRowRDD, QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.adaptive.{QueryStageExec, ReusedQueryStageExec, ShuffleQueryStageExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ThreadUtils
 
@@ -187,7 +188,17 @@ case class CoalescedShuffleReaderExec(
   override def doCanonicalize(): SparkPlan = child.canonicalized
 
   override def outputPartitioning: Partitioning = {
-    UnknownPartitioning(partitionStartIndices.length)
+    if (isLocal) {
+      val numPartitions = child match {
+        case stage: ShuffleQueryStageExec =>
+          stage.plan.shuffleDependency.rdd.partitions.length
+        case ReusedQueryStageExec(_, stage: ShuffleQueryStageExec, _) =>
+          stage.plan.shuffleDependency.rdd.partitions.length
+      }
+      UnknownPartitioning(numPartitions)
+    } else {
+      UnknownPartitioning(partitionStartIndices.length)
+    }
   }
 
   private var cachedShuffleRDD: RDD[InternalRow] = null
