@@ -152,6 +152,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PropagateEmptyRelation) ::
     Batch("Pullup Correlated Expressions", Once,
       PullupCorrelatedPredicates) ::
+    // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
+    // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
     Batch("Subquery", FixedPoint(1),
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
@@ -165,6 +167,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
+    // Since join costs in AQP can change between multiple runs, there is no reason that we have an
+    // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
     Batch("Remove Redundant Sorts", Once,
