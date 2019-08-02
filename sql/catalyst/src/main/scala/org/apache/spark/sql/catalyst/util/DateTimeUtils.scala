@@ -620,17 +620,18 @@ object DateTimeUtils {
   // Visible for testing.
   private[sql] val TRUNC_TO_YEAR = 1
   private[sql] val TRUNC_TO_MONTH = 2
-  private[sql] val TRUNC_TO_QUARTER = 3
-  private[sql] val TRUNC_TO_WEEK = 4
-  private[sql] val TRUNC_TO_DAY = 5
-  private[sql] val TRUNC_TO_HOUR = 6
-  private[sql] val TRUNC_TO_MINUTE = 7
-  private[sql] val TRUNC_TO_SECOND = 8
-  private[sql] val TRUNC_TO_MILLISECOND = 9
-  private[sql] val TRUNC_TO_MICROSECOND = 10
-  private[sql] val TRUNC_TO_DECADE = 11
-  private[sql] val TRUNC_TO_CENTURY = 12
-  private[sql] val TRUNC_TO_MILLENNIUM = 13
+  private[sql] val TRUNC_TO_DECADE = 3
+  private[sql] val TRUNC_TO_CENTURY = 4
+  private[sql] val TRUNC_TO_MILLENNIUM = 5
+  private[sql] val TRUNC_TO_QUARTER = 10
+  private[sql] val TRUNC_TO_WEEK = 11
+  private[sql] val TRUNC_TO_DAY = 12
+  private[sql] val TRUNC_TO_HOUR = 13
+  private[sql] val TRUNC_TO_MINUTE = 14
+  private[sql] val TRUNC_TO_SECOND = 15
+  private[sql] val TRUNC_TO_MILLISECOND = 16
+  private[sql] val TRUNC_TO_MICROSECOND = 17
+
   private[sql] val TRUNC_INVALID = -1
 
   /**
@@ -717,6 +718,11 @@ object DateTimeUtils {
         case "SECOND" => TRUNC_TO_SECOND
         case "WEEK" => TRUNC_TO_WEEK
         case "QUARTER" => TRUNC_TO_QUARTER
+        case "MICROSECOND" => TRUNC_TO_MICROSECOND
+        case "MILLISECOND" => TRUNC_TO_MILLISECOND
+        case "DECADE" => TRUNC_TO_DECADE
+        case "CENTURY" => TRUNC_TO_CENTURY
+        case "MILLENNIUM" => TRUNC_TO_MILLENNIUM
         case _ => TRUNC_INVALID
       }
     }

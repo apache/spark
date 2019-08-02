@@ -1471,7 +1471,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["year", "yyyy", "yy", "mon", "month", "mm"]
+    `fmt` should be one of ["year", "yyyy", "yy", "mon", "month", "mm", "decade", "century", "millennium"]
   """,
   examples = """
     Examples:
@@ -1479,6 +1479,12 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
        2009-02-01
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
+      > SELECT _FUNC_('2015-10-27', 'DECADE');
+       2010-01-01
+      > SELECT _FUNC_('2015-10-27', 'century');
+       2001-01-01
+      > SELECT _FUNC_('2015-10-27', 'millennium');
+       2001-01-01
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
@@ -1493,14 +1499,14 @@ case class TruncDate(date: Expression, format: Expression)
   override val instant = date
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MONTH) { (d: Any, level: Int) =>
+    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MILLENNIUM) { (d: Any, level: Int) =>
       DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_MONTH) { (date: String, fmt: String) =>
-      s"truncDate($date, $fmt);"
+    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_MILLENNIUM) {
+      (date: String, fmt: String) => s"truncDate($date, $fmt);"
     }
   }
 }
@@ -1512,7 +1518,8 @@ case class TruncDate(date: Expression, format: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(fmt, ts) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE", "SECOND", "WEEK", "QUARTER"]
+    `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE", "SECOND", "WEEK", "QUARTER",
+                            "DECADE", "CENTURY", "MILLENNIUM", "MICROSECOND", "MILLISECOND"]
   """,
   examples = """
     Examples:
@@ -1524,6 +1531,12 @@ case class TruncDate(date: Expression, format: Expression)
        2015-03-05 00:00:00
       > SELECT _FUNC_('HOUR', '2015-03-05T09:32:05.359');
        2015-03-05 09:00:00
+      > SELECT _FUNC_('MILLISECOND', '2015-03-05T09:32:05.123456');
+       2015-03-05 09:32:05.123
+      > SELECT _FUNC_('DECADE', '2015-03-05T09:32:05.123456');
+       2010-01-01 00:00:00
+      > SELECT _FUNC_('CENTURY', '2015-03-05T09:32:05.123456');
+       2001-01-01 00:00:00
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit
@@ -1545,14 +1558,14 @@ case class TruncTimestamp(
   def this(format: Expression, timestamp: Expression) = this(format, timestamp, None)
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_SECOND) { (t: Any, level: Int) =>
+    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MICROSECOND) { (t: Any, level: Int) =>
       DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, timeZone)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
-    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_SECOND, true) {
+    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_MICROSECOND, true) {
       (date: String, fmt: String) =>
         s"truncTimestamp($date, $fmt, $tz);"
     }
