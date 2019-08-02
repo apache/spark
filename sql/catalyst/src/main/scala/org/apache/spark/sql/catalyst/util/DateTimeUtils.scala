@@ -639,12 +639,13 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should only be 1, 2, 11, 12 or 13.
    */
   def truncDate(d: SQLDate, level: Int): SQLDate = {
-    def truncToYearLevel(divider: Int, addition: Int): SQLDate = {
+    def truncToYearLevel(divider: Int, adjust: Int): SQLDate = {
       val oldYear = getYear(d)
-      var newYear = Math.floorDiv(oldYear, divider) *  divider
-      if (addition > 0 && Math.floorMod(oldYear, divider) != 0) {
-        newYear += addition
+      var newYear = Math.floorDiv(oldYear, divider)
+      if (adjust > 0 && Math.floorMod(oldYear, divider) == 0) {
+        newYear -= 1
       }
+      newYear = newYear * divider + adjust
       localDateToDays(LocalDate.of(newYear, 1, 1))
     }
     level match {
