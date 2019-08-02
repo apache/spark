@@ -194,6 +194,15 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.coordinate.enable</code></td>
+  <td>true</td>
+  <td>
+    Whether to coordinate resources automatically among workers/drivers(client only) 
+    in Standalone. If not, user should be responsible for assigning different resources 
+    for workers/drivers while using resource discovery script.
+  </td>
+</tr>
+<tr>
  <td><code>spark.resources.dir</code></td>
   <td>SPARK_HOME</td>
   <td>
@@ -219,7 +228,9 @@ of the most common options to set are:
   <td>
     A script for the driver to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
-    name and an array of addresses.
+    name and an array of addresses. For a client-submitted driver in Standalone, discovery
+    script must assign different resource addresses to this driver comparing to workers' and
+    other dirvers' when <code>spark.resources.coordinate.enable</code> is off.
   </td>
 </tr>
 <tr>

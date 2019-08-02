@@ -37,7 +37,7 @@ package object config {
 
   private[spark] val SPARK_RESOURCES_COORDINATE =
     ConfigBuilder("spark.resources.coordinate.enable")
-      .doc("Whether to coordinate resources automatically among worker/drivers(client only) " +
+      .doc("Whether to coordinate resources automatically among workers/drivers(client only) " +
         "in Standalone. If not, user should be responsible for assigning different resources " +
         "for workers/drivers while using resource discovery script.")
       .booleanConf
