@@ -21,12 +21,13 @@ import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
-
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -156,6 +157,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     ///////////////////////////////////////////////////////////////////////////
 
     val tempDatabasePath = Utils.createTempDir().toURI
+    val tempDatabasePath2 = Utils.createTempDir().toURI
 
     test(s"$version: createDatabase") {
       val defaultDB = CatalogDatabase("default", "desc", new URI("loc"), Map())
@@ -197,6 +199,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val database = client.getDatabase("temporary").copy(properties = Map("flag" -> "true"))
       client.alterDatabase(database)
       assert(client.getDatabase("temporary").properties.contains("flag"))
+
+      // test alter database location
+      client.alterDatabase(database.copy(locationUri = tempDatabasePath2))
+      val pathInCatalog = new Path(client.getDatabase("temporary").locationUri).toUri
+      val expectedPath = new Path(tempDatabasePath2).toUri
+      assert(expectedPath.getPath === pathInCatalog.getPath)
     }
 
     test(s"$version: dropDatabase") {
