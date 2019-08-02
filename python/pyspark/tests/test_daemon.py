@@ -52,7 +52,7 @@ class DaemonTests(unittest.TestCase):
 
         # request shutdown
         terminator(daemon)
-        time.sleep(1)
+        daemon.wait(5)
 
         # daemon should no longer accept connections
         try:
