@@ -626,20 +626,35 @@ object DateTimeUtils {
   private[sql] val TRUNC_TO_HOUR = 6
   private[sql] val TRUNC_TO_MINUTE = 7
   private[sql] val TRUNC_TO_SECOND = 8
+  private[sql] val TRUNC_TO_MILLISECOND = 9
+  private[sql] val TRUNC_TO_MICROSECOND = 10
+  private[sql] val TRUNC_TO_DECADE = 11
+  private[sql] val TRUNC_TO_CENTURY = 12
+  private[sql] val TRUNC_TO_MILLENNIUM = 13
   private[sql] val TRUNC_INVALID = -1
 
   /**
    * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should only be 1 or 2.
+   * Trunc level should be generated using `parseTruncLevel()`, should only be 1, 2, 11, 12 or 13.
    */
   def truncDate(d: SQLDate, level: Int): SQLDate = {
-    if (level == TRUNC_TO_YEAR) {
-      d - DateTimeUtils.getDayInYear(d) + 1
-    } else if (level == TRUNC_TO_MONTH) {
-      d - DateTimeUtils.getDayOfMonth(d) + 1
-    } else {
-      // caller make sure that this should never be reached
-      sys.error(s"Invalid trunc level: $level")
+    def truncToYearLevel(divider: Int, addition: Int): SQLDate = {
+      val oldYear = getYear(d)
+      var newYear = Math.floorDiv(oldYear, divider) *  divider
+      if (addition > 0 && Math.floorMod(oldYear, divider) != 0) {
+        newYear += addition
+      }
+      localDateToDays(LocalDate.of(newYear, 1, 1))
+    }
+    level match {
+      case TRUNC_TO_YEAR => d - DateTimeUtils.getDayInYear(d) + 1
+      case TRUNC_TO_MONTH => d - DateTimeUtils.getDayOfMonth(d) + 1
+      case TRUNC_TO_DECADE => truncToYearLevel(10, 0)
+      case TRUNC_TO_CENTURY => truncToYearLevel(100, 1)
+      case TRUNC_TO_MILLENNIUM => truncToYearLevel(1000, 1)
+      case _ =>
+        // caller make sure that this should never be reached
+        sys.error(s"Invalid trunc level: $level")
     }
   }
 
@@ -648,12 +663,11 @@ object DateTimeUtils {
    * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
+    if (level == TRUNC_TO_MICROSECOND) return t
     var millis = MICROSECONDS.toMillis(t)
     val truncated = level match {
-      case TRUNC_TO_YEAR =>
-        val dDays = millisToDays(millis, timeZone)
-        daysToMillis(truncDate(dDays, level), timeZone)
-      case TRUNC_TO_MONTH =>
+      case TRUNC_TO_YEAR | TRUNC_TO_MONTH |
+           TRUNC_TO_DECADE | TRUNC_TO_CENTURY | TRUNC_TO_MILLENNIUM =>
         val dDays = millisToDays(millis, timeZone)
         daysToMillis(truncDate(dDays, level), timeZone)
       case TRUNC_TO_DAY =>
@@ -677,6 +691,7 @@ object DateTimeUtils {
         val daysOfQuarter = LocalDate.ofEpochDay(dDays)
           .`with`(IsoFields.DAY_OF_QUARTER, 1L).toEpochDay.toInt
         daysToMillis(daysOfQuarter, timeZone)
+      case TRUNC_TO_MILLISECOND => millis
       case _ =>
         // caller make sure that this should never be reached
         sys.error(s"Invalid trunc level: $level")
