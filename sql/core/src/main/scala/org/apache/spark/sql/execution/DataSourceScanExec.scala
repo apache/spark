@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -197,7 +198,15 @@ case class FileSourceScanExec(
     ret
   }.toArray
 
-  override lazy val outputPartitioning: Partitioning = {
+  /**
+   * [[partitionFilters]] can contain subqueries whose results are available only at runtime so
+   * accessing [[selectedPartitions]] should be guarded by this method during planning
+   */
+  private def hasPartitionsAvailableAtRunTime: Boolean = {
+    partitionFilters.exists(ExecSubqueryExpression.hasSubquery)
+  }
+
+  override lazy val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
     val bucketSpec = if (relation.sparkSession.sessionState.conf.bucketingEnabled) {
       relation.bucketSpec
     } else {
@@ -205,19 +214,66 @@ case class FileSourceScanExec(
     }
     bucketSpec match {
       case Some(spec) =>
-        // For bucketed columns, `HashPartitioning` would be used only when ALL the bucketing
-        // columns are being read from the table
+        // For bucketed columns:
+        // -----------------------
+        // `HashPartitioning` would be used only when:
+        // 1. ALL the bucketing columns are being read from the table
+        //
+        // For sorted columns:
+        // ---------------------
+        // Sort ordering should be used when ALL these criteria's match:
+        // 1. `HashPartitioning` is being used
+        // 2. A prefix (or all) of the sort columns are being read from the table.
+        //
+        // Sort ordering would be over the prefix subset of `sort columns` being read
+        // from the table.
+        // eg.
+        // Assume (col0, col2, col3) are the columns read from the table
+        // If sort columns are (col0, col1), then sort ordering would be considered as (col0)
+        // If sort columns are (col1, col0), then sort ordering would be empty as per rule #2
+        // above
+
         def toAttribute(colName: String): Option[Attribute] =
           output.find(_.name == colName)
 
         val bucketColumns = spec.bucketColumnNames.flatMap(n => toAttribute(n))
         if (bucketColumns.size == spec.bucketColumnNames.size) {
-          HashPartitioning(bucketColumns, spec.numBuckets)
+          val partitioning = HashPartitioning(bucketColumns, spec.numBuckets)
+          val sortColumns =
+            spec.sortColumnNames.map(x => toAttribute(x)).takeWhile(x => x.isDefined).map(_.get)
+          val shouldCalculateSortOrder =
+            conf.getConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING) &&
+              sortColumns.nonEmpty &&
+              !hasPartitionsAvailableAtRunTime
+
+          val sortOrder = if (shouldCalculateSortOrder) {
+            // In case of bucketing, its possible to have multiple files belonging to the
+            // same bucket in a given relation. Each of these files are locally sorted
+            // but those files combined together are not globally sorted. Given that,
+            // the RDD partition will not be sorted even if the relation has sort columns set
+            // Current solution is to check if all the buckets have a single file in it
+
+            val files = selectedPartitions.flatMap(partition => partition.files)
+            val bucketToFilesGrouping =
+              files.map(_.getPath.getName).groupBy(file => BucketingUtils.getBucketId(file))
+            val singleFilePartitions = bucketToFilesGrouping.forall(p => p._2.length <= 1)
+
+            if (singleFilePartitions) {
+              // TODO Currently Spark does not support writing columns sorting in descending order
+              // so using Ascending order. This can be fixed in future
+              sortColumns.map(attribute => SortOrder(attribute, Ascending))
+            } else {
+              Nil
+            }
+          } else {
+            Nil
+          }
+          (partitioning, sortOrder)
         } else {
-          UnknownPartitioning(0)
+          (UnknownPartitioning(0), Nil)
         }
       case _ =>
-        UnknownPartitioning(0)
+        (UnknownPartitioning(0), Nil)
     }
   }
 
