@@ -104,10 +104,15 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
             // already pull out those nondeterministic expressions.
             assert(p.udfDeterministic, "Non-determinstic PythonUDFs should not appear " +
               "in grouping expression")
-            val alias = Alias(p, "groupingPythonUDF")()
-            projList += alias
-            attributeMap += ((p.canonicalized.asInstanceOf[PythonUDF], alias.toAttribute))
-            alias.toAttribute
+            val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
+            if (attributeMap.contains(canonicalized)) {
+              attributeMap(canonicalized)
+            } else {
+              val alias = Alias(p, "groupingPythonUDF")()
+              projList += alias
+              attributeMap += ((canonicalized, alias.toAttribute))
+              alias.toAttribute
+            }
         }
         groupingExpr += newE
       } else {
