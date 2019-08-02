@@ -1656,6 +1656,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val NESTED_PRUNING_ON_EXPRESSIONS =
+    buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from expressions in an operator which are unnecessary in " +
+        "satisfying a query. Note that this optimization doesn't prune nested fields from " +
+        "physical data source scanning. For pruning nested fields from scanning, please use " +
+        "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -1769,6 +1779,15 @@ object SQLConf {
     .internal()
     .booleanConf
     .createWithDefault(false)
+
+  val ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW =
+    buildConf("spark.sql.arithmeticOperations.failOnOverFlow")
+      .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
+        "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
+        "result is returned.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
 
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
@@ -2277,6 +2296,8 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
+  def arithmeticOperationsFailOnOverflow: Boolean = getConf(ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW)
+
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingEpochBacklogQueueSize: Int =
@@ -2314,6 +2335,8 @@ class SQLConf extends Serializable with Logging {
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedPruningOnExpressions: Boolean = getConf(NESTED_PRUNING_ON_EXPRESSIONS)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 

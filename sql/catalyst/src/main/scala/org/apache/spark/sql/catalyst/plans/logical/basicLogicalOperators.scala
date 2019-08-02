@@ -442,6 +442,47 @@ case class CreateTableAsSelect(
 }
 
 /**
+ * Replace a table with a v2 catalog.
+ *
+ * If the table does not exist, and orCreate is true, then it will be created.
+ * If the table does not exist, and orCreate is false, then an exception will be thrown.
+ *
+ * The persisted table will have no contents as a result of this operation.
+ */
+case class ReplaceTable(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    orCreate: Boolean) extends Command
+
+/**
+ * Replaces a table from a select query with a v2 catalog.
+ *
+ * If the table does not exist, and orCreate is true, then it will be created.
+ * If the table does not exist, and orCreate is false, then an exception will be thrown.
+ */
+case class ReplaceTableAsSelect(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    partitioning: Seq[Transform],
+    query: LogicalPlan,
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    orCreate: Boolean) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = {
+    // the table schema is created from the query schema, so the only resolution needed is to check
+    // that the columns referenced by the table's partitioning exist in the query schema
+    val references = partitioning.flatMap(_.references).toSet
+    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+}
+
+/**
  * Append data to an existing table.
  */
 case class AppendData(

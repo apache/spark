@@ -585,14 +585,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df2, testData.selectExpr("value"))
       assert(df2.schema.map(_.name) === Seq("value"))
     }
-
-    // With SQL config caseSensitive ON, AnalysisException should be thrown
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      val e = intercept[AnalysisException] {
-        testData("KEY")
-      }.getMessage
-      assert(e.contains("Cannot resolve column name"))
-    }
   }
 
   test("drop unknown column (no-op) with column reference") {

@@ -340,7 +340,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         }
         def validateErrorMessage(msg: String): Unit = {
           val msg1 = "cannot save interval data type into external storage."
-          val msg2 = "data source does not support calendarinterval data type."
+          val msg2 = "data source does not support interval data type."
           assert(msg.toLowerCase(Locale.ROOT).contains(msg1) ||
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }

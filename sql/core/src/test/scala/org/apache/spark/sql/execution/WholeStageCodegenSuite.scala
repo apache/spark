@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -324,5 +325,34 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       }.isDefined)
       checkAnswer(groupByWithId, Seq(Row(1, 2, 0), Row(1, 2, 0)))
     }
+  }
+
+  test("SPARK-28520: WholeStageCodegen does not work properly for LocalTableScanExec") {
+    // Case1: LocalTableScanExec is the root of a query plan tree.
+    // In this case, WholeStageCodegenExec should not be inserted
+    // as the direct parent of LocalTableScanExec.
+    val df = Seq(1, 2, 3).toDF
+    val rootOfExecutedPlan = df.queryExecution.executedPlan
+
+    // Ensure WholeStageCodegenExec is not inserted and
+    // LocalTableScanExec is still the root.
+    assert(rootOfExecutedPlan.isInstanceOf[LocalTableScanExec],
+      "LocalTableScanExec should be still the root.")
+
+    // Case2: The parent of a LocalTableScanExec supports WholeStageCodegen.
+    // In this case, the LocalTableScanExec should be within a WholeStageCodegen domain
+    // and no more InputAdapter is inserted as the direct parent of the LocalTableScanExec.
+    val aggedDF = Seq(1, 2, 3).toDF.groupBy("value").sum()
+    val executedPlan = aggedDF.queryExecution.executedPlan
+
+    // HashAggregateExec supports WholeStageCodegen and it's the parent of
+    // LocalTableScanExec so LocalTableScanExec should be within a WholeStageCodegen domain.
+    assert(
+      executedPlan.find {
+        case WholeStageCodegenExec(
+          HashAggregateExec(_, _, _, _, _, _, _: LocalTableScanExec)) => true
+        case _ => false
+      }.isDefined,
+      "LocalTableScanExec should be within a WholeStageCodegen domain.")
   }
 }

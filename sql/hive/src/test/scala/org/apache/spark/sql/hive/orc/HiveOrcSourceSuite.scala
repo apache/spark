@@ -127,7 +127,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         spark.udf.register("testType", () => new IntervalData())
         sql("select testType()").write.mode("overwrite").orc(orcDir)
       }.getMessage
-      assert(msg.contains("ORC data source does not support calendarinterval data type."))
+      assert(msg.contains("ORC data source does not support interval data type."))
 
       // read path
       msg = intercept[AnalysisException] {
@@ -135,14 +135,14 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         spark.range(1).write.mode("overwrite").orc(orcDir)
         spark.read.schema(schema).orc(orcDir).collect()
       }.getMessage
-      assert(msg.contains("ORC data source does not support calendarinterval data type."))
+      assert(msg.contains("ORC data source does not support interval data type."))
 
       msg = intercept[AnalysisException] {
         val schema = StructType(StructField("a", new IntervalUDT(), true) :: Nil)
         spark.range(1).write.mode("overwrite").orc(orcDir)
         spark.read.schema(schema).orc(orcDir).collect()
       }.getMessage
-      assert(msg.contains("ORC data source does not support calendarinterval data type."))
+      assert(msg.contains("ORC data source does not support interval data type."))
     }
   }
 

@@ -180,13 +180,13 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
       withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> format,
         SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> format) {
         val commands = ArrayBuffer.empty[(String, LogicalPlan)]
-        val exceptions = ArrayBuffer.empty[(String, Exception)]
+        val errors = ArrayBuffer.empty[(String, Throwable)]
         val listener = new QueryExecutionListener {
           override def onFailure(
               funcName: String,
               qe: QueryExecution,
-              exception: Exception): Unit = {
-            exceptions += funcName -> exception
+              error: Throwable): Unit = {
+            errors += funcName -> error
           }
 
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {

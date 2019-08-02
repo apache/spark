@@ -1177,6 +1177,7 @@ abstract class RoundBase(child: Expression, scale: Expression,
     dataType match {
       case DecimalType.Fixed(_, s) =>
         val decimal = input1.asInstanceOf[Decimal]
+        // Overflow cannot happen, so no need to control nullOnOverflow
         decimal.toPrecision(decimal.precision, s, mode)
       case ByteType =>
         BigDecimal(input1.asInstanceOf[Byte]).setScale(_scale, mode).toByte
