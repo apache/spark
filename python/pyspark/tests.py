@@ -1916,7 +1916,7 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
 class DaemonTests(unittest.TestCase):
     def connect(self, port):
-        from socket import socket, AF_INET, SOCK_STREAM# request shutdown
+        from socket import socket, AF_INET, SOCK_STREAM
         sock = socket(AF_INET, SOCK_STREAM)
         sock.connect(('127.0.0.1', port))
         # send a split index of -1 to shutdown the worker
@@ -1939,12 +1939,9 @@ class DaemonTests(unittest.TestCase):
         # daemon should accept connections
         self.assertTrue(self.connect(port))
 
-        # wait worker process spawned from daemon exit.
-        time.sleep(1)
-
         # request shutdown
         terminator(daemon)
-        daemon.wait(5)
+        time.sleep(1)
 
         # daemon should no longer accept connections
         try:
