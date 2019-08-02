@@ -8,16 +8,19 @@
 | Batch write ( overwrite w/o truncate)         | shivsood    | Issues  | 2,3    |
 | Read  implementation w/o column pruning       | shivsood    | Done    |        |
 | Read  w/o column pruning and filters          | shivsood    | Issues  | 4      |
+| Transactional write                           | shivsood    | Blocked | 5      |
+| Batch write with Filters                      | TBD         |         |        |
 | Columnar read                                 | TBD         |         |        |
 | Streaming write                               | TBD         |         |        |
 | Streaming read                                | TBD         |         |        |
-| Transactional write                           | shivsood    | Issues  | 5      |
+
 
 
 Status ->
 WIP ( Work in Progress),
 DONE ( implementation is done and tested),
-Issues (blocking issues)
+Issues (Problems that need resolution)
+Blocked ( B
 
 ## Others
 - Working branch is https://github.com/shivsood/spark-dsv2
@@ -42,6 +45,8 @@ Issues (blocking issues)
    //df2.select("i").show(10) after df.read.format("jdbc2") c.f test("JDBCV2 read test")
    in MsSqlServerIntegrationSuite
    Error seen as below
+   
+   ``
    19/07/31 15:20:55 INFO DBPartitionReader: ***dsv2-flows*** close called. number of rows retrieved is 0
    19/07/31 15:20:55 ERROR Executor: Exception in task 0.0 in stage 4.0 (TID 4)
    com.microsoft.sqlserver.jdbc.SQLServerException: The index 2 is out of range.
@@ -49,7 +54,8 @@ Issues (blocking issues)
    	at com.microsoft.sqlserver.jdbc.SQLServerResultSet.verifyValidColumnIndex(SQLServerResultSet.java:570)
    	at com.microsoft.sqlserver.jdbc.SQLServerResultSet.getterGetColumn(SQLServerResultSet.java:2012)
    	at com.microsoft.sqlserver.jdbc.SQLServerResultSet.getValue(SQLServerResultSet.java:2041)
-
+   ``
+   
 5. Transactional write - Does not seem feasible with the current FW. The FW suggest that executor send a commit message
    to Driver, and actual commit should only be done by the driver after receiving all commit confirmations. Dont see
    this feasible in JDBC as commit has to happen in JDBCConnection which is maintained by the TASKs and JDBCConnection
