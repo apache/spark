@@ -24,44 +24,48 @@ import org.apache.spark.sql.test.SharedSQLContext
 class PythonUDFSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("SPARK-28445: PythonUDF in grouping key and aggregate expressions") {
-    import IntegratedUDFTestUtils._
+  import IntegratedUDFTestUtils._
 
-    val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
-    val pythonTestUDF = TestPythonUDF(name = "pyUDF")
-    assume(shouldTestPythonUDFs)
+  val scalaTestUDF = TestScalaUDF(name = "scalaUDF")
+  val pythonTestUDF = TestPythonUDF(name = "pyUDF")
+  assume(shouldTestPythonUDFs)
 
-    val base = Seq(
-      (Some(1), Some(1)), (Some(1), Some(2)), (Some(2), Some(1)),
-      (Some(2), Some(2)), (Some(3), Some(1)), (Some(3), Some(2)),
-      (None, Some(1)), (Some(3), None), (None, None)).toDF("a", "b")
+  lazy val base = Seq(
+    (Some(1), Some(1)), (Some(1), Some(2)), (Some(2), Some(1)),
+    (Some(2), Some(2)), (Some(3), Some(1)), (Some(3), Some(2)),
+    (None, Some(1)), (Some(3), None), (None, None)).toDF("a", "b")
 
-    val df = base.groupBy(scalaTestUDF(base("a") + 1))
+  test("SPARK-28445: PythonUDF as grouping key and aggregate expressions") {
+    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(base("a") + 1), scalaTestUDF(count(base("b"))))
     val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(base("a") + 1), pythonTestUDF(count(base("b"))))
-    checkAnswer(df, df2)
+    checkAnswer(df1, df2)
+  }
 
-    val df3 = base.groupBy(scalaTestUDF(base("a") + 1))
+  test("SPARK-28445: PythonUDF as grouping key and used in aggregate expressions") {
+    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(base("a") + 1) + 1, scalaTestUDF(count(base("b"))))
-    val df4 = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(base("a") + 1) + 1, pythonTestUDF(count(base("b"))))
-    checkAnswer(df3, df4)
+    checkAnswer(df1, df2)
+  }
 
-    // PythonUDF in aggregate expression has grouping key in its arguments.
-    val df5 = base.groupBy(scalaTestUDF(base("a") + 1))
+  test("SPARK-28445: PythonUDF in aggregate expression has grouping key in its arguments") {
+    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)), scalaTestUDF(count(base("b"))))
-    val df6 = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)), pythonTestUDF(count(base("b"))))
-    checkAnswer(df5, df6)
+    checkAnswer(df1, df2)
+  }
 
-    // PythonUDF over grouping key is argument to aggregate function.
-    val df7 = base.groupBy(scalaTestUDF(base("a") + 1))
+  test("SPARK-28445: PythonUDF over grouping key is argument to aggregate function") {
+    val df1 = base.groupBy(scalaTestUDF(base("a") + 1))
       .agg(scalaTestUDF(scalaTestUDF(base("a") + 1)),
         scalaTestUDF(count(scalaTestUDF(base("a") + 1))))
-    val df8 = base.groupBy(pythonTestUDF(base("a") + 1))
+    val df2 = base.groupBy(pythonTestUDF(base("a") + 1))
       .agg(pythonTestUDF(pythonTestUDF(base("a") + 1)),
         pythonTestUDF(count(pythonTestUDF(base("a") + 1))))
-    checkAnswer(df7, df8)
+    checkAnswer(df1, df2)
   }
 }

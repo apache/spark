@@ -106,7 +106,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
               "in grouping expression")
             val alias = Alias(p, "groupingPythonUDF")()
             projList += alias
-            attributeMap += ((p.canonicalized.asInstanceOf[PythonUDF], alias))
+            attributeMap += ((p.canonicalized.asInstanceOf[PythonUDF], alias.toAttribute))
             alias.toAttribute
         }
         groupingExpr += newE
@@ -125,7 +125,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
         // in its arguments. Such PythonUDF was pull out by ExtractPythonUDFFromAggregate, too.
         case p: PythonUDF if p.udfDeterministic =>
           val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
-          attributeMap.get(canonicalized).map(_.toAttribute).getOrElse(p)
+          attributeMap.getOrElse(canonicalized, p)
       }.asInstanceOf[NamedExpression]
     }
     agg.copy(

@@ -71,6 +71,6 @@ case class PythonUDF(
   override lazy val canonicalized: Expression = {
     val canonicalizedChildren = children.map(_.canonicalized)
     // `resultId` can be seen as cosmetic variation in PythonUDF, as it doesn't affect the result.
-    Canonicalize.execute(this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren))
+    this.copy(resultId = ExprId(-1)).withNewChildren(canonicalizedChildren)
   }
 }
