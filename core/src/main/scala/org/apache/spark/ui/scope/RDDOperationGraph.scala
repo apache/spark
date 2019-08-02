@@ -43,7 +43,7 @@ private[spark] case class RDDOperationGraph(
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
 private[spark] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String,
-                                           extraInfo: Option[String] = None)
+    extraInfo: Option[String] = None)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.

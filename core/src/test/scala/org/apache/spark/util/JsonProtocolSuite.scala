@@ -842,7 +842,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long,
-                          extraInfo: Option[String] = None) = {
+      extraInfo: Option[String] = None) = {
     val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7),
       a.toString, None, extraInfo)
     r.numCachedPartitions = c
