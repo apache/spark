@@ -193,7 +193,6 @@ object Cast {
 
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 
-
   def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
     val str = v.trim
     if (str.equalsIgnoreCase("infinity") || str.equalsIgnoreCase("+infinity")) {
@@ -584,7 +583,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         case _: NumberFormatException => null
       }
   }
-
 
   // DoubleConverter
   private[this] def castToDouble(from: DataType): Any => Any = from match {
