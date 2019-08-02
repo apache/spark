@@ -29,6 +29,10 @@ import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockStoreClient
 import org.apache.spark.storage.{BlockId, EncryptedManagedBuffer, StorageLevel}
 import org.apache.spark.util.ThreadUtils
 
+/**
+ * The BlockTransferService that used for fetching a set of blocks at time. Each instance of
+ * BlockTransferService contains both client and server inside.
+ */
 private[spark]
 abstract class BlockTransferService extends BlockStoreClient with Logging {
 

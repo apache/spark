@@ -41,10 +41,9 @@ import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.util.TransportConf;
 
 /**
- * Client for reading shuffle blocks which points to an external (outside of executor) server.
- * This is instead of reading shuffle blocks directly from other executors (via
- * BlockTransferService), which has the downside of losing the shuffle data if we lose the
- * executors.
+ * Client for reading both RDD blocks and shuffle blocks which points to an external
+ * (outside of executor) server. This is instead of reading blocks directly from other executors
+ * (via BlockTransferService), which has the downside of losing the data if we lose the executors.
  */
 public class ExternalBlockStoreClient extends BlockStoreClient {
   private static final Logger logger = LoggerFactory.getLogger(ExternalBlockStoreClient.class);

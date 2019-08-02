@@ -69,7 +69,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
   test("using external shuffle service") {
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalBlockStoreClient])
+    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
     // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
     // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
@@ -100,7 +100,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     val confWithRddFetchEnabled = conf.clone.set(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, true)
     sc = new SparkContext("local-cluster[1,1,1024]", "test", confWithRddFetchEnabled)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalBlockStoreClient])
+    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
     try {
       val rdd = sc.parallelize(0 until 100, 2)
         .map { i => (i, 1) }
