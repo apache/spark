@@ -219,7 +219,7 @@ exhibits eventual consistency (example: S3), and often slower than classic
 filesystem renames.
 
 Some object store connectors provide custom committers to commit tasks and
-jobs without using rename. In versions of Spark built with Hadoop-3.1 or later,
+jobs without using rename. In versions of Spark built with Hadoop 3.1 or later,
 the S3A connector for AWS S3 is such a committer.
 
 Instead of writing data to a temporary directory on the store for renaming,
@@ -253,7 +253,7 @@ Here is the documentation on the standard connectors both from Apache and the cl
 * [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html).
 * [Azure Blob Storage and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
 * [Azure Data Lake Gen 1](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html).
-* [Hadoop-AWS module (Hadoop 3-.x)](https://hadoop.apache.org/docs/current3/hadoop-aws/tools/hadoop-aws/index.html).
+* [Hadoop-AWS module (Hadoop 3.x)](https://hadoop.apache.org/docs/current3/hadoop-aws/tools/hadoop-aws/index.html).
 * [Amazon S3 via S3A and S3N (Hadoop 2.x)](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
 * [Amazon EMR File System (EMRFS)](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-fs.html). From Amazon
 * [Google Cloud Storage Connector for Spark and Hadoop](https://cloud.google.com/hadoop/google-cloud-storage-connector). From Google

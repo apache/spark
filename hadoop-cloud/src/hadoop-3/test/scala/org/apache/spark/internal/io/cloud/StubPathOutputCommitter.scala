@@ -23,8 +23,7 @@ import org.apache.hadoop.mapreduce.{JobContext, JobStatus, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.{PathOutputCommitter, PathOutputCommitterFactory}
 
 /**
- * A local path output committer which tracks its state, for use in
- * tests.
+ * A local path output committer which tracks its state, for use in tests.
  * @param outputPath final destination.
  * @param workPath work path
  * @param context task/job attempt.
@@ -83,9 +82,6 @@ class StubPathOutputCommitter(
     s" committed=$jobCommitted, aborted=$jobAborted)"
 }
 
-/**
- * Factory.
- */
 class StubPathOutputCommitterFactory extends PathOutputCommitterFactory {
 
   override def createOutputCommitter(
@@ -93,7 +89,6 @@ class StubPathOutputCommitterFactory extends PathOutputCommitterFactory {
       context: TaskAttemptContext): PathOutputCommitter = {
     new StubPathOutputCommitter(outputPath, workPath(outputPath), context)
   }
-
 
   private def workPath(out: Path): Path = new Path(out,
     StubPathOutputCommitterFactory.TEMP_DIR_NAME)
@@ -121,6 +116,5 @@ object StubPathOutputCommitterFactory {
     val key = OUTPUTCOMMITTER_FACTORY_SCHEME + "." + scheme
     conf.set(key, classOf[StubPathOutputCommitterFactory].getName())
   }
-
 
 }

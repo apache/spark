@@ -39,7 +39,7 @@ class BindingParquetOutputCommitter(
     context: TaskAttemptContext)
   extends ParquetOutputCommitter(path, context) with Logging {
 
-  logDebug(s"${this.getClass.getName} binding to configured PathOutputCommitter and dest $path")
+  logTrace(s"${this.getClass.getName} binding to configured PathOutputCommitter and dest $path")
 
   private val committer = new BindingPathOutputCommitter(path, context)
 

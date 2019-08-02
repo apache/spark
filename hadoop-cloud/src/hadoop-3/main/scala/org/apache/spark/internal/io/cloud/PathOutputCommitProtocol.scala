@@ -20,10 +20,10 @@ package org.apache.spark.internal.io.cloud
 import java.io.IOException
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, PathOutputCommitter, PathOutputCommitterFactory}
 
-import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitProtocol}
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 
 /**
  * Spark Commit protocol for Path Output Committers.
@@ -34,7 +34,7 @@ import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMapReduceCommitPr
  * `org.apache.hadoop.mapreduce.lib.output.PathOutputCommitterFactory` factory
  * API to create the committer.
  *
- * In `setupCommitter` the factory is identified and instantiated to;
+ * In `setupCommitter` the factory is identified and instantiated;
  * this factory then creates the actual committer implementation.
  *
  * @constructor Instantiate. dynamic partition overwrite is not supported,
@@ -70,7 +70,7 @@ class PathOutputCommitProtocol(
   /** The destination path. This is serializable in Hadoop 3. */
   private[cloud] val destPath: Path = new Path(destination)
 
-  logDebug(s"Instantiated committer with job ID=$jobId;" +
+  logTrace(s"Instantiated committer with job ID=$jobId;" +
     s" destination=$destPath;" +
     s" dynamicPartitionOverwrite=$dynamicPartitionOverwrite")
 
@@ -85,8 +85,7 @@ class PathOutputCommitProtocol(
    *         [[PathOutputCommitter]].
    */
   override protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
-
-    logDebug(s"Setting up committer for path $destination")
+    logTrace(s"Setting up committer for path $destination")
     committer = PathOutputCommitterFactory.createCommitter(destPath, context)
 
     // Special feature to force out the FileOutputCommitter, so as to guarantee
@@ -99,12 +98,12 @@ class PathOutputCommitProtocol(
       val factory = PathOutputCommitterFactory.getCommitterFactory(
         destPath,
         context.getConfiguration)
-      logDebug(s"Using committer factory $factory")
+      logTrace(s"Using committer factory $factory")
       committer = factory.createOutputCommitter(destPath, context)
     }
 
-    logDebug(s"Using committer ${committer.getClass}")
-    logDebug(s"Committer details: $committer")
+    logTrace(s"Using committer ${committer.getClass}")
+    logTrace(s"Committer details: $committer")
     if (committer.isInstanceOf[FileOutputCommitter]) {
       require(!rejectFileOutput,
         s"Committer created is the FileOutputCommitter $committer")
@@ -113,7 +112,7 @@ class PathOutputCommitProtocol(
         // If FileOutputCommitter says its job commit is repeatable, it means
         // it is using the v2 algorithm, which is not safe for task commit
         // failures. Warn
-        logDebug(s"Committer $committer may not be tolerant of task commit failures")
+        logTrace(s"Committer $committer may not be tolerant of task commit failures")
       }
     }
     committer
@@ -136,104 +135,9 @@ class PathOutputCommitProtocol(
     val parent = dir.map {
       d => new Path(workDir, d)
     }.getOrElse(workDir)
-    val file = new Path(parent, buildFilename(taskContext, ext))
-    logDebug(s"Creating task file $file for dir $dir and ext $ext")
+    val file = new Path(parent, getFilename(taskContext, ext))
+    logTrace(s"Creating task file $file for dir $dir and ext $ext")
     file.toString
-  }
-
-  /**
-   * Request a path for new output file to be committed in job
-   * commit into the absolute path specified.
-   *
-   * The created file will be committed through the `rename()` operation
-   * of the filesystem/filestore connector, which may be a slow `O(data)`
-   * copy. Because directory listings are *not* used to determine which files
-   * to commit, even when a store has listing inconsistency (i.e. Amazon S3),
-   * there is no risk of that affecting the operation.
-   * Similarly, because the superclass's implementation of this method uses
-   * a UUID in the source name, eventual consistency on an update will not be
-   * an issue.
-   * There is a very small risk that Amazon S3's brief caching of 404s
-   * can cause any probes for the file to fail if the task is committed
-   * immediately after the file was created.
-   *
-   * @param taskContext task
-   * @param absoluteDir destination dir
-   * @param ext         extension
-   * @return an absolute path
-   */
-  override def newTaskTempFileAbsPath(
-      taskContext: TaskAttemptContext,
-      absoluteDir: String,
-      ext: String): String = {
-
-    val file = super.newTaskTempFileAbsPath(taskContext, absoluteDir, ext)
-    logInfo(s"Creating temporary file $file for absolute path for dir $absoluteDir")
-    file
-  }
-
-  /**
-   * Build a filename which is unique across all task events.
-   * It does not have to be consistent across multiple attempts of the same
-   * task or job.
-   *
-   * @param taskContext task context
-   * @param ext         extension
-   * @return a name for a file which must be unique across all task attempts
-   */
-  protected def buildFilename(
-      taskContext: TaskAttemptContext,
-      ext: String): String = {
-
-    // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
-    // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
-    // the file name is fine and won't overflow.
-    val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"part-$split%05d-$jobId$ext"
-  }
-
-  override def setupJob(jobContext: JobContext): Unit = {
-    logDebug("setup job")
-    super.setupJob(jobContext)
-  }
-
-  override def commitJob(
-      jobContext: JobContext,
-      taskCommits: Seq[FileCommitProtocol.TaskCommitMessage]): Unit = {
-    logDebug(s"commit job with ${taskCommits.length} task commit message(s)")
-    super.commitJob(jobContext, taskCommits)
-  }
-
-  /**
-   * Abort the job; log and ignore any IO exception thrown.
-   * This is invariably invoked in an exception handler; raising
-   * an exception here will lose the root cause of the failure.
-   *
-   * @param jobContext job context
-   */
-  override def abortJob(jobContext: JobContext): Unit = {
-    try {
-      super.abortJob(jobContext)
-    } catch {
-      case e: IOException =>
-        logWarning("Abort job failed", e)
-    }
-  }
-
-  /**
-   * Abort the task; log and ignore any failure thrown.
-   * This is invariably invoked in an exception handler; raising
-   * an exception here will lose the root cause of the failure.
-   * @param taskContext context
-   */
-  override def abortTask(taskContext: TaskAttemptContext): Unit = {
-    logDebug("Abort task")
-    try {
-      super.abortTask(taskContext)
-    } catch {
-      case e: IOException =>
-        logWarning("Abort task failed", e)
-    }
   }
 
 }

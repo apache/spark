@@ -28,25 +28,29 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.internal.io.{cloud, FileCommitProtocol}
+import org.apache.spark.internal.io.FileCommitProtocol
 
-/**
- * Test committer binding logic.
- */
 class CommitterBindingSuite extends SparkFunSuite {
 
   private val jobId = "2007071202143_0101"
   private val taskAttempt0 = "attempt_" + jobId + "_m_000000_0"
   private val taskAttemptId0 = TaskAttemptID.forName(taskAttempt0)
 
+  /**
+   * The classname to use when referring to the path output committer.
+   */
+  private val pathCommitProtocolClassname: String = classOf[PathOutputCommitProtocol].getName
+
   /** hadoop-mapreduce option to enable the _SUCCESS marker. */
   private val successMarker = "mapreduce.fileoutputcommitter.marksuccessfuljobs"
+
   /**
    * Does the
    * [[BindingParquetOutputCommitter]] committer bind to the schema-specific
-   * committer declared for the destination path?
+   * committer declared for the destination path? And that lifecycle events
+   * are correctly propagated?
    */
-  test("BindingParquetOutputCommitter lifecycle") {
+  test("Verify the BindingParquetOutputCommitter binds to the inner committer") {
     val path = new Path("http://example/data")
     val job = newJob(path)
     val conf = job.getConfiguration
@@ -88,11 +92,7 @@ class CommitterBindingSuite extends SparkFunSuite {
     job
   }
 
-  /**
-   * Verify that the committer protocol can be serialized and that
-   * round trips work.
-   */
-  test("CommitterSerialization") {
+  test(" Verify that the committer protocol can be serialized and deserialized") {
     val tempDir = File.createTempFile("ser", ".bin")
 
     tempDir.delete()
@@ -121,25 +121,24 @@ class CommitterBindingSuite extends SparkFunSuite {
     }
   }
 
-  test("Instantiate") {
+  test("Verify local filesystem instantiation") {
     val instance = FileCommitProtocol.instantiate(
-      cloud.PATH_COMMIT_PROTOCOL_CLASSNAME,
+      pathCommitProtocolClassname,
       jobId, "file:///tmp", false)
 
     val protocol = instance.asInstanceOf[PathOutputCommitProtocol]
     assert("file:///tmp" === protocol.destination)
   }
 
-  test("InstantiateNoDynamicPartitioning") {
-    val ex = intercept[InvocationTargetException] {
+  test("Verify Dynamic Partitioning is rejected") {
+    val cause = intercept[InvocationTargetException] {
       FileCommitProtocol.instantiate(
-        cloud.PATH_COMMIT_PROTOCOL_CLASSNAME,
+        pathCommitProtocolClassname,
         jobId, "file:///tmp", true)
-    }
-    val cause = ex.getCause
+    }.getCause
     if (cause == null || !cause.isInstanceOf[IOException]
         || !cause.getMessage.contains(PathOutputCommitProtocol.UNSUPPORTED)) {
-      throw ex
+      throw cause
     }
   }
 
