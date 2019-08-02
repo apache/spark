@@ -374,7 +374,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     int protocol = getProtocolVersion().getValue();
     for (Object rowString : rows) {
       try {
-        rowObj = serde.deserialize(new BytesWritable(((String)rowString).getBytes("UTF-8")));
+        rowObj = serde.deserialize(new BytesWritable(((String)rowString).getBytes(StandardCharsets.UTF_8)));
       } catch (UnsupportedEncodingException e) {
         throw new SerDeException(e);
       }

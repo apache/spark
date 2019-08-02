@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.nio.charset.{Charset, StandardCharsets}
+import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.time.ZoneId
 import java.util.Locale
 
@@ -109,7 +110,7 @@ private[sql] class JSONOptions(
     .orElse(parameters.get("charset")).map(checkedEncoding)
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+    lineSep.getBytes(encoding.getOrElse(StandardCharsets.UTF_8.name()))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 

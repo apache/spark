@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
@@ -45,7 +45,7 @@ package object util extends Logging {
     }
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8"): String = {
+  def fileToString(file: File, encoding: String = UTF_8.name()): String = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
@@ -87,7 +87,7 @@ package object util extends Logging {
 
   def resourceToString(
       resource: String,
-      encoding: String = "UTF-8",
+      encoding: String = UTF_8.name(),
       classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
     new String(resourceToBytes(resource, classLoader), encoding)
   }
@@ -119,7 +119,7 @@ package object util extends Logging {
       t.printStackTrace(writer)
       writer.flush()
     }
-    new String(out.toByteArray, StandardCharsets.UTF_8)
+    new String(out.toByteArray, UTF_8)
   }
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
