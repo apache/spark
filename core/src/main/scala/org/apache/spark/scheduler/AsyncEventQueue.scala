@@ -52,7 +52,7 @@ private class AsyncEventQueue(
   private[scheduler] def capacity: Int = {
     val queuesize = conf.getInt(s"spark.scheduler.listenerbus.eventqueue.${name}.capacity",
                                 conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
-    assert(queuesize > 0, s"capacity for event queue $name must be greater than 0," +
+    assert(queuesize > 0, s"capacity for event queue $name must be greater than 0, " +
       s"but $queuesize is configured.")
     queuesize
   }

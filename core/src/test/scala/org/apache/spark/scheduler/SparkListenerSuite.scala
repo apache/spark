@@ -552,12 +552,15 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
 
     assert(bus.activeQueues() === Set(SHARED_QUEUE, APP_STATUS_QUEUE, EVENT_LOG_QUEUE))
     // check the size of shared queue is 1 as configured
-    assert(bus.getQueueCapacity(SHARED_QUEUE) == 1)
+    assert(bus.getQueueCapacity(SHARED_QUEUE).isDefined)
+    assert(bus.getQueueCapacity(SHARED_QUEUE).get == 1)
     // no specific size of status queue is configured,
     // it shoud use the LISTENER_BUS_EVENT_QUEUE_CAPACITY
-    assert(bus.getQueueCapacity(APP_STATUS_QUEUE) == 5)
+    assert(bus.getQueueCapacity(APP_STATUS_QUEUE).isDefined)
+    assert(bus.getQueueCapacity(APP_STATUS_QUEUE).get == 5)
     // check the size of event log queue is 5 as configured
-    assert(bus.getQueueCapacity(EVENT_LOG_QUEUE) == 2)
+    assert(bus.getQueueCapacity(EVENT_LOG_QUEUE).isDefined)
+    assert(bus.getQueueCapacity(EVENT_LOG_QUEUE).get == 2)
   }
 
   /**

@@ -237,8 +237,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   }
 
   // For testing only.
-  private[scheduler] def getQueueCapacity(name: String): Int = {
-    queues.asScala.find(_.name == name).map(_.capacity).getOrElse(-1)
+  private[scheduler] def getQueueCapacity(name: String): Option[Int] = {
+    queues.asScala.find(_.name == name).map(_.capacity)
   }
 }
 
