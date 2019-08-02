@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
+import java.nio.charset.{Charset, StandardCharsets}
 import java.time.ZoneId
 import java.util.Locale
 

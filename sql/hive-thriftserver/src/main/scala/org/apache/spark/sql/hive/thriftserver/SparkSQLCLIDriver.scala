@@ -22,6 +22,10 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, Locale}
 import java.util.concurrent.TimeUnit
 
+import scala.collection.JavaConverters._
+
+import jline.console.ConsoleReader
+import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
