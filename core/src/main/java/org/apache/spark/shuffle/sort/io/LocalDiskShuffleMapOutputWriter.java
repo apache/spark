@@ -96,10 +96,11 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public void commitAllPartitions() throws IOException {
+  public long[] commitAllPartitions() throws IOException {
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
+    return partitionLengths;
   }
 
   @Override
@@ -176,22 +177,6 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
         partChannel = new PartitionWriterChannel(partitionId);
       }
       return Optional.of(partChannel);
-    }
-
-    @Override
-    public long getNumBytesWritten() {
-      if (partChannel != null) {
-        try {
-          return partChannel.getCount();
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-      } else if (partStream != null) {
-        return partStream.getCount();
-      } else {
-        // Assume an empty partition if stream and channel are never created
-        return 0;
-      }
     }
   }
 

@@ -85,14 +85,4 @@ public interface ShufflePartitionWriter {
   default Optional<WritableByteChannelWrapper> openChannelWrapper() throws IOException {
     return Optional.empty();
   }
-
-  /**
-   * Returns the number of bytes written either by this writer's output stream opened by
-   * {@link #openStream()} or the byte channel opened by {@link #openChannelWrapper()}.
-   * <p>
-   * This can be different from the number of bytes given by the caller. For example, the
-   * stream might compress or encrypt the bytes before persisting the data to the backing
-   * data store.
-   */
-  long getNumBytesWritten();
 }
