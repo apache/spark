@@ -138,8 +138,6 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
   private void initStream() throws IOException {
     if (outputFileStream == null) {
-      // This file needs to opened in append mode in order to work around a Linux kernel bug that
-      // affects transferTo; see SPARK-3948 for more details.
       outputFileStream = new FileOutputStream(outputTempFile, true);
     }
     if (outputBufferedFileStream == null) {
@@ -148,11 +146,10 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   private void initChannel() throws IOException {
-    if (outputFileStream == null) {
-      outputFileStream = new FileOutputStream(outputTempFile, true);
-    }
+    // This file needs to opened in append mode in order to work around a Linux kernel bug that
+    // affects transferTo; see SPARK-3948 for more details.
     if (outputFileChannel == null) {
-      outputFileChannel = outputFileStream.getChannel();
+      outputFileChannel = new FileOutputStream(outputTempFile, true).getChannel();
     }
   }
 

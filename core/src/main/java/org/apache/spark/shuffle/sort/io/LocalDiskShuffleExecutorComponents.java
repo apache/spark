@@ -17,9 +17,10 @@
 
 package org.apache.spark.shuffle.sort.io;
 
+import java.util.Optional;
+
 import com.google.common.annotations.VisibleForTesting;
 
-import java.util.Optional;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
