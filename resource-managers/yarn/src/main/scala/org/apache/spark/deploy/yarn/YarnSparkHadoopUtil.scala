@@ -198,8 +198,13 @@ object YarnSparkHadoopUtil extends Logging {
         sparkConf.getSizeAsMb(MEMORY_OFFHEAP_SIZE.key, MEMORY_OFFHEAP_SIZE.defaultValueString)
       require(size > 0,
         s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      logInfo(s"${MEMORY_OFFHEAP_ENABLED.key} is true, ${MEMORY_OFFHEAP_SIZE.key} is $size, " +
-        s"overhead is $overhead, will choose the bigger as memoryOverhead.")
+      if (size > overhead) {
+        logWarning(s"The value of ${MEMORY_OFFHEAP_SIZE.key}(${size}MB) will be used as " +
+          s"executorMemoryOverhead to request resource to ensure that Executor has enough memory " +
+          s"to use. It is recommended that the configuration value of " +
+          s"${EXECUTOR_MEMORY_OVERHEAD.key} should be no less than ${MEMORY_OFFHEAP_SIZE.key} " +
+          s"when ${MEMORY_OFFHEAP_ENABLED.key} is true.")
+      }
       size
     } else 0
     math.max(overhead, offHeap).toInt
