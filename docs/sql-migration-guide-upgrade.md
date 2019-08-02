@@ -23,6 +23,8 @@ license: |
 {:toc}
 
 ## Upgrading From Spark SQL 2.4 to 3.0
+  - Since Spark 3.0, for type conversion, if the value is too big to fit in the target `Long`/`Int`/`Short`/`Byte` data type, Spark will return `null`. In Spark version 2.4 and earlier, Spark always returns the lower-order bits of the out-of-range value. For example, the result of `Cast(257, ByteType)` will be `null`, instead of `1`.
+
   - Since Spark 3.0, we reversed argument order of the trim function from `TRIM(trimStr, str)` to `TRIM(str, trimStr)` to be compatible with other databases.
 
   - Since Spark 3.0, PySpark requires a Pandas version of 0.23.2 or higher to use Pandas related functionality, such as `toPandas`, `createDataFrame` from Pandas DataFrame, etc.

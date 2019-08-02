@@ -165,3 +165,12 @@ Below are the scenarios in which Hive and Spark generate different results:
 * `SQRT(n)` If n < 0, Hive returns null, Spark SQL returns NaN.
 * `ACOS(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
 * `ASIN(n)` If n < -1 or n > 1, Hive returns null, Spark SQL returns NaN.
+
+### Incompatible data type conversion
+
+For type conversion, if the value is too big to fit in the target integral data type, Spark will return `null`,
+while Hive always returns lower-order bits. The related integral data types are:
+* Byte
+* Short
+* Int
+* Long
