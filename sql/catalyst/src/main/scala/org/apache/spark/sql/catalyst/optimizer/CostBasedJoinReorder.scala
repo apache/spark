@@ -675,19 +675,18 @@ class Population(conf: SQLConf, val chromos: Seq[Chromosome]) extends Logging {
 
   def evolve: Population = {
     // Sort chromos in the population first.
-    val sorted = sort()
+    var tempChromos = sort()
     // Begin iteration.
     val generations = chromos.size
-    var newChromos = sorted
     for (i <- 1 to generations) {
-      val father = JoinReorderUtils.select(conf, newChromos, None)
-      val mother = JoinReorderUtils.select(conf, newChromos, Some(father))
+      val father = JoinReorderUtils.select(conf, tempChromos, None)
+      val mother = JoinReorderUtils.select(conf, tempChromos, Some(father))
       val kid = EdgeRecombination.newChromo(father, mother)
-      newChromos = putToPop(kid, newChromos)
+      tempChromos = putToPop(kid, tempChromos)
       logDebug(s"Iteration $i, fitness for kid: ${kid.fitness}," +
-          s" and Fitness for plans: ${ newChromos.map(c => c.fitness)}")
+          s" and Fitness for plans: ${ tempChromos.map(c => c.fitness)}")
     }
-    new Population(conf, newChromos)
+    new Population(conf, tempChromos)
   }
 
   private def putToPop(kid: Chromosome, chromos: Seq[Chromosome]): Seq[Chromosome] = {
@@ -825,7 +824,7 @@ object JoinReorderUtils extends PredicateHelper {
   /**
    * A biased rand integer generator, which gives a random number in [0, cap)
    * and the number at small end will be chosen with higher probability.
-   * The probability distribution is controled by 'bias': with bigger bias,
+   * The probability distribution is controlled by 'bias': with bigger bias,
    * the smaller number will be generated with higher probability. With bias be 0,
    * it will fallback to a equal-probability random integer generator on [0, cap)
    *
