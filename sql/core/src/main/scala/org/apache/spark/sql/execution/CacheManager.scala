@@ -85,7 +85,7 @@ class CacheManager extends Logging {
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
         qe.executedPlan,
         tableName,
-        qe.optimizedPlan)
+        optimizedPlan = qe.optimizedPlan)
       this.synchronized {
         if (lookupCachedData(planToCache).nonEmpty) {
           logWarning("Data has already been cached.")
@@ -188,7 +188,7 @@ class CacheManager extends Logging {
       val qe = spark.sessionState.executePlan(cd.plan)
       val newCache = InMemoryRelation(
         cacheBuilder = cd.cachedRepresentation.cacheBuilder.copy(cachedPlan = qe.executedPlan),
-        logicalPlan = qe.optimizedPlan)
+        optimizedPlan = qe.optimizedPlan)
       val recomputedPlan = cd.copy(cachedRepresentation = newCache)
       this.synchronized {
         if (lookupCachedData(recomputedPlan.plan).nonEmpty) {
