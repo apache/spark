@@ -40,8 +40,8 @@ ARG PIP_PKGS="pyopenssl pypandoc numpy pygments sphinx"
 # the most current package versions (instead of potentially using old versions cached by docker).
 RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates apt-transport-https && \
   echo 'deb https://cloud.r-project.org/bin/linux/ubuntu xenial/' >> /etc/apt/sources.list && \
-  gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9 && \
-  gpg -a --export E084DAB9 | apt-key add - && \
+  gpg --keyserver keyserver.ubuntu.com --recv-key E298A3A825C0D65DFD57CBB651716619E084DAB9 && \
+  gpg -a --export E298A3A825C0D65DFD57CBB651716619E084DAB9 | apt-key add - && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
   apt-get clean && \
