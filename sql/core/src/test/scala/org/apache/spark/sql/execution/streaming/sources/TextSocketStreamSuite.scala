@@ -417,7 +417,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
         while (true) {
           val line = messageQueue.take() + "\n"
-          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes(StandardCharsets.UTF_8.name())))
+          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes(StandardCharsets.UTF_8)))
         }
       } catch {
         case e: InterruptedException =>
