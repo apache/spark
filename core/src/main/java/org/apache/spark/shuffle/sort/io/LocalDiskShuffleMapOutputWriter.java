@@ -95,6 +95,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     return new LocalDiskShufflePartitionWriter(reducePartitionId);
   }
+
   @Override
   public void commitAllPartitions() throws IOException {
     // Check the position after transferTo loop to see if it is in the right position and raise a
