@@ -84,9 +84,9 @@ class JDBCWriteBuilder(options: JdbcOptionsInWrite,
 
       case false =>
         logInfo("***dsv2-flows*** Dropping Table")
-        // JdbcUtils.dropTable(conn, options.table, options)
+        JdbcUtils.dropTable(conn, options.table, options)
         logInfo("***dsv2-flows*** Recreating table with passed schema")
-        Utils.createTable(conn, fwPassedSchema)
+        JdbcUtils.createTable(conn, fwPassedSchema, options)
     }
   }
 

@@ -3,25 +3,25 @@
 ## Plan
 | Work Item                                     | Who's on it | Status  | Notes  |
 |-----------------------------------------------| ----------- | ------  | -----  |
-| Batch write ( append)                         | shivsood    | WIP     | 1,6    |
-| Batch write ( overwrite w truncate)           | shivsood    | WIP     |        |
-| Batch write ( overwrite w/o truncate)         | shivsood    | WIP     | 2,3    |
+| Batch write ( append)                         | shivsood    | Done    | 1,6    |
+| Batch write ( overwrite w truncate)           | shivsood    | Done    |        |
+| Batch write ( overwrite w/o truncate)         | shivsood    | Issues  | 2,3    |
 | Read  implementation w/o column pruning       | shivsood    | Done    |        |
-| Read  w/o column pruning and filters          | shivsood    | ISSUES  | 4      |
+| Read  w/o column pruning and filters          | shivsood    | Issues  | 4      |
 | Columnar read                                 | TBD         |         |        |
 | Streaming write                               | TBD         |         |        |
 | Streaming read                                | TBD         |         |        |
-| Transactional write                           | shivsood    | ISSUES  | 5      |
+| Transactional write                           | shivsood    | Issues  | 5      |
 
 
 Status ->
 WIP ( Work in Progress),
 DONE ( implementation is done and tested),
-ISSUES (blocking issues)
+Issues (blocking issues)
 
 ## Others
 - Working branch is https://github.com/shivsood/spark-dsv2
-- Intrested in contribution? Add work item and your name against it and party on.
+- Interested in contribution? Add work item and your name against it and party on.
 
 ## Notes
 1. mode(append) - what's the append semantics in V2.

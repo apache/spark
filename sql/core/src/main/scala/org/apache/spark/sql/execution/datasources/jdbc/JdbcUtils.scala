@@ -729,18 +729,28 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Compute the schema string for this RDD.
+   * Compute the schema string for this RDD given schema as StructType
    */
   def schemaString(
       df: DataFrame,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
+    val userSpecifiedColTypesMap = createTableColumnTypes
+      .map(parseUserSpecifiedCreateTableColumnTypes(
+        df.sparkSession.sessionState.conf.resolver,
+        df.sparkSession.sessionState.conf.caseSensitiveAnalysis,
+        df.schema, _)).getOrElse(Map.empty[String, String])
+
+    schemaString(df.schema, url, userSpecifiedColTypesMap)
+  }
+
+  def schemaString(
+      cols: StructType,
+      url: String,
+      userSpecifiedColTypesMap : Map[String, String]): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
-    val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
-      .getOrElse(Map.empty[String, String])
-    df.schema.fields.foreach { field =>
+    cols.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -756,7 +766,9 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      df: DataFrame,
+      resolver : Resolver,
+      caseType : Boolean,
+      cols : StructType,
       createTableColumnTypes: String): Map[String, String] = {
     def typeName(f: StructField): String = {
       // char/varchar gets translated to string type. Real data type specified by the user
@@ -769,24 +781,22 @@ object JdbcUtils extends Logging {
     }
 
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = df.sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the createTableColumnTypes option value", nameEquality)
+      userSchema.map(_.name), "in the createTableColumnTypes option value", resolver)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
+      cols.find(f => resolver(f.name, col)).getOrElse {
         throw new AnalysisException(
           s"createTableColumnTypes option column $col not found in schema " +
-            df.schema.catalogString)
+            cols.catalogString)
       }
     }
 
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
-    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+    if (caseType) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -855,6 +865,30 @@ object JdbcUtils extends Logging {
       options: JdbcOptionsInWrite): Unit = {
     val strSchema = schemaString(
       df, options.url, options.createTableColumnTypes)
+
+    createTableWithSchemaString(conn, options, strSchema)
+  }
+
+  def createTable(
+       conn: Connection,
+       schema : StructType,
+       options: JdbcOptionsInWrite): Unit = {
+
+    val userSpecifiedColTypesMap = options.createTableColumnTypes
+      .map(parseUserSpecifiedCreateTableColumnTypes(
+        org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution,
+        true,
+        schema, _)).getOrElse(Map.empty[String, String])
+    val strSchema = schemaString(
+      schema, options.url, userSpecifiedColTypesMap)
+
+    createTableWithSchemaString(conn, options, strSchema)
+  }
+
+  def createTableWithSchemaString(
+       conn : Connection,
+       options : JdbcOptionsInWrite,
+       strSchema : String) : Unit = {
     val table = options.table
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
