@@ -183,12 +183,15 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("like escape expressions") {
+    val message = "Escape string must contains only one character."
     assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", Some('#')))
     assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", Some('\"')))
-    intercept("a like 'pattern%' escape '##'", "Escape string must be empty or one character.")
+    intercept("a like 'pattern%' escape '##'", message)
+    intercept("a like 'pattern%' escape ''", message)
     assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", Some('#'))))
     assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", Some('\"'))))
-    intercept("a not like 'pattern%' escape '\"/'", "Escape string must be empty or one character.")
+    intercept("a not like 'pattern%' escape '\"/'", message)
+    intercept("a not like 'pattern%' escape ''", message)
   }
 
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
