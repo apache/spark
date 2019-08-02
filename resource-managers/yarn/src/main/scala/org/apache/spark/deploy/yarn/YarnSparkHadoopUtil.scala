@@ -26,12 +26,11 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
-object YarnSparkHadoopUtil extends Logging {
+object YarnSparkHadoopUtil {
 
   // Additional memory overhead
   // 10% was arrived at experimentally. In the interest of minimizing memory waste while covering
@@ -185,28 +184,17 @@ object YarnSparkHadoopUtil extends Logging {
   }
 
   /**
-   * If MEMORY_OFFHEAP_ENABLED is true, we should ensure executorOverheadMemory requested value
-   * is not less than MEMORY_OFFHEAP_SIZE, otherwise the memory resource requested for executor
-   * may be not enough.
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
-  def executorMemoryOverheadRequested(sparkConf: SparkConf): Int = {
-    val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
-    val overhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-      math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN)).toInt
-    val offHeap = if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
-      val size =
-        sparkConf.getSizeAsMb(MEMORY_OFFHEAP_SIZE.key, MEMORY_OFFHEAP_SIZE.defaultValueString)
-      require(size > 0,
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      val sizeInMB =
+        sparkConf.getSizeAsMb(MEMORY_OFFHEAP_SIZE.key, MEMORY_OFFHEAP_SIZE.defaultValueString).toInt
+      require(sizeInMB > 0,
         s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      if (size > overhead) {
-        logWarning(s"The value of ${MEMORY_OFFHEAP_SIZE.key}(${size}MB) will be used as " +
-          s"executorMemoryOverhead to request resource to ensure that Executor has enough memory " +
-          s"to use. It is recommended that the configuration value of " +
-          s"${EXECUTOR_MEMORY_OVERHEAD.key} should be no less than ${MEMORY_OFFHEAP_SIZE.key} " +
-          s"when ${MEMORY_OFFHEAP_ENABLED.key} is true.")
-      }
-      size
-    } else 0
-    math.max(overhead, offHeap).toInt
+      sizeInMB
+    } else {
+      0
+    }
   }
 }
