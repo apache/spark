@@ -263,7 +263,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("simple hive table as spark") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        s"""
+           |CREATE TABLE t1 (
            |  c1 STRING COMMENT 'bla',
            |  c2 STRING
            |)
@@ -281,7 +282,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("show create table as spark can't work on data source table") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        s"""
+           |CREATE TABLE t1 (
            |  c1 STRING COMMENT 'bla',
            |  c2 STRING
            |)
@@ -293,7 +295,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
         checkCreateSparkTable("t1")
       }
 
-      assert(cause.getMessage.contains("Using `SHOW CREATE TABLE` instead"))
+      assert(cause.getMessage.contains("Use `SHOW CREATE TABLE` instead"))
     }
   }
 
@@ -301,7 +303,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     withTempDir { dir =>
       withTable("t1") {
         sql(
-          s"""CREATE TABLE t1 (
+          s"""
+             |CREATE TABLE t1 (
              |  c1 STRING COMMENT 'bla',
              |  c2 STRING
              |)
@@ -321,7 +324,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive table with STORED AS clause as spark") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        s"""
+           |CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -336,7 +340,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive table with unsupported fileformat as spark") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        s"""
+           |CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -355,7 +360,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive table with serde info as spark") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        s"""
+           |CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -373,10 +379,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive view is not supported as spark") {
     withTable("t1") {
       withView("v1") {
-        sql(
-          s"""
-             |CREATE TABLE t1 (c1 STRING, c2 STRING)
-           """.stripMargin)
+        sql("CREATE TABLE t1 (c1 STRING, c2 STRING)")
 
         createRawHiveTable(
           s"""
@@ -397,7 +400,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("partitioned, bucketed hive table as spark") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        s"""
+           |CREATE TABLE t1 (
            |  emp_id INT COMMENT 'employee id', emp_name STRING,
            |  emp_dob STRING COMMENT 'employee date of birth', emp_sex STRING COMMENT 'M/F'
            |)
@@ -411,6 +415,32 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
       )
 
       checkCreateSparkTable("t1")
+    }
+  }
+
+  test("transactional hive table as spark") {
+    withTable("t1") {
+      sql(
+        s"""
+           |CREATE TABLE t1 (
+           |  c1 STRING COMMENT 'bla',
+           |  c2 STRING
+           |)
+           |TBLPROPERTIES (
+           |  'transactional' = 'true',
+           |  'prop1' = 'value1',
+           |  'prop2' = 'value2'
+           |)
+         """.stripMargin
+      )
+
+
+      val cause = intercept[AnalysisException] {
+        sql("SHOW CREATE TABLE t1 AS SPARK")
+      }
+
+      assert(cause.getMessage.contains(
+        "SHOW CRETE TABLE AS SPARK doesn't support transactional Hive table"))
     }
   }
 }

@@ -1165,7 +1165,7 @@ case class ShowCreateTableAsSparkCommand(table: TableIdentifier)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       throw new AnalysisException(
-        s"$table is already a Spark data source table. Using `SHOW CREATE TABLE` instead.")
+        s"$table is already a Spark data source table. Use `SHOW CREATE TABLE` instead.")
     } else {
       if (tableMetadata.unsupportedFeatures.nonEmpty) {
         throw new AnalysisException(
@@ -1179,6 +1179,13 @@ case class ShowCreateTableAsSparkCommand(table: TableIdentifier)
       if (tableMetadata.tableType == VIEW) {
         throw new AnalysisException("Hive view isn't supported by SHOW CREATE TABLE AS SPARK")
       }
+
+      // scalastyle:off caselocale
+      if (tableMetadata.properties.getOrElse("transactional", "false").toLowerCase.equals("true")) {
+        throw new AnalysisException(
+          "SHOW CRETE TABLE AS SPARK doesn't support transactional Hive table")
+      }
+      // scalastyle:on caselocale
 
       showCreateDataSourceTable(convertTableMetadata(tableMetadata))
     }
