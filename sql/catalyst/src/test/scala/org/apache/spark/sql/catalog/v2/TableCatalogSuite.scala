@@ -658,7 +658,7 @@ class TableCatalogSuite extends SparkFunSuite {
 
   test("listNamespaces: list namespaces from metadata") {
     val catalog = newCatalog()
-    catalog.createNamespaceMetadata(Array("ns1"), Map("property" -> "value").asJava)
+    catalog.createNamespace(Array("ns1"), Map("property" -> "value").asJava)
 
     assert(catalog.listNamespaces === Array(Array("ns1")))
     assert(catalog.listNamespaces(Array()) === Array(Array("ns1")))
@@ -684,7 +684,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val ident1 = Identifier.of(Array("ns1", "ns2"), "test_table_1")
     val ident2 = Identifier.of(Array("ns1", "ns2"), "test_table_2")
 
-    catalog.createNamespaceMetadata(Array("ns1"), Map("property" -> "value").asJava)
+    catalog.createNamespace(Array("ns1"), Map("property" -> "value").asJava)
     catalog.createTable(ident1, schema, Array.empty, emptyProps)
     catalog.createTable(ident2, schema, Array.empty, emptyProps)
 
@@ -717,7 +717,7 @@ class TableCatalogSuite extends SparkFunSuite {
   test("loadNamespaceMetadata: metadata exists, no tables") {
     val catalog = newCatalog()
 
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
     val metadata = catalog.loadNamespaceMetadata(testNs)
 
@@ -727,30 +727,30 @@ class TableCatalogSuite extends SparkFunSuite {
   test("loadNamespaceMetadata: metadata and table exist") {
     val catalog = newCatalog()
 
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
 
     val metadata = catalog.loadNamespaceMetadata(testNs)
 
     assert(metadata.asScala === Map("property" -> "value"))
   }
 
-  test("createNamespaceMetadata: basic behavior") {
+  test("createNamespace: basic behavior") {
     val catalog = newCatalog()
 
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
     assert(catalog.namespaceExists(testNs) === true)
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
   }
 
-  test("createNamespaceMetadata: fail if metadata already exists") {
+  test("createNamespace: fail if metadata already exists") {
     val catalog = newCatalog()
 
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
     val exc = intercept[NamespaceAlreadyExistsException] {
-      catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+      catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     }
 
     assert(exc.getMessage.contains(testNs.quoted))
@@ -758,7 +758,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
   }
 
-  test("createNamespaceMetadata: table exists") {
+  test("createNamespace: fail if namespace already exists from table") {
     val catalog = newCatalog()
 
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
@@ -766,10 +766,13 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(catalog.namespaceExists(testNs) === true)
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map.empty)
 
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+    val exc = intercept[NamespaceAlreadyExistsException] {
+      catalog.createNamespace(testNs, Map("property" -> "value").asJava)
+    }
 
+    assert(exc.getMessage.contains(testNs.quoted))
     assert(catalog.namespaceExists(testNs) === true)
-    assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
+    assert(catalog.loadNamespaceMetadata(testNs).asScala === Map.empty)
   }
 
   test("dropNamespace: drop missing namespace") {
@@ -785,7 +788,7 @@ class TableCatalogSuite extends SparkFunSuite {
   test("dropNamespace: drop empty namespace") {
     val catalog = newCatalog()
 
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
     assert(catalog.namespaceExists(testNs) === true)
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map("property" -> "value"))
@@ -799,8 +802,8 @@ class TableCatalogSuite extends SparkFunSuite {
   test("dropNamespace: fail if not empty") {
     val catalog = newCatalog()
 
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
     catalog.createTable(testIdent, schema, Array.empty, emptyProps)
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
 
     val exc = intercept[IllegalStateException] {
       catalog.dropNamespace(testNs)
@@ -814,7 +817,7 @@ class TableCatalogSuite extends SparkFunSuite {
   test("alterNamespace: basic behavior") {
     val catalog = newCatalog()
 
-    catalog.createNamespaceMetadata(testNs, Map("property" -> "value").asJava)
+    catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
     catalog.alterNamespace(testNs, NamespaceChange.setProperty("property2", "value2"))
     assert(catalog.loadNamespaceMetadata(testNs).asScala === Map(

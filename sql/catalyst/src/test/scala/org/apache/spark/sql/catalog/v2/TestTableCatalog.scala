@@ -105,8 +105,7 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
     allNamespaces.map(_.head).distinct.map(Array(_)).toArray
   }
 
-  override def listNamespaces(
-      namespace: Array[String]): Array[Array[String]] = {
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
     allNamespaces
         .filter(_.size > namespace.length)
         .filter(_.startsWith(namespace))
@@ -127,14 +126,18 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
     }
   }
 
-  override def createNamespaceMetadata(
+  override def createNamespace(
       namespace: Array[String],
       metadata: util.Map[String, String]): Unit = {
+    if (namespaceExists(namespace)) {
+      throw new NamespaceAlreadyExistsException(namespace)
+    }
+
     Option(namespaces.putIfAbsent(namespace.toList, metadata.asScala.toMap)) match {
       case Some(_) =>
         throw new NamespaceAlreadyExistsException(namespace)
       case _ =>
-      // created successfully
+        // created successfully
     }
   }
 

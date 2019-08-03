@@ -112,7 +112,7 @@ public interface SupportsNamespaces extends CatalogPlugin {
    * @throws NamespaceAlreadyExistsException If the namespace already exists
    * @throws UnsupportedOperationException If create is not a supported operation
    */
-  void createNamespaceMetadata(
+  void createNamespace(
       String[] namespace,
       Map<String, String> metadata) throws NamespaceAlreadyExistsException;
 
