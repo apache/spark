@@ -362,10 +362,15 @@ private[hive] class HiveClientImpl(
 
   override def alterDatabase(database: CatalogDatabase): Unit = withHiveState {
     val hiveDb = client.getDatabase(database.name)
+    val oldPath = hiveDb.getLocationUri
+    val newPath = CatalogUtils.URIToString(database.locationUri)
     hiveDb.setDescription(database.description)
     hiveDb.setLocationUri(CatalogUtils.URIToString(database.locationUri))
     hiveDb.setParameters(Option(database.properties).map(_.asJava).orNull)
     client.alterDatabase(database.name, hiveDb)
+    val newPathInHive = client.getDatabase(database.name).getLocationUri
+    logWarning(s"Change database location, " +
+      s"oldPath=${oldPath}, newPath=${newPath}, newPathInHive=${newPathInHive}")
   }
 
   override def getDatabase(dbName: String): CatalogDatabase = withHiveState {

@@ -759,9 +759,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             Row("Location", CatalogUtils.URIToString(location)) ::
             Row("Properties", "((a,a), (b,b), (c,c), (d,d))") :: Nil)
 
-        withTempDir { tmpDir =>
+        withTempDir { _tmpDir =>
+          val tmpDir = new File(_tmpDir, "db1.db")
           val path = tmpDir.getCanonicalPath
           val uri = tmpDir.toURI
+          logWarning(s"test change location: oldPath=${CatalogUtils.URIToString(location)}," +
+            s" newPath=${CatalogUtils.URIToString(uri)}")
           sql(s"ALTER DATABASE $dbName SET LOCATION '$uri'")
           val pathInCatalog = new Path(
             catalog.getDatabaseMetadata(dbNameWithoutBackTicks).locationUri).toUri
