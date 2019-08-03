@@ -23,6 +23,9 @@ import java.util.Properties
 
 import org.apache.spark.tags.DockerTest
 
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, Row}
+
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
@@ -201,5 +204,33 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+  }
+
+  def create_df() : DataFrame = {
+    val tableSchema = StructType(Seq(
+      StructField("serialNum",ByteType,true)
+    ))
+
+    val tableData = Seq (
+      Row(10)
+    )
+
+    spark.createDataFrame(spark.sparkContext.parallelize(tableData),tableSchema)
+  }
+
+  test("SPARK-28151 Test write table with BYTETYPE") {
+    val df1 = create_df()
+    df1.write
+      .format("jdbc")
+      .mode("overwrite")
+      .option("url",jdbcUrl)
+      .option("dbtable","testTable")
+      .save()
+    val df2 = spark.read
+      .format("jdbc")
+      .option("url",jdbcUrl)
+      .option("dbtable","byteTable")
+      .load()
+    df2.show()
   }
 }

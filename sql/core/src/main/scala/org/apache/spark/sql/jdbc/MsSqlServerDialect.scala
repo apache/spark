@@ -33,6 +33,7 @@ private object MsSqlServerDialect extends JdbcDialect {
       sqlType match {
         case java.sql.Types.SMALLINT => Some(ShortType)
         case java.sql.Types.REAL => Some(FloatType)
+        case java.sql.Types.TINYINT => Some(ByteType)
         case _ => None
       }
     }
@@ -44,6 +45,7 @@ private object MsSqlServerDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BIT", java.sql.Types.BIT))
     case BinaryType => Some(JdbcType("VARBINARY(MAX)", java.sql.Types.VARBINARY))
     case ShortType => Some(JdbcType("SMALLINT", java.sql.Types.SMALLINT))
+    case ByteType => Some(JdbcType("TINYINT", java.sql.Types.TINYINT))
     case _ => None
   }
 
