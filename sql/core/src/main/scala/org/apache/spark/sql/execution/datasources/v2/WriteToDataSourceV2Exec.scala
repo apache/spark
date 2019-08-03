@@ -26,6 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Dataset, SaveMode}
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,9 +34,9 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
+import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter}
 import org.apache.spark.sql.sources.v2.{StagedTable, SupportsWrite}
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -63,10 +64,11 @@ case class CreateTableAsSelectExec(
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
+    plan: LogicalPlan,
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    ifNotExists: Boolean) extends V2TableWriteExec {
+    ifNotExists: Boolean) extends SupportsV1Write {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
@@ -83,12 +85,17 @@ case class CreateTableAsSelectExec(
       catalog.createTable(
         ident, query.schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
-          val batchWrite = table.newWriteBuilder(writeOptions)
+          val writer = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
             .withQueryId(UUID.randomUUID().toString)
-            .buildForBatch()
 
-          doWrite(batchWrite)
+          writer match {
+            case v1: V1WriteBuilder =>
+              val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+              writeWithV1(v1.buildForV1Write(), mode, writeOptions)
+            case v2 =>
+              doWrite(v2.buildForBatch())
+          }
 
         case _ =>
           // table does not support writes
@@ -114,6 +121,7 @@ case class AtomicCreateTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
+    plan: LogicalPlan,
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
@@ -129,7 +137,8 @@ case class AtomicCreateTableAsSelectExec(
     }
     val stagedTable = catalog.stageCreate(
       ident, query.schema, partitioning.toArray, properties.asJava)
-    writeToStagedTable(stagedTable, writeOptions, ident)
+    val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+    writeToStagedTable(stagedTable, writeOptions, ident, mode)
   }
 }
 
@@ -147,10 +156,11 @@ case class ReplaceTableAsSelectExec(
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
+    plan: LogicalPlan,
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends AtomicTableWriteExec {
+    orCreate: Boolean) extends SupportsV1Write {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
@@ -173,12 +183,16 @@ case class ReplaceTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
-          val batchWrite = table.newWriteBuilder(writeOptions)
+          val writer = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
             .withQueryId(UUID.randomUUID().toString)
-            .buildForBatch()
 
-          doWrite(batchWrite)
+          writer match {
+            case v1: V1WriteBuilder =>
+              writeWithV1(v1.buildForV1Write(), SaveMode.Overwrite, writeOptions)
+            case v2 =>
+              doWrite(v2.buildForBatch())
+          }
 
         case _ =>
           // table does not support writes
@@ -207,6 +221,7 @@ case class AtomicReplaceTableAsSelectExec(
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
+    plan: LogicalPlan,
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
@@ -227,7 +242,7 @@ case class AtomicReplaceTableAsSelectExec(
     } else {
       throw new CannotReplaceMissingTableException(ident)
     }
-    writeToStagedTable(staged, writeOptions, ident)
+    writeToStagedTable(staged, writeOptions, ident, SaveMode.Overwrite)
   }
 }
 
@@ -239,11 +254,16 @@ case class AtomicReplaceTableAsSelectExec(
 case class AppendDataExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    plan: LogicalPlan,
+    query: SparkPlan) extends SupportsV1Write with BatchWriteHelper {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val batchWrite = newWriteBuilder().buildForBatch()
-    doWrite(batchWrite)
+    newWriteBuilder() match {
+      case v1: V1WriteBuilder =>
+        writeWithV1(v1.buildForV1Write(), SaveMode.Append, writeOptions)
+      case v2 =>
+        doWrite(v2.buildForBatch())
+    }
   }
 }
 
@@ -261,25 +281,26 @@ case class OverwriteByExpressionExec(
     table: SupportsWrite,
     deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    plan: LogicalPlan,
+    query: SparkPlan) extends SupportsV1Write with BatchWriteHelper {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val batchWrite = newWriteBuilder() match {
+    newWriteBuilder() match {
+      case v1: V1WriteBuilder if isTruncate(deleteWhere) =>
+        writeWithV1(v1.buildForV1Write(), SaveMode.Overwrite, writeOptions)
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        builder.truncate().buildForBatch()
+        doWrite(builder.truncate().buildForBatch())
 
       case builder: SupportsOverwrite =>
-        builder.overwrite(deleteWhere).buildForBatch()
+        doWrite(builder.overwrite(deleteWhere).buildForBatch())
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
     }
-
-    doWrite(batchWrite)
   }
 }
 
@@ -463,24 +484,30 @@ object DataWritingSparkTask extends Logging {
   }
 }
 
-private[v2] trait AtomicTableWriteExec extends V2TableWriteExec {
+private[v2] trait AtomicTableWriteExec extends SupportsV1Write {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
 
   protected def writeToStagedTable(
       stagedTable: StagedTable,
       writeOptions: CaseInsensitiveStringMap,
-      ident: Identifier): RDD[InternalRow] = {
+      ident: Identifier,
+      mode: SaveMode): RDD[InternalRow] = {
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       stagedTable match {
         case table: SupportsWrite =>
-          val batchWrite = table.newWriteBuilder(writeOptions)
+          val writer = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
             .withQueryId(UUID.randomUUID().toString)
-            .buildForBatch()
 
-          val writtenRows = doWrite(batchWrite)
+          val writtenRows = writer match {
+            case v1: V1WriteBuilder =>
+              writeWithV1(v1.buildForV1Write(), SaveMode.Overwrite, writeOptions)
+            case v2 =>
+              doWrite(v2.buildForBatch())
+          }
           stagedTable.commitStagedChanges()
           writtenRows
+
         case _ =>
           // Table does not support writes - staged changes are also rolled back below.
           throw new SparkException(
@@ -501,3 +528,19 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
+
+/**
+ * A trait that allows Tables that use V1 Writer interfaces to write data.
+ */
+private trait SupportsV1Write extends V2TableWriteExec {
+  def plan: LogicalPlan
+
+  protected def writeWithV1(
+      relation: CreatableRelationProvider,
+      mode: SaveMode,
+      options: CaseInsensitiveStringMap): RDD[InternalRow] = {
+    relation.createRelation(
+      sqlContext, mode, options.asScala.toMap, Dataset.ofRows(sqlContext.sparkSession, plan))
+    sparkContext.emptyRDD
+  }
+}

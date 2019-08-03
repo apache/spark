@@ -169,10 +169,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(
-            staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+            staging, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(
-            catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+            catalog, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
       }
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
@@ -191,6 +191,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             staging,
             ident,
             parts,
+            query,
             planLater(query),
             props,
             writeOptions,
@@ -200,6 +201,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             catalog,
             ident,
             parts,
+            query,
             planLater(query),
             props,
             writeOptions,
@@ -207,7 +209,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      AppendDataExec(r.table.asWritable, r.options, planLater(query)) :: Nil
+      AppendDataExec(r.table.asWritable, r.options, query, planLater(query)) :: Nil
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
@@ -217,7 +219,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }.toArray
 
       OverwriteByExpressionExec(
-        r.table.asWritable, filters, r.options, planLater(query)) :: Nil
+        r.table.asWritable, filters, r.options, query, planLater(query)) :: Nil
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
       OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
