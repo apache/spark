@@ -503,7 +503,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   /**
    * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
-   * returning null if it overflows or modifying `value` in-place and returning it if successful.
+   * modifying `value` in-place and returning it if successful. If an overflow occurs, it
+   * either returns null or throws an exception according to the value set for
+   * `spark.sql.decimalOperations.nullOnOverflow`.
    *
    * NOTE: this modifies `value` in-place, so don't call it on external data.
    */
@@ -972,8 +974,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
     if (canNullSafeCast) {
       code"""
-         |$d.changePrecision(
-         |  ${decimalType.precision}, ${decimalType.scale});
+         |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
          |$evPrim = $d;
        """.stripMargin
     } else {
@@ -982,12 +983,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       } else {
         s"""
            |throw new ArithmeticException($d.toDebugString() + " cannot be represented as " +
-           | "Decimal(${decimalType.precision}, ${decimalType.scale})");
+           | "Decimal(${decimalType.precision}, ${decimalType.scale}).");
          """.stripMargin
       }
       code"""
-         |if ($d.changePrecision(
-         |  ${decimalType.precision}, ${decimalType.scale})) {
+         |if ($d.changePrecision(${decimalType.precision}, ${decimalType.scale})) {
          |  $evPrim = $d;
          |} else {
          |  $overflowCode

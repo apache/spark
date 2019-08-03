@@ -1024,7 +1024,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "true") {
       checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
       checkEvaluation(
-        Cast(Literal(java.sql.Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
       checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
     }
@@ -1032,7 +1032,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkExceptionInExpression[ArithmeticException](
         Cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
-        Cast(Literal(java.sql.Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
         "cannot be represented")
       checkExceptionInExpression[ArithmeticException](
         Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
