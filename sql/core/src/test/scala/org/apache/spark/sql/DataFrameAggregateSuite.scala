@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
+
 import scala.util.Random
 
 import org.scalatest.Matchers.the
@@ -925,6 +927,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         sql("SELECT COUNT_IF(x) FROM tempView")
       }
       assert(error.message.contains("function count_if requires boolean type"))
+    }
+  }
+
+  test("SPARK-28610: temporary overflow on sum of long should not fail") {
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true",
+        SQLConf.SUM_DECIMAL_BUFFER_FOR_LONG.key -> "true") {
+      val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, -1000L), 1).toDF("a")
+      checkAnswer(df.select(sum($"a")), Row(Long.MaxValue - 900L))
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true",
+      SQLConf.SUM_DECIMAL_BUFFER_FOR_LONG.key -> "false") {
+      val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, -1000L), 1).toDF("a")
+      val e = intercept[SparkException] {
+        df.select(sum($"a")).collect()
+      }
+      assert(e.getCause.isInstanceOf[ArithmeticException])
     }
   }
 }

@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -56,7 +57,11 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case _ => DoubleType
   }
 
-  private lazy val sumDataType = resultType
+  private lazy val sumDataType = child.dataType match {
+    case LongType if SQLConf.get.getConf(SQLConf.SUM_DECIMAL_BUFFER_FOR_LONG) =>
+      DecimalType.BigIntDecimal
+    case _ => resultType
+  }
 
   private lazy val sum = AttributeReference("sum", sumDataType)()
 
@@ -89,5 +94,11 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     )
   }
 
-  override lazy val evaluateExpression: Expression = sum
+  override lazy val evaluateExpression: Expression = {
+    if (sumDataType == resultType) {
+      sum
+    } else {
+      Cast(sum, resultType)
+    }
+  }
 }
