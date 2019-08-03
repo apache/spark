@@ -63,7 +63,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /**
    * Attributes that are referenced by expressions but not provided by this node's children.
    */
-  final def missingInput: AttributeSet = references -- inputSet
+  def missingInput: AttributeSet = references -- inputSet
 
   /**
    * Runs [[transformExpressionsDown]] with `rule` on all expressions present

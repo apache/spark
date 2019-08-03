@@ -215,8 +215,34 @@ class Analyzer(
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases)
+      CleanupAliases),
+    Batch("Agg", Once, BindGroupingExpressions)
   )
+
+  object BindGroupingExpressions extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case Aggregate(groupingExpressions, aggregateExpressions, child) =>
+        val equivGroupingExprsMap = groupingExpressions.collect {
+          case e if !e.isInstanceOf[NamedExpression] =>
+            ExpressionEquals(e) -> Alias(e, e.toString)()
+        }.toMap
+
+        val aliasedGroupingExprs = groupingExpressions.map { e =>
+          if (equivGroupingExprsMap.contains(ExpressionEquals(e))) {
+            equivGroupingExprsMap(ExpressionEquals(e))
+          } else {
+            e
+          }
+        }.asInstanceOf[Seq[NamedExpression]]
+
+        val rewrittenAggExpressions = aggregateExpressions.map {
+          _.transform {
+            case e => equivGroupingExprsMap.get(ExpressionEquals(e)).map(_.toAttribute).getOrElse(e)
+          }.asInstanceOf[NamedExpression]
+        }
+        RealAggregate(aliasedGroupingExprs, rewrittenAggExpressions, child)
+    }
+  }
 
   /**
    * Substitute child plan with WindowSpecDefinitions.
@@ -1812,7 +1838,7 @@ class Analyzer(
           val resolvedOperator = executeSameContext(aggregatedCondition)
           def resolvedAggregateFilter =
             resolvedOperator
-              .asInstanceOf[Aggregate]
+              .asInstanceOf[RealAggregate]
               .aggregateExpressions.head
 
           // If resolution was successful and we see the filter has an aggregate in it, add it to

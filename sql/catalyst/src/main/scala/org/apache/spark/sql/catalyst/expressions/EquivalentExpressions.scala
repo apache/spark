@@ -127,3 +127,12 @@ class EquivalentExpressions {
     sb.toString()
   }
 }
+
+case class ExpressionEquals(e: Expression) {
+  override def equals(o: Any): Boolean = o match {
+    case other: ExpressionEquals => e.semanticEquals(other.e)
+    case _ => false
+  }
+
+  override def hashCode: Int = e.semanticHash()
+}

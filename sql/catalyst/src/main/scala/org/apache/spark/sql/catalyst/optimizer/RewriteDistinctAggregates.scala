@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan, RealAggregate}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types.IntegerType
 
@@ -102,10 +102,10 @@ import org.apache.spark.sql.types.IntegerType
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case a: Aggregate => rewrite(a)
+    case a: RealAggregate => rewrite(a)
   }
 
-  def rewrite(a: Aggregate): Aggregate = {
+  def rewrite(a: RealAggregate): RealAggregate = {
 
     // Collect all aggregate expressions.
     val aggExpressions = a.aggregateExpressions.flatMap { e =>
@@ -244,7 +244,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
       // Construct the first aggregate operator. This de-duplicates all the children of
       // distinct operators, and applies the regular aggregate operators.
       val firstAggregateGroupBy = groupByAttrs ++ distinctAggChildAttrs :+ gid
-      val firstAggregate = Aggregate(
+      val firstAggregate = RealAggregate(
         firstAggregateGroupBy,
         firstAggregateGroupBy ++ regularAggOperatorMap.map(_._2),
         expand)
@@ -266,7 +266,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
               .getOrElse(transformations.getOrElse(e, e))
         }.asInstanceOf[NamedExpression]
       }
-      Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
+      RealAggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
     } else {
       a
     }

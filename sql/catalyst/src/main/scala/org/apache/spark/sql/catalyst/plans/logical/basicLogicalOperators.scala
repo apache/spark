@@ -813,6 +813,32 @@ case class Aggregate(
   }
 }
 
+case class RealAggregate(
+  groupingExpressions: Seq[NamedExpression],
+  aggregateExpressions: Seq[NamedExpression],
+  child: LogicalPlan)
+  extends UnaryNode {
+
+  override lazy val resolved: Boolean = {
+    val hasWindowExpressions = aggregateExpressions.exists ( _.collect {
+      case window: WindowExpression => window
+    }.nonEmpty
+    )
+
+    !expressions.exists(!_.resolved) && childrenResolved && !hasWindowExpressions
+  }
+
+  override def missingInput: AttributeSet =
+    super.missingInput -- (groupingExpressions.collect { case e: NamedExpression => e.toAttribute })
+  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def maxRows: Option[Long] = child.maxRows
+
+  override lazy val validConstraints: Set[Expression] = {
+    val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
+    getAllValidConstraints(nonAgg)
+  }
+}
+
 case class Window(
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],

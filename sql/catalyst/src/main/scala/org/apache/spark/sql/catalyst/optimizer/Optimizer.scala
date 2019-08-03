@@ -129,7 +129,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ComputeCurrentTime,
       GetCurrentDatabase(sessionCatalog),
       RewriteDistinctAggregates,
-      ReplaceDeduplicateWithAggregate) ::
+      ReplaceDeduplicateWithAggregate) :: Nil)
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -138,64 +138,60 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     //   extra operators between two adjacent Union operators.
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
-    Batch("Union", Once,
-      CombineUnions) ::
-    Batch("OptimizeLimitZero", Once,
-      OptimizeLimitZero) ::
-    // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
-    // For example, a query such as Filter(LocalRelation) would go through all the heavy
-    // optimizer rules that are triggered when there is a filter
-    // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
-    // LocalRelation and does not trigger many rules.
-    Batch("LocalRelation early", fixedPoint,
-      ConvertToLocalRelation,
-      PropagateEmptyRelation) ::
-    Batch("Pullup Correlated Expressions", Once,
-      PullupCorrelatedPredicates) ::
-    // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
-    // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
-    Batch("Subquery", FixedPoint(1),
-      OptimizeSubqueries) ::
-    Batch("Replace Operators", fixedPoint,
-      RewriteExceptAll,
-      RewriteIntersectAll,
-      ReplaceIntersectWithSemiJoin,
-      ReplaceExceptWithFilter,
-      ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate) ::
-    Batch("Aggregate", fixedPoint,
-      RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) :: Nil ++
-    operatorOptimizationBatch) :+
-    // Since join costs in AQP can change between multiple runs, there is no reason that we have an
-    // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
-    Batch("Join Reorder", FixedPoint(1),
-      CostBasedJoinReorder) :+
-    Batch("Remove Redundant Sorts", Once,
-      RemoveRedundantSorts) :+
-    Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates) :+
-    Batch("Object Expressions Optimization", fixedPoint,
-      EliminateMapObjects,
-      CombineTypedFilters,
-      ObjectSerializerPruning,
-      ReassignLambdaVariableID) :+
-    Batch("LocalRelation", fixedPoint,
-      ConvertToLocalRelation,
-      PropagateEmptyRelation) :+
-    Batch("Extract PythonUDF From JoinCondition", Once,
-      PullOutPythonUDFInJoinCondition) :+
-    // The following batch should be executed after batch "Join Reorder" "LocalRelation" and
-    // "Extract PythonUDF From JoinCondition".
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) :+
-    Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
-      ColumnPruning,
-      CollapseProject,
-      RemoveNoopOperators) :+
-    // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
-    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
+//    Batch("Union", Once,
+//      CombineUnions) ::
+//    Batch("OptimizeLimitZero", Once,
+//      OptimizeLimitZero) ::
+//    // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
+//    // For example, a query such as Filter(LocalRelation) would go through all the heavy
+//    // optimizer rules that are triggered when there is a filter
+//    // (e.g. InferFiltersFromConstraints). If we run this batch earlier, the query becomes just
+//    // LocalRelation and does not trigger many rules.
+//    Batch("LocalRelation early", fixedPoint,
+//      ConvertToLocalRelation,
+//      PropagateEmptyRelation) ::
+//    Batch("Pullup Correlated Expressions", Once,
+//      PullupCorrelatedPredicates) ::
+//    Batch("Subquery", FixedPoint(1),
+//      OptimizeSubqueries) ::
+//    Batch("Replace Operators", fixedPoint,
+//      RewriteExceptAll,
+//      RewriteIntersectAll,
+//      ReplaceIntersectWithSemiJoin,
+//      ReplaceExceptWithFilter,
+//      ReplaceExceptWithAntiJoin,
+//      ReplaceDistinctWithAggregate) ::
+//    Batch("Aggregate", fixedPoint,
+//      RemoveLiteralFromGroupExpressions,
+//      RemoveRepetitionFromGroupExpressions) :: Nil ++
+//    operatorOptimizationBatch) :+
+//    Batch("Join Reorder", FixedPoint(1),
+//      CostBasedJoinReorder) :+
+//    Batch("Remove Redundant Sorts", Once,
+//      RemoveRedundantSorts) :+
+//    Batch("Decimal Optimizations", fixedPoint,
+//      DecimalAggregates) :+
+//    Batch("Object Expressions Optimization", fixedPoint,
+//      EliminateMapObjects,
+//      CombineTypedFilters,
+//      ObjectSerializerPruning,
+//      ReassignLambdaVariableID) :+
+//    Batch("LocalRelation", fixedPoint,
+//      ConvertToLocalRelation,
+//      PropagateEmptyRelation) :+
+//    Batch("Extract PythonUDF From JoinCondition", Once,
+//      PullOutPythonUDFInJoinCondition) :+
+//    // The following batch should be executed after batch "Join Reorder" "LocalRelation" and
+//    // "Extract PythonUDF From JoinCondition".
+//    Batch("Check Cartesian Products", Once,
+//      CheckCartesianProducts) :+
+//    Batch("RewriteSubquery", Once,
+//      RewritePredicateSubquery,
+//      ColumnPruning,
+//      CollapseProject,
+//      RemoveNoopOperators) :+
+//    // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
+//    Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers)
   }
 
   /**
@@ -1516,8 +1512,8 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
       // global aggregation always returns at least one row even if there are no input rows. Here
       // we append a literal when the grouping key list is empty so that the result aggregate
       // operator is properly treated as a grouping aggregation.
-      val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
-      Aggregate(nonemptyKeys, aggCols, child)
+      val nonemptyKeys = if (keys.isEmpty) Alias(Literal(1), "placeholder")() :: Nil else keys
+      RealAggregate(nonemptyKeys, aggCols, child)
   }
 }
 

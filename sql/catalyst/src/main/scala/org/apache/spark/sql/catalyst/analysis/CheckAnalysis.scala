@@ -180,7 +180,7 @@ trait CheckAnalysis extends PredicateHelper {
               s"join condition '${condition.sql}' " +
                 s"of type ${condition.dataType.catalogString} is not a boolean.")
 
-          case Aggregate(groupingExprs, aggregateExprs, child) =>
+          case RealAggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression): Boolean = {
               expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
@@ -219,7 +219,7 @@ trait CheckAnalysis extends PredicateHelper {
                     s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
                     s"if you don't care which value you get."
                 )
-              case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
+              case e: Attribute if !groupingExprs.map(_.toAttribute).exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
                     s"nor is it an aggregate function. " +
@@ -474,7 +474,8 @@ trait CheckAnalysis extends PredicateHelper {
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
-            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] &&
+            !o.isInstanceOf[RealAggregate] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
               s"""nondeterministic expressions are only allowed in
