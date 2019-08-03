@@ -131,7 +131,8 @@ object Cast {
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
-    case (_, StringType) => true
+    case (_: AtomicType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
     // `timestampToLong` for details.

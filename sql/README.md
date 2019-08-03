@@ -9,4 +9,4 @@ Spark SQL is broken up into four subprojects:
  - Hive Support (sql/hive) - Includes an extension of SQLContext called HiveContext that allows users to write queries using a subset of HiveQL and access data from a Hive Metastore using Hive SerDes. There are also wrappers that allow users to run queries that include Hive UDFs, UDAFs, and UDTFs.
  - HiveServer and CLI support (sql/hive-thriftserver) - Includes support for the SQL CLI (bin/spark-sql) and a HiveServer2 (for JDBC/ODBC) compatible server.
 
-Running `sql/create-docs.sh` generates SQL documentation for built-in functions under `sql/site`.
+Running `./sql/create-docs.sh` generates SQL documentation for built-in functions under `sql/site`.

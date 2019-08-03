@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, Strategy}
+import org.apache.spark.sql.catalog.v2.StagingTableCatalog
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -165,8 +166,45 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case CreateTableAsSelect(catalog, ident, parts, query, props, options, ifNotExists) =>
       val writeOptions = new CaseInsensitiveStringMap(options.asJava)
-      CreateTableAsSelectExec(
-        catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+      catalog match {
+        case staging: StagingTableCatalog =>
+          AtomicCreateTableAsSelectExec(
+            staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+        case _ =>
+          CreateTableAsSelectExec(
+            catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+      }
+
+    case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
+      catalog match {
+        case staging: StagingTableCatalog =>
+          AtomicReplaceTableExec(staging, ident, schema, parts, props, orCreate = orCreate) :: Nil
+        case _ =>
+          ReplaceTableExec(catalog, ident, schema, parts, props, orCreate = orCreate) :: Nil
+      }
+
+    case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
+      val writeOptions = new CaseInsensitiveStringMap(options.asJava)
+      catalog match {
+        case staging: StagingTableCatalog =>
+          AtomicReplaceTableAsSelectExec(
+            staging,
+            ident,
+            parts,
+            planLater(query),
+            props,
+            writeOptions,
+            orCreate = orCreate) :: Nil
+        case _ =>
+          ReplaceTableAsSelectExec(
+            catalog,
+            ident,
+            parts,
+            planLater(query),
+            props,
+            writeOptions,
+            orCreate = orCreate) :: Nil
+      }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
       AppendDataExec(r.table.asWritable, r.options, planLater(query)) :: Nil

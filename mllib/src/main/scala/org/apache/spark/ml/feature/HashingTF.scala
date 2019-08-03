@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
@@ -28,6 +30,8 @@ import org.apache.spark.mllib.feature.{HashingTF => OldHashingTF}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.util.Utils
+import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /**
  * Maps a sequence of terms to their term frequencies using the hashing trick.
@@ -40,6 +44,8 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 @Since("1.2.0")
 class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+
+  private var hashFunc: Any => Int = FeatureHasher.murmur3Hash
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("hashingTF"))
@@ -94,15 +100,22 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-
-    val hashingTF = new OldHashingTF($(numFeatures)).setBinary($(binary))
-    val func = (terms: Seq[_]) => {
-      val seq = hashingTF.transformImpl(terms)
-      Vectors.sparse(hashingTF.numFeatures, seq)
+    val hashUDF = udf { terms: Seq[_] =>
+      val numOfFeatures = $(numFeatures)
+      val isBinary = $(binary)
+      val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
+      terms.foreach { term =>
+        val i = indexOf(term)
+        if (isBinary) {
+          termFrequencies(i) = 1.0
+        } else {
+          termFrequencies(i) += 1.0
+        }
+      }
+      Vectors.sparse($(numFeatures), termFrequencies.toSeq)
     }
 
-    val transformer = udf(func)
-    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+    dataset.withColumn($(outputCol), hashUDF(col($(inputCol))),
       outputSchema($(outputCol)).metadata)
   }
 
@@ -115,12 +128,43 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
+  /**
+   * Returns the index of the input term.
+   */
+  @Since("3.0.0")
+  def indexOf(term: Any): Int = {
+    Utils.nonNegativeMod(hashFunc(term), $(numFeatures))
+  }
+
   @Since("1.4.1")
   override def copy(extra: ParamMap): HashingTF = defaultCopy(extra)
 }
 
 @Since("1.6.0")
 object HashingTF extends DefaultParamsReadable[HashingTF] {
+
+  private class HashingTFReader extends MLReader[HashingTF] {
+
+    private val className = classOf[HashingTF].getName
+
+    override def load(path: String): HashingTF = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val hashingTF = new HashingTF(metadata.uid)
+      metadata.getAndSetParams(hashingTF)
+
+      // We support loading old `HashingTF` saved by previous Spark versions.
+      // Previous `HashingTF` uses `mllib.feature.HashingTF.murmur3Hash`, but new `HashingTF` uses
+      // `ml.Feature.FeatureHasher.murmur3Hash`.
+      val (majorVersion, _) = majorMinorVersion(metadata.sparkVersion)
+      if (majorVersion < 3) {
+        hashingTF.hashFunc = OldHashingTF.murmur3Hash
+      }
+      hashingTF
+    }
+  }
+
+  @Since("3.0.0")
+  override def read: MLReader[HashingTF] = new HashingTFReader
 
   @Since("1.6.0")
   override def load(path: String): HashingTF = super.load(path)

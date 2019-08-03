@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.math.BigDecimal
 
 import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -338,7 +339,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       withTempPath { path =>
         var numTotalCachedHit = 0
         val listener = new QueryExecutionListener {
-          override def onFailure(f: String, qe: QueryExecution, e: Exception): Unit = {}
+          override def onFailure(f: String, qe: QueryExecution, e: Throwable): Unit = {}
 
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
             qe.withCachedData match {
@@ -522,5 +523,23 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       }, IntegerType).asNondeterministic()
 
     assert(spark.range(2).select(nonDeterministicJavaUDF()).distinct().count() == 2)
+  }
+
+  test("Replace _FUNC_ in UDF ExpressionInfo") {
+    val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier("upper"))
+    assert(info.getName === "upper")
+    assert(info.getClassName === "org.apache.spark.sql.catalyst.expressions.Upper")
+    assert(info.getUsage === "upper(str) - Returns `str` with all characters changed to uppercase.")
+    assert(info.getExamples.contains("> SELECT upper('SparkSql');"))
+    assert(info.getSince === "1.0.1")
+    assert(info.getNote === "")
+    assert(info.getExtended.contains("> SELECT upper('SparkSql');"))
+  }
+
+  test("SPARK-28521 error message for CAST(parameter types contains DataType)") {
+    val e = intercept[AnalysisException] {
+      spark.sql("SELECT CAST(1)")
+    }
+    assert(e.getMessage.contains("Invalid arguments for function cast"))
   }
 }

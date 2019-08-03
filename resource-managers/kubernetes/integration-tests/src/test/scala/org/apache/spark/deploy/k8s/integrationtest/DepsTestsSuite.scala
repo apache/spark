@@ -41,7 +41,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
 
   private def getCephContainer(): Container = {
     val envVars = Map ( "NETWORK_AUTO_DETECT" -> "4",
-      "RGW_CIVETWEB_PORT" -> "8000",
+      "RGW_FRONTEND_PORT" -> "8000",
       "SREE_PORT" -> "5001",
       "CEPH_DEMO_UID" -> "nano",
       "CEPH_DAEMON" -> "demo",
@@ -63,7 +63,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     ).asJava
 
     new ContainerBuilder()
-      .withImage("ceph/daemon:v4.0.0-stable-4.0-master-centos-7-x86_64")
+      .withImage("ceph/daemon:latest")
       .withImagePullPolicy("Always")
       .withName(cName)
       .withPorts(new ContainerPortBuilder()
