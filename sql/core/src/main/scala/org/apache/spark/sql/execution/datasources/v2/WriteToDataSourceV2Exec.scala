@@ -532,7 +532,7 @@ private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
 /**
  * A trait that allows Tables that use V1 Writer interfaces to write data.
  */
-private trait SupportsV1Write extends V2TableWriteExec {
+sealed trait SupportsV1Write extends V2TableWriteExec {
   def plan: LogicalPlan
 
   protected def writeWithV1(
