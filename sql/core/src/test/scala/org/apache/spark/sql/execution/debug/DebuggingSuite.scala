@@ -53,47 +53,43 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
       subtree.contains("Range") && code.contains("Object[]")})
   }
 
-  test("SPARK-28537: DebugExec cannot debug broadcast and columnar related queries") {
+  test("SPARK-28537: DebugExec cannot debug broadcast related queries") {
     val rightDF = spark.range(10)
     val leftDF = spark.range(10)
     val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
-    try {
-      val captured = new ByteArrayOutputStream()
-      Console.withOut(captured) {
-        joinedDF.debug()
-      }
 
-      val output = captured.toString()
-      assert(output.contains(
-        """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])) ==
-        |Tuples output: 0
-        | id LongType: {}
-        |== WholeStageCodegen ==
-        |Tuples output: 10
-        | id LongType: {java.lang.Long}
-        |== Range (0, 10, step=1, splits=2) ==
-        |Tuples output: 0
-        | id LongType: {}""".stripMargin))
-    } catch {
-      case NonFatal(e) => fail("debug() for broadcast failed with exception", e)
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      joinedDF.debug()
     }
 
+    val output = captured.toString()
+    assert(output.contains(
+      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])) ==
+      |Tuples output: 0
+      | id LongType: {}
+      |== WholeStageCodegen ==
+      |Tuples output: 10
+      | id LongType: {java.lang.Long}
+      |== Range (0, 10, step=1, splits=2) ==
+      |Tuples output: 0
+      | id LongType: {}""".stripMargin))
+  }
+
+  test("SPARK-28537: DebugExec cannot debug columnar related queries") {
     val df = spark.range(5)
     df.persist()
-    try {
-      val captured = new ByteArrayOutputStream()
-      Console.withOut(captured) {
-        df.debug()
-      }
 
-      val output = captured.toString()replaceAll ("#\\d+", "#x")
-      assert(output.contains(
-        s"""== InMemoryTableScan [id#xL] ==
-          |Tuples output: 0
-          | id LongType: {}
-          |""".stripMargin))
-    } catch {
-      case NonFatal(e) => fail("debug() for columnar failed with exception", e)
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      df.debug()
     }
+
+    val output = captured.toString()replaceAll ("#\\d+", "#x")
+    assert(output.contains(
+      s"""== InMemoryTableScan [id#xL] ==
+        |Tuples output: 0
+        | id LongType: {}
+        |""".stripMargin))
   }
 }
