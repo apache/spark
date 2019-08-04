@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.debug
 
 import java.io.ByteArrayOutputStream
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
