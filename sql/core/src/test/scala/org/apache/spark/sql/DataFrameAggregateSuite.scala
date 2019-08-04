@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkException
-
 import scala.util.Random
 
 import org.scalatest.Matchers.the
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
