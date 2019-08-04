@@ -101,7 +101,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
     assert(qualifiedPlanNodes.size == 1)
   }
 
-  test("SPARK-28422: test") {
+  test("SPARK-28422: GROUPED_AGG pandas_udf should work without group by clause") {
     val aggPandasUdf = new MyDummyGROUPEDAGGPandasUDF
     spark.udf.registerPython("dummyGroupedAggPandasUDF", aggPandasUdf)
 
@@ -111,8 +111,6 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
       val agg1 = df.agg(aggPandasUdf(df("id")))
       val agg2 = sql("select dummyGroupedAggPandasUDF(id) from table")
-      agg1.explain(true)
-      agg2.explain(true)
 
       comparePlans(agg1.queryExecution.optimizedPlan, agg2.queryExecution.optimizedPlan)
     }
