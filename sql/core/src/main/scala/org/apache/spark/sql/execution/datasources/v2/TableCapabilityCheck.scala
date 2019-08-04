@@ -44,14 +44,14 @@ object TableCapabilityCheck extends (LogicalPlan => Unit) {
       // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
       //       a logical plan for streaming write.
 
-      case AppendData(r: DataSourceV2Relation, _, _) if !r.table.supports(BATCH_WRITE) =>
+      case AppendData(r: DataSourceV2Relation, _, _, _) if !r.table.supports(BATCH_WRITE) =>
         failAnalysis(s"Table ${r.table.name()} does not support append in batch mode.")
 
-      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _)
+      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _, _)
         if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
         failAnalysis(s"Table ${r.table.name()} does not support dynamic overwrite in batch mode.")
 
-      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _) =>
+      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _, _) =>
         expr match {
           case Literal(true, BooleanType) =>
             if (!r.table.supports(BATCH_WRITE) ||
