@@ -210,7 +210,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     outputData.toDF
   }
 
-  final override def transformImpl(dataset: Dataset[_]): DataFrame =
+  final override private def transformImpl(dataset: Dataset[_]): DataFrame =
     throw new UnsupportedOperationException(s"transformImpl is not supported in $getClass")
 
   /**
