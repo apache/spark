@@ -60,7 +60,7 @@ object PartitionSpec {
 
 object PartitioningUtils {
 
-  val timestampPartitionPattern = "yyyy-MM-dd HH:mm:ss[.S]"
+  val timestampPartitionPattern = "uuuu-MM-dd HH:mm:ss[.S]"
 
   private[datasources] case class PartitionValues(columnNames: Seq[String], literals: Seq[Literal])
   {

@@ -1002,6 +1002,11 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    numericTypes.foreach { dt =>
+      makeComplexTypes(dt, true).foreach { complexType =>
+        assert(!Cast.canUpCast(complexType, StringType))
+      }
+    }
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
