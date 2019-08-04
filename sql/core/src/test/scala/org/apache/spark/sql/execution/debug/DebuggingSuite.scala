@@ -66,14 +66,14 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
     val output = captured.toString()
     assert(output.contains(
       """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])) ==
-      |Tuples output: 0
-      | id LongType: {}
-      |== WholeStageCodegen ==
-      |Tuples output: 10
-      | id LongType: {java.lang.Long}
-      |== Range (0, 10, step=1, splits=2) ==
-      |Tuples output: 0
-      | id LongType: {}""".stripMargin))
+        |Tuples output: 0
+        | id LongType: {}
+        |== WholeStageCodegen ==
+        |Tuples output: 10
+        | id LongType: {java.lang.Long}
+        |== Range (0, 10, step=1, splits=2) ==
+        |Tuples output: 0
+        | id LongType: {}""".stripMargin))
   }
 
   test("SPARK-28537: DebugExec cannot debug columnar related queries") {
@@ -84,10 +84,11 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
     Console.withOut(captured) {
       df.debug()
     }
+    df.unpersist()
 
-    val output = captured.toString()replaceAll ("#\\d+", "#x")
+    val output = captured.toString().replaceAll("#\\d+", "#x")
     assert(output.contains(
-      s"""== InMemoryTableScan [id#xL] ==
+      """== InMemoryTableScan [id#xL] ==
         |Tuples output: 0
         | id LongType: {}
         |""".stripMargin))
