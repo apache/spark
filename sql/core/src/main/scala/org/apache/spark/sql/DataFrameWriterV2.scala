@@ -20,8 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.http.annotation.Experimental
-
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalog.v2.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
