@@ -120,11 +120,12 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     writeBatchToFileWithRetries(metadata, path, 1)
   }
 
-  /** Write a batch to a temp file then rename it to the batch file.
-    *
-    * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
-    * valid behavior, we still need to prevent it from destroying the files.
-    */
+  /**
+   * Write a batch to a temp file then rename it to the batch file.
+   *
+   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+   * valid behavior, we still need to prevent it from destroying the files.
+   */
   private def writeBatchToFileWithRetries(metadata: T, path: Path, retryCount: Int): Unit = {
     val output = fileManager.createAtomic(path, overwriteIfPossible = false)
     try {
