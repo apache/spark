@@ -165,18 +165,20 @@ case class DataSourceResolution(
 
     case ShowTablesStatement(None, pattern) =>
       defaultCatalog match {
-        case Some(_) => throw new AnalysisException(
-          "v2 catalog doesn't support getCurrentDatabase yet, " +
-            "so the default database name cannot be deduced.")
+        case Some(_) =>
+          throw new AnalysisException(
+            "v2 catalog doesn't support getCurrentDatabase yet, " +
+              "so the default database name cannot be deduced.")
         case None =>
           ShowTablesCommand(None, pattern)
       }
 
-    case ShowTablesStatement(Some(namespace), pattern) =>
+    case plan @ ShowTablesStatement(Some(namespace), pattern) =>
       val CatalogObjectIdentifier(maybeCatalog, identifier) = namespace
       val catalog = maybeCatalog.orElse(defaultCatalog)
       catalog match {
-        case Some(v2Catalog) => ShowTables(v2Catalog.asTableCatalog, identifier, pattern)
+        case Some(v2Catalog) =>
+          ShowTables(plan.output, v2Catalog.asTableCatalog, identifier, pattern)
         case None => ShowTablesCommand(Some(namespace.quoted), pattern)
       }
   }

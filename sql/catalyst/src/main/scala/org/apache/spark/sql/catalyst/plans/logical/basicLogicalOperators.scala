@@ -587,11 +587,10 @@ case class AlterTable(
  * Show tables.
  */
 case class ShowTables(
+    override val output: Seq[Attribute],
     catalog: TableCatalog,
     ident: Identifier,
-    pattern: Option[String]) extends Command {
-  override val output = ShowTablesSchema.attributes()
-}
+    pattern: Option[String]) extends Command
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the

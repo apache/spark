@@ -24,21 +24,22 @@ import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRowWithSchema}
-import org.apache.spark.sql.catalyst.plans.ShowTablesSchema
+import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
  * Physical plan node for showing tables.
  */
-case class ShowTablesExec(catalog: TableCatalog, ident: Identifier, pattern: Option[String])
-  extends LeafExecNode {
-  override def output: Seq[AttributeReference] = ShowTablesSchema.attributes()
-
+case class ShowTablesExec(
+    output: Seq[Attribute],
+    catalog: TableCatalog,
+    ident: Identifier,
+    pattern: Option[String])
+    extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val encoder = RowEncoder(ShowTablesSchema.schema).resolveAndBind()
+    val encoder = RowEncoder(schema).resolveAndBind()
 
     val tables = catalog.listTables(ident.namespace() :+ ident.name())
     tables.map { table =>
@@ -49,7 +50,7 @@ case class ShowTablesExec(catalog: TableCatalog, ident: Identifier, pattern: Opt
               // TODO: there is no v2 catalog API to retrieve 'isTemporary',
               //  and it is set to false for the time being.
               Array(table.namespace().quoted, table.name(), false),
-              ShowTablesSchema.schema))
+              schema))
           .copy()
       }
     }

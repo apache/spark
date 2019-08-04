@@ -243,8 +243,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case ShowTables(catalog, ident, pattern) =>
-      ShowTablesExec(catalog, ident, pattern) :: Nil
+    case r : ShowTables =>
+      ShowTablesExec(r.output, r.catalog, r.ident, r.pattern) :: Nil
 
     case _ => Nil
   }
