@@ -36,6 +36,9 @@ import org.apache.spark.sql.internal.SQLConf
  * column reference points to a column in the right side plan of a self-join, users will get
  * unexpected result because the column reference can't match the newly generated
  * [[AttributeReference]].
+ *
+ * Note that, this rule removes all the Dataset id related metadata from `AttributeReference`, so
+ * that they don't exist after analyzer.
  */
 class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
 
