@@ -971,9 +971,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] object CLogLog extends Link("cloglog") {
 
-    override def link(mu: Double): Double = math.log(-1.0 * math.log(1 - mu))
+    override def link(mu: Double): Double = math.log(-math.log1p(-mu))
 
-    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log(1.0 - mu))
+    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log1p(-mu))
 
     override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
   }

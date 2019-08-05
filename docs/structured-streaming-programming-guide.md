@@ -27,7 +27,7 @@ Structured Streaming is a scalable and fault-tolerant stream processing engine b
 
 Internally, by default, Structured Streaming queries are processed using a *micro-batch processing* engine, which processes data streams as a series of small batch jobs thereby achieving end-to-end latencies as low as 100 milliseconds and exactly-once fault-tolerance guarantees. However, since Spark 2.3, we have introduced a new low-latency processing mode called **Continuous Processing**, which can achieve end-to-end latencies as low as 1 millisecond with at-least-once guarantees. Without changing the Dataset/DataFrame operations in your queries, you will be able to choose the mode based on your application requirements. 
 
-In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing-experimental) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
+In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
 
 # Quick Example
 Let’s say you want to maintain a running word count of text data received from a data server listening on a TCP socket. Let’s see how you can express this using Structured Streaming. You can see the full code in
@@ -1496,9 +1496,9 @@ Additional details on supported joins:
 
 - Joins can be cascaded, that is, you can do `df1.join(df2, ...).join(df3, ...).join(df4, ....)`.
 
-- As of Spark 2.3, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
+- As of Spark 2.4, you can use joins only when the query is in Append output mode. Other output modes are not yet supported.
 
-- As of Spark 2.3, you cannot use other non-map-like operations before joins. Here are a few examples of
+- As of Spark 2.4, you cannot use other non-map-like operations before joins. Here are a few examples of
   what cannot be used.
 
   - Cannot use streaming aggregations before joins.
@@ -2190,34 +2190,34 @@ The function offers a simple way to express your processing logic but does not a
 deduplicate generated data when failures cause reprocessing of some input data. 
 For that situation you must specify the processing logic in an object.
 
-1. The function takes a row as input.
+- First, the function takes a row as input.
 
-  {% highlight python %}
-      def process_row(row):
-          # Write row to storage
-          pass
-      
-      query = streamingDF.writeStream.foreach(process_row).start()  
-  {% endhighlight %}
+{% highlight python %}
+def process_row(row):
+    # Write row to storage
+    pass
 
-2. The object has a process method and optional open and close methods: 
+query = streamingDF.writeStream.foreach(process_row).start()  
+{% endhighlight %}
 
-  {% highlight python %}
-      class ForeachWriter:
-          def open(self, partition_id, epoch_id):
-              # Open connection. This method is optional in Python.
-              pass
+- Second, the object has a process method and optional open and close methods:
+
+{% highlight python %}
+class ForeachWriter:
+    def open(self, partition_id, epoch_id):
+        # Open connection. This method is optional in Python.
+        pass
+
+    def process(self, row):
+        # Write row to connection. This method is NOT optional in Python.
+        pass
+
+    def close(self, error):
+        # Close the connection. This method in optional in Python.
+        pass
       
-          def process(self, row):
-              # Write row to connection. This method is NOT optional in Python.
-              pass
-      
-          def close(self, error):
-              # Close the connection. This method in optional in Python.
-              pass
-      
-      query = streamingDF.writeStream.foreach(ForeachWriter()).start()
-  {% endhighlight %}
+query = streamingDF.writeStream.foreach(ForeachWriter()).start()
+{% endhighlight %}
 
 </div>
 <div data-lang="r"  markdown="1">
@@ -2307,7 +2307,7 @@ Here are the different kinds of triggers that are supported.
     <td><b>Continuous with fixed checkpoint interval</b><br/><i>(experimental)</i></td>
     <td>
         The query will be executed in the new low-latency, continuous processing mode. Read more
-        about this in the <a href="#continuous-processing-experimental">Continuous Processing section</a> below.
+        about this in the <a href="#continuous-processing">Continuous Processing section</a> below.
     </td>
   </tr>
 </table>
@@ -3049,12 +3049,6 @@ import org.apache.spark.sql.streaming.Trigger
 
 spark
   .readStream
-  .format("rate")
-  .option("rowsPerSecond", "10")
-  .option("")
-
-spark
-  .readStream
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
   .option("subscribe", "topic1")
@@ -3112,7 +3106,7 @@ A checkpoint interval of 1 second means that the continuous processing engine wi
 ## Supported Queries
 {:.no_toc}
 
-As of Spark 2.3, only the following type of queries are supported in the continuous processing mode.
+As of Spark 2.4, only the following type of queries are supported in the continuous processing mode.
 
 - *Operations*: Only map-like Dataset/DataFrame operations are supported in continuous mode, that is, only projections (`select`, `map`, `flatMap`, `mapPartitions`, etc.) and selections (`where`, `filter`, etc.).
   + All SQL functions are supported except aggregation functions (since aggregations are not yet supported), `current_timestamp()` and `current_date()` (deterministic computations using time is challenging).
