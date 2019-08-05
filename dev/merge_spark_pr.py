@@ -453,8 +453,13 @@ def main():
 
     url = pr["url"]
 
+    # Warn if the PR is WIP
+    if "[WIP]" in pr["title"]:
+        msg = "The PR title has `[WIP]`:\n%s\nContinue?" % pr["title"]
+        continue_maybe(msg)
+
     # Decide whether to use the modified title or not
-    modified_title = standardize_jira_ref(pr["title"])
+    modified_title = standardize_jira_ref(pr["title"]).rstrip(".")
     if modified_title != pr["title"]:
         print("I've re-written the title as follows to match the standard format:")
         print("Original: %s" % pr["title"])
