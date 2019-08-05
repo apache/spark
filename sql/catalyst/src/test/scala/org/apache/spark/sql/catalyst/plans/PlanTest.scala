@@ -81,8 +81,8 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
         ae.copy(resultId = ExprId(0))
       case lv: NamedLambdaVariable =>
         lv.copy(exprId = ExprId(0), value = null)
-      case pdf: PythonUDF =>
-        pdf.copy(resultId = ExprId(0))
+      case udf: PythonUDF =>
+        udf.copy(resultId = ExprId(0))
     }
   }
 
