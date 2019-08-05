@@ -41,11 +41,9 @@ class DataSourceDFWriterV2SessionCatalogSuite
   import testImplicits._
 
   private val v2Format = classOf[InMemoryTableProvider].getName
-  private val dfData = Seq((1L, "a"), (2L, "b"), (3L, "c"))
 
   before {
     spark.conf.set(SQLConf.V2_SESSION_CATALOG.key, classOf[TestV2SessionCatalog].getName)
-    spark.createDataFrame(dfData).toDF("id", "data").createOrReplaceTempView("source")
   }
 
   override def afterEach(): Unit = {
@@ -55,47 +53,53 @@ class DataSourceDFWriterV2SessionCatalogSuite
 
   test("saveAsTable and v2 table - table doesn't exist") {
     val t1 = "tbl"
-    spark.table("source").write.format(v2Format).saveAsTable(t1)
-    checkAnswer(spark.table(t1), spark.table("source"))
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+    df.write.format(v2Format).saveAsTable(t1)
+    checkAnswer(spark.table(t1), df)
   }
 
   test("saveAsTable: v2 table - table exists") {
     val t1 = "tbl"
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     spark.sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
     intercept[TableAlreadyExistsException] {
-      spark.table("source").select("id", "data").write.format(v2Format).saveAsTable(t1)
+      df.select("id", "data").write.format(v2Format).saveAsTable(t1)
     }
-    spark.table("source").write.format(v2Format).mode("append").saveAsTable(t1)
-    checkAnswer(spark.table(t1), spark.table("source"))
+    df.write.format(v2Format).mode("append").saveAsTable(t1)
+    checkAnswer(spark.table(t1), df)
 
     // Check that appends are by name
-    spark.table("source").select('data, 'id).write.format(v2Format).mode("append").saveAsTable(t1)
-    checkAnswer(spark.table(t1), spark.table("source").union(spark.table("source")))
+    df.select('data, 'id).write.format(v2Format).mode("append").saveAsTable(t1)
+    checkAnswer(spark.table(t1), df.union(df))
   }
 
   test("saveAsTable: v2 table - table overwrite and table doesn't exist") {
     val t1 = "tbl"
-    spark.table("source").write.format(v2Format).mode("overwrite").saveAsTable(t1)
-    checkAnswer(spark.table(t1), spark.table("source"))
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+    df.write.format(v2Format).mode("overwrite").saveAsTable(t1)
+    checkAnswer(spark.table(t1), df)
   }
 
   test("saveAsTable: v2 table - table overwrite and table exists") {
     val t1 = "tbl"
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     spark.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
-    spark.table("source").write.format(v2Format).mode("overwrite").saveAsTable(t1)
-    checkAnswer(spark.table(t1), spark.table("source"))
+    df.write.format(v2Format).mode("overwrite").saveAsTable(t1)
+    checkAnswer(spark.table(t1), df)
   }
 
   test("saveAsTable: v2 table - ignore mode and table doesn't exist") {
     val t1 = "tbl"
-    spark.table("source").write.format(v2Format).mode("ignore").saveAsTable(t1)
-    checkAnswer(spark.table(t1), spark.table("source"))
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+    df.write.format(v2Format).mode("ignore").saveAsTable(t1)
+    checkAnswer(spark.table(t1), df)
   }
 
   test("saveAsTable: v2 table - ignore mode and table exists") {
     val t1 = "tbl"
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     spark.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
-    spark.table("source").write.format(v2Format).mode("ignore").saveAsTable(t1)
+    df.write.format(v2Format).mode("ignore").saveAsTable(t1)
     checkAnswer(spark.table(t1), Seq(Row("c", "d")))
   }
 }
