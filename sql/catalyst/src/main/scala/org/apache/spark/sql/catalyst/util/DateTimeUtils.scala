@@ -617,22 +617,27 @@ object DateTimeUtils {
     (date - localDate.getDayOfMonth) + localDate.lengthOfMonth()
   }
 
-  // Visible for testing.
-  private[sql] val TRUNC_TO_YEAR = 1
-  private[sql] val TRUNC_TO_MONTH = 2
-  private[sql] val TRUNC_TO_DECADE = 3
-  private[sql] val TRUNC_TO_CENTURY = 4
-  private[sql] val TRUNC_TO_MILLENNIUM = 5
-  private[sql] val TRUNC_TO_QUARTER = 10
-  private[sql] val TRUNC_TO_WEEK = 11
-  private[sql] val TRUNC_TO_DAY = 12
-  private[sql] val TRUNC_TO_HOUR = 13
-  private[sql] val TRUNC_TO_MINUTE = 14
-  private[sql] val TRUNC_TO_SECOND = 15
-  private[sql] val TRUNC_TO_MILLISECOND = 16
-  private[sql] val TRUNC_TO_MICROSECOND = 17
-
+  // The constants are visible for testing purpose only.
   private[sql] val TRUNC_INVALID = -1
+  // The levels from TRUNC_TO_MONTH to TRUNC_TO_MILLENNIUM are used in truncations
+  // of DATE and TIMESTAMP values.
+  private[sql] val TRUNC_TO_MONTH = 0
+  private[sql] val TRUNC_TO_YEAR = 1
+  private[sql] val TRUNC_TO_DECADE = 2
+  private[sql] val TRUNC_TO_CENTURY = 3
+  private[sql] val TRUNC_TO_MILLENNIUM = 4
+  private[sql] val MAX_LEVEL_OF_DATE_TRUNC = TRUNC_TO_MILLENNIUM
+  // The levels from TRUNC_TO_MICROSECOND to TRUNC_TO_QUARTER are used in truncations
+  // of TIMESTAMP values only.
+  private[sql] val TRUNC_TO_MICROSECOND = 5
+  private[sql] val TRUNC_TO_MILLISECOND = 6
+  private[sql] val TRUNC_TO_SECOND = 7
+  private[sql] val TRUNC_TO_MINUTE = 8
+  private[sql] val TRUNC_TO_HOUR = 9
+  private[sql] val TRUNC_TO_DAY = 10
+  private[sql] val TRUNC_TO_WEEK = 11
+  private[sql] val TRUNC_TO_QUARTER = 12
+  private[sql] val MAX_LEVEL_OF_TIMESTAMP_TRUNC = TRUNC_TO_QUARTER
 
   /**
    * Returns the trunc date from original date and trunc level.

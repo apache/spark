@@ -1499,13 +1499,13 @@ case class TruncDate(date: Expression, format: Expression)
   override val instant = date
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MILLENNIUM) { (d: Any, level: Int) =>
+    evalHelper(input, maxLevel = MAX_LEVEL_OF_DATE_TRUNC) { (d: Any, level: Int) =>
       DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_MILLENNIUM) {
+    codeGenHelper(ctx, ev, maxLevel = MAX_LEVEL_OF_DATE_TRUNC) {
       (date: String, fmt: String) => s"truncDate($date, $fmt);"
     }
   }
@@ -1558,14 +1558,14 @@ case class TruncTimestamp(
   def this(format: Expression, timestamp: Expression) = this(format, timestamp, None)
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = DateTimeUtils.TRUNC_TO_MICROSECOND) { (t: Any, level: Int) =>
+    evalHelper(input, maxLevel = MAX_LEVEL_OF_TIMESTAMP_TRUNC) { (t: Any, level: Int) =>
       DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, timeZone)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
-    codeGenHelper(ctx, ev, maxLevel = DateTimeUtils.TRUNC_TO_MICROSECOND, true) {
+    codeGenHelper(ctx, ev, maxLevel = MAX_LEVEL_OF_TIMESTAMP_TRUNC, true) {
       (date: String, fmt: String) =>
         s"truncTimestamp($date, $fmt, $tz);"
     }
