@@ -43,7 +43,6 @@ class V2SessionCatalogSuite
   private val schema: StructType = new StructType()
       .add("id", IntegerType)
       .add("data", StringType)
-  private val v2Source = classOf[FakeV2Provider].getName
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -161,68 +160,6 @@ class V2SessionCatalogSuite
     assert(exc.message.contains("already exists"))
 
     assert(catalog.tableExists(testIdent))
-  }
-
-  test("createTable: duplicate column names in the table definition") {
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT, $c1 INT) USING $v2Source")
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the table definition of t"))
-      }
-    }
-  }
-
-  test("createTable: partition column names not in table definition") {
-    val e = intercept[AnalysisException] {
-      sql(s"CREATE TABLE tbl(a int, b string) USING $v2Source PARTITIONED BY (c)")
-    }.getMessage
-    assert(e.contains("Couldn't find column c in"))
-  }
-
-  test("createTable: bucket column names not in table definition") {
-    val e = intercept[AnalysisException] {
-      sql(s"CREATE TABLE tbl(a int, b string) " +
-        s"USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS")
-    }.getMessage
-    assert(e.contains("Couldn't find column c in"))
-  }
-
-  test("createTable: column repeated in partition columns") {
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val e = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)")
-        }.getMessage
-        assert(e.contains("Found duplicate column(s) in the partition schema"))
-      }
-    }
-  }
-
-  test("createTable: column repeated in bucket columns") {
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val e = intercept[AnalysisException] {
-          sql(s"CREATE TABLE t($c0 INT) USING $v2Source " +
-            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS")
-        }.getMessage
-        assert(e.contains("Found duplicate column(s) in the bucket definition"))
-      }
-    }
-  }
-
-  test("createTable: all columns used in partitioning") {
-    Seq(
-      "PARTITIONED BY (a, b)",
-      "CLUSTERED BY (a, b) INTO 2 BUCKETS",
-      "PARTITIONED BY (a) CLUSTERED BY (b) INTO 2 BUCKETS").foreach { partitioning =>
-
-      val e = intercept[AnalysisException] {
-        sql(s"CREATE TABLE t(a INT, b STRING) USING $v2Source $partitioning")
-      }.getMessage
-      assert(e.contains("Cannot use all columns for partitioning."))
-    }
   }
 
   test("tableExists") {
@@ -744,12 +681,5 @@ class V2SessionCatalogSuite
 
     assert(!wasDropped)
     assert(!catalog.tableExists(testIdent))
-  }
-}
-
-/** Used as a V2 DataSource for V2SessionCatalog DDL */
-class FakeV2Provider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
 }

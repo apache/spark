@@ -162,10 +162,11 @@ private[spark] object SchemaUtils {
       case b: BucketTransform =>
         val colNames = b.columns.map(c => UnresolvedAttribute(c.fieldNames()).name)
         // We need to check that we're not duplicating columns within our bucketing transform
-        checkColumnNameDuplication(colNames, checkType, isCaseSensitive)
+        checkColumnNameDuplication(colNames, "in the bucket definition", isCaseSensitive)
         b.name -> colNames
       case NamedTransform(transformName, refs) =>
-        val fieldNameParts = refs.collect { case Ref(parts) => UnresolvedAttribute(parts).name }
+        val fieldNameParts =
+          refs.collect { case FieldReference(parts) => UnresolvedAttribute(parts).name }
         // We could also check that we're not duplicating column names here as well if
         // fieldNameParts.length > 1, but we're specifically not, because certain transforms can
         // be defined where this is a legitimate use case.
@@ -233,5 +234,24 @@ private[spark] object SchemaUtils {
       case e: AnalysisException =>
         throw new AnalysisException(e.getMessage + s":\n${schema.treeString}")
     }
+  }
+
+  def getColumnName(position: Seq[Int], schema: StructType): Seq[String] = {
+    val topLevel = schema(position.head)
+    val field = position.tail.foldLeft(Seq(topLevel.name) -> topLevel) {
+      case (nameAndField, pos) =>
+        nameAndField._2.dataType match {
+          case s: StructType =>
+            val nowField = s(pos)
+            (nameAndField._1 :+ nowField.name) -> nowField
+          case ArrayType(s: StructType, _) =>
+            val nowField = s(pos)
+            (nameAndField._1 :+ nowField.name) -> nowField
+          case _ =>
+            throw new AnalysisException(
+              s"The positions provided ($pos) cannot be resolved in\n${schema.treeString}.")
+      }
+    }
+    field._1
   }
 }

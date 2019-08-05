@@ -112,7 +112,7 @@ case class DataSourceResolution(
     case replace: ReplaceTableStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = replace.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
+      val catalog = maybeCatalog.orElse(sessionCatalog)
         .getOrElse(throw new AnalysisException(
           s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
         .asTableCatalog
@@ -121,7 +121,7 @@ case class DataSourceResolution(
     case rtas: ReplaceTableAsSelectStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = rtas.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
+      val catalog = maybeCatalog.orElse(sessionCatalog)
         .getOrElse(throw new AnalysisException(
           s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
         .asTableCatalog
@@ -246,55 +246,6 @@ case class DataSourceResolution(
       catalog: TableCatalog,
       identifier: Identifier,
       create: CreateTableStatement): CreateV2Table = {
-
-    val isCaseSensitive = conf.caseSensitiveAnalysis
-    // Check that columns are not duplicated in the schema
-    val flattenedSchema = SchemaUtils.explodeNestedFieldNames(create.tableSchema)
-    SchemaUtils.checkColumnNameDuplication(
-      flattenedSchema,
-      s"in the table definition of ${identifier.quoted}",
-      isCaseSensitive)
-
-    // Check that columns are not duplicated in the partitioning statement
-    SchemaUtils.checkTransformDuplication(
-      create.partitioning, "in the partition schema", isCaseSensitive)
-
-    // Check that columns are not duplicated in the bucketing specification
-    SchemaUtils.checkTransformDuplication(
-      create.bucketSpec.map(_.asTransform).toSeq, "in the bucket definition", isCaseSensitive)
-    if (create.tableSchema.isEmpty) {
-      if (create.partitioning.nonEmpty) {
-        throw new AnalysisException("It is not allowed to specify partition columns when the " +
-          "table schema is not defined.")
-      }
-      if (create.bucketSpec.nonEmpty) {
-        throw new AnalysisException("Cannot specify bucketing information if the table schema " +
-          "is not specified.")
-      }
-    } else {
-      val schema = create.tableSchema
-      val resolver = conf.resolver
-      val partitioningReferences = create.partitioning.flatMap(_.references()).map(f =>
-        f.fieldNames())
-
-      // Throws an exception if the reference cannot be resolved
-      val partitionColumns = partitioningReferences.map(
-        SchemaUtils.findColumnPosition(_, schema, resolver))
-
-      val bucketingReferences = create.bucketSpec.map(_.asTransform.references())
-        .getOrElse(Array.empty).map(f => f.fieldNames())
-
-      // Throws an exception if the reference cannot be resolved
-      val bucketingColumns = bucketingReferences.map(
-        SchemaUtils.findColumnPosition(_, schema, resolver))
-
-      val numPartitioningColumns = (partitionColumns ++ bucketingColumns).distinct.length
-
-      if (numPartitioningColumns == flattenedSchema.length) {
-        throw new AnalysisException("Cannot use all columns for partitioning.")
-      }
-    }
-
     // convert the bucket spec and add it as a transform
     val partitioning = create.partitioning ++ create.bucketSpec.map(_.asTransform)
     val properties = convertTableProperties(

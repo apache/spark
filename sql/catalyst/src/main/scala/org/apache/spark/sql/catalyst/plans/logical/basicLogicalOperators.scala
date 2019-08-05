@@ -417,7 +417,11 @@ case class CreateV2Table(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     properties: Map[String, String],
-    ignoreIfExists: Boolean) extends Command
+    ignoreIfExists: Boolean) extends Command with V2TableCreation {
+  override def withPartitioning(rewritten: Seq[Transform]): V2TableCreation = {
+    this.copy(partitioning = rewritten)
+  }
+}
 
 /**
  * Create a new table from a select query with a v2 catalog.
@@ -429,8 +433,9 @@ case class CreateTableAsSelect(
     query: LogicalPlan,
     properties: Map[String, String],
     writeOptions: Map[String, String],
-    ignoreIfExists: Boolean) extends Command {
+    ignoreIfExists: Boolean) extends Command with V2TableCreation {
 
+  override def tableSchema: StructType = query.schema
   override def children: Seq[LogicalPlan] = Seq(query)
 
   override lazy val resolved: Boolean = childrenResolved && {
@@ -438,6 +443,10 @@ case class CreateTableAsSelect(
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+
+  override def withPartitioning(rewritten: Seq[Transform]): V2TableCreation = {
+    this.copy(partitioning = rewritten)
   }
 }
 
@@ -455,7 +464,11 @@ case class ReplaceTable(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     properties: Map[String, String],
-    orCreate: Boolean) extends Command
+    orCreate: Boolean) extends Command with V2TableCreation {
+  override def withPartitioning(rewritten: Seq[Transform]): V2TableCreation = {
+    this.copy(partitioning = rewritten)
+  }
+}
 
 /**
  * Replaces a table from a select query with a v2 catalog.
@@ -470,8 +483,9 @@ case class ReplaceTableAsSelect(
     query: LogicalPlan,
     properties: Map[String, String],
     writeOptions: Map[String, String],
-    orCreate: Boolean) extends Command {
+    orCreate: Boolean) extends Command with V2TableCreation {
 
+  override def tableSchema: StructType = query.schema
   override def children: Seq[LogicalPlan] = Seq(query)
 
   override lazy val resolved: Boolean = {
@@ -479,6 +493,10 @@ case class ReplaceTableAsSelect(
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+
+  override def withPartitioning(rewritten: Seq[Transform]): V2TableCreation = {
+    this.copy(partitioning = rewritten)
   }
 }
 
@@ -1192,4 +1210,12 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+}
+
+sealed trait V2TableCreation extends LogicalPlan {
+  def tableName: Identifier
+  def partitioning: Seq[Transform]
+  def tableSchema: StructType
+
+  def withPartitioning(rewritten: Seq[Transform]): V2TableCreation
 }
