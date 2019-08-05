@@ -59,8 +59,11 @@ private[sql] object LogicalExpressions {
   def hours(column: String): HoursTransform = HoursTransform(reference(column))
 }
 
+/**
+ * Allows Spark to rewrite the given references of the transform during analysis.
+ */
 sealed trait RewritableTransform extends Transform {
-
+  /** Creates a copy of this transform with the new analyzed references. */
   def withReferences(newReferences: Seq[NamedReference]): Transform
 }
 

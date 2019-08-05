@@ -236,6 +236,9 @@ private[spark] object SchemaUtils {
     }
   }
 
+  /**
+   * Gets the name of the column in the given position.
+   */
   def getColumnName(position: Seq[Int], schema: StructType): Seq[String] = {
     val topLevel = schema(position.head)
     val field = position.tail.foldLeft(Seq(topLevel.name) -> topLevel) {

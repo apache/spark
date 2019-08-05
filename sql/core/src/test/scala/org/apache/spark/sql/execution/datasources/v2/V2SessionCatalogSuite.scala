@@ -25,12 +25,10 @@ import scala.collection.JavaConverters._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.{Table, TableProvider}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap

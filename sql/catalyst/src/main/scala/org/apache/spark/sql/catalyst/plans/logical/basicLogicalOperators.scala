@@ -1212,10 +1212,16 @@ case class Deduplicate(
   override def output: Seq[Attribute] = child.output
 }
 
+/** A trait used for logical plan nodes that create or replace V2 table definitions. */
 sealed trait V2TableCreation extends LogicalPlan {
   def tableName: Identifier
   def partitioning: Seq[Transform]
   def tableSchema: StructType
 
+  /**
+   * Creates a copy of this node with the new partitoning transforms. This method is used to
+   * rewrite these nodes after normalizing the field references for these transforms according to
+   * case sensitivity.
+   */
   def withPartitioning(rewritten: Seq[Transform]): V2TableCreation
 }
