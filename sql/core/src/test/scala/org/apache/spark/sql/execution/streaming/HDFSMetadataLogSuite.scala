@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.File
+import java.io.{File, IOException}
 import java.util.ConcurrentModificationException
 
 import scala.language.implicitConversions
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.{CancellableFSDataOutputStream, RenameBasedFSDataOutputStream, RenameHelperMethods}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.UninterruptibleThread
 
@@ -185,5 +189,58 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     intercept[AssertionError](verifyBatchIds(Seq(2), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
+  }
+
+  test("HDFSMetadataLog: retry") {
+    withTempDir { temp =>
+      spark.conf.set(
+        SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+        classOf[FakeFileSystemBasedCheckpointFileManager].getName)
+      spark.sessionState.conf.setConfString(SQLConf.META_DATA_NUM_RETRIES.key, 1.toString)
+      val metadataLog1 = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
+      intercept[IOException] {
+        assert(metadataLog1.add(0, "batch"))
+      }
+
+      spark.sessionState.conf.setConfString(
+        SQLConf.META_DATA_NUM_RETRIES.key, SQLConf.META_DATA_NUM_RETRIES.defaultValue.get.toString)
+      val metadataLog2 = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
+      assert(metadataLog2.add(1, "batch1"))
+      assert(metadataLog2.get(1) === Some("batch1"))
+    }
+  }
+}
+
+class FakeFileSystemBasedCheckpointFileManager(path: Path, conf: Configuration)
+  extends FileSystemBasedCheckpointFileManager(path, conf) {
+  private var closeCount = 0
+
+  override def createAtomic(
+      path: Path,
+      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+
+    new CancellableFSDataOutputStream(path.getFileSystem(conf).create(path)) {
+      private var terminated = false
+
+      override def close(): Unit = {
+        terminated = true
+        closeCount = closeCount + 1
+
+        if (closeCount < 3) {
+          super.close()
+          // mock close error
+          throw new IOException(s"close file: $path error")
+        } else {
+          // close success
+          super.close()
+        }
+      }
+
+      override def cancel(): Unit = {
+        if (!terminated) {
+          close()
+        }
+      }
+    }
   }
 }
