@@ -129,7 +129,7 @@ private[spark] class ExecutorPodsAllocator(
       lastSnapshot = snapshots.last
     }
 
-    val currentRunningExecutors = lastSnapshot.executorPods.values.count {
+    val currentRunningCount = lastSnapshot.executorPods.values.count {
       case PodRunning(_) => true
       case _ => false
     }
@@ -142,7 +142,7 @@ private[spark] class ExecutorPodsAllocator(
       .map { case (id, _) => id }
 
     if (snapshots.nonEmpty) {
-      logDebug(s"Pod allocation status: $currentRunningExecutors running, " +
+      logDebug(s"Pod allocation status: $currentRunningCount running, " +
         s"${currentPendingExecutors.size} pending, " +
         s"${newlyCreatedExecutors.size} unacknowledged.")
     }
@@ -160,7 +160,7 @@ private[spark] class ExecutorPodsAllocator(
     //
     // TODO: with dynamic allocation off, handle edge cases if we end up with more running
     // executors than expected.
-    val knownPodCount = currentRunningExecutors + currentPendingExecutors.size +
+    val knownPodCount = currentRunningCount + currentPendingExecutors.size +
       newlyCreatedExecutors.size
     if (knownPodCount > currentTotalExpectedExecutors) {
       val excess = knownPodCount - currentTotalExpectedExecutors
@@ -185,9 +185,9 @@ private[spark] class ExecutorPodsAllocator(
 
     if (newlyCreatedExecutors.isEmpty
         && currentPendingExecutors.isEmpty
-        && currentRunningExecutors < currentTotalExpectedExecutors) {
+        && currentRunningCount < currentTotalExpectedExecutors) {
       val numExecutorsToAllocate = math.min(
-        currentTotalExpectedExecutors - currentRunningExecutors, podAllocationSize)
+        currentTotalExpectedExecutors - currentRunningCount, podAllocationSize)
       logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes.")
       for ( _ <- 0 until numExecutorsToAllocate) {
         val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
@@ -220,7 +220,7 @@ private[spark] class ExecutorPodsAllocator(
       return
     }
 
-    if (currentRunningExecutors >= currentTotalExpectedExecutors && !dynamicAllocationEnabled) {
+    if (currentRunningCount >= currentTotalExpectedExecutors && !dynamicAllocationEnabled) {
       logDebug("Current number of running executors is equal to the number of requested" +
         " executors. Not scaling up further.")
     } else {
