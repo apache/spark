@@ -21,10 +21,9 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.apache.spark.tags.DockerTest
-
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types._
+import org.apache.spark.tags.DockerTest
 
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
@@ -122,7 +121,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     val types = row.toSeq.map(x => x.getClass.toString)
     assert(types.length == 12)
     assert(types(0).equals("class java.lang.Boolean"))
-    assert(types(1).equals("class java.lang.Integer"))
+    assert(types(1).equals("class java.lang.Byte"))
     assert(types(2).equals("class java.lang.Short"))
     assert(types(3).equals("class java.lang.Integer"))
     assert(types(4).equals("class java.lang.Long"))
@@ -134,7 +133,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(10).equals("class java.math.BigDecimal"))
     assert(types(11).equals("class java.math.BigDecimal"))
     assert(row.getBoolean(0) == false)
-    assert(row.getInt(1) == 255)
+    assert(row.getByte(1) == 255.toByte)
     assert(row.getShort(2) == 32767)
     assert(row.getInt(3) == 2147483647)
     assert(row.getLong(4) == 9223372036854775807L)
@@ -206,30 +205,23 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
   }
 
-  def create_df() : DataFrame = {
-    val tableSchema = StructType(Seq(
-      StructField("serialNum",ByteType,true)
-    ))
-
-    val tableData = Seq (
-      Row(10)
-    )
-
-    spark.createDataFrame(spark.sparkContext.parallelize(tableData),tableSchema)
-  }
-
   test("SPARK-28151 Test write table with BYTETYPE") {
-    val df1 = create_df()
+    val tableSchema = StructType(Seq(StructField("serialNum", ByteType, true)))
+    val tableData = Seq(Row(10))
+    val df1 = spark.createDataFrame(
+      spark.sparkContext.parallelize(tableData),
+      tableSchema)
+
     df1.write
       .format("jdbc")
       .mode("overwrite")
-      .option("url",jdbcUrl)
-      .option("dbtable","testTable")
+      .option("url", jdbcUrl)
+      .option("dbtable", "testTable")
       .save()
     val df2 = spark.read
       .format("jdbc")
-      .option("url",jdbcUrl)
-      .option("dbtable","byteTable")
+      .option("url", jdbcUrl)
+      .option("dbtable", "byteTable")
       .load()
     df2.show()
   }
