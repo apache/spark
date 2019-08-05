@@ -169,8 +169,7 @@ CCCC
 
 
 -- !query 17
-SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b)
-desc
+SELECT udf(count(*)) FROM test_missing_target GROUP BY udf(b) ORDER BY udf(b) desc
 -- !query 17 schema
 struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 17 output
