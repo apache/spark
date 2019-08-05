@@ -217,7 +217,7 @@ SELECT '' AS `Five`,
 -- !query 22 schema
 struct<Five:string,>= 3 or Null:int>
 -- !query 22 output
-3
+	3
 	4
 	NULL
 	NULL
@@ -232,7 +232,7 @@ SELECT '' AS `Five`,
 -- !query 23 schema
 struct<Five:string,Simplest Math:int>
 -- !query 23 output
-1
+	1
 	2
 	6
 	8
@@ -250,7 +250,7 @@ SELECT '' AS `Five`, i AS `Value`,
 -- !query 24 schema
 struct<Five:string,Value:int,Category:string>
 -- !query 24 output
-1	one
+	1	one
 	2	two
 	3	big
 	4	big
@@ -268,7 +268,7 @@ SELECT '' AS `Five`,
 -- !query 25 schema
 struct<Five:string,Category:string>
 -- !query 25 output
-big
+	big
 	big
 	one
 	two
@@ -340,7 +340,7 @@ SELECT '' AS Five, NULLIF(a.i,b.i) AS `NULLIF(a.i,b.i)`,
 -- !query 30 schema
 struct<Five:string,NULLIF(a.i,b.i):int,NULLIF(b.i,4):int>
 -- !query 30 output
-1	2
+	1	2
 	1	2
 	1	3
 	1	NULL
@@ -373,7 +373,7 @@ SELECT '' AS `Two`, *
 -- !query 31 schema
 struct<Two:string,i:int,f:double,i:int,j:int>
 -- !query 31 output
-4	NULL	2	-2
+	4	NULL	2	-2
 	4	NULL	2	-4
 
 

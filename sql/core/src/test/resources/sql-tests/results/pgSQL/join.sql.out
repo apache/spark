@@ -245,7 +245,7 @@ SELECT '' AS `xxx`, *
 -- !query 27 schema
 struct<xxx:string,i:int,j:int,t:string>
 -- !query 27 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -264,7 +264,7 @@ SELECT '' AS `xxx`, *
 -- !query 28 schema
 struct<xxx:string,i:int,j:int,t:string>
 -- !query 28 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -283,7 +283,7 @@ SELECT '' AS `xxx`, *
 -- !query 29 schema
 struct<xxx:string,a:int,b:int,c:string>
 -- !query 29 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -302,7 +302,7 @@ SELECT '' AS `xxx`, *
 -- !query 30 schema
 struct<xxx:string,a:int,b:int,c:string>
 -- !query 30 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -321,7 +321,7 @@ SELECT '' AS `xxx`, *
 -- !query 31 schema
 struct<xxx:string,a:int,b:int,c:string,d:int,e:int>
 -- !query 31 output
-0	NULL	zero	0	NULL
+	0	NULL	zero	0	NULL
 	0	NULL	zero	1	-1
 	0	NULL	zero	2	2
 	0	NULL	zero	2	4
@@ -428,7 +428,7 @@ SELECT '' AS `xxx`, *
 -- !query 32 schema
 struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 -- !query 32 output
-0	NULL	zero	0	NULL
+	0	NULL	zero	0	NULL
 	0	NULL	zero	1	-1
 	0	NULL	zero	2	2
 	0	NULL	zero	2	4
@@ -545,7 +545,7 @@ SELECT '' AS `xxx`, t1.i, k, t
 -- !query 34 schema
 struct<xxx:string,i:int,k:int,t:string>
 -- !query 34 output
-0	-1	zero
+	0	-1	zero
 	0	-3	zero
 	0	-5	zero
 	0	-5	zero
@@ -653,7 +653,7 @@ SELECT '' AS `xxx`, ii, tt, kk
 -- !query 35 schema
 struct<xxx:string,ii:int,tt:string,kk:int>
 -- !query 35 output
-0	zero	-1
+	0	zero	-1
 	0	zero	-3
 	0	zero	-5
 	0	zero	-5
@@ -760,7 +760,7 @@ SELECT '' AS `xxx`, *
 -- !query 36 schema
 struct<xxx:string,i:int,j:int,t:string,i:int,k:int,i:int,k:int>
 -- !query 36 output
-0	NULL	zero	0	NULL	0	NULL
+	0	NULL	zero	0	NULL	0	NULL
 	0	NULL	zero	0	NULL	1	-1
 	0	NULL	zero	0	NULL	2	2
 	0	NULL	zero	0	NULL	2	4
@@ -1659,7 +1659,7 @@ SELECT '' AS `xxx`, *
 -- !query 37 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 37 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1674,7 +1674,7 @@ SELECT '' AS `xxx`, *
 -- !query 38 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 38 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1690,7 +1690,7 @@ SELECT '' AS `xxx`, *
 -- !query 39 schema
 struct<xxx:string,a:int,b:int,c:string,d:int>
 -- !query 39 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1705,7 +1705,7 @@ SELECT '' AS `xxx`, *
 -- !query 40 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 40 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1720,7 +1720,7 @@ SELECT '' AS `xxx`, *
 -- !query 41 schema
 struct<xxx:string,a:int,b:int,c:string,d:int>
 -- !query 41 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1735,7 +1735,7 @@ SELECT '' AS `xxx`, *
 -- !query 42 schema
 struct<xxx:string,a:int,b:int,c:string,d:int>
 -- !query 42 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	2	3	two	2
 	4	1	four	2
 
@@ -1746,7 +1746,7 @@ SELECT '' AS `xxx`, *
 -- !query 43 schema
 struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 -- !query 43 output
-0	NULL	zero	0	NULL
+	0	NULL	zero	0	NULL
 	1	4	one	1	-1
 	2	3	two	2	2
 	2	3	two	2	4
@@ -1761,7 +1761,7 @@ SELECT '' AS `xxx`, *
 -- !query 44 schema
 struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 -- !query 44 output
-0	NULL	zero	NULL	0
+	0	NULL	zero	NULL	0
 	2	3	two	2	2
 	4	1	four	2	4
 
@@ -1772,7 +1772,7 @@ SELECT '' AS `xxx`, *
 -- !query 45 schema
 struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 -- !query 45 output
-0	NULL	zero	2	2
+	0	NULL	zero	2	2
 	0	NULL	zero	2	4
 	0	NULL	zero	NULL	0
 	1	4	one	2	2
@@ -1790,7 +1790,7 @@ SELECT '' AS `xxx`, *
 -- !query 46 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 46 output
-NULL	NULL	null	NULL
+	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1812,7 +1812,7 @@ SELECT '' AS `xxx`, *
 -- !query 47 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 47 output
-NULL	NULL	null	NULL
+	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1833,7 +1833,7 @@ SELECT '' AS `xxx`, *
 -- !query 48 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 48 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1850,7 +1850,7 @@ SELECT '' AS `xxx`, *
 -- !query 49 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 49 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1868,7 +1868,7 @@ SELECT '' AS `xxx`, *
 -- !query 50 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 50 output
-NULL	NULL	NULL	NULL
+	NULL	NULL	NULL	NULL
 	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	NULL	NULL	NULL	0
@@ -1892,7 +1892,7 @@ SELECT '' AS `xxx`, *
 -- !query 51 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 51 output
-NULL	NULL	NULL	NULL
+	NULL	NULL	NULL	NULL
 	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	NULL	NULL	NULL	0
@@ -1924,7 +1924,7 @@ SELECT '' AS `xxx`, *
 -- !query 53 schema
 struct<xxx:string,i:int,j:int,t:string,k:int>
 -- !query 53 output
-1	4	one	-1
+	1	4	one	-1
 
 
 -- !query 54
