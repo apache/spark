@@ -102,7 +102,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-28422: GROUPED_AGG pandas_udf should work without group by clause") {
-    val aggPandasUdf = new MyDummyGROUPEDAGGPandasUDF
+    val aggPandasUdf = new MyDummyGroupedAggPandasUDF
     spark.udf.registerPython("dummyGroupedAggPandasUDF", aggPandasUdf)
 
     withTempView("table") {
@@ -134,7 +134,7 @@ class MyDummyPythonUDF extends UserDefinedPythonFunction(
   pythonEvalType = PythonEvalType.SQL_BATCHED_UDF,
   udfDeterministic = true)
 
-class MyDummyGROUPEDAGGPandasUDF extends UserDefinedPythonFunction(
+class MyDummyGroupedAggPandasUDF extends UserDefinedPythonFunction(
   name = "dummyGroupedAggPandasUDF",
   func = new DummyUDF,
   dataType = DoubleType,

@@ -1790,7 +1790,8 @@ class Analyzer(
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.collectFirst {
         case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
-        case e if PythonUDF.isGroupedAggPandasUDF(e) && !windowedAggExprs.contains(e) => e
+        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
+          !windowedAggExprs.contains(e) => e
       }.isDefined)
     }
   }
