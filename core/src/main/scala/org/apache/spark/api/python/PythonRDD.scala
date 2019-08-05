@@ -24,6 +24,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -39,6 +40,7 @@ import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.{SocketAuthHelper, SocketAuthServer, SocketFuncServer}
+import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util._
 
 
@@ -697,10 +699,11 @@ private[spark] class PythonAccumulatorV2(
   }
 }
 
-// scalastyle:off no.finalize
 private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
     with Logging {
 
+  // id of the Broadcast variable which wrapped this PythonBroadcast
+  private var broadcastId: Long = _
   private var encryptionServer: SocketAuthServer[Unit] = null
   private var decryptionServer: SocketAuthServer[Unit] = null
 
@@ -708,6 +711,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
    * Read data from disks, then copy it to `out`
    */
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    out.writeLong(broadcastId)
     val in = new FileInputStream(new File(path))
     try {
       Utils.copyStream(in, out)
@@ -717,33 +721,36 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   }
 
   /**
-   * Write data into disk, using randomly generated name.
+   * Write data into disk and map it to a broadcast block.
    */
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
-    val file = File.createTempFile("broadcast", "", dir)
-    path = file.getAbsolutePath
-    val out = new FileOutputStream(file)
-    Utils.tryWithSafeFinally {
-      Utils.copyStream(in, out)
-    } {
-      out.close()
-    }
-  }
-
-  /**
-   * Delete the file once the object is GCed.
-   */
-  override def finalize() {
-    if (!path.isEmpty) {
-      val file = new File(path)
-      if (file.exists()) {
-        if (!file.delete()) {
-          logWarning(s"Error deleting ${file.getPath}")
+  private def readObject(in: ObjectInputStream): Unit = {
+    broadcastId = in.readLong()
+    val blockId = BroadcastBlockId(broadcastId, "python")
+    val blockManager = SparkEnv.get.blockManager
+    val diskBlockManager = blockManager.diskBlockManager
+    if (!diskBlockManager.containsBlock(blockId)) {
+      Utils.tryOrIOException {
+        val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
+        val file = File.createTempFile("broadcast", "", dir)
+        val out = new FileOutputStream(file)
+        Utils.tryWithSafeFinally {
+          val size = Utils.copyStream(in, out)
+          val ct = implicitly[ClassTag[Object]]
+          // SPARK-28486: map broadcast file to a broadcast block, so that it could be
+          // cleared by unpersist/destroy rather than gc(previously).
+          val blockStoreUpdater = blockManager.
+            TempFileBasedBlockStoreUpdater(blockId, StorageLevel.DISK_ONLY, ct, file, size)
+          blockStoreUpdater.save()
+        } {
+          out.close()
         }
       }
     }
-    super.finalize()
+    path = diskBlockManager.getFile(blockId).getAbsolutePath
+  }
+
+  def setBroadcastId(bid: Long): Unit = {
+    this.broadcastId = bid
   }
 
   def setupEncryptionServer(): Array[Any] = {
@@ -783,7 +790,6 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
 
   def waitTillDataReceived(): Unit = encryptionServer.getResult()
 }
-// scalastyle:on no.finalize
 
 /**
  * The inverse of pyspark's ChunkedStream for sending data of unknown size.

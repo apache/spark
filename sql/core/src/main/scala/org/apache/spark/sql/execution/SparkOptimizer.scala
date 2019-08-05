@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, Optimizer, PushPredicateThroughNonJoin, RemoveNoopOperators}
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
-import org.apache.spark.sql.execution.python.{ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
 
 class SparkOptimizer(
     catalog: SessionCatalog,
@@ -33,6 +33,8 @@ class SparkOptimizer(
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromAggregate,
+      // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
+      ExtractGroupingPythonUDFFromAggregate,
       ExtractPythonUDFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
@@ -45,7 +47,7 @@ class SparkOptimizer(
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
-    ExtractPythonUDFFromAggregate.ruleName :+
+    ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
     ExtractPythonUDFs.ruleName
 
   /**

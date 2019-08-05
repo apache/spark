@@ -1229,6 +1229,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * - (NOT) LIKE
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
+   * - IS (NOT) (TRUE | FALSE | UNKNOWN)
    * - IS (NOT) DISTINCT FROM
    */
   private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
@@ -1262,6 +1263,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         IsNotNull(e)
       case SqlBaseParser.NULL =>
         IsNull(e)
+      case SqlBaseParser.TRUE => ctx.NOT match {
+        case null => IsTrue(e)
+        case _ => IsNotTrue(e)
+      }
+      case SqlBaseParser.FALSE => ctx.NOT match {
+        case null => IsFalse(e)
+        case _ => IsNotFalse(e)
+      }
+      case SqlBaseParser.UNKNOWN => ctx.NOT match {
+        case null => IsUnknown(e)
+        case _ => IsNotUnknown(e)
+      }
       case SqlBaseParser.DISTINCT if ctx.NOT != null =>
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
@@ -1702,7 +1715,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * {{{
    *   [TYPE] '[VALUE]'
    * }}}
-   * Currently Date, Timestamp and Binary typed literals are supported.
+   * Currently Date, Timestamp, Interval and Binary typed literals are supported.
    */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
     val value = string(ctx.STRING)
@@ -1718,6 +1731,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "TIMESTAMP" =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
           toLiteral(stringToTimestamp(_, zoneId), TimestampType)
+        case "INTERVAL" =>
+          Literal(CalendarInterval.fromString(value), CalendarIntervalType)
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))

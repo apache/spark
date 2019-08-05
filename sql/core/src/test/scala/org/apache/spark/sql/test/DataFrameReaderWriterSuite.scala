@@ -267,7 +267,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         plan = qe.analyzed
 
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
     }
 
     spark.listenerManager.register(listener)
