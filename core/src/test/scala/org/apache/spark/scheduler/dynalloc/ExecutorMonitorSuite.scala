@@ -25,6 +25,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, when}
 
 import org.apache.spark._
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -102,11 +103,13 @@ class ExecutorMonitorSuite extends SparkFunSuite {
       monitor.onTaskStart(SparkListenerTaskStart(i, 1, taskInfo("1", 1)))
       assert(!monitor.isExecutorIdle("1"))
 
-      monitor.onTaskEnd(SparkListenerTaskEnd(i, 1, "foo", Success, taskInfo("1", 1), null))
+      monitor.onTaskEnd(SparkListenerTaskEnd(i, 1, "foo", Success, taskInfo("1", 1),
+        new ExecutorMetrics, null))
       assert(!monitor.isExecutorIdle("1"))
     }
 
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("1", 1),
+      new ExecutorMetrics, null))
     assert(monitor.isExecutorIdle("1"))
     assert(monitor.timedOutExecutors(clock.getTimeMillis()).isEmpty)
     assert(monitor.timedOutExecutors(clock.getTimeMillis() + idleTimeoutMs + 1) === Seq("1"))
@@ -256,7 +259,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     monitor.executorsKilled(Seq("3"))
     assert(monitor.pendingRemovalCount === 2)
 
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("2", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 1, "foo", Success, taskInfo("2", 1),
+      new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors().isEmpty)
     clock.advance(idleDeadline)
     assert(monitor.timedOutExecutors().toSet === Set("2"))
@@ -287,15 +291,18 @@ class ExecutorMonitorSuite extends SparkFunSuite {
 
     // First a failed task, to make sure it does not count.
     monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", TaskResultLost, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", TaskResultLost, taskInfo("1", 1),
+      new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("1"))
 
     monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1),
+      new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
 
     monitor.onTaskStart(SparkListenerTaskStart(3, 0, taskInfo("1", 1)))
-    monitor.onTaskEnd(SparkListenerTaskEnd(3, 0, "foo", Success, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(3, 0, "foo", Success, taskInfo("1", 1),
+      new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
 
     // Finish the jobs, now the executor should be idle, but with the shuffle timeout, since the
@@ -347,11 +354,13 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     monitor.onJobStart(SparkListenerJobStart(2, clock.getTimeMillis(), Seq(stage3, stage4)))
 
     monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1),
+     new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors(idleDeadline) === Seq("2"))
 
     monitor.onTaskStart(SparkListenerTaskStart(3, 0, taskInfo("2", 1)))
-    monitor.onTaskEnd(SparkListenerTaskEnd(3, 0, "foo", Success, taskInfo("2", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(3, 0, "foo", Success, taskInfo("2", 1),
+      new ExecutorMetrics, null))
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)
 
     monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
@@ -381,7 +390,8 @@ class ExecutorMonitorSuite extends SparkFunSuite {
     clock.advance(1000L)
     monitor.onExecutorAdded(SparkListenerExecutorAdded(clock.getTimeMillis(), "1", null))
     monitor.onTaskStart(SparkListenerTaskStart(1, 0, taskInfo("1", 1)))
-    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1), null))
+    monitor.onTaskEnd(SparkListenerTaskEnd(1, 0, "foo", Success, taskInfo("1", 1),
+      new ExecutorMetrics, null))
     monitor.onJobEnd(SparkListenerJobEnd(1, clock.getTimeMillis(), JobSucceeded))
 
     assert(monitor.timedOutExecutors(idleDeadline).isEmpty)

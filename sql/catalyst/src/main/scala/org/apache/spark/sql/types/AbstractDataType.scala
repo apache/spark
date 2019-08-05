@@ -142,6 +142,8 @@ abstract class NumericType extends AtomicType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
+
+  private[sql] def exactNumeric: Numeric[InternalType] = numeric
 }
 
 

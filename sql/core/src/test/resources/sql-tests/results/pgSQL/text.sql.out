@@ -47,7 +47,7 @@ SELECT '' AS two, * FROM TEXT_TBL
 -- !query 5 schema
 struct<two:string,f1:string>
 -- !query 5 output
-doh!
+	doh!
 	hi de ho neighbor
 
 
