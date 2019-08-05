@@ -196,7 +196,9 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
-          if query.resolved && DDLUtils.isHiveTable(r.tableMeta) && isConvertible(r) =>
+          if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
+            (!r.isPartitioned || SQLConf.get.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
+            && isConvertible(r) =>
         InsertIntoTable(metastoreCatalog.convert(r), partition,
           query, overwrite, ifPartitionNotExists)
 
