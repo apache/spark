@@ -363,7 +363,7 @@ SELECT '' AS t_3, BOOLTBL1.* FROM BOOLTBL1
 -- !query 44 schema
 struct<t_3:string,f1:boolean>
 -- !query 44 output
-true
+	true
 	true
 	true
 
@@ -375,7 +375,7 @@ SELECT '' AS t_3, BOOLTBL1.*
 -- !query 45 schema
 struct<t_3:string,f1:boolean>
 -- !query 45 output
-true
+	true
 	true
 	true
 
@@ -387,7 +387,7 @@ SELECT '' AS t_3, BOOLTBL1.*
 -- !query 46 schema
 struct<t_3:string,f1:boolean>
 -- !query 46 output
-true
+	true
 	true
 	true
 
@@ -417,7 +417,7 @@ SELECT '' AS f_1, BOOLTBL1.*
 -- !query 49 schema
 struct<f_1:string,f1:boolean>
 -- !query 49 output
-false
+	false
 
 
 -- !query 50
@@ -474,7 +474,7 @@ SELECT '' AS f_4, BOOLTBL2.* FROM BOOLTBL2
 -- !query 56 schema
 struct<f_4:string,f1:boolean>
 -- !query 56 output
-NULL
+	NULL
 	false
 	false
 	false
@@ -488,7 +488,7 @@ SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
 -- !query 57 schema
 struct<tf_12:string,f1:boolean,f1:boolean>
 -- !query 57 output
-true	false
+	true	false
 	true	false
 	true	false
 	true	false
@@ -509,7 +509,7 @@ SELECT '' AS tf_12, BOOLTBL1.*, BOOLTBL2.*
 -- !query 58 schema
 struct<tf_12:string,f1:boolean,f1:boolean>
 -- !query 58 output
-true	false
+	true	false
 	true	false
 	true	false
 	true	false
@@ -530,7 +530,7 @@ SELECT '' AS ff_4, BOOLTBL1.*, BOOLTBL2.*
 -- !query 59 schema
 struct<ff_4:string,f1:boolean,f1:boolean>
 -- !query 59 output
-false	false
+	false	false
 	false	false
 	false	false
 	false	false
@@ -544,7 +544,7 @@ SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
 -- !query 60 schema
 struct<tf_12_ff_4:string,f1:boolean,f1:boolean>
 -- !query 60 output
-false	false
+	false	false
 	false	false
 	false	false
 	false	false

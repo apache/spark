@@ -272,4 +272,9 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     val ret = Cast(Literal(data, udt), StringType, None)
     checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
   }
+
+  test("SPARK-28497 Can't up cast UserDefinedType to string") {
+    val udt = new TestUDT.MyDenseVectorUDT()
+    assert(!Cast.canUpCast(udt, StringType))
+  }
 }

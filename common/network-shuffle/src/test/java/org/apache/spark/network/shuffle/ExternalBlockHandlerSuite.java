@@ -44,7 +44,7 @@ import org.apache.spark.network.shuffle.protocol.RegisterExecutor;
 import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.shuffle.protocol.UploadBlock;
 
-public class ExternalShuffleBlockHandlerSuite {
+public class ExternalBlockHandlerSuite {
   TransportClient client = mock(TransportClient.class);
 
   OneForOneStreamManager streamManager;
@@ -59,7 +59,7 @@ public class ExternalShuffleBlockHandlerSuite {
   public void beforeEach() {
     streamManager = mock(OneForOneStreamManager.class);
     blockResolver = mock(ExternalShuffleBlockResolver.class);
-    handler = new ExternalShuffleBlockHandler(streamManager, blockResolver);
+    handler = new ExternalBlockHandler(streamManager, blockResolver);
   }
 
   @Test
@@ -74,7 +74,7 @@ public class ExternalShuffleBlockHandlerSuite {
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
     // Verify register executor request latency metrics
-    Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
+    Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
         .get("registerExecutorRequestLatencyMillis");
@@ -168,13 +168,13 @@ public class ExternalShuffleBlockHandlerSuite {
   }
 
   private void verifyOpenBlockLatencyMetrics() {
-    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)
+    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
         .get("openBlockRequestLatencyMillis");
     assertEquals(1, openBlockRequestLatencyMillis.getCount());
     // Verify block transfer metrics
-    Meter blockTransferRateBytes = (Meter) ((ExternalShuffleBlockHandler) handler)
+    Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
         .get("blockTransferRateBytes");

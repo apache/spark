@@ -1009,6 +1009,51 @@ for more details on the API.
 </div>
 </div>
 
+
+## RobustScaler
+
+`RobustScaler` transforms a dataset of `Vector` rows, removing the median and scaling the data according to a specific quantile range (by default the IQR: Interquartile Range, quantile range between the 1st quartile and the 3rd quartile). Its behavior is quite similar to `StandardScaler`, however the median and the quantile range are used instead of mean and standard deviation, which make it robust to outliers. It takes parameters:
+
+* `lower`: 0.25 by default. Lower quantile to calculate quantile range, shared by all features.
+* `upper`: 0.75 by default. Upper quantile to calculate quantile range, shared by all features.
+* `withScaling`: True by default. Scales the data to quantile range.
+* `withCentering`: False by default. Centers the data with median before scaling. It will build a dense output, so take care when applying to sparse input.
+
+`RobustScaler` is an `Estimator` which can be `fit` on a dataset to produce a `RobustScalerModel`; this amounts to computing quantile statistics.  The model can then transform a `Vector` column in a dataset to have unit quantile range and/or zero median features.
+
+Note that if the quantile range of a feature is zero, it will return default `0.0` value in the `Vector` for that feature.
+
+**Examples**
+
+The following example demonstrates how to load a dataset in libsvm format and then normalize each feature to have unit quantile range.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [RobustScaler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RobustScaler)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/RobustScalerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [RobustScaler Java docs](api/java/org/apache/spark/ml/feature/RobustScaler.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaRobustScalerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [RobustScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RobustScaler)
+for more details on the API.
+
+{% include_example python/ml/robust_scaler_example.py %}
+</div>
+</div>
+
+
 ## MinMaxScaler
 
 `MinMaxScaler` transforms a dataset of `Vector` rows, rescaling each feature to a specific range (often [0, 1]).  It takes parameters:

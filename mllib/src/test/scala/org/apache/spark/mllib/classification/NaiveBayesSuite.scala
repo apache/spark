@@ -233,7 +233,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     val piVector = new BDV(model.pi)
     val thetaMatrix = new BDM(model.theta(0).length, model.theta.length, model.theta.flatten).t
     val negThetaMatrix = new BDM(model.theta(0).length, model.theta.length,
-      model.theta.flatten.map(v => math.log(1.0 - math.exp(v)))).t
+      model.theta.flatten.map(v => math.log1p(-math.exp(v)))).t
     val testBreeze = testData.asBreeze
     val negTestBreeze = new BDV(Array.fill(testBreeze.size)(1.0)) - testBreeze
     val piTheta: BV[Double] = piVector + (thetaMatrix * testBreeze)

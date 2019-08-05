@@ -654,6 +654,14 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(1) === "4.56")
     }
   }
+
+  test("SPARK-28463: Thriftserver throws BigDecimal incompatible with HiveDecimal") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT CAST(1 AS decimal(38, 18))")
+      assert(rs.next())
+      assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.000000000000000000"))
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {

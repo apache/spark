@@ -361,6 +361,26 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
 
   /**
    * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
+   * consistent result regardless of the evaluation method we use. If an exception is thrown,
+   * it checks that both modes throw the same exception.
+   *
+   * This method test against binary expressions by feeding them arbitrary literals of `dataType1`
+   * and `dataType2`.
+   */
+  def checkConsistencyBetweenInterpretedAndCodegenAllowingException(
+      c: (Expression, Expression) => Expression,
+      dataType1: DataType,
+      dataType2: DataType): Unit = {
+    forAll (
+      LiteralGenerator.randomGen(dataType1),
+      LiteralGenerator.randomGen(dataType2)
+    ) { (l1: Literal, l2: Literal) =>
+      cmpInterpretWithCodegen(EmptyRow, c(l1, l2), true)
+    }
+  }
+
+  /**
+   * Test evaluation results between Interpreted mode and Codegen mode, making sure we have
    * consistent result regardless of the evaluation method we use.
    *
    * This method test against ternary expressions by feeding them arbitrary literals of `dataType1`,
@@ -398,21 +418,52 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
     }
   }
 
-  def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
-    val interpret = try {
-      evaluateWithoutCodegen(expr, inputRow)
+  def cmpInterpretWithCodegen(
+      inputRow: InternalRow,
+      expr: Expression,
+      exceptionAllowed: Boolean = false): Unit = {
+    val (interpret, interpretExc) = try {
+      (Some(evaluateWithoutCodegen(expr, inputRow)), None)
     } catch {
-      case e: Exception => fail(s"Exception evaluating $expr", e)
+      case e: Exception => if (exceptionAllowed) {
+        (None, Some(e))
+      } else {
+        fail(s"Exception evaluating $expr", e)
+      }
     }
 
     val plan = generateProject(
       GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
       expr)
-    val codegen = plan(inputRow).get(0, expr.dataType)
-
-    if (!compareResults(interpret, codegen)) {
-      fail(s"Incorrect evaluation: $expr, interpret: $interpret, codegen: $codegen")
+    val (codegen, codegenExc) = try {
+      (Some(plan(inputRow).get(0, expr.dataType)), None)
+    } catch {
+      case e: Exception => if (exceptionAllowed) {
+        (None, Some(e))
+      } else {
+        fail(s"Exception evaluating $expr", e)
+      }
     }
+
+    if (interpret.isDefined && codegen.isDefined && !compareResults(interpret.get, codegen.get)) {
+      fail(s"Incorrect evaluation: $expr, interpret: ${interpret.get}, codegen: ${codegen.get}")
+    } else if (interpretExc.isDefined && codegenExc.isEmpty) {
+      fail(s"Incorrect evaluation: $expr, interpet threw exception ${interpretExc.get}")
+    } else if (interpretExc.isEmpty && codegenExc.isDefined) {
+      fail(s"Incorrect evaluation: $expr, codegen threw exception ${codegenExc.get}")
+    } else if (interpretExc.isDefined && codegenExc.isDefined
+        && !compareExceptions(interpretExc.get, codegenExc.get)) {
+      fail(s"Different exception evaluating: $expr, " +
+        s"interpret: ${interpretExc.get}, codegen: ${codegenExc.get}")
+    }
+  }
+
+  /**
+   * Checks the equality between two exceptions. Returns true iff the two exceptions are instances
+   * of the same class and they have the same message.
+   */
+  private[this] def compareExceptions(e1: Exception, e2: Exception): Boolean = {
+    e1.getClass == e2.getClass && e1.getMessage == e2.getMessage
   }
 
   /**

@@ -45,7 +45,7 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * using too much memory.
  *
  * @param context [[TaskContext]], used for metrics update
- * @param shuffleClient [[ShuffleClient]] for fetching remote blocks
+ * @param shuffleClient [[BlockStoreClient]] for fetching remote blocks
  * @param blockManager [[BlockManager]] for reading local blocks
  * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
@@ -64,7 +64,7 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 private[spark]
 final class ShuffleBlockFetcherIterator(
     context: TaskContext,
-    shuffleClient: ShuffleClient,
+    shuffleClient: BlockStoreClient,
     blockManager: BlockManager,
     blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long)])],
     streamWrapper: (BlockId, InputStream) => InputStream,

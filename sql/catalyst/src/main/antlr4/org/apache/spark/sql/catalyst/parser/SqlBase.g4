@@ -294,8 +294,8 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
-    | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
+    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?                         #insertOverwriteTable
+    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)?                                #insertIntoTable
     | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
@@ -672,6 +672,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
@@ -1346,6 +1347,7 @@ nonReserved
     | UNBOUNDED
     | UNCACHE
     | UNIQUE
+    | UNKNOWN
     | UNLOCK
     | UNSET
     | USE
@@ -1611,6 +1613,7 @@ UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';
 UNION: 'UNION';
 UNIQUE: 'UNIQUE';
+UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
 UNSET: 'UNSET';
 USE: 'USE';

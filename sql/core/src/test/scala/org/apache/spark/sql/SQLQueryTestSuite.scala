@@ -279,6 +279,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     testCase match {
       case udfTestCase: UDFTest =>
+        // In Python UDF tests, the number of shuffle partitions matters considerably in
+        // the testing time because it requires to fork and communicate between external
+        // processes.
+        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 4)
         registerTestUDF(udfTestCase.udf, localSparkSession)
       case _ =>
     }
@@ -310,7 +314,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       QueryOutput(
         sql = sql,
         schema = schema.catalogString,
-        output = output.mkString("\n").trim)
+        output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
     if (regenerateGoldenFiles) {
@@ -341,7 +345,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         QueryOutput(
           sql = segments(i * 3 + 1).trim,
           schema = segments(i * 3 + 2).trim,
-          output = segments(i * 3 + 3).trim
+          output = segments(i * 3 + 3).replaceAll("\\s+$", "")
         )
       }
     }

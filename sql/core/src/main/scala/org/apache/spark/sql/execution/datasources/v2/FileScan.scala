@@ -21,27 +21,38 @@ import java.util.{Locale, OptionalLong}
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.IO_WARNING_LARGEFILETHRESHOLD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
 abstract class FileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     readDataSchema: StructType,
-    readPartitionSchema: StructType) extends Scan with Batch with SupportsReportStatistics {
+    readPartitionSchema: StructType)
+  extends Scan
+  with Batch with SupportsReportStatistics with Logging {
   /**
    * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(path: Path): Boolean = {
     false
+  }
+
+  /**
+   * If a file with `path` is unsplittable, return the unsplittable reason,
+   * otherwise return `None`.
+   */
+  def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
+    "undefined"
   }
 
   override def description(): String = {
@@ -91,6 +102,16 @@ abstract class FileScan(
         )
       }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
     }
+
+    if (splitFiles.length == 1) {
+      val path = new Path(splitFiles(0).filePath)
+      if (!isSplitable(path) && splitFiles(0).length >
+        sparkSession.sparkContext.getConf.get(IO_WARNING_LARGEFILETHRESHOLD)) {
+        logWarning(s"Loading one large unsplittable file ${path.toString} with only one " +
+          s"partition, the reason is: ${getFileUnSplittableReason(path)}")
+      }
+    }
+
     FilePartition.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 

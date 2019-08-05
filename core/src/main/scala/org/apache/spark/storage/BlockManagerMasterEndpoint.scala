@@ -29,7 +29,7 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -45,7 +45,7 @@ class BlockManagerMasterEndpoint(
     val isLocal: Boolean,
     conf: SparkConf,
     listenerBus: LiveListenerBus,
-    externalShuffleClient: Option[ExternalShuffleClient])
+    externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from block manager id to the block manager's information.
@@ -82,7 +82,7 @@ class BlockManagerMasterEndpoint(
   logInfo("BlockManagerMasterEndpoint up")
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)
   //   && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)`
-  private val externalShuffleServiceRddFetchEnabled: Boolean = externalShuffleClient.isDefined
+  private val externalShuffleServiceRddFetchEnabled: Boolean = externalBlockStoreClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -195,7 +195,7 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
-    val removeRddBlockViaExtShuffleServiceFutures = externalShuffleClient.map { shuffleClient =>
+    val removeRddBlockViaExtShuffleServiceFutures = externalBlockStoreClient.map { shuffleClient =>
       blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
         Future[Int] {
           val numRemovedBlocks = shuffleClient.removeBlocks(

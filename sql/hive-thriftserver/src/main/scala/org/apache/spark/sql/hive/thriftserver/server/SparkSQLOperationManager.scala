@@ -21,13 +21,13 @@ import java.util.{List => JList, Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, GetColumnsOperation, GetSchemasOperation, MetadataOperation, Operation, OperationManager}
+import org.apache.hive.service.cli.operation._
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation, SparkGetColumnsOperation, SparkGetSchemasOperation, SparkGetTablesOperation}
+import org.apache.spark.sql.hive.thriftserver._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -100,11 +100,37 @@ private[thriftserver] class SparkSQLOperationManager()
       columnName: String): GetColumnsOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
-      s" initialized or had already closed.")
+      " initialized or had already closed.")
     val operation = new SparkGetColumnsOperation(sqlContext, parentSession,
       catalogName, schemaName, tableName, columnName)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created GetColumnsOperation with session=$parentSession.")
+    operation
+  }
+
+  override def newGetTableTypesOperation(
+      parentSession: HiveSession): GetTableTypesOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      " initialized or had already closed.")
+    val operation = new SparkGetTableTypesOperation(sqlContext, parentSession)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetTableTypesOperation with session=$parentSession.")
+    operation
+  }
+
+  override def newGetFunctionsOperation(
+      parentSession: HiveSession,
+      catalogName: String,
+      schemaName: String,
+      functionName: String): GetFunctionsOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      " initialized or had already closed.")
+    val operation = new SparkGetFunctionsOperation(sqlContext, parentSession,
+      catalogName, schemaName, functionName)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
     operation
   }
 
