@@ -67,16 +67,18 @@ class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
   val unsupportedJoinTypes = Seq(LeftOuter, RightOuter, FullOuter, LeftAnti, LeftSemi)
 
   private def comparePlanWithCrossJoinEnable(query: LogicalPlan, expected: LogicalPlan): Unit = {
-    // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
-    val exception = intercept[AnalysisException] {
-      Optimize.execute(query.analyze)
-    }
-    assert(exception.message.startsWith("Detected implicit cartesian product"))
+    withSQLConf(AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // AnalysisException thrown by CheckCartesianProducts while spark.sql.crossJoin.enabled=false
+      val exception = intercept[AnalysisException] {
+        Optimize.execute(query.analyze)
+      }
+      assert(exception.message.startsWith("Detected implicit cartesian product"))
 
-    // pull out the python udf while set spark.sql.crossJoin.enabled=true
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
-      val optimized = Optimize.execute(query.analyze)
-      comparePlans(optimized, expected)
+      // pull out the python udf while set spark.sql.crossJoin.enabled=true
+      withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
+        val optimized = Optimize.execute(query.analyze)
+        comparePlans(optimized, expected)
+      }
     }
   }
 

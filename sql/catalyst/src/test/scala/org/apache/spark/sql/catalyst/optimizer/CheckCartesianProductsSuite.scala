@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf.CROSS_JOINS_ENABLED
+import org.apache.spark.sql.internal.SQLConf.{AUTO_BROADCASTJOIN_THRESHOLD, CROSS_JOINS_ENABLED}
 
 class CheckCartesianProductsSuite extends PlanTest {
 
@@ -41,7 +41,7 @@ class CheckCartesianProductsSuite extends PlanTest {
   val joinTypesWithoutRequiredCondition = Seq(LeftSemi, LeftAnti, ExistenceJoin('exists))
 
   test("CheckCartesianProducts doesn't throw an exception if cross joins are enabled)") {
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "true", AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       noException should be thrownBy {
         for (joinType <- joinTypesWithRequiredCondition ++ joinTypesWithoutRequiredCondition) {
           performCartesianProductCheck(joinType)
@@ -51,7 +51,7 @@ class CheckCartesianProductsSuite extends PlanTest {
   }
 
   test("CheckCartesianProducts throws an exception for join types that require a join condition") {
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false", AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       for (joinType <- joinTypesWithRequiredCondition) {
         val thrownException = the [AnalysisException] thrownBy {
           performCartesianProductCheck(joinType)
@@ -61,8 +61,8 @@ class CheckCartesianProductsSuite extends PlanTest {
     }
   }
 
-  test("CheckCartesianProducts doesn't throw an exception if a join condition is present") {
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+  test("CheckCartesianProducts doesn't throw an exception if an equal join condition is present") {
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false", AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       for (joinType <- joinTypesWithRequiredCondition) {
         noException should be thrownBy {
           performCartesianProductCheck(joinType, Some('a === 'd))
@@ -71,8 +71,21 @@ class CheckCartesianProductsSuite extends PlanTest {
     }
   }
 
+  test("CheckCartesianProducts throws an exception if an non-equal join condition is present") {
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false", AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      for (joinType <- joinTypesWithRequiredCondition) {
+        noException should be thrownBy {
+          val thrownException = the [AnalysisException] thrownBy {
+            performCartesianProductCheck(joinType, Some('a < 'b))
+          }
+          assert(thrownException.message.contains("Detected implicit cartesian product"))
+        }
+      }
+    }
+  }
+
   test("CheckCartesianProducts doesn't throw an exception if join types don't require conditions") {
-    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false", AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       for (joinType <- joinTypesWithoutRequiredCondition) {
         noException should be thrownBy {
           performCartesianProductCheck(joinType)
