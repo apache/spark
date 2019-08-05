@@ -1690,12 +1690,21 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("ShowTables: using v1 catalog, db doesn't exist ") {
-    // 'testcat' below resolves to a database name and falls back to v1 catalog.
+    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
+    // 'db' and there is no default catalog set.
     val exception = intercept[NoSuchDatabaseException] {
+      runShowTablesSql("SHOW TABLES FROM db", Seq())
+    }
+
+    assert(exception.getMessage.contains("Database 'db' not found"))
+  }
+
+  test("ShowTables: using v2 catalog, db is not specified - throws an exception") {
+    val exception = intercept[AnalysisException] {
       runShowTablesSql("SHOW TABLES FROM testcat", Seq())
     }
 
-    assert(exception.getMessage.contains("Database 'testcat' not found"))
+    assert(exception.getMessage.contains("default database name cannot be deduced"))
   }
 
   test("ShowTables: db is not specified and default v2 catalog is set - throws an exception") {

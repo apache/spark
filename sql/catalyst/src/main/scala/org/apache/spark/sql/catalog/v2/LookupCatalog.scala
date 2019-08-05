@@ -106,11 +106,17 @@ trait LookupCatalog extends Logging {
 
   /**
    * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
+   * Catalog name takes precedence over namespaces.
    */
   object CatalogNamespace {
     def unapply(parts: Seq[String]): Some[CatalogNamespace] = parts match {
-      case CatalogAndIdentifier(maybeCatalog, nameParts) =>
-        Some((maybeCatalog.orElse(defaultCatalog), nameParts))
+      case Seq(catalogName, tail @ _*) =>
+        try {
+          Some((Some(lookupCatalog(catalogName)), tail))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((defaultCatalog, parts))
+        }
     }
   }
 
