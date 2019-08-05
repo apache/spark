@@ -17,41 +17,21 @@
 
 package org.apache.spark.sql.sources.v2
 
-import java.util
-import java.util.concurrent.ConcurrentHashMap
+import org.scalatest.BeforeAndAfter
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-
-import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
-
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
-import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetDataSourceV2, ParquetTable}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 
 class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
 
-  private val v2Format = classOf[InMemoryTableProvider].getName
-  private val dfData = Seq((1L, "a"), (2L, "b"), (3L, "c"))
-  private val catalogName = "testcat"
-
   before {
-    spark.conf.set(s"spark.sql.catalog.$catalogName", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set(s"spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
 
-    spark.createDataFrame(dfData).toDF("id", "data").createOrReplaceTempView("source")
+    val df1 = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    df1.createOrReplaceTempView("source")
     val df2 = spark.createDataFrame(Seq((4L, "d"), (5L, "e"), (6L, "f"))).toDF("id", "data")
     df2.createOrReplaceTempView("source2")
   }
@@ -60,19 +40,6 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
     spark.sql("DROP VIEW source")
     spark.sql("DROP VIEW source2")
-  }
-
-  private def sessionCatalogTest(testName: String)(f: SparkSession => Unit): Unit = {
-    test("using session catalog: " + testName) {
-      val catalogConf = SQLConf.V2_SESSION_CATALOG
-      val newSession = spark.newSession()
-      newSession.createDataFrame(dfData).toDF("id", "data").createOrReplaceTempView("source")
-      newSession.sessionState.conf.setConf(catalogConf, classOf[TestV2SessionCatalog].getName)
-      try f(newSession) finally {
-        newSession.catalog("session").asInstanceOf[TestV2SessionCatalog].clearTables()
-        newSession.sql("DROP VIEW source")
-      }
-    }
   }
 
   test("insertInto: append") {
@@ -150,9 +117,13 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
-      // Default saveMode is append, therefore this doesn't throw a table already exists eception
+      // Default saveMode is append, therefore this doesn't throw a table already exists exception
       spark.table("source").write.saveAsTable(t1)
       checkAnswer(spark.table(t1), spark.table("source"))
+
+      // also appends are by name not by position
+      spark.table("source").select('data, 'id).write.saveAsTable(t1)
+      checkAnswer(spark.table(t1), spark.table("source").union(spark.table("source")))
     }
   }
 
@@ -188,118 +159,5 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
       spark.table("source").write.mode("ignore").saveAsTable(t1)
       checkAnswer(spark.table(t1), Seq(Row("c", "d")))
     }
-  }
-
-  sessionCatalogTest("saveAsTable and v2 table - table doesn't exist") { session =>
-    val t1 = "tbl"
-    session.table("source").write.format(v2Format).saveAsTable(t1)
-    checkAnswer(session.table(t1), session.table("source"))
-  }
-
-  sessionCatalogTest("saveAsTable: v2 table - table exists") { session =>
-    val t1 = "tbl"
-    session.sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-    intercept[TableAlreadyExistsException] {
-      session.table("source").select("id", "data").write.format(v2Format).saveAsTable(t1)
-    }
-    session.table("source").write.format(v2Format).mode("append").saveAsTable(t1)
-    checkAnswer(session.table(t1), session.table("source"))
-  }
-
-  sessionCatalogTest("saveAsTable: v2 table - table overwrite and table doesn't exist") { session =>
-    val t1 = "tbl"
-    session.table("source").write.format(v2Format).mode("overwrite").saveAsTable(t1)
-    checkAnswer(session.table(t1), session.table("source"))
-  }
-
-  sessionCatalogTest("saveAsTable: v2 table - table overwrite and table exists") { session =>
-    val t1 = "tbl"
-    session.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
-    session.table("source").write.format(v2Format).mode("overwrite").saveAsTable(t1)
-    checkAnswer(session.table(t1), session.table("source"))
-  }
-
-  sessionCatalogTest("saveAsTable: v2 table - ignore mode and table doesn't exist") { session =>
-    val t1 = "tbl"
-    session.table("source").write.format(v2Format).mode("ignore").saveAsTable(t1)
-    checkAnswer(session.table(t1), session.table("source"))
-  }
-
-  sessionCatalogTest("saveAsTable: v2 table - ignore mode and table exists") { session =>
-    val t1 = "tbl"
-    session.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
-    session.table("source").write.format(v2Format).mode("ignore").saveAsTable(t1)
-    checkAnswer(session.table(t1), Seq(Row("c", "d")))
-  }
-
-  sessionCatalogTest("saveAsTable: old table defined in a database colliding " +
-      "with a catalog name") { session =>
-    // Make sure the database name conflicts with a catalog name
-    val dbPath = session.sessionState.catalog.getDefaultDBPath(catalogName)
-    session.sessionState.catalog.createDatabase(
-      CatalogDatabase(catalogName, "", dbPath, Map.empty), ignoreIfExists = false)
-    val t1 = "tbl"
-    withTable(t1) {
-      // Create the table in the built in catalog, in the given database
-      session.sessionState.catalog.createTable(
-        CatalogTable(
-          identifier = TableIdentifier(t1, Some(catalogName)),
-          tableType = CatalogTableType.MANAGED,
-          provider = Some(v2Format),
-          storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
-          schema = session.table("source").schema
-        ),
-        ignoreIfExists = false
-      )
-      val tableName = s"$catalogName.$t1"
-      checkAnswer(session.table(tableName), Nil)
-      intercept[TableAlreadyExistsException] {
-        // Make sure default save mode is same as before
-        session.table("source").write.format(v2Format).saveAsTable(tableName)
-      }
-      session.table("source").write.format(v2Format).mode("append").saveAsTable(tableName)
-      checkAnswer(session.table(tableName), session.table("source"))
-    }
-  }
-}
-
-class InMemoryTableProvider extends TableProvider {
-  override def getTable(options: CaseInsensitiveStringMap): Table = {
-    throw new UnsupportedOperationException("D'oh!")
-  }
-}
-
-/** A SessionCatalog that always loads an in memory Table, so we can test write code paths. */
-class TestV2SessionCatalog extends V2SessionCatalog {
-
-  protected val tables: util.Map[Identifier, InMemoryTable] =
-    new ConcurrentHashMap[Identifier, InMemoryTable]()
-
-  override def loadTable(ident: Identifier): Table = {
-    if (tables.containsKey(ident)) {
-      tables.get(ident)
-    } else {
-      // Table was created through the built-in catalog
-      val t = super.loadTable(ident)
-      val table = new InMemoryTable(t.name(), t.schema(), t.partitioning(), t.properties())
-      tables.put(ident, table)
-      table
-    }
-  }
-
-  override def createTable(
-      ident: Identifier,
-      schema: StructType,
-      partitions: Array[Transform],
-      properties: util.Map[String, String]): Table = {
-    val t = new InMemoryTable(ident.name(), schema, partitions, properties)
-    tables.put(ident, t)
-    t
-  }
-
-  def clearTables(): Unit = {
-    assert(!tables.isEmpty, "Tables were empty, maybe didn't use the session catalog code path?")
-    tables.keySet().asScala.foreach(super.dropTable)
-    tables.clear()
   }
 }
