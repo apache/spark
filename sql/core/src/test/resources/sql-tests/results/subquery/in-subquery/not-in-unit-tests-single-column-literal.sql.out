@@ -15,12 +15,6 @@ struct<>
 
 
 -- !query 1
--- Uncorrelated NOT IN Subquery test cases
-  -- Case 1 (not possible to write a literal with no rows, so we ignore it.)
-  -- (empty subquery -> all rows returned)
-
-  -- Case 2
-  -- (subquery includes null -> no rows returned)
 SELECT *
 FROM   m
 WHERE  a NOT IN (null)
@@ -31,11 +25,9 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 2
--- Case 3
-  -- (probe column is null -> row not returned)
 SELECT *
 FROM   m
-WHERE  b = 1.0 -- Only matches (null, 1.0)
+WHERE  b = 1.0 
        AND a NOT IN (2)
 -- !query 2 schema
 struct<a:int,b:decimal(2,1)>
@@ -44,11 +36,9 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 3
--- Case 4
-  -- (probe column matches subquery row -> row not returned)
 SELECT *
 FROM   m
-WHERE  b = 3.0 -- Only matches (2, 3.0)
+WHERE  b = 3.0 
        AND a NOT IN (2)
 -- !query 3 schema
 struct<a:int,b:decimal(2,1)>
@@ -57,11 +47,9 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 4
--- Case 5
-  -- (probe column does not match subquery row -> row is returned)
 SELECT *
 FROM   m
-WHERE  b = 3.0 -- Only matches (2, 3.0)
+WHERE  b = 3.0 
        AND a NOT IN (6)
 -- !query 4 schema
 struct<a:int,b:decimal(2,1)>

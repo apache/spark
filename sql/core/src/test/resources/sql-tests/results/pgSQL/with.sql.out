@@ -26,9 +26,9 @@ struct<count(1):bigint>
 
 -- !query 2
 CREATE TABLE department (
-	id INTEGER,  -- department ID
-	parent_department INTEGER, -- upper department ID
-	name string -- department name
+	id INTEGER,  
+	parent_department INTEGER, 
+	name string 
 ) USING parquet
 -- !query 2 schema
 struct<>
@@ -211,7 +211,7 @@ struct<x:int>
 WITH outermost(x) AS (
   SELECT 1
   UNION (WITH innermost as (SELECT 2)
-         SELECT * FROM outermost  -- fail
+         SELECT * FROM outermost  
          UNION SELECT * FROM innermost)
 )
 SELECT * FROM outermost ORDER BY 1
@@ -358,23 +358,20 @@ create table foo (with baz)
 
 
 -- !query 38
--- fail, WITH is a reserved word
 create table foo (with ordinality)
 -- !query 38 schema
 struct<>
 -- !query 38 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'with'(line 2, pos 18)
+no viable alternative at input 'with'(line 1, pos 18)
 
 == SQL ==
--- fail, WITH is a reserved word
 create table foo (with ordinality)
 ------------------^^^
 
 
 -- !query 39
--- fail, WITH is a reserved word
 with ordinality as (select 1 as x) select * from ordinality
 -- !query 39 schema
 struct<x:int>

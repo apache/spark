@@ -29,13 +29,11 @@ struct<>
 
 
 -- !query 2
--- Case 1
-  -- (subquery is empty -> row is returned)
 SELECT *
 FROM   m
 WHERE  (a, b) NOT IN (SELECT *
                       FROM   s
-                      WHERE  d > 5.0) -- Matches no rows
+                      WHERE  d > 5.0)
 -- !query 2 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 2 output
@@ -46,13 +44,11 @@ NULL	NULL
 
 
 -- !query 3
--- Case 2
-  -- (subquery contains a row with null in all columns -> row not returned)
 SELECT *
 FROM   m
 WHERE  (a, b) NOT IN (SELECT *
                       FROM s
-                      WHERE c IS NULL AND d IS NULL) -- Matches only (null, null)
+                      WHERE c IS NULL AND d IS NULL)
 -- !query 3 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 3 output
@@ -60,14 +56,12 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 4
--- Case 3
-  -- (probe-side columns are all null -> row not returned)
 SELECT *
 FROM   m
-WHERE  a IS NULL AND b IS NULL -- Matches only (null, null)
+WHERE  a IS NULL AND b IS NULL 
        AND (a, b) NOT IN (SELECT *
                           FROM s
-                          WHERE c IS NOT NULL) -- Matches (0, 1.0), (2, 3.0), (4, null)
+                          WHERE c IS NOT NULL)
 -- !query 4 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 4 output
@@ -75,14 +69,12 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 5
--- Case 4
-  -- (one column null, other column matches a row in the subquery result -> row not returned)
 SELECT *
 FROM   m
-WHERE  b = 1.0 -- Matches (null, 1.0)
+WHERE  b = 1.0 
        AND (a, b) NOT IN (SELECT *
                           FROM s
-                          WHERE c IS NOT NULL) -- Matches (0, 1.0), (2, 3.0), (4, null)
+                          WHERE c IS NOT NULL)
 -- !query 5 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 5 output
@@ -90,14 +82,12 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 6
--- Case 5
-  -- (one null column with no match -> row is returned)
 SELECT *
 FROM   m
-WHERE  b = 1.0 -- Matches (null, 1.0)
+WHERE  b = 1.0 
        AND (a, b) NOT IN (SELECT *
                           FROM s
-                          WHERE c = 2) -- Matches (2, 3.0)
+                          WHERE c = 2)
 -- !query 6 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 6 output
@@ -105,14 +95,12 @@ NULL	1
 
 
 -- !query 7
--- Case 6
-  -- (no null columns with match -> row not returned)
 SELECT *
 FROM   m
-WHERE  b = 3.0 -- Matches (2, 3.0)
+WHERE  b = 3.0 
        AND (a, b) NOT IN (SELECT *
                           FROM s
-                          WHERE c = 2) -- Matches (2, 3.0)
+                          WHERE c = 2)
 -- !query 7 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 7 output
@@ -120,14 +108,12 @@ struct<a:int,b:decimal(2,1)>
 
 
 -- !query 8
--- Case 7
-  -- (no null columns with no match -> row is returned)
 SELECT *
 FROM   m
-WHERE  b = 5.0 -- Matches (4, 5.0)
+WHERE  b = 5.0 
        AND (a, b) NOT IN (SELECT *
                           FROM s
-                          WHERE c = 2) -- Matches (2, 3.0)
+                          WHERE c = 2)
 -- !query 8 schema
 struct<a:int,b:decimal(2,1)>
 -- !query 8 output

@@ -224,7 +224,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition(_.startsWith("--"))
+    val (comments, codeMaybeWithComment) = input.split("\n").partition(_.trim.startsWith("--"))
+    val code = codeMaybeWithComment.map(_.split("--").head)
 
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.

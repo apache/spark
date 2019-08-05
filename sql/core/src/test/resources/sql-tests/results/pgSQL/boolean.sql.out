@@ -316,7 +316,6 @@ NULL
 
 
 -- !query 39
--- error
 SELECT boolean(string('')) AS invalid
 -- !query 39 schema
 struct<invalid:boolean>
@@ -325,8 +324,6 @@ NULL
 
 
 -- !query 40
--- error
-
 CREATE TABLE BOOLTBL1 (f1 boolean) USING parquet
 -- !query 40 schema
 struct<>
