@@ -266,33 +266,16 @@ SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
 --
 
 -- Basic cases (we expect planner to pull up the subquery here)
----comment out for now
----+org.apache.spark.sql.AnalysisException
----+USING column `name` cannot be resolved on the left side of the join. The left-side columns: [CAST(udf(cast(name as string)) AS STRING), CAST(udf(cast(n as string)) AS INT)];
----SELECT * FROM
----(SELECT udf(name), udf(t2.n) FROM t2) as s2
----INNER JOIN
----(SELECT udf(name), udf(t3.n) FROM t3) s3
----USING (name);
----+USING column `name` cannot be resolved on the left side of the join. The left-side columns: [CAST(udf(cast(name as string)) AS STRING), CAST(udf(cast(n as string)) AS INT)];
 SELECT * FROM
-(SELECT * FROM t2) as s2
+(SELECT udf(name) as name, t2.n FROM t2) as s2
 INNER JOIN
-(SELECT * FROM t3) s3
+(SELECT udf(name) as name, t3.n FROM t3) s3
 USING (name);
 
---- comment out for now
----+org.apache.spark.sql.catalyst.parser.ParseException
----+mismatched input '(' expecting {')', ',', '-'}(line 5, pos 10)
----SELECT * FROM
----(SELECT * FROM t2) as s2
----LEFT JOIN
----(SELECT * FROM t3) s3
----USING (udf(name));
 SELECT * FROM
-(SELECT * FROM t2) as s2
+(SELECT udf(name) as name, t2.n FROM t2) as s2
 LEFT JOIN
-(SELECT * FROM t3) s3
+(SELECT udf(name) as name, t3.n FROM t3) s3
 USING (name);
 
 SELECT udf(name), udf(s2.n), udf(s3.n) FROM
@@ -607,19 +590,7 @@ CREATE TABLE tt4(f1 int) USING parquet;
 INSERT INTO tt4 VALUES (0),(1),(9999);
 -- analyze tt4;
 
----comment out for now
----problem caused by SELECT udf(b.f1)
----+org.apache.spark.sql.AnalysisException
----+cannot resolve '`d.f1`' given input columns: [d.CAST(udf(cast(f1 as string)) AS INT), a.f1]; line 7 pos 26
----SELECT udf(a.f1)
----FROM tt4 a
----LEFT JOIN (
----        SELECT udf(b.f1)
----        FROM tt3 b LEFT JOIN tt3 c ON udf(b.f1) = udf(c.f1)
----        WHERE udf(c.f1) IS NULL
----) AS d ON udf(a.f1) = udf(d.f1)
----WHERE udf(d.f1) IS NULL;
-SELECT udf(a.f1)
+SELECT udf(a.f1) as f1
 FROM tt4 a
 LEFT JOIN (
         SELECT b.f1
@@ -761,22 +732,6 @@ select * from a left join b on udf(i) = udf(x) and udf(i) = udf(y) and udf(x) = 
 --
 -- test NULL behavior of whole-row Vars, per bug #5025
 --
---- comment out for now
---- problem caused by `group by udf(t1.q2)`
---- -- !query 130 schema
-----struct<q2:bigint,count(q1, q2):bigint>
----+struct<>
---- -- !query 130 output
------4567890123456789      0
-----123    2
-----456    0
-----4567890123456789       6
----+org.apache.spark.sql.AnalysisException
----+expression 't1.`q2`' is neither present in the group by, nor is it an aggregate f
----unction. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;
----select udf(t1.q2), udf(count(t2.*))
----from int8_tbl t1 left join int8_tbl t2 on (udf(t1.q2) = udf(t2.q1))
----group by udf(t1.q2) order by 1;
 select udf(t1.q2), udf(count(t2.*))
 from int8_tbl t1 left join int8_tbl t2 on (udf(t1.q2) = udf(t2.q1))
 group by t1.q2 order by 1;
@@ -790,18 +745,9 @@ group by t1.q2 order by 1;
 -- from int8_tbl t1 left join (select * from int8_tbl offset 0) t2 on (t1.q2 = t2.q1)
 -- group by t1.q2 order by 1;
 
----comment out for now
----problem caused by select udf(q1)   remove udf works ok
----+org.apache.spark.sql.AnalysisException
----+cannot resolve '`t2.q1`' given input columns: [t2.CAST(udf(cast(q1 as string)) AS BIGINT), t1.q1, t1.q2, t2.q2]; line 4 pos 23
----select udf(t1.q2), udf(count(t2.*))
----from int8_tbl t1 left join
----  (select udf(q1), case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
----  on (udf(t1.q2) = udf(t2.q1))
----group by t1.q2 order by 1;
-select udf(t1.q2), udf(count(t2.*))
+select udf(t1.q2) as q2, udf(count(t2.*))
 from int8_tbl t1 left join
-  (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
+  (select udf(q1) as q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
   on (udf(t1.q2) = udf(t2.q1))
 group by t1.q2 order by 1;
 
@@ -819,25 +765,11 @@ create or replace temporary view c as select * from
   (values ('A', 'p'), ('B', 'q'), ('C', null))
   as v(name, a);
 
-
---- comment out for now   query136
---- problem caused by udf(b.a)
----+org.apache.spark.sql.AnalysisException
----+cannot resolve '`b_grp.a`' given input columns: [b_grp.CAST(udf(cast(a as string)) AS STRING), b_grp.cnt, a.code]; line 6 pos 26
----select udf(c.name), udf(ss.code), udf(ss.b_cnt), udf(ss.const)
----from c left join
----  (select a.code, coalesce(b_grp.cnt, 0) as b_cnt, -1 as const
----   from a left join
----     (select udf(count(1)) as cnt, udf(b.a) from b group by b.a) as b_grp
----     on udf(a.code) = udf(b_grp.a)
----  ) as ss
----  on (udf(c.a) = udf(ss.code))
----order by c.name;
 select udf(c.name), udf(ss.code), udf(ss.b_cnt), udf(ss.const)
 from c left join
   (select a.code, coalesce(b_grp.cnt, 0) as b_cnt, -1 as const
    from a left join
-     (select udf(count(1)) as cnt, b.a from b group by b.a) as b_grp
+     (select udf(count(1)) as cnt, b.a as a from b group by b.a) as b_grp
      on udf(a.code) = udf(b_grp.a)
   ) as ss
   on (udf(c.a) = udf(ss.code))
@@ -849,32 +781,13 @@ order by c.name;
 -- test incorrect handling of placeholders that only appear in targetlists,
 -- per bug #6154
 --
----comment out for now  query 137
----promblem caused by SELECT udf(sub5.key5),
---+org.apache.spark.sql.AnalysisException
----+cannot resolve '`sub4.key5`' given input columns: [sub4.CAST(udf(cast(key5 as string)) AS INT), sub3.key3, sub4.value2]; line 13 pos 11
----SELECT * FROM
----( SELECT 1 as key1 ) sub1
----LEFT JOIN
----( SELECT sub3.key3, sub4.value2, COALESCE(sub4.value2, 66) as value3 FROM
----    ( SELECT 1 as key3 ) sub3
----    LEFT JOIN
----    ( SELECT udf(sub5.key5), udf(COALESCE(sub6.value1, 1)) as value2 FROM
----        ( SELECT 1 as key5 ) sub5
----        LEFT JOIN
----        ( SELECT 2 as key6, 42 as value1 ) sub6
----        ON udf(sub5.key5) = udf(sub6.key6)
----    ) sub4
----    ON udf(sub4.key5) = udf(sub3.key3)
----) sub2
----ON udf(sub1.key1) = udf(sub2.key3);
 SELECT * FROM
 ( SELECT 1 as key1 ) sub1
 LEFT JOIN
 ( SELECT sub3.key3, sub4.value2, COALESCE(sub4.value2, 66) as value3 FROM
     ( SELECT 1 as key3 ) sub3
     LEFT JOIN
-    ( SELECT sub5.key5, udf(COALESCE(sub6.value1, 1)) as value2 FROM
+    ( SELECT udf(sub5.key5) as key5, udf(COALESCE(sub6.value1, 1)) as value2 FROM
         ( SELECT 1 as key5 ) sub5
         LEFT JOIN
         ( SELECT 2 as key6, 42 as value1 ) sub6
@@ -885,29 +798,10 @@ LEFT JOIN
 ON udf(sub1.key1) = udf(sub2.key3);
 
 -- test the path using join aliases, too
----comment out for now query 138
----problem caused by  udf(sub3.key3)
----+org.apache.spark.sql.AnalysisException
----+cannot resolve '`sub2.key3`' given input columns: [sub2.CAST(udf(cast(key3 as string)) AS INT), sub2.CAST(udf(cast(value2 as string)) AS INT), sub1.key1, sub2.value3]; line 15 pos 15
----SELECT * FROM
----( SELECT 1 as key1 ) sub1
----LEFT JOIN
----( SELECT udf(sub3.key3), udf(value2), udf(COALESCE(value2, 66)) as value3 FROM
----    ( SELECT 1 as key3 ) sub3
----    LEFT JOIN
----    ( SELECT sub5.key5, COALESCE(sub6.value1, 1) as value2 FROM
----        ( SELECT 1 as key5 ) sub5
----        LEFT JOIN
----        ( SELECT 2 as key6, 42 as value1 ) sub6
----        ON sub5.key5 = sub6.key6
----    ) sub4
----    ON sub4.key5 = sub3.key3
----) sub2
----ON sub1.key1 = sub2.key3;
 SELECT * FROM
 ( SELECT 1 as key1 ) sub1
 LEFT JOIN
-( SELECT sub3.key3, udf(value2), udf(COALESCE(value2, 66)) as value3 FROM
+( SELECT udf(sub3.key3) as key3, udf(value2), udf(COALESCE(value2, 66)) as value3 FROM
     ( SELECT 1 as key3 ) sub3
     LEFT JOIN
     ( SELECT sub5.key5, COALESCE(sub6.value1, 1) as value2 FROM
