@@ -350,7 +350,7 @@ class ForeachWriterAbortSuite extends StreamTest with SharedSQLContext with Befo
 
       // `close` should be called with the abort error message
       val errorEvent = allEvents(0)(5).asInstanceOf[ForeachWriterSuite.Close]
-      assert(errorEvent.error.get.isInstanceOf[RuntimeException])
+      assert(errorEvent.error.get.isInstanceOf[SparkException])
       assert(errorEvent.error.get.getMessage.contains("aborted"))
     }
   }
