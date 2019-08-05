@@ -73,9 +73,9 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
     conf = new SparkConf()
       .set("spark.app.id", "example.spark.app")
       .set("spark.shuffle.unsafe.file.output.buffer", "16k")
-    when(blockResolver.getDataFile(anyInt, anyInt)).thenReturn(mergedOutputFile)
+    when(blockResolver.getDataFile(anyInt, anyInt, anyInt)).thenReturn(mergedOutputFile)
     when(blockResolver.writeIndexFileAndCommit(
-      anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File])))
+      anyInt, anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
         partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
         val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
@@ -87,6 +87,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       }
     mapOutputWriter = new LocalDiskShuffleMapOutputWriter(
       0,
+      -1,
       0,
       NUM_PARTITIONS,
       blockResolver,
