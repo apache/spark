@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -379,6 +380,12 @@ case class Join(
     (!e.isInstanceOf[JoinHint]
       || e.asInstanceOf[JoinHint].leftHint.isDefined
       || e.asInstanceOf[JoinHint].rightHint.isDefined)
+  }
+}
+
+object Join {
+  def canBroadcast(plan: LogicalPlan, conf: SQLConf): Boolean = {
+    plan.stats.sizeInBytes >= 0 && plan.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold
   }
 }
 

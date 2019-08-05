@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -1382,12 +1383,14 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
    * there are no join conditions involving references from both left and right.
    */
   def isCartesianProduct(join: Join): Boolean = {
-    val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
-
-    conditions match {
-      case Seq(Literal.FalseLiteral) | Seq(Literal(null, BooleanType)) => false
-      case _ => !conditions.map(_.references).exists(refs =>
-        refs.exists(join.left.outputSet.contains) && refs.exists(join.right.outputSet.contains))
+    val conf = SQLConf.get
+    if (Join.canBroadcast(join.left, conf) || Join.canBroadcast(join.right, conf)) {
+      false
+    } else {
+      join match {
+        case ExtractEquiJoinKeys(_, _, _, _, _, _, _) => false
+        case _ => true
+      }
     }
   }
 
@@ -1405,7 +1408,9 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
                |Join condition is missing or trivial.
                |Either: use the CROSS JOIN syntax to allow cartesian products between these
                |relations, or: enable implicit cartesian products by setting the configuration
-               |variable spark.sql.crossJoin.enabled=true"""
+               |variable spark.sql.crossJoin.enabled=true,
+               |or: increase the configuration spark.sql.autoBroadcastJoinThreshold to make left
+               |or right table broadcast so that nested loop join will replace cross join."""
             .stripMargin)
     }
 }
