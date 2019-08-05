@@ -641,7 +641,7 @@ object DateTimeUtils {
 
   /**
    * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should only be 1, 2, 11, 12 or 13.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 4.
    */
   def truncDate(d: SQLDate, level: Int): SQLDate = {
     def truncToYearLevel(divider: Int, adjust: Int): SQLDate = {
@@ -667,7 +667,7 @@ object DateTimeUtils {
 
   /**
    * Returns the trunc date time from original date time and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 1 and 8
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 12.
    */
   def truncTimestamp(t: SQLTimestamp, level: Int, timeZone: TimeZone): SQLTimestamp = {
     if (level == TRUNC_TO_MICROSECOND) return t
