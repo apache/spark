@@ -151,7 +151,7 @@ SELECT '' AS five, * FROM FLOAT4_TBL
 -- !query 18 schema
 struct<five:string,f1:float>
 -- !query 18 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 	1.2345679E20
@@ -163,7 +163,7 @@ SELECT '' AS four, f.* FROM FLOAT4_TBL f WHERE f.f1 <> '1004.3'
 -- !query 19 schema
 struct<four:string,f1:float>
 -- !query 19 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 	1.2345679E20
@@ -174,7 +174,7 @@ SELECT '' AS one, f.* FROM FLOAT4_TBL f WHERE f.f1 = '1004.3'
 -- !query 20 schema
 struct<one:string,f1:float>
 -- !query 20 output
-1004.3
+	1004.3
 
 
 -- !query 21
@@ -182,7 +182,7 @@ SELECT '' AS three, f.* FROM FLOAT4_TBL f WHERE '1004.3' > f.f1
 -- !query 21 schema
 struct<three:string,f1:float>
 -- !query 21 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 
@@ -192,7 +192,7 @@ SELECT '' AS three, f.* FROM FLOAT4_TBL f WHERE  f.f1 < '1004.3'
 -- !query 22 schema
 struct<three:string,f1:float>
 -- !query 22 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 
@@ -202,7 +202,7 @@ SELECT '' AS four, f.* FROM FLOAT4_TBL f WHERE '1004.3' >= f.f1
 -- !query 23 schema
 struct<four:string,f1:float>
 -- !query 23 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 	1004.3
@@ -213,7 +213,7 @@ SELECT '' AS four, f.* FROM FLOAT4_TBL f WHERE  f.f1 <= '1004.3'
 -- !query 24 schema
 struct<four:string,f1:float>
 -- !query 24 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 	1004.3
@@ -225,7 +225,7 @@ SELECT '' AS three, f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
 -- !query 25 schema
 struct<three:string,f1:float,x:double>
 -- !query 25 output
-1.2345679E-20	-1.2345678720289608E-19
+	1.2345679E-20	-1.2345678720289608E-19
 	1.2345679E20	-1.2345678955701443E21
 	1004.3	-10042.999877929688
 
@@ -236,7 +236,7 @@ SELECT '' AS three, f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
 -- !query 26 schema
 struct<three:string,f1:float,x:double>
 -- !query 26 output
-1.2345679E-20	-10.0
+	1.2345679E-20	-10.0
 	1.2345679E20	1.2345678955701443E20
 	1004.3	994.2999877929688
 
@@ -247,7 +247,7 @@ SELECT '' AS three, f.f1, f.f1 / '-10' AS x FROM FLOAT4_TBL f
 -- !query 27 schema
 struct<three:string,f1:float,x:double>
 -- !query 27 output
-1.2345679E-20	-1.2345678720289608E-21
+	1.2345679E-20	-1.2345678720289608E-21
 	1.2345679E20	-1.2345678955701443E19
 	1004.3	-100.42999877929688
 
@@ -258,7 +258,7 @@ SELECT '' AS three, f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
 -- !query 28 schema
 struct<three:string,f1:float,x:double>
 -- !query 28 output
-1.2345679E-20	10.0
+	1.2345679E-20	10.0
 	1.2345679E20	1.2345678955701443E20
 	1004.3	1014.2999877929688
 
@@ -268,7 +268,7 @@ SELECT '' AS five, * FROM FLOAT4_TBL
 -- !query 29 schema
 struct<five:string,f1:float>
 -- !query 29 output
--34.84
+	-34.84
 	0.0
 	1.2345679E-20
 	1.2345679E20
