@@ -703,25 +703,24 @@ object DateTimeUtils {
   }
 
   /**
-   * Returns the truncate level, could be TRUNC_YEAR, TRUNC_MONTH, TRUNC_TO_DAY, TRUNC_TO_HOUR,
-   * TRUNC_TO_MINUTE, TRUNC_TO_SECOND, TRUNC_TO_WEEK, TRUNC_TO_QUARTER or TRUNC_INVALID,
-   * TRUNC_INVALID means unsupported truncate level.
+   * Returns the truncate level, could be from TRUNC_TO_MICROSECOND to TRUNC_TO_MILLENNIUM,
+   * or TRUNC_INVALID, TRUNC_INVALID means unsupported truncate level.
    */
   def parseTruncLevel(format: UTF8String): Int = {
     if (format == null) {
       TRUNC_INVALID
     } else {
       format.toString.toUpperCase(Locale.ROOT) match {
-        case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
-        case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
-        case "DAY" | "DD" => TRUNC_TO_DAY
-        case "HOUR" => TRUNC_TO_HOUR
-        case "MINUTE" => TRUNC_TO_MINUTE
-        case "SECOND" => TRUNC_TO_SECOND
-        case "WEEK" => TRUNC_TO_WEEK
-        case "QUARTER" => TRUNC_TO_QUARTER
         case "MICROSECOND" => TRUNC_TO_MICROSECOND
         case "MILLISECOND" => TRUNC_TO_MILLISECOND
+        case "SECOND" => TRUNC_TO_SECOND
+        case "MINUTE" => TRUNC_TO_MINUTE
+        case "HOUR" => TRUNC_TO_HOUR
+        case "DAY" | "DD" => TRUNC_TO_DAY
+        case "WEEK" => TRUNC_TO_WEEK
+        case "MON" | "MONTH" | "MM" => TRUNC_TO_MONTH
+        case "QUARTER" => TRUNC_TO_QUARTER
+        case "YEAR" | "YYYY" | "YY" => TRUNC_TO_YEAR
         case "DECADE" => TRUNC_TO_DECADE
         case "CENTURY" => TRUNC_TO_CENTURY
         case "MILLENNIUM" => TRUNC_TO_MILLENNIUM
