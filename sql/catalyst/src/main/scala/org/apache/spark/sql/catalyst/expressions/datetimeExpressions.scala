@@ -1475,6 +1475,10 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
   """,
   examples = """
     Examples:
+      > SELECT _FUNC_('2019-08-04', 'week');
+       2019-07-29
+      > SELECT _FUNC_('2019-08-04', 'quarter');
+       2019-07-01
       > SELECT _FUNC_('2009-02-12', 'MM');
        2009-02-01
       > SELECT _FUNC_('2015-10-27', 'YEAR');

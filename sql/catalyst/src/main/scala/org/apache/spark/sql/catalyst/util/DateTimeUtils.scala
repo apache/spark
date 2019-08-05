@@ -619,7 +619,7 @@ object DateTimeUtils {
 
   // The constants are visible for testing purpose only.
   private[sql] val TRUNC_INVALID = -1
-  // The levels from TRUNC_TO_MONTH to TRUNC_TO_MILLENNIUM are used in truncations
+  // The levels from TRUNC_TO_WEEK to TRUNC_TO_MILLENNIUM are used in truncations
   // of DATE and TIMESTAMP values.
   private[sql] val TRUNC_TO_WEEK = 0
   private[sql] val TRUNC_TO_MONTH = 1
@@ -629,7 +629,7 @@ object DateTimeUtils {
   private[sql] val TRUNC_TO_CENTURY = 5
   private[sql] val TRUNC_TO_MILLENNIUM = 6
   private[sql] val MAX_LEVEL_OF_DATE_TRUNC = TRUNC_TO_MILLENNIUM
-  // The levels from TRUNC_TO_MICROSECOND to TRUNC_TO_QUARTER are used in truncations
+  // The levels from TRUNC_TO_MICROSECOND to TRUNC_TO_DAY are used in truncations
   // of TIMESTAMP values only.
   private[sql] val TRUNC_TO_MICROSECOND = 7
   private[sql] val TRUNC_TO_MILLISECOND = 8
