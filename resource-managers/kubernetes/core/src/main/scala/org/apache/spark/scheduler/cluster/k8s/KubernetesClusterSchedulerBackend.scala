@@ -158,7 +158,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
       TimeUnit.MILLISECONDS)
 
     // Return an immediate success, since we can't confirm or deny that executors have been
-    // actually shut down without waiting too long and blocking the allocation thread.
+    // actually shut down without waiting too long and blocking the allocation thread, which
+    // waits on this future to complete, blocking further allocations / deallocations.
+    //
+    // This relies a lot on the guarantees of Spark's RPC system, that a message will be
+    // delivered to the destination unless there's an issue with the connection, in which
+    // case the executor will shut itself down (and the driver, separately, will just declare
+    // it as "lost"). Coupled with the allocation manager keeping track of which executors are
+    // pending release, returning "true" here means that eventually all the requested executors
+    // will be removed.
+    //
+    // The cleanup timer above is just an optimization to make sure that stuck executors don't
+    // stick around in the k8s server. Normally it should never delete any pods at all.
     Future.successful(true)
   }
 
