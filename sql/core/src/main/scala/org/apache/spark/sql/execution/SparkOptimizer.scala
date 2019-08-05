@@ -32,8 +32,8 @@ class SparkOptimizer(
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDFs", Once,
-      PullOutPythonUDFInJoinCondition,
-      // `PullOutPythonUDFInJoinCondition` can convert a join to a cartesian product.
+      ExtractPythonUDFFromJoinCondition,
+      // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
       // Here, we rerun cartesian product check.
       CheckCartesianProducts,
       ExtractPythonUDFFromAggregate,
@@ -51,7 +51,7 @@ class SparkOptimizer(
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
-    PullOutPythonUDFInJoinCondition.ruleName :+
+    ExtractPythonUDFFromJoinCondition.ruleName :+
     ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
     ExtractPythonUDFs.ruleName
 
