@@ -654,8 +654,8 @@ object DateTimeUtils {
       localDateToDays(LocalDate.of(newYear, 1, 1))
     }
     level match {
-      case TRUNC_TO_YEAR => d - DateTimeUtils.getDayInYear(d) + 1
       case TRUNC_TO_MONTH => d - DateTimeUtils.getDayOfMonth(d) + 1
+      case TRUNC_TO_YEAR => d - DateTimeUtils.getDayInYear(d) + 1
       case TRUNC_TO_DECADE => truncToYearLevel(10, 0)
       case TRUNC_TO_CENTURY => truncToYearLevel(100, 1)
       case TRUNC_TO_MILLENNIUM => truncToYearLevel(1000, 1)
@@ -673,22 +673,19 @@ object DateTimeUtils {
     if (level == TRUNC_TO_MICROSECOND) return t
     var millis = MICROSECONDS.toMillis(t)
     val truncated = level match {
-      case TRUNC_TO_YEAR | TRUNC_TO_MONTH |
-           TRUNC_TO_DECADE | TRUNC_TO_CENTURY | TRUNC_TO_MILLENNIUM =>
-        val dDays = millisToDays(millis, timeZone)
-        daysToMillis(truncDate(dDays, level), timeZone)
-      case TRUNC_TO_DAY =>
-        val offset = timeZone.getOffset(millis)
-        millis += offset
-        millis - millis % MILLIS_PER_DAY - offset
+      case TRUNC_TO_MILLISECOND => millis
+      case TRUNC_TO_SECOND =>
+        millis - millis % MILLIS_PER_SECOND
+      case TRUNC_TO_MINUTE =>
+        millis - millis % MILLIS_PER_MINUTE
       case TRUNC_TO_HOUR =>
         val offset = timeZone.getOffset(millis)
         millis += offset
         millis - millis % MILLIS_PER_HOUR - offset
-      case TRUNC_TO_MINUTE =>
-        millis - millis % MILLIS_PER_MINUTE
-      case TRUNC_TO_SECOND =>
-        millis - millis % MILLIS_PER_SECOND
+      case TRUNC_TO_DAY =>
+        val offset = timeZone.getOffset(millis)
+        millis += offset
+        millis - millis % MILLIS_PER_DAY - offset
       case TRUNC_TO_WEEK =>
         val dDays = millisToDays(millis, timeZone)
         val prevMonday = getNextDateForDayOfWeek(dDays - 7, MONDAY)
@@ -698,10 +695,9 @@ object DateTimeUtils {
         val daysOfQuarter = LocalDate.ofEpochDay(dDays)
           .`with`(IsoFields.DAY_OF_QUARTER, 1L).toEpochDay.toInt
         daysToMillis(daysOfQuarter, timeZone)
-      case TRUNC_TO_MILLISECOND => millis
-      case _ =>
-        // caller make sure that this should never be reached
-        sys.error(s"Invalid trunc level: $level")
+      case _ => // Try to truncate date levels
+        val dDays = millisToDays(millis, timeZone)
+        daysToMillis(truncDate(dDays, level), timeZone)
     }
     truncated * MICROS_PER_MILLIS
   }
