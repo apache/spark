@@ -1719,19 +1719,19 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         testCreateAnalysisError(
-          s"CREATE TABLE t (d struct<$c0 INT, $c1 INT>) USING $v2Source",
+          s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE TABLE testcat.t (d struct<$c0 INT, $c1 INT>) USING $v2Source",
+          s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE t (d struct<$c0 INT, $c1 INT>) USING $v2Source",
+          s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0 INT, $c1 INT>) USING $v2Source",
+          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
       }
