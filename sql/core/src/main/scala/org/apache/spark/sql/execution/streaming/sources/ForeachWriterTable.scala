@@ -21,6 +21,7 @@ import java.util
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{ForeachWriter, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -154,7 +155,7 @@ class ForeachDataWriter[T](
   }
 
   override def abort(): Unit = {
-    closeWriter(new RuntimeException("Foreach writer has been aborted"))
+    closeWriter(new SparkException("Foreach writer has been aborted due to a task failure"))
   }
 
   private def closeWriter(errorOrNull: Throwable): Unit = {

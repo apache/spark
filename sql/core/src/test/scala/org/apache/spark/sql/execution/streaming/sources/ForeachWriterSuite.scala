@@ -33,8 +33,6 @@ import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 
-
-
 class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
 
   import testImplicits._
