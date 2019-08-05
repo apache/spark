@@ -176,10 +176,11 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
       isFinalPlan = true
+
+      val ret = currentPhysicalPlan.execute()
       logDebug(s"Final plan: $currentPhysicalPlan")
       executionId.foreach(onUpdatePlan)
-
-      currentPhysicalPlan.execute()
+      ret
     }
   }
 
