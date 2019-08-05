@@ -55,8 +55,9 @@ import org.apache.spark.util.Utils
  * `regr_count` is an example of a function that is built-in but not defined here, because it is
  * less commonly used. To invoke it, use `expr("regr_count(yCol, xCol)")`.
  *
- * We add these functions with `Column` type arguments by default. All the other variants are there
- * for historic reasons.
+ * This function APIs usually have methods with Column signature only because it can support not
+ * only Column but also other types such as a native string. The other variants currently exist
+ * for historical reasons.
  *
  * @groupname udf_funcs UDF functions
  * @groupname agg_funcs Aggregate functions
