@@ -621,27 +621,27 @@ object DateTimeUtils {
   private[sql] val TRUNC_INVALID = -1
   // The levels from TRUNC_TO_MONTH to TRUNC_TO_MILLENNIUM are used in truncations
   // of DATE and TIMESTAMP values.
-  private[sql] val TRUNC_TO_MONTH = 0
-  private[sql] val TRUNC_TO_YEAR = 1
-  private[sql] val TRUNC_TO_DECADE = 2
-  private[sql] val TRUNC_TO_CENTURY = 3
-  private[sql] val TRUNC_TO_MILLENNIUM = 4
+  private[sql] val TRUNC_TO_WEEK = 0
+  private[sql] val TRUNC_TO_MONTH = 1
+  private[sql] val TRUNC_TO_QUARTER = 2
+  private[sql] val TRUNC_TO_YEAR = 3
+  private[sql] val TRUNC_TO_DECADE = 4
+  private[sql] val TRUNC_TO_CENTURY = 5
+  private[sql] val TRUNC_TO_MILLENNIUM = 6
   private[sql] val MAX_LEVEL_OF_DATE_TRUNC = TRUNC_TO_MILLENNIUM
   // The levels from TRUNC_TO_MICROSECOND to TRUNC_TO_QUARTER are used in truncations
   // of TIMESTAMP values only.
-  private[sql] val TRUNC_TO_MICROSECOND = 5
-  private[sql] val TRUNC_TO_MILLISECOND = 6
-  private[sql] val TRUNC_TO_SECOND = 7
-  private[sql] val TRUNC_TO_MINUTE = 8
-  private[sql] val TRUNC_TO_HOUR = 9
-  private[sql] val TRUNC_TO_DAY = 10
-  private[sql] val TRUNC_TO_WEEK = 11
-  private[sql] val TRUNC_TO_QUARTER = 12
-  private[sql] val MAX_LEVEL_OF_TIMESTAMP_TRUNC = TRUNC_TO_QUARTER
+  private[sql] val TRUNC_TO_MICROSECOND = 7
+  private[sql] val TRUNC_TO_MILLISECOND = 8
+  private[sql] val TRUNC_TO_SECOND = 9
+  private[sql] val TRUNC_TO_MINUTE = 10
+  private[sql] val TRUNC_TO_HOUR = 11
+  private[sql] val TRUNC_TO_DAY = 12
+  private[sql] val MAX_LEVEL_OF_TIMESTAMP_TRUNC = TRUNC_TO_DAY
 
   /**
    * Returns the trunc date from original date and trunc level.
-   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 4.
+   * Trunc level should be generated using `parseTruncLevel()`, should be between 0 and 6.
    */
   def truncDate(d: SQLDate, level: Int): SQLDate = {
     def truncToYearLevel(divider: Int, adjust: Int): SQLDate = {
@@ -654,7 +654,10 @@ object DateTimeUtils {
       localDateToDays(LocalDate.of(newYear, 1, 1))
     }
     level match {
+      case TRUNC_TO_WEEK => getNextDateForDayOfWeek(d - 7, MONDAY)
       case TRUNC_TO_MONTH => d - DateTimeUtils.getDayOfMonth(d) + 1
+      case TRUNC_TO_QUARTER =>
+        localDateToDays(daysToLocalDate(d).`with`(IsoFields.DAY_OF_QUARTER, 1L))
       case TRUNC_TO_YEAR => d - DateTimeUtils.getDayInYear(d) + 1
       case TRUNC_TO_DECADE => truncToYearLevel(10, 0)
       case TRUNC_TO_CENTURY => truncToYearLevel(100, 1)
@@ -686,15 +689,6 @@ object DateTimeUtils {
         val offset = timeZone.getOffset(millis)
         millis += offset
         millis - millis % MILLIS_PER_DAY - offset
-      case TRUNC_TO_WEEK =>
-        val dDays = millisToDays(millis, timeZone)
-        val prevMonday = getNextDateForDayOfWeek(dDays - 7, MONDAY)
-        daysToMillis(prevMonday, timeZone)
-      case TRUNC_TO_QUARTER =>
-        val dDays = millisToDays(millis, timeZone)
-        val daysOfQuarter = LocalDate.ofEpochDay(dDays)
-          .`with`(IsoFields.DAY_OF_QUARTER, 1L).toEpochDay.toInt
-        daysToMillis(daysOfQuarter, timeZone)
       case _ => // Try to truncate date levels
         val dDays = millisToDays(millis, timeZone)
         daysToMillis(truncDate(dDays, level), timeZone)

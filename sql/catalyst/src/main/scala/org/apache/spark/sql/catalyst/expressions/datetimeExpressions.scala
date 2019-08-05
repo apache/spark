@@ -1471,7 +1471,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 @ExpressionDescription(
   usage = """
     _FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["year", "yyyy", "yy", "mon", "month", "mm", "decade", "century", "millennium"]
+    `fmt` should be one of ["week", "mon", "month", "mm", "quarter", "year", "yyyy", "yy", "decade", "century", "millennium"]
   """,
   examples = """
     Examples:
