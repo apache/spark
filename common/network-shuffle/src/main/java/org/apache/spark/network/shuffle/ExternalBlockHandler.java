@@ -47,21 +47,22 @@ import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
 /**
- * RPC Handler for a server which can serve shuffle blocks from outside of an Executor process.
+ * RPC Handler for a server which can serve both RDD blocks and shuffle blocks from outside
+ * of an Executor process.
  *
  * Handles registering executors and opening shuffle or disk persisted RDD blocks from them.
  * Blocks are registered with the "one-for-one" strategy, meaning each Transport-layer Chunk
  * is equivalent to one block.
  */
-public class ExternalShuffleBlockHandler extends RpcHandler {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleBlockHandler.class);
+public class ExternalBlockHandler extends RpcHandler {
+  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockHandler.class);
 
   @VisibleForTesting
   final ExternalShuffleBlockResolver blockManager;
   private final OneForOneStreamManager streamManager;
   private final ShuffleMetrics metrics;
 
-  public ExternalShuffleBlockHandler(TransportConf conf, File registeredExecutorFile)
+  public ExternalBlockHandler(TransportConf conf, File registeredExecutorFile)
     throws IOException {
     this(new OneForOneStreamManager(),
       new ExternalShuffleBlockResolver(conf, registeredExecutorFile));
@@ -74,7 +75,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
 
   /** Enables mocking out the StreamManager and BlockManager. */
   @VisibleForTesting
-  public ExternalShuffleBlockHandler(
+  public ExternalBlockHandler(
       OneForOneStreamManager streamManager,
       ExternalShuffleBlockResolver blockManager) {
     this.metrics = new ShuffleMetrics();
