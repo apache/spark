@@ -39,16 +39,20 @@ public interface ShuffleExecutorComponents {
   /**
    * Called once per map task to create a writer that will be responsible for persisting all the
    * partitioned bytes written by that map task.
-   *  @param shuffleId Unique identifier for the shuffle the map task is a part of
+   * @param shuffleId Unique identifier for the shuffle the map task is a part of
+   * @param shuffleGenerationId The shuffle generation ID of the stage that this task belongs to,
+   *                            it equals the stage attempt number while the stage is indeterminate
+   *                            and -1 on the contrary.
    * @param mapId Within the shuffle, the identifier of the map task
    * @param mapTaskAttemptId Identifier of the task attempt. Multiple attempts of the same map task
- *                         with the same (shuffleId, mapId) pair can be distinguished by the
- *                         different values of mapTaskAttemptId.
+   *                         with the same (shuffleId, mapId) pair can be distinguished by the
+   *                         different values of mapTaskAttemptId.
    * @param numPartitions The number of partitions that will be written by the map task. Some of
-*                      these partitions may be empty.
+   *                      these partitions may be empty.
    */
   ShuffleMapOutputWriter createMapOutputWriter(
       int shuffleId,
+      int shuffleGenerationId,
       int mapId,
       long mapTaskAttemptId,
       int numPartitions) throws IOException;

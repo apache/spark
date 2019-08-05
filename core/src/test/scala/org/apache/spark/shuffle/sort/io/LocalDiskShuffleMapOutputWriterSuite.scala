@@ -87,6 +87,7 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       }
     mapOutputWriter = new LocalDiskShuffleMapOutputWriter(
       0,
+      -1,
       0,
       NUM_PARTITIONS,
       blockResolver,
