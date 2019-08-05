@@ -34,14 +34,14 @@ import org.apache.spark.sql.execution.LeafExecNode
 case class ShowTablesExec(
     output: Seq[Attribute],
     catalog: TableCatalog,
-    ident: Identifier,
+    namespace: Seq[String],
     pattern: Option[String])
     extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val encoder = RowEncoder(schema).resolveAndBind()
 
-    val tables = catalog.listTables(ident.namespace() :+ ident.name())
+    val tables = catalog.listTables(namespace.toArray)
     tables.map { table =>
       if (pattern.map(StringUtils.filterPattern(Seq(table.name()), _).nonEmpty).getOrElse(true)) {
         rows += encoder

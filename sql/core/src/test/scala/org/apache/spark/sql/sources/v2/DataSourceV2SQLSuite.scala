@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalog.v2.Identifier
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.plans.logical.sql.ShowTablesStatement
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
@@ -1687,6 +1687,15 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   test("ShowTables: using v2 catalog, db doesn't exist") {
     runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
+  }
+
+  test("ShowTables: using v1 catalog, db doesn't exist ") {
+    // 'testcat' below resolves to a database name and falls back to v1 catalog.
+    val exception = intercept[NoSuchDatabaseException] {
+      runShowTablesSql("SHOW TABLES FROM testcat", Seq())
+    }
+
+    assert(exception.getMessage.contains("Database 'testcat' not found"))
   }
 
   test("ShowTables: db is not specified and default v2 catalog is set - throws an exception") {

@@ -589,7 +589,7 @@ case class AlterTable(
 case class ShowTables(
     override val output: Seq[Attribute],
     catalog: TableCatalog,
-    ident: Identifier,
+    namespace: Seq[String],
     pattern: Option[String]) extends Command
 
 /**

@@ -244,7 +244,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       AlterTableExec(catalog, ident, changes) :: Nil
 
     case r : ShowTables =>
-      ShowTablesExec(r.output, r.catalog, r.ident, r.pattern) :: Nil
+      ShowTablesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
 
     case _ => Nil
   }

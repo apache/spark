@@ -111,7 +111,7 @@ case class DataSourceResolution(
     case replace: ReplaceTableStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = replace.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
+      val catalog = maybeCatalog
         .getOrElse(throw new AnalysisException(
           s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
         .asTableCatalog
@@ -120,7 +120,7 @@ case class DataSourceResolution(
     case rtas: ReplaceTableAsSelectStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = rtas.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
+      val catalog = maybeCatalog
         .getOrElse(throw new AnalysisException(
           s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
         .asTableCatalog
@@ -174,11 +174,10 @@ case class DataSourceResolution(
       }
 
     case plan @ ShowTablesStatement(Some(namespace), pattern) =>
-      val CatalogObjectIdentifier(maybeCatalog, identifier) = namespace
-      val catalog = maybeCatalog.orElse(defaultCatalog)
-      catalog match {
+      val CatalogNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
         case Some(v2Catalog) =>
-          ShowTables(plan.output, v2Catalog.asTableCatalog, identifier, pattern)
+          ShowTables(plan.output, v2Catalog.asTableCatalog, ns, pattern)
         case None => ShowTablesCommand(Some(namespace.quoted), pattern)
       }
   }
