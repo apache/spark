@@ -56,7 +56,8 @@ private[spark] object StandaloneResourceUtils extends Logging {
   }
 
   /**
-   * Assign resources to workers/drivers from the same host to avoid address conflict.
+   * Assigns (if coordinate needed) resources to workers/drivers from the same host to avoid
+   * address conflict.
    *
    * This function works in three steps. First, acquiring the lock on RESOURCES_LOCK_FILE
    * to achieve synchronization among workers and drivers. Second, getting all allocated
@@ -189,8 +190,8 @@ private[spark] object StandaloneResourceUtils extends Logging {
   }
 
   /**
-   * Free the indicated resources to make those resources be available for other
-   * workers/drivers on the same host.
+   * Frees (if coordinate needed) all the resources a worker/driver (pid) has in one shot
+   * to make those resources be available for other workers/drivers on the same host.
    * @param conf SparkConf
    * @param componentName spark.driver / spark.worker
    * @param toRelease the resources expected to release
