@@ -2589,7 +2589,7 @@ object SparkContext extends Logging {
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
   private[spark] val SPARK_JOB_CURRENT_USER = "spark.job.currentUser"
   private[spark] val SPARK_JOB_TOKENS = "spark.job.passed.tokens"
-  private[spark] val SPARK_JOB_TOKEN_DELIMiTER = "TOKEN_DELIMiTER"
+  private[spark] val SPARK_JOB_TOKEN_DELIMiTER = "TOKEN_DELIMITER"
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was
