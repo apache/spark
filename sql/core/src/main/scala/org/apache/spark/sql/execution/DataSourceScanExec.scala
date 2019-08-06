@@ -341,16 +341,16 @@ case class FileSourceScanExec(
     "numFiles" -> SQLMetrics.createMetric(sparkContext, "number of files read"),
     "metadataTime" -> SQLMetrics.createTimingMetric(sparkContext, "metadata time")
   ) ++ {
-    if (relation.partitionSchemaOption.isDefined) {
-      Some("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"))
-    } else {
-      None
-    }
-  } ++ {
     // Tracking scan time has overhead, we can't afford to do it for each row, and can only do
     // it for each batch.
     if (supportsColumnar) {
       Some("scanTime" -> SQLMetrics.createTimingMetric(sparkContext, "scan time"))
+    } else {
+      None
+    }
+  } ++ {
+    if (relation.partitionSchemaOption.isDefined) {
+      Some("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions read"))
     } else {
       None
     }
