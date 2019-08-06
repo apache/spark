@@ -362,8 +362,8 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
         val (empty, nonEmpty) = workers.partition(_.resources.isEmpty)
         assert(empty.length === 0)
         assert(nonEmpty.length === 3)
-        // Each Worker should load resources from resources file and discovery script naively
-        // without coordination. Note that, normally, we should config different resources
+        // Each Worker should get the same resources from resources file and discovery script
+        // without coordination. Note that, normally, we must config different resources
         // for workers run on the same host when coordinate config is off. Test here is used
         // to validate the different behaviour comparing to the above test when coordinate config
         // is on, so we admit the resources collision here.
