@@ -117,7 +117,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   }
 
   private def writeBatchToFile(metadata: T, path: Path): Unit = {
-    writeBatchToFileWithRetries(metadata, path, 1)
+    writeBatchToFileWithRetries(metadata, path)
   }
 
   /**
@@ -126,27 +126,32 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
    * valid behavior, we still need to prevent it from destroying the files.
    */
-  private def writeBatchToFileWithRetries(metadata: T, path: Path, retryCount: Int): Unit = {
-    val output = fileManager.createAtomic(path, overwriteIfPossible = false)
-    try {
-      serialize(metadata, output)
-      output.close()
-    } catch {
-      case e: FileAlreadyExistsException =>
-        output.cancel()
-        // If next batch file already exists, then another concurrently running query has
-        // written it.
-        throw new ConcurrentModificationException(
-          s"Multiple streaming queries are concurrently using $path", e)
-      case e: Throwable =>
-        output.cancel()
-        if (retryCount > metaDataNumRetries) {
-          throw new IOException(
-            s"Failed to write meta data log after retry $metaDataNumRetries count", e)
-        } else {
-          writeBatchToFileWithRetries(metadata, path, retryCount + 1)
-        }
-    }
+  private def writeBatchToFileWithRetries(metadata: T, path: Path): Unit = {
+    var retryCount = 0
+    var isSuccess = false
+    do {
+      val output = fileManager.createAtomic(path, overwriteIfPossible = false)
+      try {
+        serialize(metadata, output)
+        output.close()
+        isSuccess = true
+      } catch {
+        case e: FileAlreadyExistsException =>
+          output.cancel()
+          // If next batch file already exists, then another concurrently running query has
+          // written it.
+          throw new ConcurrentModificationException(
+            s"Multiple streaming queries are concurrently using $path", e)
+        case e: Throwable =>
+          output.cancel()
+          if (retryCount >= metaDataNumRetries) {
+            throw new IOException(
+              s"Failed to write meta data log after retry $metaDataNumRetries count", e)
+          }
+          logWarning(s"Error while ${e.getMessage} [attempt = ${retryCount + 1}]")
+      }
+      retryCount = retryCount + 1
+    } while (!isSuccess)
   }
 
   override def get(batchId: Long): Option[T] = {
