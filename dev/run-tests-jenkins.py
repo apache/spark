@@ -106,7 +106,7 @@ def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
         test_name = pr_test + '.sh'
         pr_results.append(run_cmd(['bash', os.path.join(SPARK_HOME, 'dev', 'tests', test_name),
                                    ghprb_actual_commit, sha1],
-                                  return_output=True).rstrip())
+                                  return_output=True).decode().rstrip())
         # Ensure, after each test, that we're back on the current PR
         run_cmd(['git', 'checkout', '-f', current_pr_head])
     return pr_results

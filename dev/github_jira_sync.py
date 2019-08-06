@@ -68,7 +68,7 @@ def get_url(url):
 
 
 def get_json(urllib_response):
-    return json.load(urllib_response.decode())
+    return json.loads(urllib_response.read().decode("utf-8"))
 
 
 # Return a list of (JIRA id, JSON dict) tuples:
@@ -129,7 +129,7 @@ def reset_pr_labels(pr_num, jira_components):
     url = '%s/issues/%s/labels' % (GITHUB_API_BASE, pr_num)
     labels = ', '.join(('"%s"' % c) for c in jira_components)
     try:
-        request = Request(url, data=('{"labels":[%s]}' % labels).encode())
+        request = Request(url, data=('{"labels":[%s]}' % labels).encode('utf-8'))
         request.add_header('Content-Type', 'application/json')
         request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
         request.get_method = lambda: 'PUT'
