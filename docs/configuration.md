@@ -2018,7 +2018,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
-### Barrier Mode Execution
+### Barrier Execution Mode
 
 <table class="table">
 <tr><th>Property Name></th><th>Default</th><th>Meaning</th></tr>
