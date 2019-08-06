@@ -40,6 +40,9 @@ class CatalogManager(conf: SQLConf) extends Logging {
       try {
         Some(catalog(catalogName))
       } catch {
+        case e @ (_: CatalogClassNotFoundException | _: CatalogNotFoundException) =>
+          logWarning(e.getMessage)
+          None
         case NonFatal(e) =>
           logError(s"Cannot load default v2 catalog: $catalogName", e)
           None
@@ -51,6 +54,9 @@ class CatalogManager(conf: SQLConf) extends Logging {
     try {
       Some(catalog(CatalogManager.SESSION_CATALOG_NAME))
     } catch {
+      case e @ (_: CatalogClassNotFoundException | _: CatalogNotFoundException) =>
+        logWarning(e.getMessage)
+        None
       case NonFatal(e) =>
         logError("Cannot load v2 session catalog", e)
         None

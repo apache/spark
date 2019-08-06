@@ -81,10 +81,12 @@ public class CatalogLoadingSuite {
     SQLConf conf = new SQLConf();
     conf.setConfString("spark.sql.catalog.missing", "com.example.NoSuchCatalogPlugin");
 
-    SparkException exc = intercept(SparkException.class, () -> Catalogs.load("missing", conf));
+    SparkException exc =
+        intercept(CatalogClassNotFoundException.class, () -> Catalogs.load("missing", conf));
 
     Assert.assertTrue("Should complain that the class is not found",
-        exc.getMessage().contains("Cannot find catalog plugin class"));
+        exc.getMessage().contains(
+            "Catalog 'missing' plugin class 'com.example.NoSuchCatalogPlugin' not found"));
     Assert.assertTrue("Should identify the catalog by name",
         exc.getMessage().contains("missing"));
     Assert.assertTrue("Should identify the missing class",
