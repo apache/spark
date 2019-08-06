@@ -517,9 +517,11 @@ private[deploy] class Worker(
       changeMaster(masterRef, masterWebUiUrl, masterRef.address)
 
       val executorResponses = executors.values.map { e =>
-        WorkerExecutorStateResponse(new ExecutorDescription(e.appId, e.execId, e.cores, e.state), e.resources)
+        WorkerExecutorStateResponse(new ExecutorDescription(
+          e.appId, e.execId, e.cores, e.state), e.resources)
       }
-      val driverResponses = drivers.keys.map { id => WorkerDriverStateResponse(id, drivers(id).resources)}
+      val driverResponses = drivers.keys.map { id =>
+        WorkerDriverStateResponse(id, drivers(id).resources)}
       masterRef.send(WorkerSchedulerStateResponse(
         workerId, executorResponses.toList, driverResponses.toSeq))
 

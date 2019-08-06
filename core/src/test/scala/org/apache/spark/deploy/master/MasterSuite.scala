@@ -259,7 +259,8 @@ class MasterSuite extends SparkFunSuite
       }
       val execResponse = fakeExecutors.map(exec =>
         WorkerExecutorStateResponse(exec, Map.empty[String, ResourceInformation]))
-      val driverResponse = WorkerDriverStateResponse(fakeDriverInfo.id, Map.empty[String, ResourceInformation])
+      val driverResponse = WorkerDriverStateResponse(
+        fakeDriverInfo.id, Map.empty[String, ResourceInformation])
       master.self.send(WorkerSchedulerStateResponse(
         fakeWorkerInfo.id, execResponse, Seq(driverResponse)))
 
