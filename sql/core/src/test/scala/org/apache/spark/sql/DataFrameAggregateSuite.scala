@@ -167,6 +167,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 1, 1, 3) :: Nil
     )
 
+    // use column reference in `grouping_id` instead of column name
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping_id(courseSales("course"), courseSales("year"))),
+      Row("Java", 2012, 0) ::
+        Row("Java", 2013, 0) ::
+        Row("Java", null, 1) ::
+        Row("dotNET", 2012, 0) ::
+        Row("dotNET", 2013, 0) ::
+        Row("dotNET", null, 1) ::
+        Row(null, 2012, 2) ::
+        Row(null, 2013, 2) ::
+        Row(null, null, 3) :: Nil
+    )
+
     intercept[AnalysisException] {
       courseSales.groupBy().agg(grouping("course")).explain()
     }
