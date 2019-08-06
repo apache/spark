@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.time._
-import java.time.temporal.{ChronoUnit, IsoFields}
+import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -464,22 +464,15 @@ object DateTimeUtils {
   }
 
   /**
-   * Divides and adjust the given date. It can be used in calculations of current millennium,
-   * century and decade of the date.
-   */
-  private def truncYear(date: SQLDate, divider: Int, adjust: Int): Int = {
-    val oldYear = getYear(date)
-    val dividedYear = Math.floorDiv(oldYear, divider) + 1
-    if (adjust != 0 && Math.floorMod(oldYear, divider) == 0) {
-      dividedYear + adjust
-    } else {
-      dividedYear
-    }
-  }
-
-  /** Returns the millennium for the given date. */
+   * Returns the millennium for the given date. The date is expressed in days since 1.1.1970.
+   * */
   def getMillennium(date: SQLDate): Int = {
-    truncYear(date, 1000, -1)
+    val localDate = daysToLocalDate(date)
+    val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
+    var millennium = (yearOfEra / 1000) + 1
+    if (yearOfEra > 1 && (yearOfEra % 1000) == 0) millennium -= 1
+    if (localDate.get(ChronoField.ERA) == 0) millennium = -millennium
+    millennium
   }
 
   /**
