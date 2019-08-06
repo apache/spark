@@ -229,6 +229,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.
     val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
+      // Fix misplacement when comment is at the end of the query
       .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
     // When we are regenerating the golden files, we don't need to set any config as they
