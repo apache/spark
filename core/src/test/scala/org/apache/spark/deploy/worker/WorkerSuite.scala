@@ -320,7 +320,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     }
   }
 
-  test("Workers should avoid resources conflict when launch from the same host") {
+  test("Workers run on the same host should avoid resources conflict when coordinate is on") {
     val conf = new SparkConf()
     withTempDir { dir =>
       val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
@@ -335,6 +335,42 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
         assert(nonEmpty.length === 2)
         val totalResources = nonEmpty.flatMap(_.resources(FPGA).addresses).toSet.toSeq.sorted
         assert(totalResources === Seq("f1", "f2", "f3", "f4"))
+        workers.foreach(_.rpcEnv.shutdown())
+        workers.foreach(_.rpcEnv.awaitTermination())
+      }
+      assertResourcesFileDeleted()
+    }
+  }
+
+  test("Workers run on the same host should load resources naively when coordinate is off") {
+    val conf = new SparkConf()
+    // disable coordination
+    conf.set(config.SPARK_RESOURCES_COORDINATE, false)
+    withTempDir { dir =>
+      val gpuArgs = ResourceAllocation(WORKER_GPU_ID, Seq("g0", "g1"))
+      val ja = Extraction.decompose(Seq(gpuArgs))
+      val resourcesPath = createTempJsonFile(dir, "resources", ja)
+      val scriptPath = createTempScriptWithExpectedOutput(dir, "fpgaDiscoverScript",
+        """{"name": "fpga","addresses":["f1", "f2", "f3", "f4", "f5"]}""")
+      conf.set(SPARK_WORKER_RESOURCE_FILE.key, resourcesPath)
+      conf.set(WORKER_GPU_ID.amountConf, "2")
+      conf.set(WORKER_FPGA_ID.discoveryScriptConf, scriptPath)
+      conf.set(WORKER_FPGA_ID.amountConf, "2")
+      val workers = (0 until 3).map(id => makeWorker(conf, pid = id, local = true))
+      workers.zipWithIndex.foreach{case (w, i) => w.rpcEnv.setupEndpoint(s"worker$i", w)}
+      eventually(timeout(20.seconds)) {
+        val (empty, nonEmpty) = workers.partition(_.resources.isEmpty)
+        assert(empty.length === 0)
+        assert(nonEmpty.length === 3)
+        // Each Worker should load resources from resources file and discovery script naively
+        // without coordination. Note that, normally, we should config different resources
+        // for workers run on the same host when coordinate config is off. Test here is used
+        // to validate the different behaviour comparing to the above test when coordinate config
+        // is on, so we admit the resources collision here.
+        nonEmpty.foreach { worker =>
+          assert(worker.resources === Map(GPU -> gpuArgs.toResourceInformation,
+            FPGA -> new ResourceInformation(FPGA, Array("f1", "f2", "f3", "f4", "f5"))))
+        }
         workers.foreach(_.rpcEnv.shutdown())
         workers.foreach(_.rpcEnv.awaitTermination())
       }
