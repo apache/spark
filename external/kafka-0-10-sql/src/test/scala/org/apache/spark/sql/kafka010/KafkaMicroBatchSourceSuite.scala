@@ -568,7 +568,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // If a topic is deleted and we try to poll data starting from offset 0,
       // the Kafka consumer will just block until timeout and return an empty result.
       // So set the timeout to 1 second to make this test fast.
-      .option("kafkaConsumer.pollTimeoutMs", "1000")
+      .option("kafkaConsumer.pollTimeoutMs", "5000")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")
     val kafka = reader.load()
