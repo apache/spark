@@ -44,7 +44,6 @@ private[deploy] object DeployMessages {
    * @param workerWebUiUrl the worker Web UI address
    * @param masterAddress the master address used by the worker to connect
    * @param resources the resources of worker
-   * @param pid the process id of worker
    */
   case class RegisterWorker(
       id: String,
@@ -55,8 +54,7 @@ private[deploy] object DeployMessages {
       memory: Int,
       workerWebUiUrl: String,
       masterAddress: RpcAddress,
-      resources: Map[String, ResourceInformation] = Map.empty,
-      pid: Int = 0)
+      resources: Map[String, ResourceInformation] = Map.empty)
     extends DeployMessage {
     Utils.checkHost(host)
     assert (port > 0)
