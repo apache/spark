@@ -28,12 +28,12 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
-class PullOutPythonUDFInJoinConditionSuite extends PlanTest {
+class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Extract PythonUDF From JoinCondition", Once,
-        PullOutPythonUDFInJoinCondition) ::
+        ExtractPythonUDFFromJoinCondition) ::
       Batch("Check Cartesian Products", Once,
         CheckCartesianProducts) :: Nil
   }
