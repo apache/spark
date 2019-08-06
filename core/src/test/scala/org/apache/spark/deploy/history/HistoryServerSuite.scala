@@ -133,11 +133,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1422981780767/jobs?status=succeeded&status=failed",
     "executor list json" -> "applications/local-1422981780767/executors",
     "executor list with executor metrics json" ->
-      "applications/application_1506645932520_24630151/executors",
-    "executor list with executor process tree metrics json" ->
-      "applications/application_1538416563558_0014/executors",
-    "executor list with executor garbage collection metrics json" ->
-      "applications/application_1536831636016_59384/1/executors",
+      "applications/application_1553914137147_0018/executors",
     "stage list json" -> "applications/local-1422981780767/stages",
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
@@ -629,6 +625,49 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         val sc = TestUtils.httpResponseCode(new URL(url), headers = headers)
         assert(sc === expectedCode, s"Unexpected status code $sc for $url (user = $user)")
       }
+    }
+  }
+
+  test("access history application defaults to the last attempt id") {
+
+    def getRedirectUrl(url: URL): (Int, String) = {
+      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+      connection.setRequestMethod("GET")
+      connection.setUseCaches(false)
+      connection.setDefaultUseCaches(false)
+      connection.setInstanceFollowRedirects(false)
+      connection.connect()
+      val code = connection.getResponseCode()
+      val location = connection.getHeaderField("Location")
+      (code, location)
+    }
+
+    def buildPageAttemptUrl(appId: String, attemptId: Option[Int]): URL = {
+      attemptId match {
+        case Some(id) =>
+          new URL(s"http://localhost:$port/history/$appId/$id")
+        case None =>
+          new URL(s"http://localhost:$port/history/$appId")
+      }
+    }
+
+    val oneAttemptAppId = "local-1430917381534"
+    HistoryServerSuite.getUrl(buildPageAttemptUrl(oneAttemptAppId, None))
+
+    val multiAttemptAppid = "local-1430917381535"
+    val lastAttemptId = Some(2)
+    val lastAttemptUrl = buildPageAttemptUrl(multiAttemptAppid, lastAttemptId)
+    Seq(None, Some(1), Some(2)).foreach { attemptId =>
+      val url = buildPageAttemptUrl(multiAttemptAppid, attemptId)
+      val (code, location) = getRedirectUrl(url)
+      assert(code === 302, s"Unexpected status code $code for $url")
+      attemptId match {
+        case None =>
+          assert(location.stripSuffix("/") === lastAttemptUrl.toString)
+        case _ =>
+          assert(location.stripSuffix("/") === url.toString)
+      }
+      HistoryServerSuite.getUrl(new URL(location))
     }
   }
 

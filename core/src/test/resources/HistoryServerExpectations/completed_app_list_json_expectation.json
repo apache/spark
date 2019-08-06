@@ -1,49 +1,16 @@
 [ {
-  "id": "application_1536831636016_59384",
-  "name": "Spark Pi",
-  "attempts": [
-    {
-      "attemptId": "1",
-      "startTime": "2019-01-08T04:33:43.607GMT",
-      "endTime": "2019-01-08T04:33:58.745GMT",
-      "lastUpdated": "",
-      "duration": 15138,
-      "sparkUser": "lajin",
-      "completed": true,
-      "appSparkVersion": "3.0.0-SNAPSHOT",
-      "lastUpdatedEpoch": 0,
-      "startTimeEpoch": 1546922023607,
-      "endTimeEpoch": 1546922038745
-    }
-  ]
-}, {
-  "id" : "application_1538416563558_0014",
-  "name" : "PythonBisectingKMeansExample",
+  "id" : "application_1553914137147_0018",
+  "name" : "LargeBlocks",
   "attempts" : [ {
-    "startTime" : "2018-10-02T00:42:39.580GMT",
-    "endTime" : "2018-10-02T00:44:02.338GMT",
+    "startTime" : "2019-04-08T20:39:44.286GMT",
+    "endTime" : "2019-04-08T20:40:46.454GMT",
     "lastUpdated" : "",
-    "duration" : 82758,
-    "sparkUser" : "root",
+    "duration" : 62168,
+    "sparkUser" : "systest",
     "completed" : true,
-    "appSparkVersion" : "2.5.0-SNAPSHOT",
-    "lastUpdatedEpoch" : 0,
-    "startTimeEpoch" : 1538440959580,
-    "endTimeEpoch" : 1538441042338
-  } ]
-}, {
-  "id" : "application_1506645932520_24630151",
-  "name" : "Spark shell",
-  "attempts" : [ {
-    "startTime" : "2018-04-19T23:54:42.734GMT",
-    "endTime" : "2018-04-19T23:56:29.134GMT",
-    "lastUpdated" : "",
-    "duration" : 106400,
-    "sparkUser" : "edlu",
-    "completed" : true,
-    "appSparkVersion" : "2.4.0-SNAPSHOT",
-    "startTimeEpoch" : 1524182082734,
-    "endTimeEpoch" : 1524182189134,
+    "appSparkVersion" : "3.0.0-SNAPSHOT",
+    "startTimeEpoch" : 1554755984286,
+    "endTimeEpoch" : 1554756046454,
     "lastUpdatedEpoch" : 0
   } ]
 }, {

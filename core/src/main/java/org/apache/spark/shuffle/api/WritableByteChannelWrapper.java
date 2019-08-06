@@ -15,24 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.shuffle.api;
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import java.io.Closeable;
+import java.nio.channels.WritableByteChannel;
 
-class HiveDataFrameJoinSuite extends QueryTest with TestHiveSingleton {
-  import spark.implicits._
+import org.apache.spark.annotation.Private;
 
-  // We should move this into SQL package if we make case sensitivity configurable in SQL.
-  test("join - self join auto resolve ambiguity with case insensitivity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("Key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
+/**
+ * :: Private ::
+ *
+ * A thin wrapper around a {@link WritableByteChannel}.
+ * <p>
+ * This is primarily provided for the local disk shuffle implementation to provide a
+ * {@link java.nio.channels.FileChannel} that keeps the channel open across partition writes.
+ *
+ * @since 3.0.0
+ */
+@Private
+public interface WritableByteChannelWrapper extends Closeable {
 
-    checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
-      Row(2, "2", 2, "2") :: Nil)
-  }
-
+  /**
+   * The underlying channel to write bytes into.
+   */
+  WritableByteChannel channel();
 }
