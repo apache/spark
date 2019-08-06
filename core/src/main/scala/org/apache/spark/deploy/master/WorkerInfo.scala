@@ -70,12 +70,6 @@ private[spark] class WorkerInfo(
     }
   }
 
-  def resourcesCanBeReleased: Map[String, ResourceInformation] = {
-    resources.filter(_._2.availableAddrs.nonEmpty).map { case (rName, rInfo) =>
-      rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
-    }
-  }
-
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()
