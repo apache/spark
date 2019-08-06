@@ -960,4 +960,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
     checkEvaluation(makeTimestampExpr.copy(sec = Literal(60.5)), null)
   }
+
+  test("millennium") {
+    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
+    checkEvaluation(Millennium(date), 3)
+    checkEvaluation(Millennium(date.copy(year = Literal(2001))), 3)
+    checkEvaluation(Millennium(date.copy(year = Literal(2000))), 2)
+    checkEvaluation(Millennium(date.copy(year = Literal(1001), day = Literal(28))), 2)
+    checkEvaluation(Millennium(date.copy(year = Literal(1))), 1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-100), month = Literal(12))), -1)
+    checkEvaluation(Millennium(date.copy(year = Literal(-2019))), -3)
+  }
 }
