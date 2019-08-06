@@ -426,7 +426,8 @@ private[kafka010] class KafkaOffsetReader(
       consumer.poll(jt.Duration.ofMillis(100))
       partitions = consumer.assignment()
     }
-    require(!partitions.isEmpty, "Partitions assigned to the Kafka consumer can't be null")
+    require(!partitions.isEmpty, "Partitions assigned to the Kafka consumer can't be empty. " +
+      "Setting kafkaConsumer.pollTimeoutMs to a too low value can potentially cause this.")
     logDebug(s"Partitions assigned to consumer: $partitions")
     partitions
   }
