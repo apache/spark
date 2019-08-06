@@ -39,7 +39,7 @@ private[kafka010] class KafkaBatch(
   assert(endingOffsets != EarliestOffsetRangeLimit,
     "Ending offset not allowed to be set to earliest offsets.")
 
-  private val pollTimeoutMs = sourceOptions.getOrElse(
+  private[kafka010] val pollTimeoutMs = sourceOptions.getOrElse(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
     (SparkEnv.get.conf.get(NETWORK_TIMEOUT) * 1000L).toString
   ).toLong

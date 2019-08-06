@@ -22,20 +22,14 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{PrivateMethodTester}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
 import org.apache.spark.sql.sources.v2.reader.Scan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
+class KafkaSourceProviderSuite extends SparkFunSuite {
 
   private val expected = "1111"
-  private val pollTimeoutMsMethod = PrivateMethod[Long]('pollTimeoutMs)
-  private val maxOffsetsPerTriggerMethod = PrivateMethod[Option[Long]]('maxOffsetsPerTrigger)
-  private val maxOffsetFetchAttemptsMethod = PrivateMethod[Int]('maxOffsetFetchAttempts)
-  private val offsetFetchAttemptIntervalMsMethod =
-    PrivateMethod[Long]('offsetFetchAttemptIntervalMs)
 
   override protected def afterEach(): Unit = {
     SparkEnv.set(null)
@@ -44,37 +38,36 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("batch mode - options should be handled as case-insensitive") {
     verifyFieldsInBatch(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, batch => {
-      assert(expected.toLong === getField(batch, pollTimeoutMsMethod))
+      assert(expected.toLong === batch.pollTimeoutMs)
     })
   }
 
   test("micro-batch mode - options should be handled as case-insensitive") {
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
-      assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
+      assert(expected.toLong === stream.pollTimeoutMs)
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER, expected, stream => {
-      assert(Some(expected.toLong) === getField(stream, maxOffsetsPerTriggerMethod))
+      assert(Some(expected.toLong) === stream.maxOffsetsPerTrigger)
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
-      assert(expected.toInt === getField(stream.kafkaOffsetReader, maxOffsetFetchAttemptsMethod))
+      assert(expected.toInt === stream.kafkaOffsetReader.maxOffsetFetchAttempts)
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
-      assert(expected.toLong === getField(stream.kafkaOffsetReader,
-        offsetFetchAttemptIntervalMsMethod))
+      assert(expected.toLong === stream.kafkaOffsetReader.offsetFetchAttemptIntervalMs))
     })
   }
 
   test("continuous mode - options should be handled as case-insensitive") {
     verifyFieldsInContinuousStream(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, expected, stream => {
-      assert(expected.toLong === getField(stream, pollTimeoutMsMethod))
+      assert(expected.toLong === stream.pollTimeoutMs)
     })
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, expected, stream => {
-      assert(expected.toInt === getField(stream.offsetReader, maxOffsetFetchAttemptsMethod))
+      assert(expected.toInt === stream.offsetReader.maxOffsetFetchAttempts)
     })
     verifyFieldsInContinuousStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
-      assert(expected.toLong === getField(stream.offsetReader, offsetFetchAttemptIntervalMsMethod))
+      assert(expected.toLong === stream.offsetReader.offsetFetchAttemptIntervalMs)
     })
   }
 
@@ -133,9 +126,5 @@ class KafkaSourceProviderSuite extends SparkFunSuite with PrivateMethodTester {
   private def getKafkaDataSourceScan(options: CaseInsensitiveStringMap): Scan = {
     val provider = new KafkaSourceProvider()
     provider.getTable(options).newScanBuilder(options).build()
-  }
-
-  private def getField[T](obj: AnyRef, method: PrivateMethod[T]): T = {
-    obj.invokePrivate(method())
   }
 }
