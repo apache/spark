@@ -631,7 +631,7 @@ object Population {
       Chromosome(conf, shuffle(itemsMap), conditions, topOutputSet)
     }
 
-    new Population(conf, chromos)
+    Population(conf, chromos)
   }
 
   private def determinePopSize(conf: SQLConf, numRelations: Int): Int = {
@@ -668,14 +668,11 @@ object Population {
   }
 }
 
-class Population(conf: SQLConf, val chromos: Seq[Chromosome]) extends Logging {
-  private def sort(): Seq[Chromosome] = {
-    chromos.sortWith((left, right) => left.fitness > right.fitness)
-  }
+case class Population(conf: SQLConf, chromos: Seq[Chromosome]) extends Logging {
 
   def evolve: Population = {
     // Sort chromos in the population first.
-    var tempChromos = sort()
+    var tempChromos = chromos.sortWith((left, right) => left.fitness > right.fitness)
     // Begin iteration.
     val generations = chromos.size
     for (i <- 1 to generations) {
@@ -686,24 +683,17 @@ class Population(conf: SQLConf, val chromos: Seq[Chromosome]) extends Logging {
       logDebug(s"Iteration $i, fitness for kid: ${kid.fitness}," +
           s" and Fitness for plans: ${ tempChromos.map(c => c.fitness)}")
     }
-    new Population(conf, tempChromos)
+    Population(conf, tempChromos)
   }
 
   private def putToPop(kid: Chromosome, chromos: Seq[Chromosome]): Seq[Chromosome] = {
-    val tmp = mutable.Buffer[Chromosome]()
-    var added = false
-    for (elem <- chromos) {
-      if (kid.fitness >= elem.fitness && !added) {
-        tmp.append(kid)
-        added = true
-      }
-      tmp.append(elem)
-    }
-    // Remove the last elem whose fitness is lowest if we have inserted the kid.
-    if (added) {
+    val tmp = mutable.Buffer[Chromosome](chromos: _*)
+    val index = chromos.indexWhere(_.fitness < kid.fitness)
+    if (index >= 0) {
+      tmp.insert(index, kid)
       tmp.remove(tmp.size - 1)
     }
-    tmp
+    Seq(tmp: _*)
   }
 }
 
@@ -797,28 +787,16 @@ object JoinReorderUtils extends PredicateHelper {
    *
    * @param conf SQLConf for parameters that control the selection
    * @param chromos candidates to be selected.
-   * @param excludes chromosomes set that will be excluded in the selection.
+   * @param exclude chromosome that will be excluded in the selection.
    * @return the selected chromosome.
    */
-  def select(conf: SQLConf, chromos: Seq[Chromosome], excludes: Option[Chromosome]): Chromosome = {
-    excludes match {
-      case Some(e) =>
-        val exIndex = chromos.indexOf(e)
-        val index = {
-          var candidate: Int = 0
-          var break: Boolean = false
-          while (!break) {
-            candidate = rand(chromos.size, conf.joinReorderGASelectionBias)
-            if (candidate != exIndex) {
-              break = true
-            }
-          }
-          candidate
-        }
-        chromos(index)
-      case None =>
-        chromos(rand(chromos.size, conf.joinReorderGASelectionBias))
-    }
+  def select(conf: SQLConf, chromos: Seq[Chromosome], exclude: Option[Chromosome]): Chromosome = {
+    val exIndex = exclude.map { chromos.indexOf }.getOrElse(-1)
+    var index = -1
+    do {
+      index = rand(chromos.size, conf.joinReorderGASelectionBias)
+    } while (index == exIndex)
+    chromos(index)
   }
 
   /**
