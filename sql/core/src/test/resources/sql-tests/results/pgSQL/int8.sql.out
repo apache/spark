@@ -355,7 +355,7 @@ SELECT '' AS five, q1 AS plus, -q1 AS `minus` FROM INT8_TBL
 -- !query 37 schema
 struct<five:string,plus:bigint,minus:bigint>
 -- !query 37 output
-123	-123
+	123	-123
 	123	-123
 	4567890123456789	-4567890123456789
 	4567890123456789	-4567890123456789
@@ -367,7 +367,7 @@ SELECT '' AS five, q1, q2, q1 + q2 AS plus FROM INT8_TBL
 -- !query 38 schema
 struct<five:string,q1:bigint,q2:bigint,plus:bigint>
 -- !query 38 output
-123	456	579
+	123	456	579
 	123	4567890123456789	4567890123456912
 	4567890123456789	-4567890123456789	0
 	4567890123456789	123	4567890123456912
@@ -379,7 +379,7 @@ SELECT '' AS five, q1, q2, q1 - q2 AS `minus` FROM INT8_TBL
 -- !query 39 schema
 struct<five:string,q1:bigint,q2:bigint,minus:bigint>
 -- !query 39 output
-123	456	-333
+	123	456	-333
 	123	4567890123456789	-4567890123456666
 	4567890123456789	-4567890123456789	9135780246913578
 	4567890123456789	123	4567890123456666
@@ -391,7 +391,7 @@ SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 -- !query 40 schema
 struct<three:string,q1:bigint,q2:bigint,multiply:bigint>
 -- !query 40 output
-123	456	56088
+	123	456	56088
 	123	4567890123456789	561850485185185047
 	4567890123456789	-4567890123456789	-4868582358072306617
 	4567890123456789	123	561850485185185047
@@ -404,7 +404,7 @@ SELECT '' AS three, q1, q2, q1 * q2 AS multiply FROM INT8_TBL
 -- !query 41 schema
 struct<three:string,q1:bigint,q2:bigint,multiply:bigint>
 -- !query 41 output
-123	456	56088
+	123	456	56088
 	123	4567890123456789	561850485185185047
 	4567890123456789	123	561850485185185047
 
@@ -414,7 +414,7 @@ SELECT '' AS five, q1, q2, q1 / q2 AS divide, q1 % q2 AS mod FROM INT8_TBL
 -- !query 42 schema
 struct<five:string,q1:bigint,q2:bigint,divide:bigint,mod:bigint>
 -- !query 42 output
-123	456	0	123
+	123	456	0	123
 	123	4567890123456789	0	123
 	4567890123456789	-4567890123456789	-1	0
 	4567890123456789	123	37137318076884	57
@@ -426,7 +426,7 @@ SELECT '' AS five, q1, double(q1) FROM INT8_TBL
 -- !query 43 schema
 struct<five:string,q1:bigint,q1:double>
 -- !query 43 output
-123	123.0
+	123	123.0
 	123	123.0
 	4567890123456789	4.567890123456789E15
 	4567890123456789	4.567890123456789E15
@@ -438,7 +438,7 @@ SELECT '' AS five, q2, double(q2) FROM INT8_TBL
 -- !query 44 schema
 struct<five:string,q2:bigint,q2:double>
 -- !query 44 output
--4567890123456789	-4.567890123456789E15
+	-4567890123456789	-4.567890123456789E15
 	123	123.0
 	456	456.0
 	4567890123456789	4.567890123456789E15
@@ -474,7 +474,7 @@ SELECT '' AS five, 2 * q1 AS `twice int4` FROM INT8_TBL
 -- !query 47 schema
 struct<five:string,twice int4:bigint>
 -- !query 47 output
-246
+	246
 	246
 	9135780246913578
 	9135780246913578
@@ -486,7 +486,7 @@ SELECT '' AS five, q1 * 2 AS `twice int4` FROM INT8_TBL
 -- !query 48 schema
 struct<five:string,twice int4:bigint>
 -- !query 48 output
-246
+	246
 	246
 	9135780246913578
 	9135780246913578

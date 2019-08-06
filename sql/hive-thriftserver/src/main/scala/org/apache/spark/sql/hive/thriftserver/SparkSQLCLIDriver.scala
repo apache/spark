@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -98,9 +99,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -168,9 +169,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // will set the output into an invalid buffer.
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
