@@ -77,8 +77,8 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
     when(blockResolver.writeIndexFileAndCommit(
       anyInt, anyInt, anyInt, any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
-        partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
-        val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
+        partitionSizesInMergedFile = invocationOnMock.getArguments()(3).asInstanceOf[Array[Long]]
+        val tmp: File = invocationOnMock.getArguments()(4).asInstanceOf[File]
         if (tmp != null) {
           mergedOutputFile.delete()
           tmp.renameTo(mergedOutputFile)
