@@ -198,8 +198,8 @@ of the most common options to set are:
   <td>true</td>
   <td>
     Whether to coordinate resources automatically among workers/drivers(client only) 
-    in Standalone. If not, user should be responsible for assigning different resources 
-    for workers/drivers while using resource discovery script.
+    in Standalone. If false, the user is responsible for configuring different resources
+    for workers/drivers that run on the same host.
   </td>
 </tr>
 <tr>
@@ -207,8 +207,8 @@ of the most common options to set are:
   <td>SPARK_HOME</td>
   <td>
     Directory used to coordinate resources among workers/drivers(client only) in Standalone.
-    Default is SPARK_HOME. Make sure to use the same directory with the worker when submits
-    the application in client mode and don't clean up this directory while workers/drivers
+    Default is SPARK_HOME. Make sure to use the same directory for worker and drivers in
+    client mode that run on the same host. Don't clean up this directory while workers/drivers
     are still alive to avoid the most likely resources conflict. 
   </td>
 </tr>
