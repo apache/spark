@@ -460,9 +460,9 @@ object JoinReorderGA extends PredicateHelper with Logging {
 trait Crossover {
 
   /**
-    * Generate a new [[Chromosome]] from the given parent [[Chromosome]]s,
-    * with this crossover algorithm.
-    */
+   * Generate a new [[Chromosome]] from the given parent [[Chromosome]]s,
+   * with this crossover algorithm.
+   */
   def newChromo(father: Chromosome, mother: Chromosome) : Chromosome
 }
 
