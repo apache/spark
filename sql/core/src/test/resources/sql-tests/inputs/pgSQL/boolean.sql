@@ -195,31 +195,31 @@ SELECT '' AS True, f1
    FROM BOOLTBL1
    WHERE f1 IS TRUE;
 
-SELECT '' AS "Not False", f1
+SELECT '' AS `Not False`, f1
    FROM BOOLTBL1
    WHERE f1 IS NOT FALSE;
 
-SELECT '' AS "False", f1
+SELECT '' AS `False`, f1
    FROM BOOLTBL1
    WHERE f1 IS FALSE;
 
-SELECT '' AS "Not True", f1
+SELECT '' AS `Not True`, f1
    FROM BOOLTBL1
    WHERE f1 IS NOT TRUE;
 
-SELECT '' AS "True", f1
+SELECT '' AS `True`, f1
    FROM BOOLTBL2
    WHERE f1 IS TRUE;
 
-SELECT '' AS "Not False", f1
+SELECT '' AS `Not False`, f1
    FROM BOOLTBL2
    WHERE f1 IS NOT FALSE;
 
-SELECT '' AS "False", f1
+SELECT '' AS `False`, f1
    FROM BOOLTBL2
    WHERE f1 IS FALSE;
 
-SELECT '' AS "Not True", f1
+SELECT '' AS `Not True`, f1
    FROM BOOLTBL2
    WHERE f1 IS NOT TRUE;
 

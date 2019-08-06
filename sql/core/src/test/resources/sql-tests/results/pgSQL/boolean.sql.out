@@ -578,129 +578,82 @@ struct<True:string,f1:boolean>
 
 
 -- !query 62
-SELECT '' AS "Not False", f1
+SELECT '' AS `Not False`, f1
    FROM BOOLTBL1
    WHERE f1 IS NOT FALSE
 -- !query 62 schema
-struct<>
+struct<Not False:string,f1:boolean>
 -- !query 62 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "Not False", f1
-----------^^^
-   FROM BOOLTBL1
-   WHERE f1 IS NOT FALSE
+	true
+	true
+	true
 
 
 -- !query 63
-SELECT '' AS "False", f1
+SELECT '' AS `False`, f1
    FROM BOOLTBL1
    WHERE f1 IS FALSE
 -- !query 63 schema
-struct<>
+struct<False:string,f1:boolean>
 -- !query 63 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "False", f1
-----------^^^
-   FROM BOOLTBL1
-   WHERE f1 IS FALSE
+	false
 
 
 -- !query 64
-SELECT '' AS "Not True", f1
+SELECT '' AS `Not True`, f1
    FROM BOOLTBL1
    WHERE f1 IS NOT TRUE
 -- !query 64 schema
-struct<>
+struct<Not True:string,f1:boolean>
 -- !query 64 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "Not True", f1
-----------^^^
-   FROM BOOLTBL1
-   WHERE f1 IS NOT TRUE
+	false
 
 
 -- !query 65
-SELECT '' AS "True", f1
+SELECT '' AS `True`, f1
    FROM BOOLTBL2
    WHERE f1 IS TRUE
 -- !query 65 schema
-struct<>
+struct<True:string,f1:boolean>
 -- !query 65 output
-org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "True", f1
-----------^^^
-   FROM BOOLTBL2
-   WHERE f1 IS TRUE
 
 
 -- !query 66
-SELECT '' AS "Not False", f1
+SELECT '' AS `Not False`, f1
    FROM BOOLTBL2
    WHERE f1 IS NOT FALSE
 -- !query 66 schema
-struct<>
+struct<Not False:string,f1:boolean>
 -- !query 66 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "Not False", f1
-----------^^^
-   FROM BOOLTBL2
-   WHERE f1 IS NOT FALSE
+	NULL
 
 
 -- !query 67
-SELECT '' AS "False", f1
+SELECT '' AS `False`, f1
    FROM BOOLTBL2
    WHERE f1 IS FALSE
 -- !query 67 schema
-struct<>
+struct<False:string,f1:boolean>
 -- !query 67 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "False", f1
-----------^^^
-   FROM BOOLTBL2
-   WHERE f1 IS FALSE
+	false
+	false
+	false
+	false
 
 
 -- !query 68
-SELECT '' AS "Not True", f1
+SELECT '' AS `Not True`, f1
    FROM BOOLTBL2
    WHERE f1 IS NOT TRUE
 -- !query 68 schema
-struct<>
+struct<Not True:string,f1:boolean>
 -- !query 68 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-no viable alternative at input 'AS'(line 1, pos 10)
-
-== SQL ==
-SELECT '' AS "Not True", f1
-----------^^^
-   FROM BOOLTBL2
-   WHERE f1 IS NOT TRUE
+	NULL
+	false
+	false
+	false
+	false
 
 
 -- !query 69
