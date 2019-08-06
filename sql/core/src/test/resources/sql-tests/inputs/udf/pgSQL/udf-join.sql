@@ -734,11 +734,11 @@ select * from a left join b on udf(i) = udf(x) and udf(i) = udf(y) and udf(x) = 
 --
 select udf(t1.q2), udf(count(t2.*))
 from int8_tbl t1 left join int8_tbl t2 on (udf(t1.q2) = udf(t2.q1))
-group by t1.q2 order by 1;
+group by udf(t1.q2) order by 1;
 
 select udf(t1.q2), udf(count(t2.*))
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(t1.q2) = udf(t2.q1))
-group by t1.q2 order by 1;
+group by udf(t1.q2) order by 1;
 
 -- [SPARK-28330] Enhance query limit
 -- select t1.q2, count(t2.*)

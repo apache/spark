@@ -245,7 +245,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t)
 -- !query 27 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 27 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -264,7 +264,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t)
 -- !query 28 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 28 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -283,7 +283,7 @@ SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c)
 -- !query 29 schema
 struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string>
 -- !query 29 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -302,7 +302,7 @@ SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c)
 -- !query 30 schema
 struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string>
 -- !query 30 output
-0	NULL	zero
+	0	NULL	zero
 	1	4	one
 	2	3	two
 	3	2	three
@@ -321,7 +321,7 @@ SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d), udf(e)
 -- !query 31 schema
 struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int,CAST(udf(cast(e as string)) AS INT):int>
 -- !query 31 output
-0	NULL	zero	0	NULL
+	0	NULL	zero	0	NULL
 	0	NULL	zero	1	-1
 	0	NULL	zero	2	2
 	0	NULL	zero	2	4
@@ -428,7 +428,7 @@ SELECT udf('') AS `xxx`, *
 -- !query 32 schema
 struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 -- !query 32 output
-0	NULL	zero	0	NULL
+	0	NULL	zero	0	NULL
 	0	NULL	zero	1	-1
 	0	NULL	zero	2	2
 	0	NULL	zero	2	4
@@ -545,7 +545,7 @@ SELECT udf('') AS `xxx`, udf(t1.i), udf(k), udf(t)
 -- !query 34 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 34 output
-0	-1	zero
+	0	-1	zero
 	0	-3	zero
 	0	-5	zero
 	0	-5	zero
@@ -653,7 +653,7 @@ SELECT udf('') AS `xxx`, udf(ii), udf(tt), udf(kk)
 -- !query 35 schema
 struct<xxx:string,CAST(udf(cast(ii as string)) AS INT):int,CAST(udf(cast(tt as string)) AS STRING):string,CAST(udf(cast(kk as string)) AS INT):int>
 -- !query 35 output
-0	zero	-1
+	0	zero	-1
 	0	zero	-3
 	0	zero	-5
 	0	zero	-5
@@ -760,7 +760,7 @@ SELECT udf('') AS `xxx`, udf(j1_tbl.i), udf(j), udf(t), udf(a.i), udf(a.k), udf(
 -- !query 36 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 36 output
-0	NULL	zero	0	NULL	0	NULL
+	0	NULL	zero	0	NULL	0	NULL
 	0	NULL	zero	0	NULL	1	-1
 	0	NULL	zero	0	NULL	2	2
 	0	NULL	zero	0	NULL	2	4
@@ -1659,7 +1659,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 37 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 37 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1674,7 +1674,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 38 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 38 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1690,7 +1690,7 @@ SELECT udf('') AS `xxx`, *
 -- !query 39 schema
 struct<xxx:string,a:int,b:int,c:string,d:int>
 -- !query 39 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1705,7 +1705,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 40 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 40 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1720,7 +1720,7 @@ SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
 -- !query 41 schema
 struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
 -- !query 41 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1735,7 +1735,7 @@ SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
 -- !query 42 schema
 struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
 -- !query 42 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	2	3	two	2
 	4	1	four	2
 
@@ -1746,7 +1746,7 @@ SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL
 -- !query 43 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 43 output
-0	NULL	zero	0	NULL
+	0	NULL	zero	0	NULL
 	1	4	one	1	-1
 	2	3	two	2	2
 	2	3	two	2	4
@@ -1761,7 +1761,7 @@ SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), J2_TBL.i, 
 -- !query 44 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,i:int,k:int>
 -- !query 44 output
-0	NULL	zero	NULL	0
+	0	NULL	zero	NULL	0
 	2	3	two	2	2
 	4	1	four	2	4
 
@@ -1772,7 +1772,7 @@ SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL
 -- !query 45 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 45 output
-0	NULL	zero	2	2
+	0	NULL	zero	2	2
 	0	NULL	zero	2	4
 	0	NULL	zero	NULL	0
 	1	4	one	2	2
@@ -1790,7 +1790,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 46 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 46 output
-NULL	NULL	null	NULL
+	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1812,7 +1812,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 47 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 47 output
-NULL	NULL	null	NULL
+	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1833,7 +1833,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 48 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 48 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1850,7 +1850,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 49 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 49 output
-0	NULL	zero	NULL
+	0	NULL	zero	NULL
 	1	4	one	-1
 	2	3	two	2
 	2	3	two	4
@@ -1868,7 +1868,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 50 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 50 output
-NULL	NULL	NULL	NULL
+	NULL	NULL	NULL	NULL
 	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	NULL	NULL	NULL	0
@@ -1892,7 +1892,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 51 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 51 output
-NULL	NULL	NULL	NULL
+	NULL	NULL	NULL	NULL
 	NULL	NULL	null	NULL
 	NULL	0	zero	NULL
 	NULL	NULL	NULL	0
@@ -1924,7 +1924,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
 -- !query 53 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 53 output
-1	4	one	-1
+	1	4	one	-1
 
 
 -- !query 54
@@ -2759,7 +2759,7 @@ struct<i:int,x:int,y:int>
 -- !query 130
 select udf(t1.q2), udf(count(t2.*))
 from int8_tbl t1 left join int8_tbl t2 on (udf(t1.q2) = udf(t2.q1))
-group by t1.q2 order by 1
+group by udf(t1.q2) order by 1
 -- !query 130 schema
 struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2) as string)) AS BIGINT):bigint>
 -- !query 130 output
@@ -2772,7 +2772,7 @@ struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2
 -- !query 131
 select udf(t1.q2), udf(count(t2.*))
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(t1.q2) = udf(t2.q1))
-group by t1.q2 order by 1
+group by udf(t1.q2) order by 1
 -- !query 131 schema
 struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2) as string)) AS BIGINT):bigint>
 -- !query 131 output
