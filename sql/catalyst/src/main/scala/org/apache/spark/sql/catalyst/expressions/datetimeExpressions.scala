@@ -474,6 +474,32 @@ case class WeekDay(child: Expression) extends DayWeek {
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the day of the week for date/timestamp numbered according to ISO 8601 (1 = Monday, 2 = Tuesday, ..., 7 = Sunday).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2019-08-06');
+       2
+  """,
+  since = "3.0.0")
+// scalastyle:on line.size.limit
+case class IsoDayOfWeek(child: Expression) extends DayWeek {
+
+  override protected def nullSafeEval(date: Any): Any = {
+    val localDate = LocalDate.ofEpochDay(date.asInstanceOf[Int])
+    localDate.getDayOfWeek.getValue
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, days => {
+      s"""
+         ${ev.value} = java.time.LocalDate.ofEpochDay($days).getDayOfWeek().getValue();
+      """
+    })
+  }
+}
+
 abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)

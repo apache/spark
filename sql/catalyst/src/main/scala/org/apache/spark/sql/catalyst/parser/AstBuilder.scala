@@ -1408,6 +1408,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         DayOfMonth(expression(ctx.source))
       case "DAYOFWEEK" =>
         DayOfWeek(expression(ctx.source))
+      case "ISODOW" =>
+        IsoDayOfWeek(expression(ctx.source))
       case "DOY" =>
         DayOfYear(expression(ctx.source))
       case "HOUR" =>
