@@ -31,10 +31,17 @@ class ImpliesSuite extends SparkFunSuite {
   private val prefix = "select * from tbl where "
 
   private val positiveTestExprs: Seq[ExprContainer] Tuple2 Boolean = Seq(
-    ExprContainer("(a > 10)",
-                  "(a > 5)"),
-    ExprContainer("(a < 10)",
-                  "(a < 11)"),
+    ExprContainer("a < 20",
+                  "a < 20"),
+    ExprContainer("(a > 20)",
+                  "(a >= 20)"),
+    ExprContainer("(a < 20)",
+                  "(a <= 20)"),
+    ExprContainer("(c > 10)",
+                  "(c > 5)"),
+    ExprContainer("(c < 10)",
+                  "(c < 11)"),
+    ExprContainer("a < 20 and c < 10", "a < 20 and c < 11"),
     ExprContainer("(a > 10 and c < 5) or (a > 20)",
                   "(a > 0 or c < 5)"),
     ExprContainer("(a > 100) and (a > 20 or b > 100)",
@@ -42,6 +49,10 @@ class ImpliesSuite extends SparkFunSuite {
   ) -> true
 
   private val negativeTestExprs: Seq[ExprContainer] Tuple2 Boolean = Seq(
+    ExprContainer("(a >= 20)",
+                  "(a > 20)"),
+    ExprContainer("(a <= 20)",
+                  "(a < 20)"),
     ExprContainer("(a > 100)",
                   "(a > 200)"),
     ExprContainer("(a < 100)",

@@ -21,15 +21,17 @@ import org.apache.spark.sql.catalyst.expressions._
 class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
   def implies: Boolean = {
-    // val queryDNF = convertToDNF(filters).getOrElse(return false)
-    // val mvDNF = convertToDNF(mvFilters).getOrElse(return false)
     val queryDNF = toDNF(foldUsingConjunct(filters)).getOrElse(return false)
     val mvDNF = toDNF(foldUsingConjunct(mvFilters)).getOrElse(return false)
     impliesDNF(queryDNF, mvDNF)
   }
 
   private def foldUsingConjunct(exps: Seq[Expression]): Expression =
-                                      exps.foldRight(exps.head)(And(_, _))
+    if (exps.size > 1) {
+      exps.slice(1, exps.size - 1).foldRight(exps.head)(And)
+    } else {
+      exps.head
+    }
 
   private def toDNF(expression: Expression): Option[Seq[Seq[Expression]]] = {
     expression match {
@@ -50,25 +52,6 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
       case expr =>
         Some(Seq(Seq(expr)))
     }
-  }
-
-  private def convertToDNF(exps: Seq[Expression]): Option[Seq[Seq[Expression]]] = {
-    // [[a & b & c],[d & e]] => [[a & b & c & d & e]]
-    if (exps.forall(isConjunct)) {
-      Some(Seq(exps.flatMap(getConjunctComponents(_))))
-
-      // [[a | b ], [c | d]] => [[a & c], [a & d], [b & c], [b & d]]
-    } else if (exps.forall(isDisjunct)) {
-      Some(DNF(exps.map(getDisjunctsComponents(_))))
-
-      // [[(a | b) & (c | d)]] => [[a & c], [a & d], [b & c], [b & d]]
-    } else if (exps.size == 1 && isCNFExpression(exps.head)) {
-      Some(DNF(convertCNFExpToDNF(exps.head)))
-
-      // [[(a & b) | (c)]] => [[a & b ], [c]]
-    } else if (exps.size == 1 && isDNFExpression(exps.head)) {
-      Some(convertDNFExpToDNF(exps.head))
-    } else None
   }
 
   def convertCNFExpToDNF(exp: Expression): Seq[Seq[Expression]] = {
@@ -120,19 +103,6 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
   }
 
    /**
-    * Converts CNF to DNF
-    */
-  private def DNF(disjuncts: Seq[Seq[Expression]]): Seq[Seq[Expression]] = {
-    disjuncts match {
-      case Nil => Seq(Nil)
-      case _ =>
-        disjuncts.head.flatMap(exp => {
-          DNF(disjuncts.tail).map(Seq(exp) ++  _)
-        })
-    }
-  }
-
-   /**
     * Checks if conjunctions implication.
     * Note it can have false negatives but not false positives.
     *
@@ -168,7 +138,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     * Similar for [[LessThan]] and [[LessThanOrEqual]]
     */
   private def groupAndReduceConjunct(orderedConjuncts: Seq[Expression]): Option[Seq[Expression]] = {
-    val expandedConjuncts = orderedConjuncts.map(_ match {
+    val expandedConjuncts = orderedConjuncts.map({
       case bc @ BinaryComparison(left: Attribute, right: Literal) =>
         AttributeExpressionLiteral(left, bc, Some(right))
       case ue: UnaryExpression =>
@@ -182,7 +152,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
       attrExpLiterals.last.exp match {
         case _: GreaterThan | _: GreaterThanOrEqual | _: LessThan | _: LessThanOrEqual =>
-          attrExpLiterals.sortWith(impliesHelper _).head.exp
+          attrExpLiterals.sortWith(impliesHelper).head.exp
 
         case _: EqualTo => attrExpLiterals.map(x => x.literal.get).toSet.size match {
           case 1 => attrExpLiterals.last.exp
@@ -202,7 +172,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
   def impliesPredicate(expression1: Expression, expression2: Expression): Boolean = {
     expression1 match {
       case bc@BinaryComparison(left: Attribute, right: Expression) =>
-        impliesForBinaryComparision(bc, expression2, left, right)
+        impliesBinaryComparision(bc, expression2)
       case _@IsNotNull(left : Expression) =>
         impliesForNotNullCheck(expression2, left)
       case _ => false
@@ -211,9 +181,8 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
   private def impliesForNotNullCheck(expression2: Expression, left: Expression): Boolean = {
     expression2 match {
-      case _@IsNotNull(child: Expression) =>
-        return left == child
-      case _ => return false
+      case _@IsNotNull(child: Expression) => left == child
+      case _ => false
     }
   }
 
@@ -221,47 +190,73 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     * 1. query: a > 10, mv: a >= 5 , will return false
     * 2. query: a > 10, mv: a > 10 , will return false
     */
-  private def impliesForBinaryComparision(bc: BinaryComparison, expression2: Expression,
-                                          left: Attribute, right: Expression): Boolean = {
-    val evaluate = PartialFunction[Expression, Boolean] {
+  private def impliesBinaryComparision(leftBc: BinaryComparison,
+                                       rightExpr: Expression): Boolean = {
+    val evaluate: PartialFunction[Expression, Boolean] = {
       case b@BinaryComparison(l: Attribute, r: Expression) =>
-        if (l != left) {
-          return false
-        } else {
-          bc match {
-            case _: GreaterThan | _: GreaterThanOrEqual =>
-              b match {
-                case _: GreaterThan | _: GreaterThanOrEqual =>
-                  GreaterThan(right, r).eval(null).asInstanceOf[Boolean]
-                case _ => false
-              }
-            case _: LessThan | _: LessThanOrEqual =>
-              b match {
-                case _: LessThan | _: LessThanOrEqual =>
-                  LessThan(right, r).eval(null).asInstanceOf[Boolean]
-                case _ => false
-              }
+        if (l == leftBc.left) {
+          leftBc match {
+            case _: GreaterThan =>
+              greaterImplies(leftBc, b, isRightGreaterThan = true)
+            case _: GreaterThanOrEqual =>
+              greaterImplies(leftBc, b, isRightGreaterThan = false)
+            case _: LessThan =>
+              lesserImplies(leftBc, b, isRightLesserThan = true)
+            case _: LessThanOrEqual =>
+              lesserImplies(leftBc, b, isRightLesserThan = false)
             case _: EqualTo =>
               b match {
                 case _: GreaterThan | _: GreaterThanOrEqual =>
-                  GreaterThan(right, r).eval(null).asInstanceOf[Boolean]
+                  GreaterThan(leftBc.right, r).eval(null).asInstanceOf[Boolean]
                 case _: LessThan | _: LessThanOrEqual =>
-                  LessThan(right, r).eval(null).asInstanceOf[Boolean]
+                  LessThan(leftBc.right, r).eval(null).asInstanceOf[Boolean]
                 case _: EqualTo =>
-                  EqualTo(right, r).eval(null).asInstanceOf[Boolean]
+                  EqualTo(leftBc.right, r).eval(null).asInstanceOf[Boolean]
                 case _ => false
               }
           }
+        } else {
+          false
         }
-      case _@IsNotNull(n) => n == left
+      case _@IsNotNull(n) => n == leftBc.left
     }
-    return evaluate.applyOrElse(expression2, (_ => false) : scala.Function1[Expression, Boolean])
+    evaluate.applyOrElse(rightExpr, (_ => false) : scala.Function1[Expression, Boolean])
+  }
+
+  private def lesserImplies(leftBc: BinaryComparison, rightBc: BinaryComparison,
+                            isRightLesserThan: Boolean) = {
+    rightBc match {
+      case _: LessThan | _: LessThanOrEqual =>
+        val res = LessThan(leftBc.right, rightBc.right).eval(null).asInstanceOf[Boolean]
+        if (isRightLesserThan && !res) {
+          EqualTo(leftBc.right, rightBc.right).eval(null).asInstanceOf[Boolean]
+        } else {
+          res
+        }
+      case _ => false
+    }
+  }
+
+  private def greaterImplies(leftBc: BinaryComparison,
+                             rightBc: BinaryComparison,
+                             isRightGreaterThan: Boolean) = {
+    rightBc match {
+      case _: GreaterThan | _: GreaterThanOrEqual =>
+        val res = GreaterThan(leftBc.right, rightBc.right).eval(null).asInstanceOf[Boolean]
+
+        if (isRightGreaterThan && !res) {
+          EqualTo(leftBc.right, rightBc.right).eval(null).asInstanceOf[Boolean]
+        } else {
+          res
+        }
+      case _ => false
+    }
   }
 
   /* 1. Convert the expression to format "AttributeReference Operator Literal"
-     * 2. If not possible, implies is false.
-     * 3. isNotNull isNull should also only have attributes
-     */
+       * 2. If not possible, implies is false.
+       * 3. isNotNull isNull should also only have attributes
+       */
   private def checkAndFixOrder(exp: Expression): Option[Expression] = {
     exp match {
       case bc @ BinaryComparison(left, right) =>
