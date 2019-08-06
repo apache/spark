@@ -2476,6 +2476,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(true),
           Row(true),
           Row(null)))
+      checkAnswer(df.select(forall(col("i"), x => x % 2 === 0)),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(true),
+          Row(null)))
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2502,7 +2508,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Row(true),
           Row(true),
           Row(null)))
+      checkAnswer(df.select(forall(col("i"), x => (x % 2 === 0) || x.isNull)),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(true),
+          Row(true),
+          Row(null)))
       checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(false),
+          Row(null),
+          Row(true),
+          Row(true),
+          Row(null)))
+      checkAnswer(df.select(forall(col("i"), x => x % 2 === 0)),
         Seq(
           Row(false),
           Row(null),
@@ -2528,6 +2548,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     def testNonPrimitiveType(): Unit = {
       checkAnswer(df.selectExpr("forall(s, x -> x is null)"),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(true),
+          Row(null)))
+      checkAnswer(df.select(forall(col("s"), _.isNull)),
         Seq(
           Row(false),
           Row(true),
@@ -2560,15 +2586,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
+    val ex2a = intercept[AnalysisException] {
+      df.select(forall(col("i"), x => x))
+    }
+    assert(ex2a.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("forall(s, x -> x)")
     }
     assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
+    val ex3a = intercept[AnalysisException] {
+      df.select(forall(col("s"), x => x))
+    }
+    assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
     assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+
+    val ex4a = intercept[AnalysisException] {
+      df.select(forall(col("a"), x => x))
+    }
+    assert(ex4a.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {

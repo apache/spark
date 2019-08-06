@@ -3416,6 +3416,15 @@ object functions {
   }
 
   /**
+   * (Scala-specific) Returns whether a predicate holds for every element in the array.
+   *
+   * @group collection_funcs
+   */
+  def forall(column: Column, f: Column => Column): Column = withExpr {
+    ArrayForAll(column.expr, createLambda(f))
+  }
+
+  /**
    * (Scala-specific) Returns an array of elements for which a predicate holds in a given array.
    *
    * @group collection_funcs
@@ -3527,6 +3536,15 @@ object functions {
    */
   def exists(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayExists(column.expr, createLambda(f))
+  }
+
+  /**
+   * (Java-specific) Returns whether a predicate holds for every element in the array.
+   *
+   * @group collection_funcs
+   */
+  def forall(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
+    ArrayForAll(column.expr, createLambda(f))
   }
 
   /**
