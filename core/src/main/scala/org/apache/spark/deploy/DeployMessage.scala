@@ -76,16 +76,18 @@ private[deploy] object DeployMessages {
       exception: Option[Exception])
     extends DeployMessage
 
-  case class ExecutorResponse(
+  case class WorkerExecutorStateResponse(
       desc: ExecutorDescription,
       resources: Map[String, ResourceInformation])
 
-  case class DriverResponse(driverId: String, resources: Map[String, ResourceInformation])
+  case class WorkerDriverStateResponse(
+      driverId: String,
+      resources: Map[String, ResourceInformation])
 
   case class WorkerSchedulerStateResponse(
       id: String,
-      execResponses: List[ExecutorResponse],
-      driverResponses: Seq[DriverResponse])
+      execResponses: List[WorkerExecutorStateResponse],
+      driverResponses: Seq[WorkerDriverStateResponse])
 
   /**
    * A worker will send this message to the master when it registers with the master. Then the
