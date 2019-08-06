@@ -59,7 +59,7 @@ object TypeCoercion {
       CaseWhenCoercion ::
       IfCoercion ::
       StackCoercion ::
-      Division ::
+      Division(conf) ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
@@ -666,7 +666,7 @@ object TypeCoercion {
    * Hive only performs integral division with the DIV operator. The arguments to / are always
    * converted to fractional types.
    */
-  object Division extends TypeCoercionRule {
+  case class Division(conf: SQLConf)  extends TypeCoercionRule {
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
@@ -677,7 +677,12 @@ object TypeCoercion {
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
       case Divide(left, right) if isNumericOrNull(left) && isNumericOrNull(right) =>
-        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+        (left.dataType, right.dataType) match {
+          case (_: IntegralType, _: IntegralType) if conf.preferIntegralDivision =>
+            IntegralDivide(left, right)
+          case _ =>
+            Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+        }
     }
 
     private def isNumericOrNull(ex: Expression): Boolean = {

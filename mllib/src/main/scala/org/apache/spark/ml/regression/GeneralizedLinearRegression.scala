@@ -971,9 +971,9 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   private[regression] object CLogLog extends Link("cloglog") {
 
-    override def link(mu: Double): Double = math.log(-1.0 * math.log(1 - mu))
+    override def link(mu: Double): Double = math.log(-math.log1p(-mu))
 
-    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log(1.0 - mu))
+    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log1p(-mu))
 
     override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
   }
@@ -1041,18 +1041,31 @@ class GeneralizedLinearRegressionModel private[ml] (
   }
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
-    val predictLinkUDF = udf { (features: Vector, offset: Double) => predictLink(features, offset) }
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
 
     val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
-    var output = dataset
+
     if ($(predictionCol).nonEmpty) {
-      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol)), offset))
+      val predictUDF = udf { (features: Vector, offset: Double) => predict(features, offset) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)), offset)
     }
+
     if (hasLinkPredictionCol) {
-      output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol)), offset))
+      val predictLinkUDF =
+        udf { (features: Vector, offset: Double) => predictLink(features, offset) }
+      predictionColNames :+= $(linkPredictionCol)
+      predictionColumns :+= predictLinkUDF(col($(featuresCol)), offset)
     }
-    output.toDF()
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
+    } else {
+      this.logWarning(s"$uid: GeneralizedLinearRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   /**

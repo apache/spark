@@ -33,7 +33,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -110,11 +110,29 @@ class GaussianMixtureModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predUDF = udf((vector: Vector) => predict(vector))
-    val probUDF = udf((vector: Vector) => predictProbability(vector))
-    dataset
-      .withColumn($(predictionCol), predUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
-      .withColumn($(probabilityCol), probUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
+
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
+    if ($(predictionCol).nonEmpty) {
+      val predUDF = udf((vector: Vector) => predict(vector))
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+    }
+
+    if ($(probabilityCol).nonEmpty) {
+      val probUDF = udf((vector: Vector) => predictProbability(vector))
+      predictionColNames :+= $(probabilityCol)
+      predictionColumns :+= probUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
+    } else {
+      this.logWarning(s"$uid: GaussianMixtureModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   @Since("2.0.0")

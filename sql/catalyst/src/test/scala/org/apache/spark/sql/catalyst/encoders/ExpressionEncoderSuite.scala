@@ -427,6 +427,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   testOverflowingBigNumeric(BigInt("9" * 100), "scala very large big int")
   testOverflowingBigNumeric(new BigInteger("9" * 100), "java very big int")
 
+  encodeDecodeTest("foo" -> 1L, "makeCopy") {
+    Encoders.product[(String, Long)].makeCopy.asInstanceOf[ExpressionEncoder[(String, Long)]]
+  }
+
   private def testOverflowingBigNumeric[T: TypeTag](bigNumeric: T, testName: String): Unit = {
     Seq(true, false).foreach { allowNullOnOverflow =>
       testAndVerifyNotLeakingReflectionObjects(

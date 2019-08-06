@@ -349,15 +349,15 @@ SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL;
 -- SELECT EXTRACT(MICROSEC  FROM DATE 'infinity');     -- ERROR:  timestamp units "microsec" not recognized
 -- SELECT EXTRACT(UNDEFINED FROM DATE 'infinity');     -- ERROR:  timestamp units "undefined" not supported
 
--- skip test constructors
 -- test constructors
--- select make_date(2013, 7, 15);
--- select make_date(-44, 3, 15);
+select make_date(2013, 7, 15);
+-- [SPARK-28471] Formatting dates with negative years
+select make_date(-44, 3, 15);
 -- select make_time(8, 20, 0.0);
 -- should fail
--- select make_date(2013, 2, 30);
--- select make_date(2013, 13, 1);
--- select make_date(2013, 11, -1);
+select make_date(2013, 2, 30);
+select make_date(2013, 13, 1);
+select make_date(2013, 11, -1);
 -- select make_time(10, 55, 100.1);
 -- select make_time(24, 0, 2.1);
 

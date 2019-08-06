@@ -49,12 +49,18 @@ class JsonProtocolSuite extends SparkFunSuite {
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
+      new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
+        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
+      new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
+        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
+      new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
+        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
@@ -101,7 +107,7 @@ class JsonProtocolSuite extends SparkFunSuite {
         Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
           321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
-        Some(executorUpdates))
+        Map((0, 0) -> executorUpdates))
     }
     val blockUpdated =
       SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
@@ -437,8 +443,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val oldExecutorMetricsUpdateJson =
       JsonProtocol.executorMetricsUpdateToJson(executorMetricsUpdate)
         .removeField( _._1 == "Executor Metrics Updated")
-    val exepectedExecutorMetricsUpdate = makeExecutorMetricsUpdate("1", true, false)
-    assertEquals(exepectedExecutorMetricsUpdate,
+    val expectedExecutorMetricsUpdate = makeExecutorMetricsUpdate("1", true, false)
+    assertEquals(expectedExecutorMetricsUpdate,
       JsonProtocol.executorMetricsUpdateFromJson(oldExecutorMetricsUpdateJson))
   }
 
@@ -569,9 +575,11 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assertEquals(e1.taskInfo, e2.taskInfo)
       case (e1: SparkListenerTaskEnd, e2: SparkListenerTaskEnd) =>
         assert(e1.stageId === e2.stageId)
+        assert(e1.stageAttemptId === e2.stageAttemptId)
         assert(e1.taskType === e2.taskType)
         assertEquals(e1.reason, e2.reason)
         assertEquals(e1.taskInfo, e2.taskInfo)
+        assertEquals(e1.taskExecutorMetrics, e2.taskExecutorMetrics)
         assertEquals(e1.taskMetrics, e2.taskMetrics)
       case (e1: SparkListenerJobStart, e2: SparkListenerJobStart) =>
         assert(e1.jobId === e2.jobId)
@@ -600,8 +608,16 @@ private[spark] object JsonProtocolSuite extends Assertions {
             assert(stageAttemptId1 === stageAttemptId2)
             assertSeqEquals[AccumulableInfo](updates1, updates2, (a, b) => a.equals(b))
           })
-        assertOptionEquals(e1.executorUpdates, e2.executorUpdates,
-        (e1: ExecutorMetrics, e2: ExecutorMetrics) => assertEquals(e1, e2))
+        assertSeqEquals[((Int, Int), ExecutorMetrics)](
+          e1.executorUpdates.toSeq.sortBy(_._1),
+          e2.executorUpdates.toSeq.sortBy(_._1),
+          (a, b) => {
+            val (k1, v1) = a
+            val (k2, v2) = b
+            assert(k1 === k2)
+            assertEquals(v1, v2)
+          }
+        )
       case (e1: SparkListenerStageExecutorMetrics, e2: SparkListenerStageExecutorMetrics) =>
         assert(e1.execId === e2.execId)
         assert(e1.stageId === e2.stageId)
@@ -885,12 +901,12 @@ private[spark] object JsonProtocolSuite extends Assertions {
        } else {
         Seq()
       }
-    val executorMetricsUpdate =
+    val executorMetricsUpdate: Map[(Int, Int), ExecutorMetrics] =
       if (includeExecutorMetrics) {
-        Some(new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L,
+        Map((0, 0) -> new ExecutorMetrics(Array(123456L, 543L, 0L, 0L, 0L, 0L, 0L,
           0L, 0L, 0L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
       } else {
-        None
+        Map.empty
       }
     SparkListenerExecutorMetricsUpdate(execId, taskMetrics, executorMetricsUpdate)
   }
@@ -1193,6 +1209,28 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      }
       |    ]
       |  },
+      |  "Task Executor Metrics" : {
+      |    "JVMHeapMemory" : 543,
+      |    "JVMOffHeapMemory" : 123456,
+      |    "OnHeapExecutionMemory" : 12345,
+      |    "OffHeapExecutionMemory" : 1234,
+      |    "OnHeapStorageMemory" : 123,
+      |    "OffHeapStorageMemory" : 12,
+      |    "OnHeapUnifiedMemory" : 432,
+      |    "OffHeapUnifiedMemory" : 321,
+      |    "DirectPoolMemory" : 654,
+      |    "MappedPoolMemory" : 765,
+      |    "ProcessTreeJVMVMemory": 256912,
+      |    "ProcessTreeJVMRSSMemory": 123456,
+      |    "ProcessTreePythonVMemory": 123456,
+      |    "ProcessTreePythonRSSMemory": 61728,
+      |    "ProcessTreeOtherVMemory": 30364,
+      |    "ProcessTreeOtherRSSMemory": 15182,
+      |    "MinorGCCount" : 0,
+      |    "MinorGCTime" : 0,
+      |    "MajorGCCount" : 0,
+      |    "MajorGCTime" : 0
+      |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
       |    "Executor Deserialize CPU Time": 300,
@@ -1294,6 +1332,28 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      }
       |    ]
       |  },
+      |  "Task Executor Metrics" : {
+      |    "JVMHeapMemory" : 543,
+      |    "JVMOffHeapMemory" : 123456,
+      |    "OnHeapExecutionMemory" : 12345,
+      |    "OffHeapExecutionMemory" : 1234,
+      |    "OnHeapStorageMemory" : 123,
+      |    "OffHeapStorageMemory" : 12,
+      |    "OnHeapUnifiedMemory" : 432,
+      |    "OffHeapUnifiedMemory" : 321,
+      |    "DirectPoolMemory" : 654,
+      |    "MappedPoolMemory" : 765,
+      |    "ProcessTreeJVMVMemory": 256912,
+      |    "ProcessTreeJVMRSSMemory": 123456,
+      |    "ProcessTreePythonVMemory": 123456,
+      |    "ProcessTreePythonRSSMemory": 61728,
+      |    "ProcessTreeOtherVMemory": 30364,
+      |    "ProcessTreeOtherRSSMemory": 15182,
+      |    "MinorGCCount" : 0,
+      |    "MinorGCTime" : 0,
+      |    "MajorGCCount" : 0,
+      |    "MajorGCTime" : 0
+      |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
       |    "Executor Deserialize CPU Time": 300,
@@ -1394,6 +1454,28 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Count Failed Values": false
       |      }
       |    ]
+      |  },
+      |  "Task Executor Metrics" : {
+      |    "JVMHeapMemory" : 543,
+      |    "JVMOffHeapMemory" : 123456,
+      |    "OnHeapExecutionMemory" : 12345,
+      |    "OffHeapExecutionMemory" : 1234,
+      |    "OnHeapStorageMemory" : 123,
+      |    "OffHeapStorageMemory" : 12,
+      |    "OnHeapUnifiedMemory" : 432,
+      |    "OffHeapUnifiedMemory" : 321,
+      |    "DirectPoolMemory" : 654,
+      |    "MappedPoolMemory" : 765,
+      |    "ProcessTreeJVMVMemory": 256912,
+      |    "ProcessTreeJVMRSSMemory": 123456,
+      |    "ProcessTreePythonVMemory": 123456,
+      |    "ProcessTreePythonRSSMemory": 61728,
+      |    "ProcessTreeOtherVMemory": 30364,
+      |    "ProcessTreeOtherRSSMemory": 15182,
+      |    "MinorGCCount" : 0,
+      |    "MinorGCTime" : 0,
+      |    "MajorGCCount" : 0,
+      |    "MajorGCTime" : 0
       |  },
       |  "Task Metrics": {
       |    "Executor Deserialize Time": 300,
@@ -2090,29 +2172,34 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ]
       |    }
       |  ],
-      |  "Executor Metrics Updated" : {
-      |    "JVMHeapMemory" : 543,
-      |    "JVMOffHeapMemory" : 123456,
-      |    "OnHeapExecutionMemory" : 12345,
-      |    "OffHeapExecutionMemory" : 1234,
-      |    "OnHeapStorageMemory" : 123,
-      |    "OffHeapStorageMemory" : 12,
-      |    "OnHeapUnifiedMemory" : 432,
-      |    "OffHeapUnifiedMemory" : 321,
-      |    "DirectPoolMemory" : 654,
-      |    "MappedPoolMemory" : 765,
-      |    "ProcessTreeJVMVMemory": 256912,
-      |    "ProcessTreeJVMRSSMemory": 123456,
-      |    "ProcessTreePythonVMemory": 123456,
-      |    "ProcessTreePythonRSSMemory": 61728,
-      |    "ProcessTreeOtherVMemory": 30364,
-      |    "ProcessTreeOtherRSSMemory": 15182,
-      |    "MinorGCCount": 10,
-      |    "MinorGCTime": 90,
-      |    "MajorGCCount": 2,
-      |    "MajorGCTime": 20
-      |  }
-      |
+      |  "Executor Metrics Updated" : [
+      |    {
+      |      "Stage ID" : 0,
+      |      "Stage Attempt ID" : 0,
+      |      "Executor Metrics" : {
+      |        "JVMHeapMemory" : 543,
+      |        "JVMOffHeapMemory" : 123456,
+      |        "OnHeapExecutionMemory" : 12345,
+      |        "OffHeapExecutionMemory" : 1234,
+      |        "OnHeapStorageMemory" : 123,
+      |        "OffHeapStorageMemory" : 12,
+      |        "OnHeapUnifiedMemory" : 432,
+      |        "OffHeapUnifiedMemory" : 321,
+      |        "DirectPoolMemory" : 654,
+      |        "MappedPoolMemory" : 765,
+      |        "ProcessTreeJVMVMemory": 256912,
+      |        "ProcessTreeJVMRSSMemory": 123456,
+      |        "ProcessTreePythonVMemory": 123456,
+      |        "ProcessTreePythonRSSMemory": 61728,
+      |        "ProcessTreeOtherVMemory": 30364,
+      |        "ProcessTreeOtherRSSMemory": 15182,
+      |        "MinorGCCount": 10,
+      |        "MinorGCTime": 90,
+      |        "MajorGCCount": 2,
+      |        "MajorGCTime": 20
+      |      }
+      |    }
+      |  ]
       |}
     """.stripMargin
 

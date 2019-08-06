@@ -6,8 +6,6 @@
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L145-L350
 --
 -- This test file was converted from pgSQL/aggregates_part2.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
 create temporary view int4_tbl as select * from values
   (0),

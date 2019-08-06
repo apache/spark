@@ -2741,7 +2741,7 @@ setMethod("format_string", signature(format = "character", x = "Column"),
 #' head(tmp)}
 #' @note from_unixtime since 1.5.0
 setMethod("from_unixtime", signature(x = "Column"),
-          function(x, format = "yyyy-MM-dd HH:mm:ss") {
+          function(x, format = "uuuu-MM-dd HH:mm:ss") {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_unixtime",
                               x@jc, format)
@@ -3029,7 +3029,7 @@ setMethod("unix_timestamp", signature(x = "Column", format = "missing"),
 #' @aliases unix_timestamp,Column,character-method
 #' @note unix_timestamp(Column, character) since 1.5.0
 setMethod("unix_timestamp", signature(x = "Column", format = "character"),
-          function(x, format = "yyyy-MM-dd HH:mm:ss") {
+          function(x, format = "uuuu-MM-dd HH:mm:ss") {
             jc <- callJStatic("org.apache.spark.sql.functions", "unix_timestamp", x@jc, format)
             column(jc)
           })

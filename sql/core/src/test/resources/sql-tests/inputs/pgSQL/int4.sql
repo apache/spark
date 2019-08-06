@@ -33,6 +33,10 @@ INSERT INTO INT4_TBL VALUES ('-2147483647');
 -- INSERT INTO INT4_TBL(f1) VALUES ('123       5');
 -- INSERT INTO INT4_TBL(f1) VALUES ('');
 
+-- We cannot test this when failOnOverFlow=true here
+-- because exception happens in the executors and the
+-- output stacktrace cannot have an exact match
+set spark.sql.arithmeticOperations.failOnOverFlow=false;
 
 SELECT '' AS five, * FROM INT4_TBL;
 
@@ -135,7 +139,6 @@ SELECT int('1000') < int('999') AS `false`;
 
 SELECT 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 AS ten;
 
--- [SPARK-2659] HiveQL: Division operator should always perform fractional division
 SELECT 2 + 2 / 2 AS three;
 
 SELECT (2 + 2) / 2 AS two;

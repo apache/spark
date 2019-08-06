@@ -717,7 +717,7 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
   </td>
 </tr>
  <tr>
@@ -1083,11 +1083,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.ui.showConsoleProgress</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Show the progress bar in the console. The progress bar shows the progress of stages
     that run for longer than 500ms. If multiple stages run at the same time, multiple
     progress bars will be displayed on the same line.
+    <br/>
+    <em>Note:</em> In shell environment, the default value of spark.ui.showConsoleProgress is true.
   </td>
 </tr>
 <tr>
@@ -2133,6 +2135,26 @@ Apart from these, the following properties are also available, and may be useful
     Same as <code>spark.dynamicAllocation.schedulerBacklogTimeout</code>, but used only for
     subsequent executor requests. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    without the need for an external shuffle service. This option will try to keep alive executors
+    that are storing shuffle data for active jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.shuffleTimeout</code></td>
+  <td><code>infinity</code></td>
+  <td>
+    When shuffle tracking is enabled, controls the timeout for executors that are holding shuffle
+    data. The default value means that Spark will rely on the shuffles being garbage collected to be
+    able to release executors. If for some reason garbage collection is not cleaning up shuffles
+    quickly enough, this option can be used to control when to time out executors even when they are
+    storing shuffle data.
   </td>
 </tr>
 </table>

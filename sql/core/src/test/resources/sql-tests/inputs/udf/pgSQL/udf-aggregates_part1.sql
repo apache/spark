@@ -9,12 +9,10 @@
 -- SET extra_float_digits = 0;
 
 -- This test file was converted from pgSQL/aggregates_part1.sql.
--- Note that currently registered UDF returns a string. So there are some differences, for instance
--- in string cast within UDF in Scala and Python.
 
-SELECT CAST(avg(udf(four)) AS decimal(10,3)) AS avg_1 FROM onek;
+SELECT avg(udf(four)) AS avg_1 FROM onek;
 
-SELECT CAST(udf(avg(a)) AS decimal(10,3)) AS avg_32 FROM aggtest WHERE a < 100;
+SELECT udf(avg(a)) AS avg_32 FROM aggtest WHERE a < 100;
 
 -- In 7.1, avg(float4) is computed using float8 arithmetic.
 -- Round the result to 3 digits to avoid platform-specific results.
@@ -23,32 +21,32 @@ select CAST(avg(udf(b)) AS Decimal(10,3)) AS avg_107_943 FROM aggtest;
 -- `student` has a column with data type POINT, which is not supported by Spark [SPARK-27766]
 -- SELECT avg(gpa) AS avg_3_4 FROM ONLY student;
 
-SELECT CAST(sum(udf(four)) AS int) AS sum_1500 FROM onek;
+SELECT sum(udf(four)) AS sum_1500 FROM onek;
 SELECT udf(sum(a)) AS sum_198 FROM aggtest;
-SELECT CAST(udf(udf(sum(b))) AS decimal(10,3)) AS avg_431_773 FROM aggtest;
+SELECT udf(udf(sum(b))) AS avg_431_773 FROM aggtest;
 -- `student` has a column with data type POINT, which is not supported by Spark [SPARK-27766]
 -- SELECT sum(gpa) AS avg_6_8 FROM ONLY student;
 
 SELECT udf(max(four)) AS max_3 FROM onek;
-SELECT max(CAST(udf(a) AS int)) AS max_100 FROM aggtest;
-SELECT CAST(udf(udf(max(aggtest.b))) AS decimal(10,3)) AS max_324_78 FROM aggtest;
+SELECT max(udf(a)) AS max_100 FROM aggtest;
+SELECT udf(udf(max(aggtest.b))) AS max_324_78 FROM aggtest;
 -- `student` has a column with data type POINT, which is not supported by Spark [SPARK-27766]
 -- SELECT max(student.gpa) AS max_3_7 FROM student;
 
-SELECT CAST(stddev_pop(udf(b)) AS decimal(10,3)) FROM aggtest;
-SELECT CAST(udf(stddev_samp(b)) AS decimal(10,3)) FROM aggtest;
-SELECT CAST(var_pop(udf(b)) AS decimal(10,3)) FROM aggtest;
-SELECT CAST(udf(var_samp(b)) AS decimal(10,3)) FROM aggtest;
+SELECT stddev_pop(udf(b)) FROM aggtest;
+SELECT udf(stddev_samp(b)) FROM aggtest;
+SELECT var_pop(udf(b)) FROM aggtest;
+SELECT udf(var_samp(b)) FROM aggtest;
 
-SELECT CAST(udf(stddev_pop(CAST(b AS Decimal(38,0)))) AS decimal(10,3)) FROM aggtest;
-SELECT CAST(stddev_samp(CAST(udf(b) AS Decimal(38,0))) AS decimal(10,3)) FROM aggtest;
-SELECT CAST(udf(var_pop(CAST(b AS Decimal(38,0)))) AS decimal(10,3)) FROM aggtest;
-SELECT CAST(var_samp(udf(CAST(b AS Decimal(38,0)))) AS decimal(10,3)) FROM aggtest;
+SELECT udf(stddev_pop(CAST(b AS Decimal(38,0)))) FROM aggtest;
+SELECT stddev_samp(CAST(udf(b) AS Decimal(38,0))) FROM aggtest;
+SELECT udf(var_pop(CAST(b AS Decimal(38,0)))) FROM aggtest;
+SELECT var_samp(udf(CAST(b AS Decimal(38,0)))) FROM aggtest;
 
 -- population variance is defined for a single tuple, sample variance
 -- is not
-SELECT CAST(udf(var_pop(1.0)) AS int), var_samp(udf(2.0));
-SELECT CAST(stddev_pop(udf(CAST(3.0 AS Decimal(38,0)))) AS int), stddev_samp(CAST(udf(4.0) AS Decimal(38,0)));
+SELECT udf(var_pop(1.0)), var_samp(udf(2.0));
+SELECT stddev_pop(udf(CAST(3.0 AS Decimal(38,0)))), stddev_samp(CAST(udf(4.0) AS Decimal(38,0)));
 
 
 -- verify correct results for null and NaN inputs
@@ -76,9 +74,9 @@ FROM (VALUES ('-Infinity'), ('Infinity')) v(x);
 
 
 -- test accuracy with a large input offset
-SELECT CAST(avg(udf(CAST(x AS DOUBLE))) AS int), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
+SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x);
-SELECT CAST(avg(udf(x)) AS long), CAST(udf(var_pop(CAST(x AS DOUBLE))) AS decimal(10,3))
+SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (7000000000005), (7000000000007)) v(x);
 
 -- SQL2003 binary aggregates [SPARK-23907]
@@ -89,8 +87,8 @@ FROM (VALUES (7000000000005), (7000000000007)) v(x);
 -- SELECT regr_avgx(b, a), regr_avgy(b, a) FROM aggtest;
 -- SELECT regr_r2(b, a) FROM aggtest;
 -- SELECT regr_slope(b, a), regr_intercept(b, a) FROM aggtest;
-SELECT CAST(udf(covar_pop(b, udf(a))) AS decimal(10,3)), CAST(covar_samp(udf(b), a) as decimal(10,3)) FROM aggtest;
-SELECT CAST(corr(b, udf(a)) AS decimal(10,3)) FROM aggtest;
+SELECT udf(covar_pop(b, udf(a))), covar_samp(udf(b), a) FROM aggtest;
+SELECT corr(b, udf(a)) FROM aggtest;
 
 
 -- test accum and combine functions directly [SPARK-23907]
@@ -122,7 +120,7 @@ SELECT CAST(corr(b, udf(a)) AS decimal(10,3)) FROM aggtest;
 SELECT count(udf(four)) AS cnt_1000 FROM onek;
 SELECT udf(count(DISTINCT four)) AS cnt_4 FROM onek;
 
-select ten, udf(count(*)), CAST(sum(udf(four)) AS int) from onek
+select ten, udf(count(*)), sum(udf(four)) from onek
 group by ten order by ten;
 
 select ten, count(udf(four)), udf(sum(DISTINCT four)) from onek
