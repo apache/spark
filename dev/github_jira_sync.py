@@ -68,7 +68,7 @@ def get_url(url):
 
 
 def get_json(urllib_response):
-    return json.load(urllib_response)
+    return json.load(urllib_response.decode())
 
 
 # Return a list of (JIRA id, JSON dict) tuples:

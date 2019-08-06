@@ -53,11 +53,11 @@ def post_message_to_github(msg, ghprb_pull_id):
 
     posted_message = json.dumps({"body": msg})
     request = Request(url,
-                              headers={
-                                  "Authorization": "token %s" % github_oauth_key,
-                                  "Content-Type": "application/json"
-                              },
-                              data=posted_message.encode())
+                      headers={
+                          "Authorization": "token %s" % github_oauth_key,
+                          "Content-Type": "application/json"
+                      },
+                      data=posted_message.encode())
     try:
         response = urlopen(request)
 
