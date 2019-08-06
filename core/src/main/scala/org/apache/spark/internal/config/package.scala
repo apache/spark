@@ -42,7 +42,7 @@ package object config {
         "in Standalone. If false, the user is responsible for configuring different resources " +
         "for workers/drivers that run on the same host.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SPARK_RESOURCES_DIR =
     ConfigBuilder("spark.resources.dir")
