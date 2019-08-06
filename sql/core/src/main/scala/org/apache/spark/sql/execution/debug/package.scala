@@ -265,5 +265,7 @@ package object debug {
     override def doExecuteColumnar(): RDD[ColumnarBatch] = {
       child.executeColumnar()
     }
+
+    override def supportsColumnar: Boolean = child.supportsColumnar
   }
 }
