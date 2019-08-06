@@ -26,9 +26,9 @@ struct<count(1):bigint>
 
 -- !query 2
 CREATE TABLE department (
-	id INTEGER,  
-	parent_department INTEGER, 
-	name string 
+	id INTEGER,  -- department ID
+	parent_department INTEGER, -- upper department ID
+	name string -- department name
 ) USING parquet
 -- !query 2 schema
 struct<>
@@ -211,7 +211,7 @@ struct<x:int>
 WITH outermost(x) AS (
   SELECT 1
   UNION (WITH innermost as (SELECT 2)
-         SELECT * FROM outermost  
+         SELECT * FROM outermost  -- fail
          UNION SELECT * FROM innermost)
 )
 SELECT * FROM outermost ORDER BY 1
