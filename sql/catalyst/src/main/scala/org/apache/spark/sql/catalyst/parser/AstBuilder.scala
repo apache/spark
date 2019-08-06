@@ -1396,6 +1396,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
     ctx.field.getText.toUpperCase(Locale.ROOT) match {
+      case "MILLENNIUM" =>
+        Millennium(expression(ctx.source))
       case "YEAR" =>
         Year(expression(ctx.source))
       case "QUARTER" =>

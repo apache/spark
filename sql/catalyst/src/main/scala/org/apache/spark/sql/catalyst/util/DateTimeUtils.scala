@@ -464,6 +464,25 @@ object DateTimeUtils {
   }
 
   /**
+   * Divides and adjust the given date. It can be used in calculations of current millennium,
+   * century and decade of the date.
+   */
+  private def truncYear(date: SQLDate, divider: Int, adjust: Int): Int = {
+    val oldYear = getYear(date)
+    val dividedYear = Math.floorDiv(oldYear, divider) + 1
+    if (adjust != 0 && Math.floorMod(oldYear, divider) == 0) {
+      dividedYear + adjust
+    } else {
+      dividedYear
+    }
+  }
+
+  /** Returns the millennium for the given date. */
+  def getMillennium(date: SQLDate): Int = {
+    truncYear(date, 1000, -1)
+  }
+
+  /**
    * Returns the year value for the given date. The date is expressed in days
    * since 1.1.1970.
    */

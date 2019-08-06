@@ -1810,3 +1810,29 @@ case class MakeTimestamp(
 
   override def prettyName: String = "make_timestamp"
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the millennium of the date/timestamp.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2000-01-19');
+       2
+      > SELECT _FUNC_('2019-08-06');
+       3
+  """,
+  since = "3.0.0")
+case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getMillennium(date.asInstanceOf[Int])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMillennium($c)")
+  }
+}
