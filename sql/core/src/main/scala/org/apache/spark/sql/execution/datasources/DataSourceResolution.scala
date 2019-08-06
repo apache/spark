@@ -45,8 +45,8 @@ case class DataSourceResolution(
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
   import lookup._
 
-  lazy val v2SessionCatalog: CatalogPlugin = lookup.sessionCatalog
-      .getOrElse(throw new AnalysisException("No v2 session catalog implementation is available"))
+  def v2SessionCatalog: CatalogPlugin = lookup.sessionCatalog
+    .getOrElse(throw new AnalysisException("No v2 session catalog implementation is available"))
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(

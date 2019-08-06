@@ -20,8 +20,12 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 import java.util.Locale
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
+import org.mockito.invocation.InvocationOnMock
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog, TestTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog, TestTableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -51,28 +55,40 @@ class PlanResolutionSuite extends AnalysisTest {
   }
 
   private val lookupWithDefault: LookupCatalog = new LookupCatalog {
-    override protected def defaultCatalogName: Option[String] = Some("testcat")
-
-    override protected def lookupCatalog(name: String): CatalogPlugin = name match {
-      case "testcat" =>
-        testCat
-      case "session" =>
-        v2SessionCatalog
-      case _ =>
-        throw new CatalogNotFoundException(s"No such catalog: $name")
+    override protected val catalogManager = {
+      val manager = mock(classOf[CatalogManager])
+      when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+        invocation.getArgument[String](0) match {
+          case "testcat" =>
+            testCat
+          case "session" =>
+            v2SessionCatalog
+          case name =>
+            throw new CatalogNotFoundException(s"No such catalog: $name")
+        }
+      })
+      when(manager.defaultCatalog()).thenReturn(Some(testCat))
+      when(manager.v2SessionCatalog()).thenCallRealMethod()
+      manager
     }
   }
 
   private val lookupWithoutDefault: LookupCatalog = new LookupCatalog {
-    override protected def defaultCatalogName: Option[String] = None
-
-    override protected def lookupCatalog(name: String): CatalogPlugin = name match {
-      case "testcat" =>
-        testCat
-      case "session" =>
-        v2SessionCatalog
-      case _ =>
-        throw new CatalogNotFoundException(s"No such catalog: $name")
+    override protected val catalogManager = {
+      val manager = mock(classOf[CatalogManager])
+      when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+        invocation.getArgument[String](0) match {
+          case "testcat" =>
+            testCat
+          case "session" =>
+            v2SessionCatalog
+          case name =>
+            throw new CatalogNotFoundException(s"No such catalog: $name")
+        }
+      })
+      when(manager.defaultCatalog()).thenReturn(None)
+      when(manager.v2SessionCatalog()).thenCallRealMethod()
+      manager
     }
   }
 

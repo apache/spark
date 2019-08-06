@@ -188,8 +188,6 @@ abstract class BaseSessionStateBuilder(
         V2WriteSupportCheck +:
         V2StreamingScanSupportCheck +:
         customCheckRules
-
-    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**
