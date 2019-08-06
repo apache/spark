@@ -23,8 +23,6 @@ license: |
 {:toc}
 
 ## Upgrading From Spark SQL 2.4 to 3.0
-  - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for Hive result.
-
   - Since Spark 3.0, we reversed argument order of the trim function from `TRIM(trimStr, str)` to `TRIM(str, trimStr)` to be compatible with other databases.
 
   - Since Spark 3.0, PySpark requires a Pandas version of 0.23.2 or higher to use Pandas related functionality, such as `toPandas`, `createDataFrame` from Pandas DataFrame, etc.
@@ -158,6 +156,32 @@ license: |
   - Since Spark 3.0, 0-argument Java UDF is executed in the executor side identically with other UDFs. In Spark version 2.4 and earlier, 0-argument Java UDF alone was executed in the driver side, and the result was propagated to executors, which might be more performant in some cases but caused inconsistency with a correctness issue in some cases.
 
   - The result of `java.lang.Math`'s `log`, `log1p`, `exp`, `expm1`, and `pow` may vary across platforms. In Spark 3.0, the result of the equivalent SQL functions (including related SQL functions like `LOG10`) return values consistent with `java.lang.StrictMath`. In virtually all cases this makes no difference in the return value, and the difference is very small, but may not exactly match `java.lang.Math` on x86 platforms in cases like, for example, `log(3.0)`, whose value varies between `Math.log()` and `StrictMath.log()`.
+
+  - Since Spark 3.0, we pad decimal numbers with trailing zeros to the scale of the column for Hive result, for example:
+    <table class="table">
+        <tr>
+          <th>
+            <b>Query</b>
+          </th>
+          <th>
+            <b>Spark 2.4 or Prior</b>
+          </th>
+          <th>
+            <b>Spark 3.0</b>
+          </th>
+        </tr>
+        <tr>
+          <td>
+            <code>SELECT CAST(1 AS decimal(38, 18));</code>
+          </td>
+          <td>
+            <code>1</code>
+          </td>
+          <td>
+            <code>1.000000000000000000</code>
+          </td>
+        </tr>
+    </table>
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
