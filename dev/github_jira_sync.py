@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,7 +22,14 @@ import json
 import os
 import re
 import sys
-import urllib2
+if sys.version < '3':
+    from urllib2 import urlopen
+    from urllib2 import Request
+    from urllib2 import HTTPError
+else:
+    from urllib.request import urlopen
+    from urllib.request import Request
+    from urllib.error import HTTPError
 
 try:
     import jira.client
@@ -52,10 +59,10 @@ MAX_FILE = ".github-jira-max"
 
 def get_url(url):
     try:
-        request = urllib2.Request(url)
+        request = Request(url)
         request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
-        return urllib2.urlopen(request)
-    except urllib2.HTTPError:
+        return urlopen(request)
+    except HTTPError:
         print("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
 

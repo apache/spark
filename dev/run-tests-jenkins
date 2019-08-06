@@ -31,4 +31,4 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
   exit -1
 fi
 
-exec python -u ./dev/run-tests-jenkins.py "$@"
+exec python3 -u ./dev/run-tests-jenkins.py "$@"
