@@ -214,7 +214,7 @@ class ArrowTests(ReusedSQLTestCase):
         exception_udf = udf(raise_exception, IntegerType())
         df = df.withColumn("error", exception_udf())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(RuntimeError, 'My error'):
+            with self.assertRaisesRegexp(Exception, 'My error'):
                 df.toPandas()
 
     def _createDataFrame_toggle(self, pdf, schema=None):
@@ -268,10 +268,10 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
         fields = list(self.schema)
-        fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
+        fields[0], fields[1] = fields[1], fields[0]  # swap str with int
         wrong_schema = StructType(fields)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, ".*cast.*[s|S]tring.*timestamp.*"):
+            with self.assertRaisesRegexp(Exception, "integer.*required"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -383,6 +383,15 @@ class ArrowTests(ReusedSQLTestCase):
         assert_frame_equal(pdf, df_from_python.toPandas())
         assert_frame_equal(pdf, df_from_pandas.toPandas())
 
+    # Regression test for SPARK-28003
+    def test_timestamp_nat(self):
+        dt = [pd.NaT, pd.Timestamp('2019-06-11'), None] * 100
+        pdf = pd.DataFrame({'time': dt})
+        df_no_arrow, df_arrow = self._createDataFrame_toggle(pdf)
+
+        assert_frame_equal(pdf, df_no_arrow.toPandas())
+        assert_frame_equal(pdf, df_arrow.toPandas())
+
     def test_toPandas_batch_order(self):
 
         def delay_first_part(partition_index, iterator):
@@ -424,7 +433,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

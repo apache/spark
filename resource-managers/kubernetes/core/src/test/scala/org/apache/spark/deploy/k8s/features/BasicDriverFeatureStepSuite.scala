@@ -28,6 +28,8 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestReso
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 class BasicDriverFeatureStepSuite extends SparkFunSuite {
@@ -45,7 +47,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     }
 
   test("Check the pod respects all configurations from the user.") {
-    val resources = Map(("nvidia.com/gpu" -> TestResourceInformation("gpu", "2", "nvidia.com")))
+    val resourceID = ResourceID(SPARK_DRIVER_PREFIX, GPU)
+    val resources =
+      Map(("nvidia.com/gpu" -> TestResourceInformation(resourceID, "2", "nvidia.com")))
     val sparkConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
       .set(DRIVER_CORES, 2)
@@ -55,12 +59,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS)
     resources.foreach { case (_, testRInfo) =>
-      sparkConf.set(
-        s"${SPARK_DRIVER_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_AMOUNT_SUFFIX}",
-        testRInfo.count)
-      sparkConf.set(
-        s"${SPARK_DRIVER_RESOURCE_PREFIX}${testRInfo.rName}${SPARK_RESOURCE_VENDOR_SUFFIX}",
-        testRInfo.vendor)
+      sparkConf.set(testRInfo.rId.amountConf, testRInfo.count)
+      sparkConf.set(testRInfo.rId.vendorConf, testRInfo.vendor)
     }
     val kubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = sparkConf,

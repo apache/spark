@@ -416,14 +416,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   }
 
   /**
-   * Get all parameters that start with `prefix` and end with 'suffix'
-   */
-  def getAllWithPrefixAndSuffix(prefix: String, suffix: String): Array[(String, String)] = {
-    getAll.filter { case (k, v) => k.startsWith(prefix) && k.endsWith(suffix) }
-      .map { case (k, v) => (k.substring(prefix.length, (k.length - suffix.length)), v) }
-  }
-
-  /**
    * Get a parameter as an integer, falling back to a default if not set
    * @throws NumberFormatException If the value cannot be interpreted as an integer
    */
@@ -507,14 +499,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     }
   }
 
-  /**
-   * Get task resource requirements.
-   */
-  private[spark] def getTaskResourceRequirements(): Map[String, Int] = {
-    getAllWithPrefix(SPARK_TASK_RESOURCE_PREFIX)
-      .withFilter { case (k, v) => k.endsWith(SPARK_RESOURCE_AMOUNT_SUFFIX)}
-      .map { case (k, v) => (k.dropRight(SPARK_RESOURCE_AMOUNT_SUFFIX.length), v.toInt)}.toMap
-  }
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not
@@ -802,35 +786,6 @@ private[spark] object SparkConf extends Logging {
         s"The configuration key $key is not supported anymore " +
           s"because Spark doesn't use Akka since 2.0")
     }
-  }
-
-  /**
-   * A function to help parsing configs with multiple parts where the base and
-   * suffix could be one of many options. For instance configs like:
-   * spark.executor.resource.{resourceName}.{count/addresses}
-   * This function takes an Array of configs you got from the
-   * getAllWithPrefix function, selects only those that end with the suffix
-   * passed in and returns just the base part of the config before the first
-   * '.' and its value.
-   */
-  def getConfigsWithSuffix(
-      configs: Array[(String, String)],
-      suffix: String
-      ): Array[(String, String)] = {
-    configs.filter { case (rConf, _) => rConf.endsWith(suffix)}.
-      map { case (k, v) => (k.split('.').head, v) }
-  }
-
-  /**
-   * A function to help parsing configs with multiple parts where the base and
-   * suffix could be one of many options. For instance configs like:
-   * spark.executor.resource.{resourceName}.{count/addresses}
-   * This function takes an Array of configs you got from the
-   * getAllWithPrefix function and returns the base part of the config
-   * before the first '.'.
-   */
-  def getBaseOfConfigs(configs: Array[(String, String)]): Set[String] = {
-    configs.map { case (k, _) => k.split('.').head }.toSet
   }
 
   /**

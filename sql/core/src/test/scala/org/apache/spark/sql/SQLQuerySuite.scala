@@ -26,6 +26,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -1895,7 +1896,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Star Expansion - group by") {
-    withSQLConf("spark.sql.retainGroupColumns" -> "false") {
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
       checkAnswer(
         testData2.groupBy($"a", $"b").agg($"*"),
         sql("SELECT * FROM testData2 group by a, b"))
@@ -1935,7 +1936,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
-    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       // select from a table to prevent constant folding.
       val df = sql("SELECT a, b from testData2 limit 1")
       checkAnswer(df, Row(1, 1))
@@ -1984,9 +1985,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
 
       // Try disabling it via configuration.
-      spark.conf.set("spark.sql.subexpressionElimination.enabled", "false")
+      spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "false")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
-      spark.conf.set("spark.sql.subexpressionElimination.enabled", "true")
+      spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "true")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
     }
   }
@@ -3148,6 +3149,36 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("select * from t1 where d > '1999-13'"), Row(result))
       checkAnswer(sql("select to_timestamp('2000-01-01 01:10:00') > '1'"), Row(true))
     }
+  }
+
+  test("SPARK-28156: self-join should not miss cached view") {
+    withTable("table1") {
+      withView("table1_vw") {
+        val df = Seq.tabulate(5) { x => (x, x + 1, x + 2, x + 3) }.toDF("a", "b", "c", "d")
+        df.write.mode("overwrite").format("orc").saveAsTable("table1")
+        sql("drop view if exists table1_vw")
+        sql("create view table1_vw as select * from table1")
+
+        val cachedView = sql("select a, b, c, d from table1_vw")
+
+        cachedView.createOrReplaceTempView("cachedview")
+        cachedView.persist()
+
+        val queryDf = sql(
+          s"""select leftside.a, leftside.b
+             |from cachedview leftside
+             |join cachedview rightside
+             |on leftside.a = rightside.a
+           """.stripMargin)
+
+        val inMemoryTableScan = queryDf.queryExecution.executedPlan.collect {
+          case i: InMemoryTableScanExec => i
+        }
+        assert(inMemoryTableScan.size == 2)
+        checkAnswer(queryDf, Row(0, 1) :: Row(1, 2) :: Row(2, 3) :: Row(3, 4) :: Row(4, 5) :: Nil)
+      }
+    }
+
   }
 }
 

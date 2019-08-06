@@ -91,17 +91,17 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
         val e = intercept[IllegalStateException] { func }
         assert(e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
       }
-      assertLogFileMalformed { metadataLog.parseVersion("", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("xyz", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("v10.x", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("10", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("v0", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("v-10", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("xyz", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("v10.x", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("10", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("v0", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("v-10", 100) }
 
-      assert(metadataLog.parseVersion("v10", 10) === 10)
-      assert(metadataLog.parseVersion("v10", 100) === 10)
+      assert(metadataLog.validateVersion("v10", 10) === 10)
+      assert(metadataLog.validateVersion("v10", 100) === 10)
 
-      val e = intercept[IllegalStateException] { metadataLog.parseVersion("v200", 100) }
+      val e = intercept[IllegalStateException] { metadataLog.validateVersion("v200", 100) }
       Seq(
         "maximum supported log version is v100, but encountered v200",
         "produced by a newer version of Spark and cannot be read by this version"

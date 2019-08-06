@@ -29,7 +29,7 @@ import scala.util.Random
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
@@ -45,7 +45,7 @@ class BlockManagerMasterEndpoint(
     val isLocal: Boolean,
     conf: SparkConf,
     listenerBus: LiveListenerBus,
-    externalShuffleClient: Option[ExternalShuffleClient])
+    externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends ThreadSafeRpcEndpoint with Logging {
 
   // Mapping from block manager id to the block manager's information.
@@ -82,12 +82,12 @@ class BlockManagerMasterEndpoint(
   logInfo("BlockManagerMasterEndpoint up")
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)
   //   && conf.get(config.SHUFFLE_SERVICE_FETCH_RDD_ENABLED)`
-  private val externalShuffleServiceRddFetchEnabled: Boolean = externalShuffleClient.isDefined
+  private val externalShuffleServiceRddFetchEnabled: Boolean = externalBlockStoreClient.isDefined
   private val externalShuffleServicePort: Int = StorageUtils.externalShuffleServicePort(conf)
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case RegisterBlockManager(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
-      context.reply(register(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
+    case RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint) =>
+      context.reply(register(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
 
     case _updateBlockInfo @
         UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
@@ -97,8 +97,8 @@ class BlockManagerMasterEndpoint(
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
 
-    case GetLocationsAndStatus(blockId) =>
-      context.reply(getLocationsAndStatus(blockId))
+    case GetLocationsAndStatus(blockId, requesterHost) =>
+      context.reply(getLocationsAndStatus(blockId, requesterHost))
 
     case GetLocationsMultipleBlockIds(blockIds) =>
       context.reply(getLocationsMultipleBlockIds(blockIds))
@@ -195,7 +195,7 @@ class BlockManagerMasterEndpoint(
       }
     }.toSeq
 
-    val removeRddBlockViaExtShuffleServiceFutures = externalShuffleClient.map { shuffleClient =>
+    val removeRddBlockViaExtShuffleServiceFutures = externalBlockStoreClient.map { shuffleClient =>
       blocksToDeleteByShuffleService.map { case (bmId, blockIds) =>
         Future[Int] {
           val numRemovedBlocks = shuffleClient.removeBlocks(
@@ -398,6 +398,7 @@ class BlockManagerMasterEndpoint(
    */
   private def register(
       idWithoutTopologyInfo: BlockManagerId,
+      localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
       slaveEndpoint: RpcEndpointRef): BlockManagerId = {
@@ -433,8 +434,8 @@ class BlockManagerMasterEndpoint(
           None
         }
 
-      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), maxOnHeapMemSize,
-        maxOffHeapMemSize, slaveEndpoint, externalShuffleServiceBlockStatus)
+      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(), localDirs,
+        maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint, externalShuffleServiceBlockStatus)
     }
     listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
         Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
@@ -499,18 +500,30 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
-  private def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+  private def getLocationsAndStatus(
+      blockId: BlockId,
+      requesterHost: String): Option[BlockLocationsAndStatus] = {
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
         Option(blockStatusByShuffleService(bmId).get(blockId))
       } else {
-        blockManagerInfo(bmId).getStatus(blockId)
+        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
       }
     }
 
     if (locations.nonEmpty && status.isDefined) {
-      Some(BlockLocationsAndStatus(locations, status.get))
+      val localDirs = locations.find { loc =>
+          if (loc.port != externalShuffleServicePort && loc.host == requesterHost) {
+            blockManagerInfo
+              .get(loc)
+              .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
+              .getOrElse(false)
+          } else {
+            false
+          }
+      }.map(blockManagerInfo(_).localDirs)
+      Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None
     }
@@ -561,6 +574,7 @@ object BlockStatus {
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
+    val localDirs: Array[String],
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
     val slaveEndpoint: RpcEndpointRef,

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
@@ -130,7 +131,8 @@ object Cast {
     case (from: DecimalType, to: NumericType) if from.isTighterThan(to) => true
     case (f, t) if legalNumericPrecedence(f, t) => true
     case (DateType, TimestampType) => true
-    case (_, StringType) => true
+    case (_: AtomicType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
     // `timestampToLong` for details.

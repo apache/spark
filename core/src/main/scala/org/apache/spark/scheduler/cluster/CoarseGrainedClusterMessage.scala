@@ -19,8 +19,8 @@ package org.apache.spark.scheduler.cluster
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.ResourceInformation
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
 import org.apache.spark.util.SerializableBuffer

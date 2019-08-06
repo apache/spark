@@ -113,10 +113,12 @@ public class CatalogLoadingSuite {
     String invalidClassName = ConstructorFailureCatalogPlugin.class.getCanonicalName();
     conf.setConfString("spark.sql.catalog.invalid", invalidClassName);
 
-    RuntimeException exc = intercept(RuntimeException.class, () -> Catalogs.load("invalid", conf));
+    SparkException exc = intercept(SparkException.class, () -> Catalogs.load("invalid", conf));
 
+    Assert.assertTrue("Should identify the constructor error",
+        exc.getMessage().contains("Failed during instantiating constructor for catalog"));
     Assert.assertTrue("Should have expected error message",
-        exc.getMessage().contains("Expected failure"));
+        exc.getCause().getMessage().contains("Expected failure"));
   }
 
   @Test

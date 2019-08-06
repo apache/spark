@@ -47,13 +47,13 @@ class JoinHintSuite extends PlanTest with SharedSQLContext {
   }
 
   def msgNoHintRelationFound(relation: String, hint: String): String =
-    s"Count not find relation '$relation' for join strategy hint '$hint'."
+    s"Count not find relation '$relation' specified in hint '$hint'."
 
   def msgNoJoinForJoinHint(strategy: String): String =
     s"A join hint (strategy=$strategy) is specified but it is not part of a join relation."
 
   def msgJoinHintOverridden(strategy: String): String =
-    s"Join hint (strategy=$strategy) is overridden by another hint and will not take effect."
+    s"Hint (strategy=$strategy) is overridden by another hint and will not take effect."
 
   def verifyJoinHintWithWarnings(
       df: => DataFrame,

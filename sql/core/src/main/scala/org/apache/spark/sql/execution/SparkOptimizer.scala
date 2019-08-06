@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.catalyst.optimizer.{ColumnPruning, Optimizer, PushDownPredicate, RemoveNoopOperators}
+import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
-import org.apache.spark.sql.execution.python.{ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
 
 class SparkOptimizer(
     catalog: SessionCatalog,
@@ -32,12 +32,18 @@ class SparkOptimizer(
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDFs", Once,
+      ExtractPythonUDFFromJoinCondition,
+      // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
+      // Here, we rerun cartesian product check.
+      CheckCartesianProducts,
       ExtractPythonUDFFromAggregate,
+      // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
+      ExtractGroupingPythonUDFFromAggregate,
       ExtractPythonUDFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
       ColumnPruning,
-      PushDownPredicate,
+      PushPredicateThroughNonJoin,
       RemoveNoopOperators) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
     Batch("Schema Pruning", Once, SchemaPruning)) ++
@@ -45,7 +51,8 @@ class SparkOptimizer(
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
-    ExtractPythonUDFFromAggregate.ruleName :+
+    ExtractPythonUDFFromJoinCondition.ruleName :+
+    ExtractPythonUDFFromAggregate.ruleName :+ ExtractGroupingPythonUDFFromAggregate.ruleName :+
     ExtractPythonUDFs.ruleName
 
   /**

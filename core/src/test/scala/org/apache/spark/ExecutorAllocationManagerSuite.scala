@@ -23,6 +23,7 @@ import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
 import org.apache.spark.metrics.MetricsSystem
@@ -254,14 +255,19 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAdd(manager) === 1)
 
     // Verify that running a speculative task doesn't affect the target
-    post(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-2", true)))
+    post(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0, "executor-2", true)))
     assert(numExecutorsTarget(manager) === 5)
     assert(addExecutors(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
   }
 
-  test("ignore task end events from completed stages") {
+  test("properly handle task end events from completed stages") {
     val manager = createManager(createConf(0, 10, 0))
+
+    // We simulate having a stage fail, but with tasks still running.  Then another attempt for
+    // that stage is started, and we get task completions from the first stage attempt.  Make sure
+    // the value of `totalTasksRunning` is consistent as tasks finish from both attempts (we count
+    // all running tasks, from the zombie & non-zombie attempts)
     val stage = createStageInfo(0, 5)
     post(SparkListenerStageSubmitted(stage))
     val taskInfo1 = createTaskInfo(0, 0, "executor-1")
@@ -269,10 +275,27 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskStart(0, 0, taskInfo1))
     post(SparkListenerTaskStart(0, 0, taskInfo2))
 
+    // The tasks in the zombie attempt haven't completed yet, so we still count them
     post(SparkListenerStageCompleted(stage))
 
-    post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, null))
-    post(SparkListenerTaskEnd(2, 0, null, Success, taskInfo2, null))
+    // There are still two tasks that belong to the zombie stage running.
+    assert(totalRunningTasks(manager) === 2)
+
+    // submit another attempt for the stage.  We count completions from the first zombie attempt
+    val stageAttempt1 = createStageInfo(stage.stageId, 5, attemptId = 1)
+    post(SparkListenerStageSubmitted(stageAttempt1))
+    post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo1, new ExecutorMetrics, null))
+    assert(totalRunningTasks(manager) === 1)
+    val attemptTaskInfo1 = createTaskInfo(3, 0, "executor-1")
+    val attemptTaskInfo2 = createTaskInfo(4, 1, "executor-1")
+    post(SparkListenerTaskStart(0, 1, attemptTaskInfo1))
+    post(SparkListenerTaskStart(0, 1, attemptTaskInfo2))
+    assert(totalRunningTasks(manager) === 3)
+    post(SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo1, new ExecutorMetrics, null))
+    assert(totalRunningTasks(manager) === 2)
+    post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo2, new ExecutorMetrics, null))
+    assert(totalRunningTasks(manager) === 1)
+    post(SparkListenerTaskEnd(0, 1, null, Success, attemptTaskInfo2, new ExecutorMetrics, null))
     assert(totalRunningTasks(manager) === 0)
   }
 
@@ -298,10 +321,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     post(SparkListenerTaskStart(2, 0, task2Info))
 
     task1Info.markFinished(TaskState.FINISHED, System.currentTimeMillis())
-    post(SparkListenerTaskEnd(2, 0, null, Success, task1Info, null))
+    post(SparkListenerTaskEnd(2, 0, null, Success, task1Info, new ExecutorMetrics, null))
 
     task2Info.markFinished(TaskState.FINISHED, System.currentTimeMillis())
-    post(SparkListenerTaskEnd(2, 0, null, Success, task2Info, null))
+    post(SparkListenerTaskEnd(2, 0, null, Success, task2Info, new ExecutorMetrics, null))
 
     assert(adjustRequestedExecutors(manager) === -1)
   }
@@ -417,7 +440,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // Remove executors when numExecutorsTarget is lower than current number of executors
     (1 to 3).map { i => createTaskInfo(i, i, s"$i") }.foreach { info =>
-      post(SparkListenerTaskEnd(0, 0, null, Success, info, null))
+      post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))
     }
     adjustRequestedExecutors(manager)
     assert(manager.executorMonitor.executorCount === 8)
@@ -430,7 +453,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     onExecutorRemoved(manager, "3")
 
     // numExecutorsTarget is lower than minNumExecutors
-    post(SparkListenerTaskEnd(0, 0, null, Success, createTaskInfo(4, 4, "4"), null))
+    post(SparkListenerTaskEnd(0, 0, null, Success, createTaskInfo(4, 4, "4"),
+      new ExecutorMetrics, null))
     assert(manager.executorMonitor.executorCount === 5)
     assert(numExecutorsTarget(manager) === 5)
     assert(maxNumExecutorsNeeded(manager) == 4)
@@ -810,7 +834,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // If the task is failed, we expect it to be resubmitted later.
     val taskEndReason = ExceptionFailure(null, null, null, null, None)
-    post(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, null))
+    post(SparkListenerTaskEnd(0, 0, null, taskEndReason, taskInfo, new ExecutorMetrics, null))
     assert(maxNumExecutorsNeeded(manager) === 1)
   }
 
@@ -924,7 +948,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
     // have one task finish -- we should adjust the target number of executors down
     // but we should *not* kill any executors yet
-    post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo0, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success, taskInfo0, new ExecutorMetrics, null))
     assert(maxNumExecutorsNeeded(manager) === 1)
     assert(numExecutorsTarget(manager) === 2)
     clock.advance(1000)
@@ -986,7 +1010,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def createManager(
       conf: SparkConf,
       clock: Clock = new SystemClock()): ExecutorAllocationManager = {
-    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock)
+    val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock)
     managers += manager
     manager.start()
     manager
@@ -1008,7 +1032,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def onExecutorIdle(manager: ExecutorAllocationManager, id: String): Unit = {
     val info = new TaskInfo(1, 1, 1, 0, id, "foo.example.com", TaskLocality.PROCESS_LOCAL, false)
     info.markFinished(TaskState.FINISHED, 1)
-    post(SparkListenerTaskEnd(1, 1, "foo", Success, info, null))
+    post(SparkListenerTaskEnd(1, 1, "foo", Success, info, new ExecutorMetrics, null))
   }
 
   private def removeExecutor(manager: ExecutorAllocationManager, executorId: String): Boolean = {
@@ -1033,9 +1057,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private def createStageInfo(
       stageId: Int,
       numTasks: Int,
-      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty
+      taskLocalityPreferences: Seq[Seq[TaskLocation]] = Seq.empty,
+      attemptId: Int = 0
     ): StageInfo = {
-    new StageInfo(stageId, 0, "name", numTasks, Seq.empty, Seq.empty, "no details",
+    new StageInfo(stageId, attemptId, "name", numTasks, Seq.empty, Seq.empty, "no details",
       taskLocalityPreferences = taskLocalityPreferences)
   }
 

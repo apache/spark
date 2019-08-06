@@ -57,7 +57,7 @@ class OffsetSeqLog(sparkSession: SparkSession, path: String)
       throw new IllegalStateException("Incomplete log file")
     }
 
-    val version = parseVersion(lines.next(), OffsetSeqLog.VERSION)
+    validateVersion(lines.next(), OffsetSeqLog.VERSION)
 
     // read metadata
     val metadata = lines.next().trim match {

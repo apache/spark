@@ -750,6 +750,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
             self.spark._jvm.OnSuccessCall.isCalled(),
             "The callback from the query execution listener should not be called before 'collect'")
         self.spark.sql("SELECT * FROM range(1)").collect()
+        self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty(10000)
         self.assertTrue(
             self.spark._jvm.OnSuccessCall.isCalled(),
             "The callback from the query execution listener should be called after 'collect'")
@@ -764,6 +765,7 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                 "The callback from the query execution listener should not be "
                 "called before 'toPandas'")
             self.spark.sql("SELECT * FROM range(1)").toPandas()
+            self.spark.sparkContext._jsc.sc().listenerBus().waitUntilEmpty(10000)
             self.assertTrue(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'")
@@ -774,7 +776,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

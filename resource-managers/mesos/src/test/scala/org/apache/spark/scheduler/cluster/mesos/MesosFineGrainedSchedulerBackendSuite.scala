@@ -36,10 +36,11 @@ import org.mockito.ArgumentMatchers.{any, anyLong, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
-import org.apache.spark.{LocalSparkContext, ResourceInformation, SparkConf, SparkContext,
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext,
   SparkFunSuite}
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.executor.MesosExecutorBackend
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.ExecutorInfo

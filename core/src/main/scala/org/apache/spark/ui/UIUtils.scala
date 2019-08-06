@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.URLDecoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, TimeZone}
 import javax.servlet.http.HttpServletRequest
@@ -523,10 +524,10 @@ private[spark] object UIUtils extends Logging {
    */
   def decodeURLParameter(urlParam: String): String = {
     var param = urlParam
-    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    var decodedParam = URLDecoder.decode(param, UTF_8.name())
     while (param != decodedParam) {
       param = decodedParam
-      decodedParam = URLDecoder.decode(param, "UTF-8")
+      decodedParam = URLDecoder.decode(param, UTF_8.name())
     }
     param
   }

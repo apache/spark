@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -71,7 +72,7 @@ class SessionCatalog(
       conf: SQLConf) {
     this(
       () => externalCatalog,
-      () => new GlobalTempViewManager("global_temp"),
+      () => new GlobalTempViewManager(conf.getConf(GLOBAL_TEMP_DATABASE)),
       functionRegistry,
       conf,
       new Configuration(),
@@ -783,7 +784,19 @@ class SessionCatalog(
    * Note that, if the specified database is global temporary view database, we will list global
    * temporary views.
    */
-  def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
+  def listTables(db: String, pattern: String): Seq[TableIdentifier] = listTables(db, pattern, true)
+
+  /**
+   * List all matching tables in the specified database, including local temporary views
+   * if includeLocalTempViews is enabled.
+   *
+   * Note that, if the specified database is global temporary view database, we will list global
+   * temporary views.
+   */
+  def listTables(
+      db: String,
+      pattern: String,
+      includeLocalTempViews: Boolean): Seq[TableIdentifier] = {
     val dbName = formatDatabaseName(db)
     val dbTables = if (dbName == globalTempViewManager.database) {
       globalTempViewManager.listViewNames(pattern).map { name =>
@@ -795,12 +808,23 @@ class SessionCatalog(
         TableIdentifier(name, Some(dbName))
       }
     }
-    val localTempViews = synchronized {
+
+    if (includeLocalTempViews) {
+      dbTables ++ listLocalTempViews(pattern)
+    } else {
+      dbTables
+    }
+  }
+
+  /**
+   * List all matching local temporary views.
+   */
+  def listLocalTempViews(pattern: String): Seq[TableIdentifier] = {
+    synchronized {
       StringUtils.filterPattern(tempViews.keys.toSeq, pattern).map { name =>
         TableIdentifier(name)
       }
     }
-    dbTables ++ localTempViews
   }
 
   /**

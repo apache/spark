@@ -63,18 +63,19 @@ class MultilabelClassificationEvaluator (override val uid: String)
 
   setDefault(metricName -> "f1Measure")
 
-  final val metricClass: DoubleParam = new DoubleParam(this, "metricClass",
-    "The class whose metric will be computed in precisionByLabel|recallByLabel|" +
-      "f1MeasureByLabel. Must be >= 0. The default value is 0.",
+  final val metricLabel: DoubleParam = new DoubleParam(this, "metricLabel",
+    "The class whose metric will be computed in " +
+      s"${supportedMetricNames.filter(_.endsWith("ByLabel")).mkString("(", "|", ")")}. " +
+      "Must be >= 0. The default value is 0.",
     ParamValidators.gtEq(0.0))
 
   /** @group getParam */
-  def getMetricClass: Double = $(metricClass)
+  def getMetricLabel: Double = $(metricLabel)
 
   /** @group setParam */
-  def setMetricClass(value: Double): this.type = set(metricClass, value)
+  def setMetricLabel(value: Double): this.type = set(metricLabel, value)
 
-  setDefault(metricClass -> 0.0)
+  setDefault(metricLabel -> 0.0)
 
   /** @group setParam */
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -103,9 +104,9 @@ class MultilabelClassificationEvaluator (override val uid: String)
       case "precision" => metrics.precision
       case "recall" => metrics.recall
       case "f1Measure" => metrics.f1Measure
-      case "precisionByLabel" => metrics.precision($(metricClass))
-      case "recallByLabel" => metrics.recall($(metricClass))
-      case "f1MeasureByLabel" => metrics.f1Measure($(metricClass))
+      case "precisionByLabel" => metrics.precision($(metricLabel))
+      case "recallByLabel" => metrics.recall($(metricLabel))
+      case "f1MeasureByLabel" => metrics.f1Measure($(metricLabel))
       case "microPrecision" => metrics.microPrecision
       case "microRecall" => metrics.microRecall
       case "microF1Measure" => metrics.microF1Measure

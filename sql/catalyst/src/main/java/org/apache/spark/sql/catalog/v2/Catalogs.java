@@ -23,6 +23,7 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -66,7 +67,8 @@ public class Catalogs {
             name, pluginClassName));
       }
 
-      CatalogPlugin plugin = CatalogPlugin.class.cast(pluginClass.newInstance());
+      CatalogPlugin plugin =
+        CatalogPlugin.class.cast(pluginClass.getDeclaredConstructor().newInstance());
 
       plugin.initialize(name, catalogOptions(name, conf));
 
@@ -76,6 +78,11 @@ public class Catalogs {
       throw new SparkException(String.format(
           "Cannot find catalog plugin class for catalog '%s': %s", name, pluginClassName));
 
+    } catch (NoSuchMethodException e) {
+      throw new SparkException(String.format(
+          "Failed to find public no-arg constructor for catalog '%s': %s", name, pluginClassName),
+          e);
+
     } catch (IllegalAccessException e) {
       throw new SparkException(String.format(
           "Failed to call public no-arg constructor for catalog '%s': %s", name, pluginClassName),
@@ -83,7 +90,12 @@ public class Catalogs {
 
     } catch (InstantiationException e) {
       throw new SparkException(String.format(
-          "Failed while instantiating plugin for catalog '%s': %s", name, pluginClassName),
+          "Cannot instantiate abstract catalog plugin class for catalog '%s': %s", name,
+          pluginClassName), e.getCause());
+
+    } catch (InvocationTargetException e) {
+      throw new SparkException(String.format(
+          "Failed during instantiating constructor for catalog '%s': %s", name, pluginClassName),
           e.getCause());
     }
   }

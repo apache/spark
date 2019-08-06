@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.serde2.thrift.Type
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema}
 import org.slf4j.LoggerFactory
 
@@ -31,6 +32,7 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] type TOpenSessionReq = org.apache.hive.service.rpc.thrift.TOpenSessionReq
   private[thriftserver] type TGetSchemasReq = org.apache.hive.service.rpc.thrift.TGetSchemasReq
   private[thriftserver] type TGetTablesReq = org.apache.hive.service.rpc.thrift.TGetTablesReq
+  private[thriftserver] type TGetColumnsReq = org.apache.hive.service.rpc.thrift.TGetColumnsReq
 
   private[thriftserver] def getConsole: SessionState.LogHelper = {
     val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
@@ -42,5 +44,7 @@ private[thriftserver] object ThriftserverShimUtils {
       getProtocolVersion: TProtocolVersion): RowSet = {
     RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
   }
+
+  private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
 }

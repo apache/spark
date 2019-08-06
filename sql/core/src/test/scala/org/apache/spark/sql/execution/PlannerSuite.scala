@@ -413,8 +413,7 @@ class PlannerSuite extends SharedSQLContext {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning),
-      None)
+      DummySparkPlan(outputPartitioning = partitioning))
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
@@ -429,8 +428,7 @@ class PlannerSuite extends SharedSQLContext {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning),
-      None)
+      DummySparkPlan(outputPartitioning = partitioning))
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
@@ -452,7 +450,7 @@ class PlannerSuite extends SharedSQLContext {
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     val shuffle = outputPlan.collect { case e: ShuffleExchangeExec => e }
     assert(shuffle.size === 1)
-    assert(shuffle.head.newPartitioning === finalPartitioning)
+    assert(shuffle.head.outputPartitioning === finalPartitioning)
   }
 
   test("Reuse exchanges") {
@@ -464,8 +462,7 @@ class PlannerSuite extends SharedSQLContext {
       DummySparkPlan(
         children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
         requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)),
-      None)
+        requiredChildOrdering = Seq(Seq.empty)))
 
     val inputPlan = SortMergeJoinExec(
       Literal(1) :: Nil,
@@ -696,6 +693,32 @@ class PlannerSuite extends SharedSQLContext {
         assert(leftKeys == Seq(exprA, exprA))
         assert(rightKeys == Seq(exprB, exprC))
       case _ => fail()
+    }
+  }
+
+  test("SPARK-27485: EnsureRequirements.reorder should handle duplicate expressions") {
+    val plan1 = DummySparkPlan(
+      outputPartitioning = HashPartitioning(exprA :: exprB :: exprA :: Nil, 5))
+    val plan2 = DummySparkPlan()
+    val smjExec = SortMergeJoinExec(
+      leftKeys = exprA :: exprB :: exprB :: Nil,
+      rightKeys = exprA :: exprC :: exprC :: Nil,
+      joinType = Inner,
+      condition = None,
+      left = plan1,
+      right = plan2)
+    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(smjExec)
+    outputPlan match {
+      case SortMergeJoinExec(leftKeys, rightKeys, _, _,
+             SortExec(_, _,
+               ShuffleExchangeExec(HashPartitioning(leftPartitioningExpressions, _), _, _), _),
+             SortExec(_, _,
+               ShuffleExchangeExec(HashPartitioning(rightPartitioningExpressions, _), _, _), _)) =>
+        assert(leftKeys === smjExec.leftKeys)
+        assert(rightKeys === smjExec.rightKeys)
+        assert(leftKeys === leftPartitioningExpressions)
+        assert(rightKeys === rightPartitioningExpressions)
+      case _ => fail(outputPlan.toString)
     }
   }
 

@@ -3,7 +3,7 @@
 --
 --
 -- AGGREGATES [Part 2]
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L145-L350
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L145-L350
 
 create temporary view int4_tbl as select * from values
   (0),
