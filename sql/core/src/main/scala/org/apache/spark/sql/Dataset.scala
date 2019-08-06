@@ -45,12 +45,14 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -60,6 +62,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
+  val curId = new java.util.concurrent.atomic.AtomicLong()
+  val DATASET_ID_KEY = "__dataset_id"
+  val COL_POS_KEY = "__col_position"
+  val DATASET_ID_TAG = TreeNodeTag[Long]("dataset_id")
+
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
@@ -173,6 +180,9 @@ class Dataset[T] private[sql](
     encoder: Encoder[T])
   extends Serializable {
 
+  // A globally unique id of this Dataset.
+  private val id = Dataset.curId.getAndIncrement()
+
   queryExecution.assertAnalyzed()
 
   // Note for Spark contributors: if adding or updating any action in `Dataset`, please make sure
@@ -189,7 +199,7 @@ class Dataset[T] private[sql](
   @transient private[sql] val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
-    queryExecution.analyzed match {
+    val plan = queryExecution.analyzed match {
       case c: Command =>
         LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
       case u @ Union(children) if children.forall(_.isInstanceOf[Command]) =>
@@ -197,6 +207,10 @@ class Dataset[T] private[sql](
       case _ =>
         queryExecution.analyzed
     }
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN)) {
+      plan.setTagValue(Dataset.DATASET_ID_TAG, id)
+    }
+    plan
   }
 
   /**
@@ -1271,9 +1285,27 @@ class Dataset[T] private[sql](
       if (sqlContext.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        val expr = resolve(colName)
-        Column(expr)
+        Column(addDataFrameIdToCol(resolve(colName)))
       }
+  }
+
+  // Attach the dataset id and column position to the column reference, so that we can detect
+  // ambiguous self-join correctly. See the rule `DetectAmbiguousSelfJoin`.
+  // This must be called before we return a `Column` that contains `AttributeReference`.
+  // Note that, the metadata added here are only avaiable in the analyzer, as the analyzer rule
+  // `DetectAmbiguousSelfJoin` will remove it.
+  private def addDataFrameIdToCol(expr: NamedExpression): NamedExpression = {
+    val newExpr = expr transform {
+      case a: AttributeReference
+        if sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN) =>
+        val metadata = new MetadataBuilder()
+          .withMetadata(a.metadata)
+          .putLong(Dataset.DATASET_ID_KEY, id)
+          .putLong(Dataset.COL_POS_KEY, logicalPlan.output.indexWhere(a.semanticEquals))
+          .build()
+        a.withMetadata(metadata)
+    }
+    newExpr.asInstanceOf[NamedExpression]
   }
 
   /**
@@ -1289,7 +1321,7 @@ class Dataset[T] private[sql](
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
         Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        Column(resolve(colName))
+        Column(addDataFrameIdToCol(resolve(colName)))
     }
   }
 
