@@ -57,7 +57,7 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
     sharedState.cacheManager.clearCache()
     // Reset the SQL configs.
     sessionState.conf.clear()
-    sc.conf.getAll.foreach { case (k, v) =>
+    sparkContext.conf.getAll.foreach { case (k, v) =>
       sessionState.conf.setConfString(k, v)
     }
     // Clear the registered UDFs, but need to restore the built-in functions.
