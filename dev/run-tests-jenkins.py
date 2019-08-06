@@ -57,7 +57,7 @@ def post_message_to_github(msg, ghprb_pull_id):
                                   "Authorization": "token %s" % github_oauth_key,
                                   "Content-Type": "application/json"
                               },
-                              data=posted_message)
+                              data=posted_message.encode())
     try:
         response = urlopen(request)
 

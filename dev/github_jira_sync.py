@@ -129,13 +129,13 @@ def reset_pr_labels(pr_num, jira_components):
     url = '%s/issues/%s/labels' % (GITHUB_API_BASE, pr_num)
     labels = ', '.join(('"%s"' % c) for c in jira_components)
     try:
-        request = urllib2.Request(url, data='{"labels":[%s]}' % labels)
+        request = Request(url, data=('{"labels":[%s]}' % labels).encode())
         request.add_header('Content-Type', 'application/json')
         request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
         request.get_method = lambda: 'PUT'
-        urllib2.urlopen(request)
+        urlopen(request)
         print("Set %s with labels %s" % (pr_num, labels))
-    except urllib2.HTTPError:
+    except HTTPError:
         print("Unable to update PR labels, exiting: %s" % url)
         sys.exit(-1)
 
