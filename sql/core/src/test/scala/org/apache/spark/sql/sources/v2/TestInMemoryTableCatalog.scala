@@ -119,16 +119,6 @@ class InMemoryTable(
     override val properties: util.Map[String, String])
   extends Table with SupportsRead with SupportsWrite {
 
-  def this(
-      name: String,
-      schema: StructType,
-      properties: util.Map[String, String],
-      partitioning: Array[Transform],
-      data: Array[BufferedRows]) = {
-    this(name, schema, partitioning, properties)
-    withData(data)
-  }
-
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
       throw new IllegalArgumentException(s"Transform $t must be IdentityTransform")
