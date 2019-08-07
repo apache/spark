@@ -119,6 +119,9 @@ case class AdaptiveSparkPlanExec(
     if (isFinalPlan) {
       currentPhysicalPlan.execute()
     } else {
+      // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
+      // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
+      // their own execution IDs and therefore rely on the main query to update UI.
       val executionId = Option(
         session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).flatMap { idStr =>
         val id = idStr.toLong
