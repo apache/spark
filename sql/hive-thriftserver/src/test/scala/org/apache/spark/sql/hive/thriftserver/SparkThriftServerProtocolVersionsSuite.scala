@@ -215,8 +215,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
       }
     }
 
-    // TODO: enable this test case after SPARK-28474
-    ignore(s"$version get binary type") {
+    test(s"$version get binary type") {
       testExecuteStatementWithProtocolVersion(version, "SELECT cast('ABC' as binary)") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "ABC")

@@ -195,7 +195,7 @@ public class ColumnValue {
     case DECIMAL_TYPE:
       return stringValue(((HiveDecimal)value));
     case BINARY_TYPE:
-      return stringValue((String)value);
+      return stringValue(new String((byte[])value));
     case ARRAY_TYPE:
     case MAP_TYPE:
     case STRUCT_TYPE:
