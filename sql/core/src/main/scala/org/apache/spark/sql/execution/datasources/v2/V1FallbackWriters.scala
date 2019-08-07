@@ -71,10 +71,10 @@ case class OverwriteByExpressionExecV1(
   override protected def doExecute(): RDD[InternalRow] = {
     writeBuilder match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().buildForV1Write(), writeOptions)
+        writeWithV1(builder.truncate().asV1Writer.buildForV1Write(), writeOptions)
 
       case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).buildForV1Write(), writeOptions)
+        writeWithV1(builder.overwrite(deleteWhere).asV1Writer.buildForV1Write(), writeOptions)
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
@@ -87,8 +87,12 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   override def output: Seq[Attribute] = Nil
   override final def children: Seq[SparkPlan] = Nil
 
-  protected implicit def toV1WriteBuilder(builder: WriteBuilder): V1WriteBuilder = {
-    builder.asInstanceOf[V1WriteBuilder]
+  protected implicit class toV1WriteBuilder(builder: WriteBuilder) {
+    def asV1Writer: V1WriteBuilder = builder match {
+      case v1: V1WriteBuilder => v1
+      case other => throw new IllegalStateException(
+        s"The returned writer ${other} was no longer a V1WriteBuilder.")
+    }
   }
 }
 
