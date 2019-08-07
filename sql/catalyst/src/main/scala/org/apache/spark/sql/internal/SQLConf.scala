@@ -1787,6 +1787,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
+    buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
+      .internal()
+      .doc("When true, the bucketed table scan will list files during planning to figure out the " +
+        "output ordering, which is expensive and may make the planning quite slow.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW =
     buildConf("spark.sql.arithmeticOperations.failOnOverFlow")
       .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
