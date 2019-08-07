@@ -71,9 +71,9 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
   }
 
   protected def createDF(
-      topic: String,
-      withOptions: Map[String, String] = Map.empty[String, String],
-      brokerAddress: Option[String] = None) = {
+    topic: String,
+    withOptions: Map[String, String] = Map.empty[String, String],
+    brokerAddress: Option[String] = None) = {
     val df = spark
       .read
       .format("kafka")
@@ -127,18 +127,18 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     val startPartitionOffsets = Map(
       new TopicPartition(topic, 0) -> -2L, // -2 => earliest
       new TopicPartition(topic, 1) -> -2L,
-      new TopicPartition(topic, 2) -> 0L   // explicit earliest
+      new TopicPartition(topic, 2) -> 0L // explicit earliest
     )
     val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
 
     val endPartitionOffsets = Map(
       new TopicPartition(topic, 0) -> -1L, // -1 => latest
       new TopicPartition(topic, 1) -> -1L,
-      new TopicPartition(topic, 2) -> 1L  // explicit offset happens to = the latest
+      new TopicPartition(topic, 2) -> 1L // explicit offset happens to = the latest
     )
     val endingOffsets = JsonUtils.partitionOffsets(endPartitionOffsets)
     val df = createDF(topic,
-        withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
+      withOptions = Map("startingOffsets" -> startingOffsets, "endingOffsets" -> endingOffsets))
     checkAnswer(df, (0 to 20).map(_.toString).toDF)
 
     // static offset partition 2, nothing should change
@@ -174,7 +174,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
        */
       val brokerProps = Map[String, Object](
         "log.retention.bytes" -> 1.asInstanceOf[AnyRef], // retain nothing
-        "log.retention.ms" -> 1.asInstanceOf[AnyRef]     // no wait time
+        "log.retention.ms" -> 1.asInstanceOf[AnyRef] // no wait time
       )
       kafkaUtils = new KafkaTestUtils(withBrokerProps = brokerProps)
       kafkaUtils.setup()
@@ -219,7 +219,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
       "for batch queries on Kafka")
 
     // Now do it with an explicit json start offset indicating latest
-    val startPartitionOffsets = Map( new TopicPartition("t", 0) -> -1L)
+    val startPartitionOffsets = Map(new TopicPartition("t", 0) -> -1L)
     val startingOffsets = JsonUtils.partitionOffsets(startPartitionOffsets)
     testBadOptions("subscribe" -> "t", "startingOffsets" -> startingOffsets)(
       "startingOffsets for t-0 can't be latest for batch queries on Kafka")
@@ -250,65 +250,70 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     testBadOptions("subscribePattern" -> "")("pattern to subscribe is empty")
   }
 
-//  test("resolveAndDivvyUpPartitions - using specific offsets") {
-//    val kafkaReader = mock[KafkaOffsetReader]
-//    when(kafkaReader.minPartitions).thenReturn(Some(3))
-//    val tp = new TopicPartition("topic", 1)
-//    val base = Set(KafkaOffsetRange(tp, 1, 4, Some("abc")))
-//    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> 1L)), any()))
-//      .thenReturn(KafkaSourceOffset(Map(tp -> 1L)))
-//    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> 4L)), any()))
-//      .thenReturn(KafkaSourceOffset(Map(tp -> 4L)))
-//
-//    val split = KafkaRelation.resolveAndDivvyUpPartitions(kafkaReader, base)
-//    assert(split === Array(
-//      KafkaOffsetRange(tp, 1, 2, None),
-//      KafkaOffsetRange(tp, 2, 3, None),
-//      KafkaOffsetRange(tp, 3, 4, None)))
-//  }
-//
-//  test("resolveAndDivvyUpPartitions - using special offsets") {
-//    val kafkaReader = mock[KafkaOffsetReader]
-//    when(kafkaReader.minPartitions).thenReturn(Some(3))
-//    val tp = new TopicPartition("topic", 1)
-//    val base = Set(KafkaOffsetRange(
-//      tp, KafkaOffsetRangeLimit.EARLIEST, KafkaOffsetRangeLimit.LATEST, Some("abc")))
-//    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> KafkaOffsetRangeLimit.EARLIEST)), any()))
-//      .thenReturn(KafkaSourceOffset(Map(tp -> 1L)))
-//    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> KafkaOffsetRangeLimit.LATEST)), any()))
-//      .thenReturn(KafkaSourceOffset(Map(tp -> 4L)))
-//
-//    val split = KafkaRelation.resolveAndDivvyUpPartitions(kafkaReader, base)
-//    assert(split === Array(
-//      KafkaOffsetRange(tp, KafkaOffsetRangeLimit.EARLIEST, 2, None),
-//      KafkaOffsetRange(tp, 2, 3, None),
-//      KafkaOffsetRange(tp, 3, KafkaOffsetRangeLimit.LATEST, None)))
-//  }
+  test("resolveAndDivvyUpPartitions - using specific offsets") {
+    val kafkaReader = mock[KafkaOffsetReader]
+    when(kafkaReader.minPartitions).thenReturn(Some(3))
+    when(kafkaReader.shouldDivvyUpLargePartitions(any())).thenReturn(true)
+    val tp = new TopicPartition("topic", 1)
+    val base = Set(KafkaOffsetRange(tp, 1, 4, Some("abc")))
+    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> 1L)), any()))
+      .thenReturn(KafkaSourceOffset(Map(tp -> 1L)))
+    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> 4L)), any()))
+      .thenReturn(KafkaSourceOffset(Map(tp -> 4L)))
 
-//  test("resolveAndDivvyUpPartitions - multiple topic partitions") {
-//    val kafkaReader = mock[KafkaOffsetReader]
-//    when(kafkaReader.minPartitions).thenReturn(Some(3))
-//    val tp1 = new TopicPartition("topic", 1)
-//    val tp2 = new TopicPartition("topic", 2)
-//    import KafkaOffsetRangeLimit.EARLIEST
-//    import KafkaOffsetRangeLimit.LATEST
-//
-//    val base = Set(
-//      KafkaOffsetRange(tp1, EARLIEST, LATEST, Some("abc")),
-//      KafkaOffsetRange(tp2, EARLIEST, 3, Some("cde")))
-//
-//    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp1 -> EARLIEST, tp2 -> EARLIEST)), any()))
-//      .thenReturn(KafkaSourceOffset(Map(tp1 -> 1L, tp2 -> 2L)))
-//    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp1 -> LATEST, tp2 -> 3L)), any()))
-//      .thenReturn(KafkaSourceOffset(Map(tp1 -> 100L, tp2 -> 3L)))
-//
-//    val split = kafkaReader.getOffsetRanges(base)
-//    assert(split === Array(
-//      KafkaOffsetRange(tp2, EARLIEST, 3, None),
-//      KafkaOffsetRange(tp1, EARLIEST, 34, None),
-//      KafkaOffsetRange(tp1, 34, 67, None),
-//      KafkaOffsetRange(tp1, 67, LATEST, None)))
-//  }
+    val split = KafkaOffsetReader.getOffsetRanges(
+      kafkaReader,
+      Map(tp -> 1),
+      Map(tp -> 4),
+      new KafkaOffsetRangeCalculator(Some(3)))
+    assert(split === Array(
+      KafkaOffsetRange(tp, 1, 2, None),
+      KafkaOffsetRange(tp, 2, 3, None),
+      KafkaOffsetRange(tp, 3, 4, None)))
+  }
+  QQFC ##### ASWfACAQS1 `XSADXazz
+  //  test("resolveAndDivvyUpPartitions - `AÁawW special offsets") {
+  //    val kafkaReader = mock[KafkaOffsetReader]
+  //    when(kafkaReader.minPartitions).th=Return(Some(3))
+  //    val tp = new TopicPartition("topic", 1)
+  //    val base = Set(KafkaOffsetRange(
+  //      tp, KafkaOffsetRangeLimit.EARLIEST, KafkaOffsetRangeLimit.LATEST, Some("abc")))
+  //    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> KafkaOffsetRangeLimit.EARLIEST)), any()))
+  //      .thenReturn(KafkaSourceOffset(Map(tp -> 1L)))
+  //    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp -> KafkaOffsetRangeLimit.LATEST)), any()))
+  //      .thenReturn(KafkaSourceOffset(Map(tp -> 4L)))
+  //
+  //    val split = KafkaRelation.resolveAndDivvyUpPartitions(kafkaReader, base)
+  //    assert(split === Array(
+  //      KafkaOffsetRange(tp, KafkaOffsetRangeLimit.EARLIEST, 2, None),
+  //      KafkaOffsetRange(tp, 2, 3, None),
+  //      KafkaOffsetRange(tp, 3, KafkaOffsetRangeLimit.LATEST, None)))
+  //  }
+
+  //  test("resolveAndDivvyUpPartitions - multiple topic partitions") {
+  //    val kafkaReader = mock[KafkaOffsetReader]
+  //    when(kafkaReader.minPartitions).thenReturn(Some(3))
+  //    val tp1 = new TopicPartition("topic", 1)
+  //    val tp2 = new TopicPartition("topic", 2)
+  //    import KafkaOffsetRangeLimit.EARLIEST
+  //    import KafkaOffsetRangeLimit.LATEST
+  //
+  //    val base = Set(
+  //      KafkaOffsetRange(tp1, EARLIEST, LATEST, Some("abc")),
+  //      KafkaOffsetRange(tp2, EARLIEST, 3, Some("cde")))
+  //
+  //    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp1 -> EARLIEST, tp2 -> EARLIEST)), any()))
+  //      .thenReturn(KafkaSourceOffset(Map(tp1 -> 1L, tp2 -> 2L)))
+  //    when(kafkaReader.fetchSpecificOffsets(meq(Map(tp1 -> LATEST, tp2 -> 3L)), any()))
+  //      .thenReturn(KafkaSourceOffset(Map(tp1 -> 100L, tp2 -> 3L)))
+  //
+  //    val split = kafkaReader.getOffsetRanges(base)
+  //    assert(split === Array(
+  //      KafkaOffsetRange(tp2, EARLIEST, 3, None),
+  //      KafkaOffsetRange(tp1, EARLIEST, 34, None),
+  //      KafkaOffsetRange(tp1, 34, 67, None),
+  //      KafkaOffsetRange(tp1, 67, LATEST, None)))
+  //  }
 
   test("minPartitions") {
     val topic = newTopic()
@@ -328,7 +333,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSQLContext wi
     testGroupId("groupIdPrefix", (expected, actual) => {
       assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
         "Valid consumer groups don't contain the expected group id - " +
-        s"Valid consumer groups: $actual / expected group id: $expected")
+          s"Valid consumer groups: $actual / expected group id: $expected")
     })
   }
 

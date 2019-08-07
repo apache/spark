@@ -63,7 +63,9 @@ private[kafka010] class KafkaRelation(
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val offsetRanges: Seq[KafkaOffsetRange] = try {
-      kafkaOffsetReader.getOffsetRanges(startingOffsets, endingOffsets)
+      val fromPartitionOffsets = kafkaOffsetReader.fetchPartitionOffsets(startingOffsets)
+      val untilPartitionOffsets = kafkaOffsetReader.fetchPartitionOffsets(endingOffsets)
+      kafkaOffsetReader.getOffsetRanges(fromPartitionOffsets, untilPartitionOffsets)
     } finally {
       kafkaOffsetReader.close()
     }

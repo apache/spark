@@ -57,7 +57,9 @@ private[kafka010] class KafkaBatch(
 
     // Leverage the KafkaReader to obtain the relevant partition offsets
     val offsetRanges: Array[KafkaOffsetRange] = try {
-      kafkaOffsetReader.getOffsetRanges(startingOffsets, endingOffsets).toArray
+      val fromPartitionOffsets = kafkaOffsetReader.fetchPartitionOffsets(startingOffsets)
+      val untilPartitionOffsets = kafkaOffsetReader.fetchPartitionOffsets(endingOffsets)
+      kafkaOffsetReader.getOffsetRanges(fromPartitionOffsets, untilPartitionOffsets).toArray
     } finally {
       kafkaOffsetReader.close()
     }
