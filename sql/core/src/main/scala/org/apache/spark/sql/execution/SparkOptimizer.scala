@@ -39,7 +39,8 @@ class SparkOptimizer(
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
-      ExtractPythonUDFs,
+      ExtractPythonUDFs) :+
+    Batch("Post Extract Python UDFs Optimization", fixedPoint,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
       // column pruning and filter push-down. Here we rerun the related optimizer rules.
       ColumnPruning,
