@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2.writer
 
 import org.apache.spark.annotation.{Experimental, Unstable}
-import org.apache.spark.sql.sources.CreatableRelationProvider
+import org.apache.spark.sql.sources.{CreatableRelationProvider, InsertableRelation}
 
 /**
  * A trait that should be implemented by V1 DataSources that would like to leverage the DataSource
@@ -33,16 +33,14 @@ import org.apache.spark.sql.sources.CreatableRelationProvider
 trait V1WriteBuilder extends WriteBuilder {
 
   /**
-   * Creates a [[CreatableRelationProvider]] that allows saving a DataFrame to a
-   * a destination (using data source-specific parameters).
-   *
-   * The relation will receive a string to string map of options that will be case sensitive,
-   * therefore the implementation of the data source should be able to handle case insensitive
-   * option checking.
+   * Creates an [[InsertableRelation]] that allows appending a DataFrame to a
+   * a destination (using data source-specific parameters). The insert method will only be
+   * called with `overwrite=false`. The DataSource should implement the overwrite behavior as
+   * part of the [[SupportsOverwrite]], and [[SupportsTruncate]] interfaces.
    *
    * @since 3.0.0
    */
-  def buildForV1Write(): CreatableRelationProvider = {
+  def buildForV1Write(): InsertableRelation = {
     throw new UnsupportedOperationException(getClass.getName + " does not support batch write")
   }
 }

@@ -89,10 +89,8 @@ case class CreateTableAsSelectExec(
             .withQueryId(UUID.randomUUID().toString)
 
           writer match {
-            case v1: V1WriteBuilder =>
-              writeWithV1(v1.buildForV1Write(), writeOptions)
-            case v2 =>
-              doWrite(v2.buildForBatch())
+            case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
+            case v2 => doWrite(v2.buildForBatch())
           }
 
         case _ =>
@@ -185,10 +183,8 @@ case class ReplaceTableAsSelectExec(
             .withQueryId(UUID.randomUUID().toString)
 
           writer match {
-            case v1: V1WriteBuilder =>
-              writeWithV1(v1.buildForV1Write(), writeOptions)
-            case v2 =>
-              doWrite(v2.buildForBatch())
+            case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
+            case v2 => doWrite(v2.buildForBatch())
           }
 
         case _ =>
@@ -489,10 +485,8 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
             .withQueryId(UUID.randomUUID().toString)
 
           val writtenRows = writer match {
-            case v1: V1WriteBuilder =>
-              writeWithV1(v1.buildForV1Write(), writeOptions)
-            case v2 =>
-              doWrite(v2.buildForBatch())
+            case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
+            case v2 => doWrite(v2.buildForBatch())
           }
           stagedTable.commitStagedChanges()
           writtenRows

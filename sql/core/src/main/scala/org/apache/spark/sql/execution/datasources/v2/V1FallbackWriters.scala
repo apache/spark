@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter}
+import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter, InsertableRelation}
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,11 +38,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 case class AppendDataExecV1(
     writeBuilder: V1WriteBuilder,
-    writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan) extends V1FallbackWriters {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    writeWithV1(writeBuilder.buildForV1Write(), writeOptions)
+    writeWithV1(writeBuilder.buildForV1Write())
   }
 }
 
@@ -61,7 +60,6 @@ case class OverwriteByExpressionExecV1(
     table: Table,
     writeBuilder: V1WriteBuilder,
     deleteWhere: Array[Filter],
-    writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
@@ -71,10 +69,10 @@ case class OverwriteByExpressionExecV1(
   override protected def doExecute(): RDD[InternalRow] = {
     writeBuilder match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Writer.buildForV1Write(), writeOptions)
+        writeWithV1(builder.truncate().asV1Writer.buildForV1Write())
 
       case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Writer.buildForV1Write(), writeOptions)
+        writeWithV1(builder.overwrite(deleteWhere).asV1Writer.buildForV1Write())
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
@@ -102,14 +100,8 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
 trait SupportsV1Write extends SparkPlan {
   def plan: LogicalPlan
 
-  protected def writeWithV1(
-      relation: CreatableRelationProvider,
-      options: CaseInsensitiveStringMap): RDD[InternalRow] = {
-    relation.createRelation(
-      sqlContext,
-      SaveMode.Append,
-      options.asCaseSensitiveMap().asScala.toMap,
-      Dataset.ofRows(sqlContext.sparkSession, plan))
+  protected def writeWithV1(relation: InsertableRelation): RDD[InternalRow] = {
+    relation.insert(Dataset.ofRows(sqlContext.sparkSession, plan), overwrite = false)
     sparkContext.emptyRDD
   }
 }

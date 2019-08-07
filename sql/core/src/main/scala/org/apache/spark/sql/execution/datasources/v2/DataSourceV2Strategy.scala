@@ -214,7 +214,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       val writer = table.newWriteBuilder(r.options)
       writer match {
         case v1: V1WriteBuilder =>
-          AppendDataExecV1(v1, r.options, query) :: Nil
+          AppendDataExecV1(v1, query) :: Nil
         case v2 =>
           AppendDataExec(table, v2, r.options, planLater(query)) :: Nil
       }
@@ -229,7 +229,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       val writer = table.newWriteBuilder(r.options)
       writer match {
         case v1: V1WriteBuilder =>
-          OverwriteByExpressionExecV1(table, v1, filters, r.options, query) :: Nil
+          OverwriteByExpressionExecV1(table, v1, filters, query) :: Nil
         case v2 =>
           OverwriteByExpressionExec(table, v2, filters, r.options, planLater(query)) :: Nil
       }
