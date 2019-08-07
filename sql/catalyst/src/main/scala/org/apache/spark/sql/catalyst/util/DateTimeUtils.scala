@@ -466,8 +466,8 @@ object DateTimeUtils {
   private def extractFromYear(date: SQLDate, divider: Int): Int = {
     val localDate = daysToLocalDate(date)
     val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
-    var result = (yearOfEra / divider) + 1
-    if (yearOfEra > 1 && (yearOfEra % divider) == 0) result -= 1
+    var result = yearOfEra / divider
+    if ((yearOfEra % divider) != 0 || yearOfEra <= 1) result += 1
     if (localDate.get(ChronoField.ERA) == 0) result = -result
     result
   }
