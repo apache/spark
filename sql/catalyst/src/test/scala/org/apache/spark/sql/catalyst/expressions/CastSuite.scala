@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -1021,6 +1022,27 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", atomicType, nullable = true))))
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null))
+    }
+  }
+
+  test("SPARK-28470: Cast should honor nullOnOverflow property") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "true") {
+      checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
+      checkEvaluation(
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
+      checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
+      checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
+    }
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "false") {
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
+        "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
     }
   }
 }
