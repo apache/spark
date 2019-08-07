@@ -1522,8 +1522,9 @@ case class TruncDate(date: Expression, format: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(fmt, ts) - Returns timestamp `ts` truncated to the unit specified by the format model `fmt`.
-    `fmt` should be one of ["YEAR", "YYYY", "YY", "MON", "MONTH", "MM", "DAY", "DD", "HOUR", "MINUTE", "SECOND", "WEEK", "QUARTER",
-                            "DECADE", "CENTURY", "MILLENNIUM", "MICROSECOND", "MILLISECOND"]
+    `fmt` should be one of ["MILLENNIUM", "CENTURY", "DECADE", "YEAR", "YYYY", "YY",
+                            "QUARTER", "MON", "MONTH", "MM", "WEEK", "DAY", "DD",
+                            "HOUR", "MINUTE", "SECOND", "MICROSECOND", "MILLISECOND"]
   """,
   examples = """
     Examples:
