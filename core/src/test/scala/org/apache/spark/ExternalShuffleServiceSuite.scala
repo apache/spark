@@ -105,7 +105,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(true)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.shuffleClient.getClass should equal(classOf[ExternalShuffleClient])
+    sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
     // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.
     // If we don't wait for all slaves, it's possible that only one executor runs all jobs. Then
