@@ -408,19 +408,22 @@ object DDLCheck extends (LogicalPlan => Unit) {
 
   override def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case ct: CreateTable =>
-        throwWhenExistsNullType(ct.tableDesc.schema)
+      case CreateTable(tableDesc, _, _) =>
+        throwWhenExistsNullType(tableDesc.schema)
 
-      case ct2: CreateV2Table =>
-        throwWhenExistsNullType(ct2.tableSchema)
+      case CreateV2Table(_, _, tableSchema, _, _, _) =>
+        throwWhenExistsNullType(tableSchema)
 
-      // DataSourceStrategy will convert CreateTable to CreateDataSourceTableCommand before check
-      case cdstc: CreateDataSourceTableCommand =>
-        throwWhenExistsNullType(cdstc.table.schema)
+      // DataSourceAnalysis will convert CreateTable to CreateDataSourceTableCommand before check
+      case CreateDataSourceTableCommand(table, _) =>
+        throwWhenExistsNullType(table.schema)
 
       // HiveAnalysis will convert CreateTable to CreateTableCommand before check
-      case ctc: CreateTableCommand =>
-        throwWhenExistsNullType(ctc.table.schema)
+      case CreateTableCommand(table, _) =>
+        throwWhenExistsNullType(table.schema)
+
+      case ReplaceTable(_, _, tableSchema, _, _, _) =>
+        throwWhenExistsNullType(tableSchema)
 
       case _ => // OK
     }
