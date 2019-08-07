@@ -57,7 +57,7 @@ def post_message_to_github(msg, ghprb_pull_id):
                           "Authorization": "token %s" % github_oauth_key,
                           "Content-Type": "application/json"
                       },
-                      data=posted_message.encode())
+                      data=posted_message.encode('utf-8'))
     try:
         response = urlopen(request)
 
@@ -106,7 +106,7 @@ def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
         test_name = pr_test + '.sh'
         pr_results.append(run_cmd(['bash', os.path.join(SPARK_HOME, 'dev', 'tests', test_name),
                                    ghprb_actual_commit, sha1],
-                                  return_output=True).decode().rstrip())
+                                  return_output=True).rstrip())
         # Ensure, after each test, that we're back on the current PR
         run_cmd(['git', 'checkout', '-f', current_pr_head])
     return pr_results

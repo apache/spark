@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -87,7 +87,7 @@ def get_jira_prs():
                 result = result + [(jira, pull)]
 
         # Check if there is another page
-        link_headers = filter(lambda k: k.startswith("Link"), page.info().headers)
+        link_headers = list(filter(lambda k: k.startswith("Link"), page.headers))
         if not link_headers or "next" not in link_headers[0]:
             has_next_page = False
         else:
