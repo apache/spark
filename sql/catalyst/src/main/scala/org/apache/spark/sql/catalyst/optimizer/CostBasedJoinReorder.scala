@@ -703,8 +703,8 @@ case class Population(conf: SQLConf, chromos: Seq[Chromosome]) extends Logging {
     // Begin iteration.
     val generations = chromos.size
     for (i <- 1 to generations) {
-      val father = JoinReorderUtils.select(conf, evolvedChromos, None)
-      val mother = JoinReorderUtils.select(conf, evolvedChromos, Some(father))
+      val father = JoinReorderGAUtils.select(conf, evolvedChromos, None)
+      val mother = JoinReorderGAUtils.select(conf, evolvedChromos, Some(father))
       val kid = EdgeRecombination.newChromo(father, mother)
       evolvedChromos = putToPop(kid, evolvedChromos)
       logDebug(s"Iteration $i, fitness for kid: ${kid.fitness}," +
@@ -726,16 +726,16 @@ object JoinReorderUtils extends PredicateHelper {
    * - the sets of items contained in left and right sides do not overlap.
    * - there exists at least one join condition involving references from both sides.
    * - if star-join filter is enabled, allow the following combinations:
-   *         1) (oneJoinPlan U otherJoinPlan) is a subset of star-join
-   *         2) star-join is a subset of (oneJoinPlan U otherJoinPlan)
-   *         3) (oneJoinPlan U otherJoinPlan) is a subset of non star-join
+   * 1) (oneJoinPlan U otherJoinPlan) is a subset of star-join
+   * 2) star-join is a subset of (oneJoinPlan U otherJoinPlan)
+   * 3) (oneJoinPlan U otherJoinPlan) is a subset of non star-join
    *
-   * @param oneJoinPlan One side JoinPlan for building a new JoinPlan.
+   * @param oneJoinPlan   One side JoinPlan for building a new JoinPlan.
    * @param otherJoinPlan The other side JoinPlan for building a new join node.
-   * @param conf SQLConf for statistics computation.
-   * @param conditions The overall set of join conditions.
-   * @param topOutput The output attributes of the final plan.
-   * @param filters Join graph info to be used as filters by the search algorithm.
+   * @param conf          SQLConf for statistics computation.
+   * @param conditions    The overall set of join conditions.
+   * @param topOutput     The output attributes of the final plan.
+   * @param filters       Join graph info to be used as filters by the search algorithm.
    * @return Builds and returns a new JoinPlan if both conditions hold. Otherwise, returns None.
    */
   private[optimizer] def buildJoin(
@@ -801,7 +801,9 @@ object JoinReorderUtils extends PredicateHelper {
         otherJoinPlan.planCost + otherJoinPlan.rootCost(conf)
     Some(JoinPlan(itemIds, newPlan, collectedJoinConds, newPlanCost))
   }
+}
 
+object JoinReorderGAUtils extends PredicateHelper {
   /**
    * Select a [[Chromosome]] randomly from the given chromosomes set. Chromosomes those in
    * excludes will not be selected.
