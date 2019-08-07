@@ -228,7 +228,6 @@ private[spark] class AppStatusStore(
           toValues(_.shuffleRecordsRead),
           toValues(_.shuffleRemoteBlocksFetched),
           toValues(_.shuffleLocalBlocksFetched),
-          toValues(_.shuffleHostLocalBlocksFetched),
           toValues(_.shuffleFetchWaitTime),
           toValues(_.shuffleRemoteBytesRead),
           toValues(_.shuffleRemoteBytesReadToDisk),
@@ -323,23 +322,18 @@ private[spark] class AppStatusStore(
         scanTasks(TaskIndexNames.OUTPUT_RECORDS) { t => t.outputRecordsWritten }),
       shuffleReadMetrics = new v1.ShuffleReadMetricDistributions(
         scanTasks(TaskIndexNames.SHUFFLE_TOTAL_READS) { m =>
-          m.shuffleLocalBytesRead + m.shuffleHostLocalBytesRead + m.shuffleRemoteBytesRead
+          m.shuffleLocalBytesRead + m.shuffleRemoteBytesRead
         },
         scanTasks(TaskIndexNames.SHUFFLE_READ_RECORDS) { t => t.shuffleRecordsRead },
         scanTasks(TaskIndexNames.SHUFFLE_REMOTE_BLOCKS) { t => t.shuffleRemoteBlocksFetched },
         scanTasks(TaskIndexNames.SHUFFLE_LOCAL_BLOCKS) { t => t.shuffleLocalBlocksFetched },
-        scanTasks(TaskIndexNames.SHUFFLE_HOST_LOCAL_BLOCKS) { t =>
-           t.shuffleHostLocalBlocksFetched
-        },
         scanTasks(TaskIndexNames.SHUFFLE_READ_TIME) { t => t.shuffleFetchWaitTime },
         scanTasks(TaskIndexNames.SHUFFLE_REMOTE_READS) { t => t.shuffleRemoteBytesRead },
         scanTasks(TaskIndexNames.SHUFFLE_REMOTE_READS_TO_DISK) { t =>
           t.shuffleRemoteBytesReadToDisk
         },
         scanTasks(TaskIndexNames.SHUFFLE_TOTAL_BLOCKS) { m =>
-          m.shuffleLocalBlocksFetched +
-            m.shuffleHostLocalBlocksFetched +
-            m.shuffleRemoteBlocksFetched
+          m.shuffleLocalBlocksFetched + m.shuffleRemoteBlocksFetched
         }),
       shuffleWriteMetrics = new v1.ShuffleWriteMetricDistributions(
         scanTasks(TaskIndexNames.SHUFFLE_WRITE_SIZE) { t => t.shuffleBytesWritten },
@@ -375,8 +369,6 @@ private[spark] class AppStatusStore(
           shuffleRemoteBlocksFetched =
             computedQuantiles.shuffleReadMetrics.remoteBlocksFetched(idx),
           shuffleLocalBlocksFetched = computedQuantiles.shuffleReadMetrics.localBlocksFetched(idx),
-          shuffleHostLocalBlocksFetched =
-            computedQuantiles.shuffleReadMetrics.hostLocalBlocksFetched(idx),
           shuffleFetchWaitTime = computedQuantiles.shuffleReadMetrics.fetchWaitTime(idx),
           shuffleRemoteBytesRead = computedQuantiles.shuffleReadMetrics.remoteBytesRead(idx),
           shuffleRemoteBytesReadToDisk =
@@ -506,12 +498,10 @@ private[spark] class AppStatusStore(
       outputRecords = stage.outputRecords,
       shuffleRemoteBlocksFetched = stage.shuffleRemoteBlocksFetched,
       shuffleLocalBlocksFetched = stage.shuffleLocalBlocksFetched,
-      shuffleHostLocalBlocksFetched = stage.shuffleHostLocalBlocksFetched,
       shuffleFetchWaitTime = stage.shuffleFetchWaitTime,
       shuffleRemoteBytesRead = stage.shuffleRemoteBytesRead,
       shuffleRemoteBytesReadToDisk = stage.shuffleRemoteBytesReadToDisk,
       shuffleLocalBytesRead = stage.shuffleLocalBytesRead,
-      shuffleHostLocalBytesRead = stage.shuffleHostLocalBytesRead,
       shuffleReadBytes = stage.shuffleReadBytes,
       shuffleReadRecords = stage.shuffleReadRecords,
       shuffleWriteBytes = stage.shuffleWriteBytes,

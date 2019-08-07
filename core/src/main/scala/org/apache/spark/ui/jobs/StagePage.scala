@@ -814,7 +814,7 @@ private[spark] object ApiHelper {
   }
 
   def totalBytesRead(metrics: ShuffleReadMetrics): Long = {
-    metrics.localBytesRead + metrics.hostLocalBytesRead + metrics.remoteBytesRead
+    metrics.localBytesRead + metrics.remoteBytesRead
   }
 
   def indexName(sortColumn: String): Option[String] = {

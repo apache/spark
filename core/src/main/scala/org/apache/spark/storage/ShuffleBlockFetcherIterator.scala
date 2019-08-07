@@ -464,8 +464,8 @@ final class ShuffleBlockFetcherIterator(
       try {
         val buf =
           blockManager.getHostLocalShuffleData(blockId.asInstanceOf[ShuffleBlockId], localDirs)
-        shuffleMetrics.incHostLocalBlocksFetched(1)
-        shuffleMetrics.incHostLocalBytesRead(buf.size)
+        shuffleMetrics.incLocalBlocksFetched(1)
+        shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
         results.put(SuccessFetchResult(blockId, blockManager.blockManagerId,
           buf.size(), buf, isNetworkReqDone = false))

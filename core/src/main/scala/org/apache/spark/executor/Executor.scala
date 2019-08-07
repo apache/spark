@@ -504,16 +504,12 @@ private[spark] class Executor(
           .inc(task.metrics.shuffleReadMetrics.remoteBytesReadToDisk)
         executorSource.METRIC_SHUFFLE_LOCAL_BYTES_READ
           .inc(task.metrics.shuffleReadMetrics.localBytesRead)
-        executorSource.METRIC_SHUFFLE_HOST_LOCAL_BYTES_READ
-          .inc(task.metrics.shuffleReadMetrics.hostLocalBytesRead)
         executorSource.METRIC_SHUFFLE_RECORDS_READ
           .inc(task.metrics.shuffleReadMetrics.recordsRead)
         executorSource.METRIC_SHUFFLE_REMOTE_BLOCKS_FETCHED
           .inc(task.metrics.shuffleReadMetrics.remoteBlocksFetched)
         executorSource.METRIC_SHUFFLE_LOCAL_BLOCKS_FETCHED
           .inc(task.metrics.shuffleReadMetrics.localBlocksFetched)
-        executorSource.METRIC_SHUFFLE_HOST_LOCAL_BLOCKS_FETCHED
-          .inc(task.metrics.shuffleReadMetrics.hostLocalBlocksFetched)
         executorSource.METRIC_SHUFFLE_BYTES_WRITTEN
           .inc(task.metrics.shuffleWriteMetrics.bytesWritten)
         executorSource.METRIC_SHUFFLE_RECORDS_WRITTEN

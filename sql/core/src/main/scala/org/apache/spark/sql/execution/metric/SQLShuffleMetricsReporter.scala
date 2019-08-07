@@ -34,16 +34,12 @@ class SQLShuffleReadMetricsReporter(
     metrics(SQLShuffleReadMetricsReporter.REMOTE_BLOCKS_FETCHED)
   private[this] val _localBlocksFetched =
     metrics(SQLShuffleReadMetricsReporter.LOCAL_BLOCKS_FETCHED)
-  private[this] val _hostLocalBlocksFetched =
-    metrics(SQLShuffleReadMetricsReporter.HOST_LOCAL_BLOCKS_FETCHED)
   private[this] val _remoteBytesRead =
     metrics(SQLShuffleReadMetricsReporter.REMOTE_BYTES_READ)
   private[this] val _remoteBytesReadToDisk =
     metrics(SQLShuffleReadMetricsReporter.REMOTE_BYTES_READ_TO_DISK)
   private[this] val _localBytesRead =
     metrics(SQLShuffleReadMetricsReporter.LOCAL_BYTES_READ)
-  private[this] val _hostLocalBytesRead =
-    metrics(SQLShuffleReadMetricsReporter.HOST_LOCAL_BYTES_READ)
   private[this] val _fetchWaitTime =
     metrics(SQLShuffleReadMetricsReporter.FETCH_WAIT_TIME)
   private[this] val _recordsRead =
@@ -57,10 +53,6 @@ class SQLShuffleReadMetricsReporter(
     _localBlocksFetched.add(v)
     tempMetrics.incLocalBlocksFetched(v)
   }
-  override def incHostLocalBlocksFetched(v: Long): Unit = {
-    _hostLocalBlocksFetched.add(v)
-    tempMetrics.incHostLocalBlocksFetched(v)
-  }
   override def incRemoteBytesRead(v: Long): Unit = {
     _remoteBytesRead.add(v)
     tempMetrics.incRemoteBytesRead(v)
@@ -72,10 +64,6 @@ class SQLShuffleReadMetricsReporter(
   override def incLocalBytesRead(v: Long): Unit = {
     _localBytesRead.add(v)
     tempMetrics.incLocalBytesRead(v)
-  }
-  override def incHostLocalBytesRead(v: Long): Unit = {
-    _hostLocalBytesRead.add(v)
-    tempMetrics.incHostLocalBytesRead(v)
   }
   override def incFetchWaitTime(v: Long): Unit = {
     _fetchWaitTime.add(v)
@@ -90,11 +78,9 @@ class SQLShuffleReadMetricsReporter(
 object SQLShuffleReadMetricsReporter {
   val REMOTE_BLOCKS_FETCHED = "remoteBlocksFetched"
   val LOCAL_BLOCKS_FETCHED = "localBlocksFetched"
-  val HOST_LOCAL_BLOCKS_FETCHED = "hostLocalBlocksFetched"
   val REMOTE_BYTES_READ = "remoteBytesRead"
   val REMOTE_BYTES_READ_TO_DISK = "remoteBytesReadToDisk"
   val LOCAL_BYTES_READ = "localBytesRead"
-  val HOST_LOCAL_BYTES_READ = "hostLocalBytesRead"
   val FETCH_WAIT_TIME = "fetchWaitTime"
   val RECORDS_READ = "recordsRead"
 
@@ -104,11 +90,9 @@ object SQLShuffleReadMetricsReporter {
   def createShuffleReadMetrics(sc: SparkContext): Map[String, SQLMetric] = Map(
     REMOTE_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "remote blocks read"),
     LOCAL_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "local blocks read"),
-    HOST_LOCAL_BLOCKS_FETCHED -> SQLMetrics.createMetric(sc, "host local blocks read"),
     REMOTE_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "remote bytes read"),
     REMOTE_BYTES_READ_TO_DISK -> SQLMetrics.createSizeMetric(sc, "remote bytes read to disk"),
     LOCAL_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "local bytes read"),
-    HOST_LOCAL_BYTES_READ -> SQLMetrics.createSizeMetric(sc, "host local bytes read"),
     FETCH_WAIT_TIME -> SQLMetrics.createTimingMetric(sc, "fetch wait time"),
     RECORDS_READ -> SQLMetrics.createMetric(sc, "records read"))
 }
