@@ -136,6 +136,8 @@ private[spark] class AppStatusStore(
     store.read(classOf[StageDataWrapper], Array(stageId, stageAttemptId)).locality
   }
 
+  private def isLiveUI: Boolean = listener.isDefined
+
   /**
    * Calculates a summary of the task metrics for the given stage attempt, returning the
    * requested quantiles for the recorded metrics.
@@ -156,7 +158,7 @@ private[spark] class AppStatusStore(
     // cheaper for disk stores (avoids deserialization).
     val count = {
       Utils.tryWithResource(
-        if (store.isInstanceOf[ElementTrackingStore]) {
+        if (isLiveUI) {
           // For Live UI, we should count the tasks with status "SUCCESS" only.
           store.view(classOf[TaskDataWrapper])
             .parent(stageKey)
@@ -246,7 +248,7 @@ private[spark] class AppStatusStore(
     // and failed tasks differently (would be tricky). Also would require changing the disk store
     // version (to invalidate old stores).
     def scanTasks(index: String)(fn: TaskDataWrapper => Long): IndexedSeq[Double] = {
-      if (store.isInstanceOf[ElementTrackingStore]) {
+      if (isLiveUI) {
         val quantileTasks = store.view(classOf[TaskDataWrapper])
           .parent(stageKey)
           .index(index)
