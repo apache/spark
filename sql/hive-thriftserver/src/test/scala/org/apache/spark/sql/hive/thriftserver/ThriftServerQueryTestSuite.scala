@@ -67,6 +67,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     hiveServer2 = null
   }
 
+  override val isTestWithConfigSets = false
+
   /** List of test cases to ignore, in lower cases. */
   override def blackList: Set[String] = Set(
     "blacklist.sql",   // Do NOT remove this one. It is here to test the blacklist functionality.
@@ -176,7 +178,6 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
             // This exception is usually a feature that ThriftServer cannot support.
             // Please add SQL to blackList.
             assert(false, s"${output.output} for query #$i\n${expected.sql}")
-          case s if s.sql.equals("""select '\'', '"', '\n', '\r', '\t', 'Z'""") =>
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
               output.output

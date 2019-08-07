@@ -106,6 +106,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   import IntegratedUDFTestUtils._
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  protected val isTestWithConfigSets: Boolean = true
 
   protected val baseResourcePath = {
     // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
@@ -235,7 +236,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
-    if (regenerateGoldenFiles) {
+    if (regenerateGoldenFiles || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {
