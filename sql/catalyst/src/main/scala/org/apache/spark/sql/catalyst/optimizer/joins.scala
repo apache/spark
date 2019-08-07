@@ -170,7 +170,7 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
  * See `ExtractPythonUDFs` for details. This rule will detect un-evaluable PythonUDF and pull them
  * out from join condition.
  */
-object PullOutPythonUDFInJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
+object ExtractPythonUDFFromJoinCondition extends Rule[LogicalPlan] with PredicateHelper {
 
   private def hasUnevaluablePythonUDF(expr: Expression, j: Join): Boolean = {
     expr.find { e =>

@@ -2199,7 +2199,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     val baos = new ByteArrayOutputStream()
-    val ps = new PrintStream(baos, true, "UTF-8")
+    val ps = new PrintStream(baos, true, StandardCharsets.UTF_8.name())
     exception.printStackTrace(ps)
     ps.flush()
 
