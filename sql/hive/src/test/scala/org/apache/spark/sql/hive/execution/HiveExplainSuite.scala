@@ -32,6 +32,7 @@ import org.apache.spark.util.Utils
  * A set of tests that validates support for Hive Explain command.
  */
 class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import testImplicits._
 
   test("show cost in explain command") {
     val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
@@ -208,12 +209,27 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("SPARK-28595: explain should not trigger partition listing") {
-    HiveCatalogMetrics.reset()
-    withTable("t") {
-      sql("CREATE TABLE t USING json PARTITIONED BY (j) AS SELECT 1 i, 2 j")
-      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
-      spark.table("t").explain()
-      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+    Seq(true, false).foreach { legacyBucketedScan =>
+      withSQLConf(
+        SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING.key -> legacyBucketedScan.toString) {
+        HiveCatalogMetrics.reset()
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t USING json
+              |PARTITIONED BY (j)
+              |CLUSTERED BY (i) SORTED BY (i) INTO 4 BUCKETS
+              |AS SELECT 1 i, 2 j
+            """.stripMargin)
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+          spark.table("t").sort($"i").explain()
+          if (legacyBucketedScan) {
+            assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount > 0)
+          } else {
+            assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+          }
+        }
+      }
     }
   }
 }
