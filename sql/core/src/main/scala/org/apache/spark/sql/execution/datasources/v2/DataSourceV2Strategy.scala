@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceEx
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.writer.V1WriteBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
@@ -209,7 +210,14 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      AppendDataExec(r.table.asWritable, r.options, query, planLater(query)) :: Nil
+      val table = r.table.asWritable
+      val writer = table.newWriteBuilder(r.options)
+      writer match {
+        case v1: V1WriteBuilder =>
+          AppendDataExecV1(v1, r.options, query) :: Nil
+        case v2 =>
+          AppendDataExec(table, v2, r.options, planLater(query)) :: Nil
+      }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
@@ -217,9 +225,14 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
           throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
-
-      OverwriteByExpressionExec(
-        r.table.asWritable, filters, r.options, query, planLater(query)) :: Nil
+      val table = r.table.asWritable
+      val writer = table.newWriteBuilder(r.options)
+      writer match {
+        case v1: V1WriteBuilder =>
+          OverwriteByExpressionExecV1(table, v1, filters, r.options, query) :: Nil
+        case v2 =>
+          OverwriteByExpressionExec(table, v2, filters, r.options, planLater(query)) :: Nil
+      }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
       OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
