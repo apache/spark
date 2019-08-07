@@ -27,7 +27,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
   import testImplicits._
 
   before {
-    spark.conf.set(s"spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
   }
 
@@ -142,7 +142,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  testQuietly("saveAsTable: with defined catalog and table doesn't exist") {
+  testQuietly("saveAsTable: table doesn't exist => create table") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
@@ -151,7 +151,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  testQuietly("saveAsTable: with defined catalog and table exists") {
+  testQuietly("saveAsTable: table exists => append by name") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
@@ -166,7 +166,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  testQuietly("saveAsTable: with defined catalog + table overwrite and table doesn't exist") {
+  testQuietly("saveAsTable: table overwrite and table doesn't exist => create table") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
@@ -175,7 +175,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  testQuietly("saveAsTable: with defined catalog + table overwrite and table exists") {
+  testQuietly("saveAsTable: table overwrite and table exists => replace table") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
@@ -185,7 +185,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  testQuietly("saveAsTable: with defined catalog + ignore mode and table doesn't exist") {
+  testQuietly("saveAsTable: ignore mode and table doesn't exist => create table") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
@@ -194,7 +194,7 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
     }
   }
 
-  testQuietly("saveAsTable: with defined catalog + ignore mode and table exists") {
+  testQuietly("saveAsTable: ignore mode and table exists => do nothing") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")

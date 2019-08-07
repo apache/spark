@@ -490,25 +490,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val useV1Sources =
-      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
-    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val shouldUseV1Source = cls.newInstance() match {
-      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
-      case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
-    }
-
-    val canUseV2 = !shouldUseV1Source && classOf[TableProvider].isAssignableFrom(cls)
-    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
-
-      case CatalogObjectIdentifier(None, ident) if canUseV2 && sessionCatalogOpt.isDefined =>
-        // We pass in the modeForDSV1, as using the V2 session catalog should maintain compatibility
-        // for now.
-        saveAsTable(sessionCatalogOpt.get.asTableCatalog, ident, modeForDSV1)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
