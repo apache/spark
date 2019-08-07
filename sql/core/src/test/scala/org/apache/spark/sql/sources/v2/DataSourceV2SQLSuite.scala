@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
 
 class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
@@ -69,6 +69,56 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+  }
+
+  test("DescribeTable using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
+      " USING foo" +
+      " PARTITIONED BY (id)")
+    val descriptionDf = spark.sql("DESCRIBE TABLE testcat.table_name")
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+      Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+    val description = descriptionDf.collect()
+    assert(description === Seq(
+      Row("id", "bigint", ""),
+      Row("data", "string", "")))
+  }
+
+  test("DescribeTable with v2 catalog when table does not exist.") {
+    intercept[AnalysisException] {
+      spark.sql("DESCRIBE TABLE testcat.table_name")
+    }
+  }
+
+  test("DescribeTable extended using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
+      " USING foo" +
+      " PARTITIONED BY (id)" +
+      " TBLPROPERTIES ('bar'='baz')")
+    val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType))
+      === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+    assert(descriptionDf.collect()
+      .map(_.toSeq)
+      .map(_.toArray.map(_.toString.trim)) === Array(
+      Array("id", "bigint", ""),
+      Array("data", "string", ""),
+      Array("", "", ""),
+      Array("Partitioning", "", ""),
+      Array("--------------", "", ""),
+      Array("Part 0", "id", ""),
+      Array("", "", ""),
+      Array("Table Property", "Value", ""),
+      Array("----------------", "-------", ""),
+      Array("bar", "baz", ""),
+      Array("provider", "foo", "")))
+
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
