@@ -136,11 +136,7 @@ private[spark] class AppStatusStore(
     store.read(classOf[StageDataWrapper], Array(stageId, stageAttemptId)).locality
   }
 
-  private def isInMemoryStore: Boolean = store match {
-    case _: InMemoryStore => true
-    case _: ElementTrackingStore => true // Live UI
-    case _ => false
-  }
+  private def isInMemoryStore: Boolean = store.isInstanceOf[InMemoryStore] || listener.isDefined
 
   /**
    * Calculates a summary of the task metrics for the given stage attempt, returning the
