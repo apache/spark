@@ -23,9 +23,8 @@ import org.apache.spark.sql.sources.CreatableRelationProvider
 /**
  * A trait that should be implemented by V1 DataSources that would like to leverage the DataSource
  * V2 write code paths. The CreatableRelationProvider will be used only to Append data. Other
- * instances of the [[WriteBuilder]] interface such as [[SupportsOverwrite]], [[SupportsTruncate]],
- * [[SupportsDynamicOverwrite]] should be extended as well to support additional operations other
- * than data appends.
+ * instances of the [[WriteBuilder]] interface such as [[SupportsOverwrite]], [[SupportsTruncate]]
+ * should be extended as well to support additional operations other than data appends.
  *
  * @since 3.0.0
  */
