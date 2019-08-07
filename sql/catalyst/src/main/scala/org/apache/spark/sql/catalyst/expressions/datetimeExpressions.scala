@@ -1842,9 +1842,9 @@ case class Millennium(child: Expression) extends UnaryExpression with ImplicitCa
   examples = """
     Examples:
       > SELECT _FUNC_('2000-01-19');
-       2
+       20
       > SELECT _FUNC_('2019-08-06');
-       3
+       21
   """,
   since = "3.0.0")
 case class Century(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
