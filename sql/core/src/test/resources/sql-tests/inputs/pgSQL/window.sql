@@ -67,6 +67,8 @@ SELECT lag(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHER
 
 -- [SPARK-28068] `lag` second argument must be a literal in Spark
 -- SELECT lag(ten, four) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
+
+-- [SPARK-28068] `lag` second argument must be a literal in Spark
 -- SELECT lag(ten, four, 0) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
 
 SELECT lead(ten) OVER (PARTITION BY four ORDER BY ten), ten, four FROM tenk1 WHERE unique2 < 10;
@@ -269,9 +271,9 @@ unique1, four
 FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
--- SELECT sum(unique1) over (w range between current row and unbounded following),
--- unique1, four
--- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
+SELECT sum(unique1) over (w range between current row and unbounded following),
+	unique1, four
+FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
 -- SELECT sum(unique1) over (w range between unbounded preceding and current row exclude current row),
@@ -304,7 +306,7 @@ FROM tenk1 WHERE unique1 < 10;
 
 CREATE TEMP VIEW v_window AS
 SELECT i.id, sum(i.id) over (order by i.id rows between 1 preceding and 1 following) as sum_rows
-FROM range(1, 10) i;
+FROM range(1, 11) i;
 
 SELECT * FROM v_window;
 
@@ -332,10 +334,10 @@ SELECT * FROM v_window;
 --   exclude no others) as sum_rows FROM generate_series(1, 10) i;
 -- SELECT * FROM v_window;
 
-CREATE OR REPLACE TEMP VIEW v_window AS
-SELECT i.id, sum(i.id) over (order by i.id range between 1 preceding and 1 following) as sum_rows FROM range(1, 10) i;
-
-SELECT * FROM v_window;
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- CREATE OR REPLACE TEMP VIEW v_window AS
+-- SELECT i.id, sum(i.id) over (order by i.id groups between 1 preceding and 1 following) as sum_rows FROM range(1, 11) i;
+-- SELECT * FROM v_window;
 
 DROP VIEW v_window;
 
@@ -423,10 +425,9 @@ FROM tenk1 WHERE unique1 < 10;
 -- nth_value(salary, 1) over(order by salary range between 1000 preceding and 1000 following),
 -- salary from empsalary;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
--- select last_value(salary) over(order by salary range between 1000 preceding and 1000 following),
--- lag(salary) over(order by salary range between 1000 preceding and 1000 following),
--- salary from empsalary;
+select last(salary) over(order by salary range between 1000 preceding and 1000 following),
+lag(salary) over(order by salary range between 1000 preceding and 1000 following),
+salary from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
 -- select first_value(salary) over(order by salary range between 1000 following and 3000 following
@@ -474,7 +475,7 @@ select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
 from
-  (select x.id, x.id as y from range(1,5) as x
+  (select x.id, x.id as y from range(1,6) as x
    union all select null, 42
    union all select null, 43) ss
 window w as
@@ -484,7 +485,7 @@ select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
 from
-  (select x.id, x.id as y from range(1,5) as x
+  (select x.id, x.id as y from range(1,6) as x
    union all select null, 42
    union all select null, 43) ss
 window w as
@@ -494,7 +495,7 @@ select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
 from
-  (select x.id, x.id as y from range(1,5) as x
+  (select x.id, x.id as y from range(1,6) as x
    union all select null, 42
    union all select null, 43) ss
 window w as
@@ -504,7 +505,7 @@ select ss.id, ss.y,
        first(ss.y) over w,
        last(ss.y) over w
 from
-  (select x.id, x.id as y from range(1,5) as x
+  (select x.id, x.id as y from range(1,6) as x
    union all select null, 42
    union all select null, 43) ss
 window w as
@@ -513,22 +514,22 @@ window w as
 -- Check overflow behavior for various integer sizes
 
 select x.id, last(x.id) over (order by x.id range between current row and 2147450884 following)
-from range(32764, 32766) x;
+from range(32764, 32767) x;
 
 select x.id, last(x.id) over (order by x.id desc range between current row and 2147450885 following)
-from range(-32766, -32764) x;
+from range(-32766, -32765) x;
 
 select x.id, last(x.id) over (order by x.id range between current row and 4 following)
-from range(2147483644, 2147483646) x;
+from range(2147483644, 2147483647) x;
 
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
-from range(-2147483646, -2147483644) x;
+from range(-2147483646, -2147483645) x;
 
 select x.id, last(x.id) over (order by x.id range between current row and 4 following)
-from range(9223372036854775804, 9223372036854775806) x;
+from range(9223372036854775804, 9223372036854775807) x;
 
 select x.id, last(x.id) over (order by x.id desc range between current row and 5 following)
-from range(-9223372036854775806, -9223372036854775804) x;
+from range(-9223372036854775806, -9223372036854775805) x;
 
 -- Test in_range for other numeric datatypes
 
@@ -548,9 +549,9 @@ insert into numerics values
 (5, 1.12, 1.12, 1.12),
 (6, 2, 2, 2),
 (7, 100, 100, 100);
---(8, 'infinity', 'infinity', '1000'),
---(9, 'NaN', 'NaN', 'NaN');
---(0, '-infinity', '-infinity', '-1000'),  -- numeric type lacks infinities
+-- (8, 'infinity', 'infinity', '1000'),
+-- (9, 'NaN', 'NaN', 'NaN');
+-- (0, '-infinity', '-infinity', '-1000'),  -- numeric type lacks infinities
 
 
 select id, f_float4, first(id) over w, last(id) over w
@@ -731,46 +732,55 @@ insert into datetimes values
 -- 	exclude ties), salary, enroll_date from empsalary;
 
 -- GROUPS tests
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
 
-SELECT sum(unique1) over (order by four range between unbounded preceding and current row),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
-SELECT sum(unique1) over (order by four range between unbounded preceding and unbounded following),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
-SELECT sum(unique1) over (order by four range between current row and unbounded following),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
-SELECT sum(unique1) over (order by four range between 1 preceding and unbounded following),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
-SELECT sum(unique1) over (order by four range between 1 following and unbounded following),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
-SELECT sum(unique1) over (order by four range between unbounded preceding and 2 following),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
-SELECT sum(unique1) over (order by four range between 2 preceding and 1 preceding),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
-
--- [SPARK-28428] Spark `exclude` always expecting `()`
--- SELECT sum(unique1) over (order by four range between 2 preceding and 1 following),
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between unbounded preceding and current row),
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
-SELECT sum(unique1) over (order by four range between 0 preceding and 0 following),
-unique1, four
-FROM tenk1 WHERE unique1 < 10;
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between unbounded preceding and unbounded following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between current row and unbounded following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between 1 preceding and unbounded following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between 1 following and unbounded following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between unbounded preceding and 2 following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 preceding),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (order by four groups between 0 preceding and 0 following),
+-- unique1, four
+-- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
--- SELECT sum(unique1) over (order by four range between 2 preceding and 1 following
+-- SELECT sum(unique1) over (order by four groups between 2 preceding and 1 following
 --   exclude current row), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
@@ -784,34 +794,40 @@ FROM tenk1 WHERE unique1 < 10;
 --   exclude ties), unique1, four
 -- FROM tenk1 WHERE unique1 < 10;
 
-SELECT sum(unique1) over (partition by ten
-  order by four range between 0 preceding and 0 following),unique1, four, ten
-FROM tenk1 WHERE unique1 < 10;
-
--- [SPARK-28428] Spark `exclude` always expecting `()`
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (partition by ten
---   order by four range between 0 preceding and 0 following exclude current row), unique1, four, ten
+--   order by four groups between 0 preceding and 0 following),unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (partition by ten
---   order by four range between 0 preceding and 0 following exclude group), unique1, four, ten
+--   order by four groups between 0 preceding and 0 following exclude current row), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- SELECT sum(unique1) over (partition by ten
---   order by four range between 0 preceding and 0 following exclude ties), unique1, four, ten
+--   order by four groups between 0 preceding and 0 following exclude group), unique1, four, ten
+-- FROM tenk1 WHERE unique1 < 10;
+
+-- [SPARK-28428] Spark `exclude` always expecting `()`
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- SELECT sum(unique1) over (partition by ten
+--   order by four groups between 0 preceding and 0 following exclude ties), unique1, four, ten
 -- FROM tenk1 WHERE unique1 < 10;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
 -- select first_value(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 -- lead(salary) over(order by enroll_date groups between 1 preceding and 1 following),
 -- nth_value(salary, 1) over(order by enroll_date groups between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
 
 -- [SPARK-28508] Support for range frame+row frame in the same query
--- select last(salary) over(order by enroll_date range between 1 preceding and 1 following),
--- lag(salary)         over(order by enroll_date range between 1 preceding and 1 following),
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- select last(salary) over(order by enroll_date groups between 1 preceding and 1 following),
+-- lag(salary)         over(order by enroll_date groups between 1 preceding and 1 following),
 -- salary, enroll_date from empsalary;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
@@ -823,37 +839,38 @@ FROM tenk1 WHERE unique1 < 10;
 -- salary, enroll_date from empsalary;
 
 -- [SPARK-28428] Spark `exclude` always expecting `()`
--- select last(salary) over(order by enroll_date range between 1 following and 3 following
+-- select last(salary) over(order by enroll_date groups between 1 following and 3 following
 --   exclude group),
--- lag(salary) over(order by enroll_date range between 1 following and 3 following exclude group),
+-- lag(salary) over(order by enroll_date groups between 1 following and 3 following exclude group),
 -- salary, enroll_date from empsalary;
 
 -- Show differences in offset interpretation between ROWS, RANGE, and GROUPS
 
 WITH cte (x) AS (
-        SELECT * FROM range(1, 35, 2)
+        SELECT * FROM range(1, 36, 2)
 )
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
 
 WITH cte (x) AS (
-        SELECT * FROM range(1, 35, 2)
+        SELECT * FROM range(1, 36, 2)
 )
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
-WITH cte (x) AS (
-        SELECT * FROM range(1, 35, 2)
-)
-SELECT x, (sum(x) over w)
-FROM cte
-WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- WITH cte (x) AS (
+--         SELECT * FROM range(1, 36, 2)
+-- )
+-- SELECT x, (sum(x) over w)
+-- FROM cte
+-- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
-        SELECT * FROM range(5, 49, 2)
+        SELECT * FROM range(5, 50, 2)
 )
 SELECT x, (sum(x) over w)
 FROM cte
@@ -861,19 +878,20 @@ WINDOW w AS (ORDER BY x rows between 1 preceding and 1 following);
 
 WITH cte (x) AS (
         select 1 union all select 1 union all select 1 union all
-        SELECT * FROM range(5, 49, 2)
+        SELECT * FROM range(5, 50, 2)
 )
 SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
 
-WITH cte (x) AS (
-        select 1 union all select 1 union all select 1 union all
-        SELECT * FROM range(5, 49, 2)
-)
-SELECT x, (sum(x) over w)
-FROM cte
-WINDOW w AS (ORDER BY x range between 1 preceding and 1 following);
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- WITH cte (x) AS (
+--         select 1 union all select 1 union all select 1 union all
+--         SELECT * FROM range(5, 50, 2)
+-- )
+-- SELECT x, (sum(x) over w)
+-- FROM cte
+-- WINDOW w AS (ORDER BY x groups between 1 preceding and 1 following);
 
 -- with UNION
 
@@ -884,7 +902,7 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 UNION ALL SEL
 create table t1 (f1 int, f2 int) using parquet;
 insert into t1 values (1,1),(1,2),(2,2);
 
-select f1, sum(f1) over (partition by f1 order by f1
+select f1, sum(f1) over (partition by f1
                          range between 1 preceding and 1 following)
 from t1 where f1 = f2; -- error, must have order by
 
@@ -905,9 +923,10 @@ select f1, sum(f1) over (partition by f1, f2 order by f2
 range between 1 following and 2 following)
 from t1 where f1 = f2;
 
-select f1, sum(f1) over (partition by f1,
-f1 order by f2 range between 1 preceding and 1 following)
-from t1 where f1 = f2;
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- select f1, sum(f1) over (partition by f1,
+-- groups between 1 preceding and 1 following)
+-- from t1 where f1 = f2;
 
 -- Since EXPLAIN clause rely on host physical location, it is commented out
 -- explain
@@ -915,17 +934,20 @@ from t1 where f1 = f2;
 -- range between 1 preceding and 1 following)
 -- from t1 where f1 = f2;
 
-select f1, sum(f1) over (partition by f1 order by f2
-range between 1 preceding and 1 following)
-from t1 where f1 = f2;
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- select f1, sum(f1) over (partition by f1 order by f2
+-- groups between 1 preceding and 1 following)
+-- from t1 where f1 = f2;
 
-select f1, sum(f1) over (partition by f1, f1 order by f2
-range between 2 preceding and 1 preceding)
-from t1 where f1 = f2;
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- select f1, sum(f1) over (partition by f1, f1 order by f2
+-- groups between 2 preceding and 1 preceding)
+-- from t1 where f1 = f2;
  
-select f1, sum(f1) over (partition by f1, f2 order by f2
-range between 1 following and 2 following)
-from t1 where f1 = f2;
+-- [SPARK-28648] Adds support to `groups` unit type in window clauses
+-- select f1, sum(f1) over (partition by f1, f2 order by f2
+-- groups between 1 following and 2 following)
+-- from t1 where f1 = f2;
 
 -- ordering by a non-integer constant is allowed
 
@@ -938,29 +960,30 @@ SELECT rank() OVER (ORDER BY length('abc'));
 -- some other errors
 SELECT * FROM empsalary WHERE row_number() OVER (ORDER BY salary) < 10;
 
--- [SPARK-28506] not handling usage of group function and window function at some conditions
--- SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
+SELECT * FROM empsalary INNER JOIN tenk1 ON row_number() OVER (ORDER BY salary) < 10;
 
--- [SPARK-28506] not handling usage of group function and window function at some conditions
--- SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
+SELECT rank() OVER (ORDER BY 1), count(*) FROM empsalary GROUP BY 1;
 
 -- Since random() result may change due to seed issues, the behavior is actually unstable
 SELECT * FROM rank() OVER (ORDER BY random());
 
+-- Original query: DELETE FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
 SELECT * FROM empsalary WHERE (rank() OVER (ORDER BY random())) > 10;
 
+-- Original query: DELETE FROM empsalary RETURNING rank() OVER (ORDER BY random());
 SELECT * FROM empsalary WHERE rank() OVER (ORDER BY random());
 
--- The original query currently outputs too many rows, so just count the output number
-SELECT count(*) FROM (select count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1));
+-- [SPARK-28645] Throw an error on window redefinition
+-- select count(*) OVER w FROM tenk1 WINDOW w AS (ORDER BY unique1), w AS (ORDER BY unique1);
 
--- The original query currently outputs too many rows, so just count the output number
-SELECT count(*) FROM (select rank() OVER (PARTITION BY four ORDER BY ten) FROM tenk1);
+select rank() OVER (PARTITION BY four, ORDER BY ten) FROM tenk1;
 
--- The original query currently outputs too many rows, so just count the output number
-SELECT count(*) FROM (select count() OVER () FROM tenk1);
+-- [SPARK-28646] Allow usage of `count` only for parameterless aggregate function
+-- select count() OVER () FROM tenk1;
 
--- [SPARK-28065] ntile only accepting positive (>0) values
+-- The output is the expected one: `range` is not a window or aggregate function.
+SELECT range(1, 100) OVER () FROM empsalary;
+
 SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- [SPARK-27951] ANSI SQL: NTH_VALUE function
@@ -1016,6 +1039,208 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 
 -- cleanup
 DROP TABLE empsalary;
+
+-- test user-defined window function with named args and default args
+-- CREATE FUNCTION nth_value_def(val anyelement, n integer = 1) RETURNS anyelement
+--   LANGUAGE internal WINDOW IMMUTABLE STRICT AS 'window_nth_value';
+
+-- SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
+--   FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+
+-- SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
+--   FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
+
+--
+-- Test the basic moving-aggregate machinery
+--
+
+-- create aggregates that record the series of transform calls (these are
+-- intentionally not true inverses)
+
+-- CREATE FUNCTION logging_sfunc_nonstrict(text, anyelement) RETURNS text AS
+-- $$ SELECT COALESCE($1, '') || '*' || quote_nullable($2) $$
+-- LANGUAGE SQL IMMUTABLE;
+
+-- CREATE FUNCTION logging_msfunc_nonstrict(text, anyelement) RETURNS text AS
+-- $$ SELECT COALESCE($1, '') || '+' || quote_nullable($2) $$
+-- LANGUAGE SQL IMMUTABLE;
+
+-- CREATE FUNCTION logging_minvfunc_nonstrict(text, anyelement) RETURNS text AS
+-- $$ SELECT $1 || '-' || quote_nullable($2) $$
+-- LANGUAGE SQL IMMUTABLE;
+
+-- CREATE AGGREGATE logging_agg_nonstrict (anyelement)
+-- (
+-- 	stype = text,
+-- 	sfunc = logging_sfunc_nonstrict,
+-- 	mstype = text,
+-- 	msfunc = logging_msfunc_nonstrict,
+-- 	minvfunc = logging_minvfunc_nonstrict
+-- );
+
+-- CREATE AGGREGATE logging_agg_nonstrict_initcond (anyelement)
+-- (
+-- 	stype = text,
+-- 	sfunc = logging_sfunc_nonstrict,
+-- 	mstype = text,
+-- 	msfunc = logging_msfunc_nonstrict,
+-- 	minvfunc = logging_minvfunc_nonstrict,
+-- 	initcond = 'I',
+-- 	minitcond = 'MI'
+-- );
+
+-- CREATE FUNCTION logging_sfunc_strict(text, anyelement) RETURNS text AS
+-- $$ SELECT $1 || '*' || quote_nullable($2) $$
+-- LANGUAGE SQL STRICT IMMUTABLE;
+
+-- CREATE FUNCTION logging_msfunc_strict(text, anyelement) RETURNS text AS
+-- $$ SELECT $1 || '+' || quote_nullable($2) $$
+-- LANGUAGE SQL STRICT IMMUTABLE;
+
+-- CREATE FUNCTION logging_minvfunc_strict(text, anyelement) RETURNS text AS
+-- $$ SELECT $1 || '-' || quote_nullable($2) $$
+-- LANGUAGE SQL STRICT IMMUTABLE;
+
+-- CREATE AGGREGATE logging_agg_strict (text)
+-- (
+-- 	stype = text,
+-- 	sfunc = logging_sfunc_strict,
+-- 	mstype = text,
+-- 	msfunc = logging_msfunc_strict,
+-- 	minvfunc = logging_minvfunc_strict
+-- );
+
+-- CREATE AGGREGATE logging_agg_strict_initcond (anyelement)
+-- (
+-- 	stype = text,
+-- 	sfunc = logging_sfunc_strict,
+-- 	mstype = text,
+-- 	msfunc = logging_msfunc_strict,
+-- 	minvfunc = logging_minvfunc_strict,
+-- 	initcond = 'I',
+-- 	minitcond = 'MI'
+-- );
+
+-- test strict and non-strict cases
+-- SELECT
+-- 	p::text || ',' || i::text || ':' || COALESCE(v::text, 'NULL') AS row,
+-- 	logging_agg_nonstrict(v) over wnd as nstrict,
+-- 	logging_agg_nonstrict_initcond(v) over wnd as nstrict_init,
+-- 	logging_agg_strict(v::text) over wnd as strict,
+-- 	logging_agg_strict_initcond(v) over wnd as strict_init
+-- FROM (VALUES
+-- 	(1, 1, NULL),
+-- 	(1, 2, 'a'),
+-- 	(1, 3, 'b'),
+-- 	(1, 4, NULL),
+-- 	(1, 5, NULL),
+-- 	(1, 6, 'c'),
+-- 	(2, 1, NULL),
+-- 	(2, 2, 'x'),
+-- 	(3, 1, 'z')
+-- ) AS t(p, i, v)
+-- WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+-- ORDER BY p, i;
+
+-- and again, but with filter
+-- SELECT
+-- 	p::text || ',' || i::text || ':' ||
+-- 		CASE WHEN f THEN COALESCE(v::text, 'NULL') ELSE '-' END as row,
+-- 	logging_agg_nonstrict(v) filter(where f) over wnd as nstrict_filt,
+-- 	logging_agg_nonstrict_initcond(v) filter(where f) over wnd as nstrict_init_filt,
+-- 	logging_agg_strict(v::text) filter(where f) over wnd as strict_filt,
+-- 	logging_agg_strict_initcond(v) filter(where f) over wnd as strict_init_filt
+-- FROM (VALUES
+-- 	(1, 1, true,  NULL),
+-- 	(1, 2, false, 'a'),
+-- 	(1, 3, true,  'b'),
+-- 	(1, 4, false, NULL),
+-- 	(1, 5, false, NULL),
+-- 	(1, 6, false, 'c'),
+-- 	(2, 1, false, NULL),
+-- 	(2, 2, true,  'x'),
+-- 	(3, 1, true,  'z')
+-- ) AS t(p, i, f, v)
+-- WINDOW wnd AS (PARTITION BY p ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+-- ORDER BY p, i;
+
+-- test that volatile arguments disable moving-aggregate mode
+-- SELECT
+-- 	i::text || ':' || COALESCE(v::text, 'NULL') as row,
+-- 	logging_agg_strict(v::text)
+-- 		over wnd as inverse,
+-- 	logging_agg_strict(v::text || CASE WHEN random() < 0 then '?' ELSE '' END)
+-- 		over wnd as noinverse
+-- FROM (VALUES
+-- 	(1, 'a'),
+-- 	(2, 'b'),
+-- 	(3, 'c')
+-- ) AS t(i, v)
+-- WINDOW wnd AS (ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+-- ORDER BY i;
+
+-- SELECT
+-- 	i::text || ':' || COALESCE(v::text, 'NULL') as row,
+-- 	logging_agg_strict(v::text) filter(where true)
+-- 		over wnd as inverse,
+-- 	logging_agg_strict(v::text) filter(where random() >= 0)
+-- 		over wnd as noinverse
+-- FROM (VALUES
+-- 	(1, 'a'),
+-- 	(2, 'b'),
+-- 	(3, 'c')
+-- ) AS t(i, v)
+-- WINDOW wnd AS (ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+-- ORDER BY i;
+
+-- test that non-overlapping windows don't use inverse transitions
+-- SELECT
+-- 	logging_agg_strict(v::text) OVER wnd
+-- FROM (VALUES
+-- 	(1, 'a'),
+-- 	(2, 'b'),
+-- 	(3, 'c')
+-- ) AS t(i, v)
+-- WINDOW wnd AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
+-- ORDER BY i;
+
+-- test that returning NULL from the inverse transition functions
+-- restarts the aggregation from scratch. The second aggregate is supposed
+-- to test cases where only some aggregates restart, the third one checks
+-- that one aggregate restarting doesn't cause others to restart.
+
+-- CREATE FUNCTION sum_int_randrestart_minvfunc(int4, int4) RETURNS int4 AS
+-- $$ SELECT CASE WHEN random() < 0.2 THEN NULL ELSE $1 - $2 END $$
+-- LANGUAGE SQL STRICT;
+
+-- CREATE AGGREGATE sum_int_randomrestart (int4)
+-- (
+-- 	stype = int4,
+-- 	sfunc = int4pl,
+-- 	mstype = int4,
+-- 	msfunc = int4pl,
+-- 	minvfunc = sum_int_randrestart_minvfunc
+-- );
+
+-- WITH
+-- vs AS (
+-- 	SELECT i, (random() * 100)::int4 AS v
+-- 	FROM generate_series(1, 100) AS i
+-- ),
+-- sum_following AS (
+-- 	SELECT i, SUM(v) OVER
+-- 		(ORDER BY i DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS s
+-- 	FROM vs
+-- )
+-- SELECT DISTINCT
+-- 	sum_following.s = sum_int_randomrestart(v) OVER fwd AS eq1,
+-- 	-sum_following.s = sum_int_randomrestart(-v) OVER fwd AS eq2,
+-- 	100*3+(vs.i-1)*3 = length(logging_agg_nonstrict(''::text) OVER fwd) AS eq3
+-- FROM vs
+-- JOIN sum_following ON sum_following.i = vs.i
+-- WINDOW fwd AS (
+-- 	ORDER BY vs.i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+-- );
 
 --
 -- Test various built-in aggregates that have moving-aggregate support
@@ -1141,6 +1366,7 @@ SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWI
 SELECT STDDEV(n) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
   FROM (VALUES(0,NULL),(1,600),(2,470),(3,170),(4,430),(5,300)) r(i,n);
 
+-- test that inverse transition functions work with various frame options
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
   FROM (VALUES(1,1),(2,2),(3,NULL),(4,NULL)) t(i,v);
 
