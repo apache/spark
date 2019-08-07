@@ -67,8 +67,8 @@ class PlanResolutionSuite extends AnalysisTest {
             throw new CatalogNotFoundException(s"No such catalog: $name")
         }
       })
-      when(manager.defaultCatalog()).thenReturn(Some(testCat))
-      when(manager.v2SessionCatalog()).thenCallRealMethod()
+      when(manager.defaultCatalog).thenReturn(Some(testCat))
+      when(manager.v2SessionCatalog).thenCallRealMethod()
       manager
     }
   }
@@ -86,8 +86,8 @@ class PlanResolutionSuite extends AnalysisTest {
             throw new CatalogNotFoundException(s"No such catalog: $name")
         }
       })
-      when(manager.defaultCatalog()).thenReturn(None)
-      when(manager.v2SessionCatalog()).thenCallRealMethod()
+      when(manager.defaultCatalog).thenReturn(None)
+      when(manager.v2SessionCatalog).thenCallRealMethod()
       manager
     }
   }

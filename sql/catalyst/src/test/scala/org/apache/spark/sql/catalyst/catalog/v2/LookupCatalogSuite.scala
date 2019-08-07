@@ -44,7 +44,7 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
       val name = invocation.getArgument[String](0)
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
-    when(manager.defaultCatalog()).thenReturn(None)
+    when(manager.defaultCatalog).thenReturn(None)
     manager
   }
 
@@ -136,7 +136,7 @@ class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog wit
       val name = invocation.getArgument[String](0)
       catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
     })
-    when(manager.defaultCatalog()).thenReturn(catalogs.get("prod"))
+    when(manager.defaultCatalog).thenReturn(catalogs.get("prod"))
     manager
   }
 

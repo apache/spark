@@ -37,7 +37,7 @@ trait LookupCatalog extends Logging {
    * If this is None and a table's provider (source) is a v2 provider, the v2 session catalog will
    * be used.
    */
-  def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog()
+  def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
 
   /**
    * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
@@ -45,7 +45,7 @@ trait LookupCatalog extends Logging {
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  def sessionCatalog: Option[CatalogPlugin] = catalogManager.v2SessionCatalog()
+  def sessionCatalog: Option[CatalogPlugin] = catalogManager.v2SessionCatalog
 
   /**
    * Extract catalog plugin and remaining identifier names.

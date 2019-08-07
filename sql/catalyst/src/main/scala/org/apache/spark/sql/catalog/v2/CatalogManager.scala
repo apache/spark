@@ -44,7 +44,7 @@ class CatalogManager(conf: SQLConf) extends Logging {
   /**
    * Returns the default catalog specified by config.
    */
-  def defaultCatalog(): Option[CatalogPlugin] = {
+  def defaultCatalog: Option[CatalogPlugin] = {
     conf.defaultV2Catalog.flatMap { catalogName =>
       try {
         Some(catalog(catalogName))
@@ -56,7 +56,7 @@ class CatalogManager(conf: SQLConf) extends Logging {
     }
   }
 
-  def v2SessionCatalog(): Option[CatalogPlugin] = {
+  def v2SessionCatalog: Option[CatalogPlugin] = {
     try {
       Some(catalog(CatalogManager.SESSION_CATALOG_NAME))
     } catch {
@@ -67,7 +67,7 @@ class CatalogManager(conf: SQLConf) extends Logging {
   }
 
   // Clear all the registered catalogs. Only used in tests.
-  def reset(): Unit = catalogs.clear()
+  private[sql] def reset(): Unit = catalogs.clear()
 }
 
 object CatalogManager {
