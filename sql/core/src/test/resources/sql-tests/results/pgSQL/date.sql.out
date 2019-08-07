@@ -452,17 +452,15 @@ struct<DATE '4714-11-23':date>
 
 
 -- !query 44
--- out of range
 SELECT date '5874897-12-31'
 -- !query 44 schema
 struct<>
 -- !query 44 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot parse the DATE value: 5874897-12-31(line 2, pos 7)
+Cannot parse the DATE value: 5874897-12-31(line 1, pos 7)
 
 == SQL ==
--- out of range
 SELECT date '5874897-12-31'
 -------^^^
 
@@ -482,10 +480,6 @@ SELECT date '5874898-01-01'
 
 
 -- !query 46
--- out of range
-
-
-
 SELECT f1 - date '2000-01-01' AS `Days From 2K` FROM DATE_TBL
 -- !query 46 schema
 struct<Days From 2K:int>
