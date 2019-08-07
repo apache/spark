@@ -1066,7 +1066,7 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
-      "spark.sql.streaming.disabledV2MicroBatchReaders",
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key,
       classOf[KafkaSourceProvider].getCanonicalName)
   }
 

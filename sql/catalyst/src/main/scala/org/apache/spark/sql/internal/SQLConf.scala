@@ -234,6 +234,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED =
+    buildConf("spark.sql.inMemoryTableScanStatistics.enable")
+      .internal()
+      .doc("When true, enable in-memory table scan accumulators.")
+      .booleanConf
+      .createWithDefault(false)
+
   val CACHE_VECTORIZED_READER_ENABLED =
     buildConf("spark.sql.inMemoryColumnarStorage.enableVectorizedReader")
       .doc("Enables vectorized reader for columnar caching.")
@@ -299,12 +306,6 @@ object SQLConf {
       .doc("The target post-shuffle input size in bytes of a task.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(64 * 1024 * 1024)
-
-  val RUNTIME_REOPTIMIZATION_ENABLED =
-    buildConf("spark.sql.runtime.reoptimization.enabled")
-      .doc("When true, enable runtime query re-optimization.")
-      .booleanConf
-      .createWithDefault(false)
 
   val ADAPTIVE_EXECUTION_ENABLED = buildConf("spark.sql.adaptive.enabled")
     .doc("When true, enable adaptive query execution.")
@@ -1030,6 +1031,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ENABLE_VECTORIZED_HASH_MAP =
+    buildConf("spark.sql.codegen.aggregate.map.vectorized.enable")
+      .internal()
+      .doc("Enable vectorized aggregate hash map. This is for testing/benchmarking only.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
       .internal()
@@ -1516,6 +1524,12 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .doc("When true, will perform integral division with the / operator " +
+      "if both sides are integral types.")
+    .booleanConf
+    .createWithDefault(false)
+
   val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
     buildConf("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation")
     .internal()
@@ -1642,6 +1656,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val NESTED_PRUNING_ON_EXPRESSIONS =
+    buildConf("spark.sql.optimizer.expression.nestedPruning.enabled")
+      .internal()
+      .doc("Prune nested fields from expressions in an operator which are unnecessary in " +
+        "satisfying a query. Note that this optimization doesn't prune nested fields from " +
+        "physical data source scanning. For pruning nested fields from scanning, please use " +
+        "`spark.sql.optimizer.nestedSchemaPruning.enabled` config.")
+      .booleanConf
+      .createWithDefault(false)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()
@@ -1756,6 +1780,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW =
+    buildConf("spark.sql.arithmeticOperations.failOnOverFlow")
+      .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
+        "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
+        "result is returned.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE =
     buildConf("spark.sql.legacy.parser.havingWithoutGroupByAsWhere")
       .internal()
@@ -1833,8 +1866,19 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
+      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+      .stringConf
+      .createWithDefault("org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog")
+
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_CTE_PRECEDENCE_ENABLED = buildConf("spark.sql.legacy.ctePrecedence.enabled")
+    .internal()
+    .doc("When true, outer CTE definitions takes precedence over inner definitions.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1948,10 +1992,7 @@ class SQLConf extends Serializable with Logging {
   def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  def runtimeReoptimizationEnabled: Boolean = getConf(RUNTIME_REOPTIMIZATION_ENABLED)
-
-  def adaptiveExecutionEnabled: Boolean =
-    getConf(ADAPTIVE_EXECUTION_ENABLED) && !getConf(RUNTIME_REOPTIMIZATION_ENABLED)
+  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 
@@ -2113,6 +2154,8 @@ class SQLConf extends Serializable with Logging {
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
+  def inMemoryTableScanStatisticsEnabled: Boolean = getConf(IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED)
+
   def offHeapColumnVectorEnabled: Boolean = getConf(COLUMN_VECTOR_OFFHEAP_ENABLED)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
@@ -2151,6 +2194,8 @@ class SQLConf extends Serializable with Logging {
   def runSQLonFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
+
+  def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
 
@@ -2251,6 +2296,8 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
+  def arithmeticOperationsFailOnOverflow: Boolean = getConf(ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW)
+
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
   def continuousStreamingEpochBacklogQueueSize: Int =
@@ -2274,6 +2321,8 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
+  def preferIntegralDivision: Boolean = getConf(PREFER_INTEGRAL_DIVISION)
+
   def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
     getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
@@ -2286,6 +2335,8 @@ class SQLConf extends Serializable with Logging {
 
   def serializerNestedSchemaPruningEnabled: Boolean =
     getConf(SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED)
+
+  def nestedPruningOnExpressions: Boolean = getConf(NESTED_PRUNING_ON_EXPRESSIONS)
 
   def csvColumnPruning: Boolean = getConf(SQLConf.CSV_PARSER_COLUMN_PRUNING)
 

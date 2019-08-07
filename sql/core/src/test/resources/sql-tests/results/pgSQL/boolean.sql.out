@@ -19,7 +19,7 @@ true
 
 
 -- !query 2
-SELECT false AS false
+SELECT false AS `false`
 -- !query 2 schema
 struct<false:boolean>
 -- !query 2 output
@@ -35,7 +35,7 @@ true
 
 
 -- !query 4
-SELECT boolean('   f           ') AS false
+SELECT boolean('   f           ') AS `false`
 -- !query 4 schema
 struct<false:boolean>
 -- !query 4 output
@@ -59,7 +59,7 @@ NULL
 
 
 -- !query 7
-SELECT boolean('false') AS false
+SELECT boolean('false') AS `false`
 -- !query 7 schema
 struct<false:boolean>
 -- !query 7 output
@@ -99,7 +99,7 @@ NULL
 
 
 -- !query 12
-SELECT boolean('n') AS false
+SELECT boolean('n') AS `false`
 -- !query 12 schema
 struct<false:boolean>
 -- !query 12 output
@@ -107,7 +107,7 @@ false
 
 
 -- !query 13
-SELECT boolean('no') AS false
+SELECT boolean('no') AS `false`
 -- !query 13 schema
 struct<false:boolean>
 -- !query 13 output
@@ -131,7 +131,7 @@ NULL
 
 
 -- !query 16
-SELECT boolean('off') AS false
+SELECT boolean('off') AS `false`
 -- !query 16 schema
 struct<false:boolean>
 -- !query 16 output
@@ -139,7 +139,7 @@ NULL
 
 
 -- !query 17
-SELECT boolean('of') AS false
+SELECT boolean('of') AS `false`
 -- !query 17 schema
 struct<false:boolean>
 -- !query 17 output
@@ -187,7 +187,7 @@ NULL
 
 
 -- !query 23
-SELECT boolean('0') AS false
+SELECT boolean('0') AS `false`
 -- !query 23 schema
 struct<false:boolean>
 -- !query 23 output
@@ -219,7 +219,7 @@ true
 
 
 -- !query 27
-SELECT boolean('t') and boolean('f') AS false
+SELECT boolean('t') and boolean('f') AS `false`
 -- !query 27 schema
 struct<false:boolean>
 -- !query 27 output
@@ -235,7 +235,7 @@ true
 
 
 -- !query 29
-SELECT boolean('t') = boolean('f') AS false
+SELECT boolean('t') = boolean('f') AS `false`
 -- !query 29 schema
 struct<false:boolean>
 -- !query 29 output
@@ -283,7 +283,7 @@ true
 
 
 -- !query 35
-SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS false
+SELECT boolean(string('TrUe')) AS true, boolean(string('fAlse')) AS `false`
 -- !query 35 schema
 struct<true:boolean,false:boolean>
 -- !query 35 output
@@ -292,7 +292,7 @@ true	false
 
 -- !query 36
 SELECT boolean(string('    true   ')) AS true,
-       boolean(string('     FALSE')) AS false
+       boolean(string('     FALSE')) AS `false`
 -- !query 36 schema
 struct<true:boolean,false:boolean>
 -- !query 36 output
@@ -300,7 +300,7 @@ NULL	NULL
 
 
 -- !query 37
-SELECT string(boolean(true)) AS true, string(boolean(false)) AS false
+SELECT string(boolean(true)) AS true, string(boolean(false)) AS `false`
 -- !query 37 schema
 struct<true:string,false:string>
 -- !query 37 output

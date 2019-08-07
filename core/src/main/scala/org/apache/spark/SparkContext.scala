@@ -42,6 +42,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat, WholeTextFileInputFormat}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -516,7 +517,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     // create and start the heartbeater for collecting memory metrics
-    _heartbeater = new Heartbeater(env.memoryManager,
+    _heartbeater = new Heartbeater(
       () => SparkContext.this.reportHeartBeat(),
       "driver-heartbeater",
       conf.get(EXECUTOR_HEARTBEAT_INTERVAL))
@@ -553,22 +554,6 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
 
-    // Optionally scale number of executors dynamically based on workload. Exposed for testing.
-    val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
-    _executorAllocationManager =
-      if (dynamicAllocationEnabled) {
-        schedulerBackend match {
-          case b: ExecutorAllocationClient =>
-            Some(new ExecutorAllocationManager(
-              schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf))
-          case _ =>
-            None
-        }
-      } else {
-        None
-      }
-    _executorAllocationManager.foreach(_.start())
-
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
         Some(new ContextCleaner(this))
@@ -576,6 +561,22 @@ class SparkContext(config: SparkConf) extends Logging {
         None
       }
     _cleaner.foreach(_.start())
+
+    val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(_conf)
+    _executorAllocationManager =
+      if (dynamicAllocationEnabled) {
+        schedulerBackend match {
+          case b: ExecutorAllocationClient =>
+            Some(new ExecutorAllocationManager(
+              schedulerBackend.asInstanceOf[ExecutorAllocationClient], listenerBus, _conf,
+              cleaner = cleaner))
+          case _ =>
+            None
+        }
+      } else {
+        None
+      }
+    _executorAllocationManager.foreach(_.start())
 
     setupAndStartListenerBus()
     postEnvironmentUpdate()
@@ -1791,7 +1792,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note A path can be added only once. Subsequent additions of the same path are ignored.
    */
   def addJar(path: String) {
-    def addJarFile(file: File): String = {
+    def addLocalJarFile(file: File): String = {
       try {
         if (!file.exists()) {
           throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
@@ -1808,12 +1809,36 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
+    def checkRemoteJarFile(path: String): String = {
+      val hadoopPath = new Path(path)
+      val scheme = new URI(path).getScheme
+      if (!Array("http", "https", "ftp").contains(scheme)) {
+        try {
+          val fs = hadoopPath.getFileSystem(hadoopConfiguration)
+          if (!fs.exists(hadoopPath)) {
+            throw new FileNotFoundException(s"Jar ${path} not found")
+          }
+          if (fs.isDirectory(hadoopPath)) {
+            throw new IllegalArgumentException(
+              s"Directory ${path} is not allowed for addJar")
+          }
+          path
+        } catch {
+          case NonFatal(e) =>
+            logError(s"Failed to add $path to Spark environment", e)
+            null
+        }
+      } else {
+        path
+      }
+    }
+
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
       val key = if (path.contains("\\")) {
         // For local paths with backslashes on Windows, URI throws an exception
-        addJarFile(new File(path))
+        addLocalJarFile(new File(path))
       } else {
         val uri = new URI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
@@ -1822,12 +1847,12 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
-            addJarFile(new File(uri.getRawPath))
+            addLocalJarFile(new File(uri.getRawPath))
           // A JAR file which exists only on the driver node
-          case "file" => addJarFile(new File(uri.getPath))
+          case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
           case "local" => "file:" + uri.getPath
-          case _ => path
+          case _ => checkRemoteJarFile(path)
         }
       }
       if (key != null) {
@@ -2401,10 +2426,13 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Reports heartbeat metrics for the driver. */
   private def reportHeartBeat(): Unit = {
-    val driverUpdates = _heartbeater.getCurrentMetrics()
+    val currentMetrics = ExecutorMetrics.getCurrentMetrics(env.memoryManager)
+    val driverUpdates = new HashMap[(Int, Int), ExecutorMetrics]
+    // In the driver, we do not track per-stage metrics, so use a dummy stage for the key
+    driverUpdates.put(EventLoggingListener.DRIVER_STAGE_KEY, new ExecutorMetrics(currentMetrics))
     val accumUpdates = new Array[(Long, Int, Int, Seq[AccumulableInfo])](0)
     listenerBus.post(SparkListenerExecutorMetricsUpdate("driver", accumUpdates,
-      Some(driverUpdates)))
+      driverUpdates))
   }
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this

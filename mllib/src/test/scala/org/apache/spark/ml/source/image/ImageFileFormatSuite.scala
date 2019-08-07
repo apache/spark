@@ -32,6 +32,24 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
   private lazy val imagePath = "../data/mllib/images/partitioned"
   private lazy val recursiveImagePath = "../data/mllib/images"
 
+  test("Smoke test: create basic ImageSchema dataframe") {
+    val origin = "path"
+    val width = 1
+    val height = 1
+    val nChannels = 3
+    val data = Array[Byte](0, 0, 0)
+    val mode = ocvTypes("CV_8UC3")
+
+    // Internal Row corresponds to image StructType
+    val rows = Seq(Row(Row(origin, height, width, nChannels, mode, data)),
+      Row(Row(null, height, width, nChannels, mode, data)))
+    val rdd = sc.makeRDD(rows)
+    val df = spark.createDataFrame(rdd, imageSchema)
+
+    assert(df.count === 2, "incorrect image count")
+    assert(df.schema("image").dataType == columnSchema, "data do not fit ImageSchema")
+  }
+
   test("image datasource count test") {
     val df1 = spark.read.format("image").load(imagePath)
     assert(df1.count === 9)

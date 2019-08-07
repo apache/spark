@@ -58,8 +58,15 @@ private[hive] class SparkGetColumnsOperation(
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    super.close()
+    HiveThriftServer2.listener.onOperationClosed(statementId)
+  }
+
   override def runInternal(): Unit = {
-    val statementId = UUID.randomUUID().toString
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"

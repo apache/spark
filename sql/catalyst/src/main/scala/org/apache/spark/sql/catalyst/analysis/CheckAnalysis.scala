@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -351,6 +352,59 @@ trait CheckAnalysis extends PredicateHelper {
                     "as it may truncate\n")
                 }
               case _ =>
+            }
+
+          case alter: AlterTable if alter.childrenResolved =>
+            val table = alter.table
+            def findField(operation: String, fieldName: Array[String]): StructField = {
+              // include collections because structs nested in maps and arrays may be altered
+              val field = table.schema.findNestedField(fieldName, includeCollections = true)
+              if (field.isEmpty) {
+                throw new AnalysisException(
+                  s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
+              }
+              field.get
+            }
+
+            alter.changes.foreach {
+              case add: AddColumn =>
+                val parent = add.fieldNames.init
+                if (parent.nonEmpty) {
+                  findField("add to", parent)
+                }
+              case update: UpdateColumnType =>
+                val field = findField("update", update.fieldNames)
+                val fieldName = update.fieldNames.quoted
+                update.newDataType match {
+                  case _: StructType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a struct by adding, deleting, or updating its fields")
+                  case _: MapType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a map by updating $fieldName.key or $fieldName.value")
+                  case _: ArrayType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update the element by updating $fieldName.element")
+                  case _: AtomicType =>
+                    // update is okay
+                }
+                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+                  throw new AnalysisException(
+                    s"Cannot update ${table.name} field $fieldName: " +
+                        s"${field.dataType.simpleString} cannot be cast to " +
+                        s"${update.newDataType.simpleString}")
+                }
+              case rename: RenameColumn =>
+                findField("rename", rename.fieldNames)
+              case update: UpdateColumnComment =>
+                findField("update", update.fieldNames)
+              case delete: DeleteColumn =>
+                findField("delete", delete.fieldNames)
+              case _ =>
+              // no validation needed for set and remove property
             }
 
           case _ => // Fallbacks to the following checks

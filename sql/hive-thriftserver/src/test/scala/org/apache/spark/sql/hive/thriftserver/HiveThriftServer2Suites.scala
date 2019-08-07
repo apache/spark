@@ -44,6 +44,7 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -536,9 +537,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.5"))
       } else {
-        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
     }
   }
@@ -553,9 +554,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       }
 
       if (HiveUtils.isHive23) {
-        assert(conf.get("spark.sql.hive.version") === Some("2.3.5"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("2.3.5"))
       } else {
-        assert(conf.get("spark.sql.hive.version") === Some("1.2.1"))
+        assert(conf.get(HiveUtils.FAKE_HIVE_VERSION.key) === Some("1.2.1"))
       }
     }
   }
@@ -653,13 +654,21 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(resultSet.getString(1) === "4.56")
     }
   }
+
+  test("SPARK-28463: Thriftserver throws BigDecimal incompatible with HiveDecimal") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT CAST(1 AS decimal(38, 18))")
+      assert(rs.next())
+      assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.000000000000000000"))
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def extraConf: Seq[String] =
-    "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
+    s"--conf ${HIVE_THRIFT_SERVER_SINGLESESSION.key}=true" :: Nil
 
   test("share the temporary functions across JDBC connections") {
     withMultipleConnectionJdbcStatement()(

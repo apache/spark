@@ -24,6 +24,7 @@ import org.apache.spark.metrics.GarbageCollectionMetrics
 import org.apache.spark.network.shuffle.Constants
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{EventLoggingListener, SchedulingMode}
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 import org.apache.spark.storage.{DefaultTopologyMapper, RandomBlockReplicationPolicy}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -48,7 +49,10 @@ package object config {
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
 
   private[spark] val DRIVER_JAVA_OPTIONS =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+      .withPrepended(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
+      .stringConf
+      .createOptional
 
   private[spark] val DRIVER_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH).stringConf.createOptional
@@ -173,8 +177,16 @@ package object config {
   private[spark] val EXECUTOR_HEARTBEAT_MAX_FAILURES =
     ConfigBuilder("spark.executor.heartbeat.maxFailures").internal().intConf.createWithDefault(60)
 
+  private[spark] val EXECUTOR_METRICS_POLLING_INTERVAL =
+    ConfigBuilder("spark.executor.metrics.pollingInterval")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("0")
+
   private[spark] val EXECUTOR_JAVA_OPTIONS =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
+      .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)
+      .stringConf
+      .createOptional
 
   private[spark] val EXECUTOR_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH).stringConf.createOptional
@@ -362,6 +374,17 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
+
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING =
+    ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DYN_ALLOCATION_SHUFFLE_TIMEOUT =
+    ConfigBuilder("spark.dynamicAllocation.shuffleTimeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefault(Long.MaxValue)
 
   private[spark] val DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.schedulerBacklogTimeout")
@@ -794,6 +817,12 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val SHUFFLE_IO_PLUGIN_CLASS =
+    ConfigBuilder("spark.shuffle.sort.io.plugin.class")
+      .doc("Name of the class to use for shuffle IO.")
+      .stringConf
+      .createWithDefault(classOf[LocalDiskShuffleDataIO].getName)
+
   private[spark] val SHUFFLE_FILE_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.file.buffer")
       .doc("Size of the in-memory buffer for each shuffle file output stream, in KiB unless " +
@@ -1180,6 +1209,14 @@ package object config {
       .intConf
       .createWithDefault(1)
 
+  private[spark] val IO_WARNING_LARGEFILETHRESHOLD =
+    ConfigBuilder("spark.io.warning.largeFileThreshold")
+      .internal()
+      .doc("When spark loading one single large file, if file size exceed this " +
+        "threshold, then log warning with possible reasons.")
+      .longConf
+      .createWithDefault(1024 * 1024 * 1024)
+
   private[spark] val EVENT_LOG_COMPRESSION_CODEC =
     ConfigBuilder("spark.eventLog.compression.codec")
       .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
@@ -1239,6 +1276,14 @@ package object config {
       "more data. It's possible to disable it if the network has other " +
       "mechanisms to guarantee data won't be corrupted during broadcast")
     .booleanConf.createWithDefault(true)
+
+  private[spark] val BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD =
+    ConfigBuilder("spark.broadcast.UDFCompressionThreshold")
+      .doc("The threshold at which user-defined functions (UDFs) and Python RDD commands " +
+        "are compressed by broadcast in bytes unless otherwise specified")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v >= 0, "The threshold should be non-negative.")
+      .createWithDefault(1L * 1024 * 1024)
 
   private[spark] val RDD_COMPRESS = ConfigBuilder("spark.rdd.compress")
     .doc("Whether to compress serialized RDD partitions " +

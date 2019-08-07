@@ -44,7 +44,7 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
 
   override def apply(plan: SparkPlan): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
-    case _ if conf.runtimeReoptimizationEnabled && supportAdaptive(plan) =>
+    case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan) =>
       try {
         // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse. Fall
         // back to non-adaptive mode if adaptive execution is supported in any of the sub-queries.
@@ -57,13 +57,13 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
         AdaptiveSparkPlanExec(newPlan, session, subqueryMap, stageCache)
       } catch {
         case SubqueryAdaptiveNotSupportedException(subquery) =>
-          logWarning(s"${SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key} is enabled " +
+          logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
             s"but is not supported for sub-query: $subquery.")
           plan
       }
     case _ =>
-      if (conf.runtimeReoptimizationEnabled) {
-        logWarning(s"${SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key} is enabled " +
+      if (conf.adaptiveExecutionEnabled) {
+        logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
           s"but is not supported for query: $plan.")
       }
       plan

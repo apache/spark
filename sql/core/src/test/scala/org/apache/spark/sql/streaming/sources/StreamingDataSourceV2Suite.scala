@@ -24,8 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{RateStreamOffset, Sink, StreamingQueryWrapper}
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.{ContinuousTrigger, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2._
@@ -242,7 +241,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
     val fakeCheckpoint = Utils.createTempDir()
-    spark.conf.set("spark.sql.streaming.checkpointLocation", fakeCheckpoint.getCanonicalPath)
+    spark.conf.set(SQLConf.CHECKPOINT_LOCATION.key, fakeCheckpoint.getCanonicalPath)
   }
 
   override def afterEach(): Unit = {

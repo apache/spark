@@ -134,8 +134,10 @@ class RateStreamContinuousPartitionReader(
     nextReadTime += readTimeIncrement
 
     try {
-      while (System.currentTimeMillis < nextReadTime) {
-        Thread.sleep(nextReadTime - System.currentTimeMillis)
+      var toWaitMs = nextReadTime - System.currentTimeMillis
+      while (toWaitMs > 0) {
+        Thread.sleep(toWaitMs)
+        toWaitMs = nextReadTime - System.currentTimeMillis
       }
     } catch {
       case _: InterruptedException =>

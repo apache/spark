@@ -263,12 +263,14 @@ private[spark] class HadoopDelegationTokenManager(
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
       logInfo("Successfully logged into KDC.")
       ugi
-    } else {
+    } else if (!SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())) {
       logInfo(s"Attempting to load user's ticket cache.")
       val ccache = sparkConf.getenv("KRB5CCNAME")
       val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
         UserGroupInformation.getCurrentUser().getUserName())
       UserGroupInformation.getUGIFromTicketCache(ccache, user)
+    } else {
+      UserGroupInformation.getCurrentUser()
     }
   }
 
