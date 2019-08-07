@@ -1646,7 +1646,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     override def init(blockDataManager: BlockDataManager): Unit = {}
 
-    override def fetchBlocks(
+    override def fetchShuffleBlocks(
         host: String,
         port: Int,
         execId: String,

@@ -218,7 +218,7 @@ public class ExternalShuffleIntegrationSuite {
           }
         };
       if (isShuffleBlocks) {
-        client.fetchBlocks(TestUtils.getLocalHost(), port, execId, shuffleGenerationId, blockIds,
+        client.fetchShuffleBlocks(TestUtils.getLocalHost(), port, execId, shuffleGenerationId, blockIds,
           listener, null);
       } else {
         client.fetchDataBlocks(TestUtils.getLocalHost(), port, execId, blockIds, listener, null);

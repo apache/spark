@@ -92,7 +92,7 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
         throw new UnsupportedOperationException("uploadBlock")
       }
 
-      override def fetchBlocks(
+      override def fetchShuffleBlocks(
           host: String,
           port: Int,
           execId: String,
@@ -101,7 +101,7 @@ class BlockTransferServiceSuite extends SparkFunSuite with TimeLimits {
           listener: BlockFetchingListener,
           tempFileManager: DownloadFileManager): Unit = {
         // This method is unused in this test
-        throw new UnsupportedOperationException("fetchBlocks")
+        throw new UnsupportedOperationException("fetchShuffleBlocks")
       }
     }
 

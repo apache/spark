@@ -38,7 +38,7 @@ abstract class BlockTransferService extends BlockStoreClient with Logging {
 
   /**
    * Initialize the transfer service by giving it the BlockDataManager that can be used to fetch
-   * local blocks or put local blocks. The fetchBlocks method in [[BlockStoreClient]] also
+   * local blocks or put local blocks. The fetchShuffleBlocks method in [[BlockStoreClient]] also
    * available only after this is invoked.
    */
   def init(blockDataManager: BlockDataManager): Unit
@@ -54,34 +54,6 @@ abstract class BlockTransferService extends BlockStoreClient with Logging {
   def hostName: String
 
   /**
-   * Fetch a sequence of shuffle blocks from a remote node asynchronously,
-   * available only after [[init]] is invoked.
-   *
-   * Note that this API takes a sequence so the implementation can batch requests, and does not
-   * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
-   * the data of a block is fetched, rather than waiting for all blocks to be fetched.
-   */
-  override def fetchBlocks(
-      host: String,
-      port: Int,
-      execId: String,
-      shuffleGenerationId: Int,
-      blockIds: Array[String],
-      listener: BlockFetchingListener,
-      tempFileManager: DownloadFileManager): Unit
-
-  /**
-   * Fetch a sequence of non-shuffle blocks from a remote node asynchronously.
-   */
-  override def fetchDataBlocks(
-      host: String,
-      port: Int,
-      execId: String,
-      blockIds: Array[String],
-      listener: BlockFetchingListener,
-      tempFileManager: DownloadFileManager): Unit
-
-  /**
    * Upload a single block to a remote node, available only after [[init]] is invoked.
    */
   def uploadBlock(
@@ -94,7 +66,7 @@ abstract class BlockTransferService extends BlockStoreClient with Logging {
       classTag: ClassTag[_]): Future[Unit]
 
   /**
-   * A special case of [[fetchBlocks]], as it fetches only one block and is blocking.
+   * A special case of [[fetchDataBlocks]], as it fetches only one block and is blocking.
    *
    * It is also only available after [[init]] is invoked.
    */
@@ -104,7 +76,7 @@ abstract class BlockTransferService extends BlockStoreClient with Logging {
       execId: String,
       blockId: String,
       tempFileManager: DownloadFileManager): ManagedBuffer = {
-    // Make sure ShuffleBlockId will not enter this function, so we call fetchBlocks with the
+    // Make sure ShuffleBlockId will not enter this function, so we call fetchShuffleBlocks with the
     // invalid shuffleGenerationId -1 here for this special case of fetching a non-shuffle block.
     assert(!BlockId.apply(blockId).isShuffle)
     // A monitor for the thread to wait on.

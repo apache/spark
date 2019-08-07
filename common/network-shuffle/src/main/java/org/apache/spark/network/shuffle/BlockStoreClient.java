@@ -29,7 +29,7 @@ import com.codahale.metrics.MetricSet;
 public abstract class BlockStoreClient implements Closeable {
 
   /**
-   * Fetch a sequence of blocks from a remote node asynchronously,
+   * Fetch a sequence of shuffle blocks from a remote node asynchronously,
    *
    * Note that this API takes a sequence so the implementation can batch requests, and does not
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
@@ -46,7 +46,7 @@ public abstract class BlockStoreClient implements Closeable {
    *                        into temp shuffle files to reduce the memory usage, otherwise,
    *                        they will be kept in memory.
    */
-  public abstract void fetchBlocks(
+  public abstract void fetchShuffleBlocks(
       String host,
       int port,
       String execId,

@@ -101,7 +101,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
   }
 
   @Override
-  public void fetchBlocks(
+  public void fetchShuffleBlocks(
       String host,
       int port,
       String execId,
@@ -146,7 +146,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         blockFetchStarter.createAndStart(blockIds, listener);
       }
     } catch (Exception e) {
-      logger.error("Exception while beginning fetchBlocks", e);
+      logger.error("Exception while beginning fetchShuffleBlocks", e);
       for (String blockId : blockIds) {
         listener.onBlockFetchFailure(blockId, e);
       }

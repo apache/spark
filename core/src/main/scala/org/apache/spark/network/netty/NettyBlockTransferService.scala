@@ -106,7 +106,7 @@ private[spark] class NettyBlockTransferService(
     }
   }
 
-  override def fetchBlocks(
+  override def fetchShuffleBlocks(
       host: String,
       port: Int,
       execId: String,
@@ -173,7 +173,7 @@ private[spark] class NettyBlockTransferService(
       }
     } catch {
       case e: Exception =>
-        logError("Exception while beginning fetchBlocks", e)
+        logError("Exception while beginning fetchShuffleBlocks", e)
         blockIds.foreach(listener.onBlockFetchFailure(_, e))
     }
   }

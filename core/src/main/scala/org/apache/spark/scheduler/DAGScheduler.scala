@@ -1101,6 +1101,8 @@ private[spark] class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
 
     // Before find missing partition, do the intermediate state clean work first.
+    // The operation here can make sure for the intermediate stage, `findMissingPartitions()`
+    // returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if stage.isIndeterminate() =>
         mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
