@@ -972,4 +972,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Millennium(date.copy(year = Literal(-100), month = Literal(12))), -1)
     checkEvaluation(Millennium(date.copy(year = Literal(-2019))), -3)
   }
+
+  test("century") {
+    val date = MakeDate(Literal(2019), Literal(1), Literal(1))
+    checkEvaluation(Century(date), 21)
+    checkEvaluation(Century(date.copy(year = Literal(2001))), 21)
+    checkEvaluation(Century(date.copy(year = Literal(2000))), 20)
+    checkEvaluation(Century(date.copy(year = Literal(1001), day = Literal(28))), 11)
+    checkEvaluation(Century(date.copy(year = Literal(1))), 1)
+    checkEvaluation(Century(date.copy(year = Literal(-1))), -1)
+    checkEvaluation(Century(date.copy(year = Literal(-100), month = Literal(12))), -2)
+    checkEvaluation(Century(date.copy(year = Literal(-2019))), -21)
+  }
 }

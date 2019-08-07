@@ -463,16 +463,27 @@ object DateTimeUtils {
     LocalDate.ofEpochDay(date).getDayOfYear
   }
 
+  private def extractFromYear(date: SQLDate, divider: Int): Int = {
+    val localDate = daysToLocalDate(date)
+    val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
+    var result = (yearOfEra / divider) + 1
+    if (yearOfEra > 1 && (yearOfEra % divider) == 0) result -= 1
+    if (localDate.get(ChronoField.ERA) == 0) result = -result
+    result
+  }
+
   /**
    * Returns the millennium for the given date. The date is expressed in days since 1.1.1970.
    * */
   def getMillennium(date: SQLDate): Int = {
-    val localDate = daysToLocalDate(date)
-    val yearOfEra = localDate.get(ChronoField.YEAR_OF_ERA)
-    var millennium = (yearOfEra / 1000) + 1
-    if (yearOfEra > 1 && (yearOfEra % 1000) == 0) millennium -= 1
-    if (localDate.get(ChronoField.ERA) == 0) millennium = -millennium
-    millennium
+    extractFromYear(date, 1000)
+  }
+
+  /**
+   * Returns the century for the given date. The date is expressed in days since 1.1.1970.
+   * */
+  def getCentury(date: SQLDate): Int = {
+    extractFromYear(date, 100)
   }
 
   /**
