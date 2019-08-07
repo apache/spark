@@ -21,6 +21,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 /**
@@ -255,5 +257,15 @@ package object debug {
     override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
       consume(ctx, input)
     }
+
+    override def doExecuteBroadcast[T](): Broadcast[T] = {
+      child.executeBroadcast()
+    }
+
+    override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+      child.executeColumnar()
+    }
+
+    override def supportsColumnar: Boolean = child.supportsColumnar
   }
 }

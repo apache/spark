@@ -24,13 +24,17 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TestTableCatalog extends TableCatalog {
+class TestTableCatalog extends TableCatalog with SupportsNamespaces {
   import CatalogV2Implicits._
+
+  override val defaultNamespace: Array[String] = Array()
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
 
   private val tables: util.Map[Identifier, Table] = new ConcurrentHashMap[Identifier, Table]()
   private var _name: Option[String] = None
@@ -88,6 +92,68 @@ class TestTableCatalog extends TableCatalog {
   }
 
   override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
+
+  private def allNamespaces: Seq[Seq[String]] = {
+    (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
+  }
+
+  override def namespaceExists(namespace: Array[String]): Boolean = {
+    allNamespaces.exists(_.startsWith(namespace))
+  }
+
+  override def listNamespaces: Array[Array[String]] = {
+    allNamespaces.map(_.head).distinct.map(Array(_)).toArray
+  }
+
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    allNamespaces
+        .filter(_.size > namespace.length)
+        .filter(_.startsWith(namespace))
+        .map(_.take(namespace.length + 1))
+        .distinct
+        .map(_.toArray)
+        .toArray
+  }
+
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    Option(namespaces.get(namespace.toSeq)) match {
+      case Some(metadata) =>
+        metadata.asJava
+      case _ if namespaceExists(namespace) =>
+        util.Collections.emptyMap[String, String]
+      case _ =>
+        throw new NoSuchNamespaceException(namespace)
+    }
+  }
+
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = {
+    if (namespaceExists(namespace)) {
+      throw new NamespaceAlreadyExistsException(namespace)
+    }
+
+    Option(namespaces.putIfAbsent(namespace.toList, metadata.asScala.toMap)) match {
+      case Some(_) =>
+        throw new NamespaceAlreadyExistsException(namespace)
+      case _ =>
+        // created successfully
+    }
+  }
+
+  override def alterNamespace(
+      namespace: Array[String],
+      changes: NamespaceChange*): Unit = {
+    val metadata = loadNamespaceMetadata(namespace).asScala.toMap
+    namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
+  }
+
+  override def dropNamespace(namespace: Array[String]): Boolean = {
+    if (listTables(namespace).nonEmpty) {
+      throw new IllegalStateException(s"Cannot delete non-empty namespace: ${namespace.quoted}")
+    }
+    Option(namespaces.remove(namespace.toList)).isDefined
+  }
 }
 
 case class InMemoryTable(

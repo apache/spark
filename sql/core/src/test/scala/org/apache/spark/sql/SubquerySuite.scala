@@ -1294,7 +1294,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       // need to execute the query before we can examine fs.inputRDDs()
       assert(df.queryExecution.executedPlan match {
         case WholeStageCodegenExec(ColumnarToRowExec(InputAdapter(
-            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _), _))) =>
+            fs @ FileSourceScanExec(_, _, _, partitionFilters, _, _, _)))) =>
           partitionFilters.exists(ExecSubqueryExpression.hasSubquery) &&
             fs.inputRDDs().forall(
               _.asInstanceOf[FileScanRDD].filePartitions.forall(
