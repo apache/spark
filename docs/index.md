@@ -139,6 +139,7 @@ options for deployment:
 
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Monitoring](monitoring.html): track the behavior of your applications
+* [Web UI](web-ui.html): track the status and resource consumption
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support

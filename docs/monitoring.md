@@ -23,7 +23,7 @@ There are several ways to monitor Spark applications: web UIs, metrics, and exte
 
 # Web Interfaces
 
-Every SparkContext launches a web UI, by default on port 4040, that
+Every SparkContext launches a [Web UI](web-ui.html), by default on port 4040, that
 displays useful information about the application. This includes:
 
 * A list of scheduler stages and tasks
@@ -39,100 +39,6 @@ Note that this information is only available for the duration of the application
 To view the web UI after the fact, set `spark.eventLog.enabled` to true before starting the
 application. This configures Spark to log Spark events that encode the information displayed
 in the UI to persisted storage.
-
-## Web UI Tabs
-The web UI provides an overview of the Spark cluster and is composed of following tabs:
-
-### Jobs Tab
-The Jobs tab displays a summary page of all jobs in the Spark application and a detailed page
-for each job. The summary page shows high-level information, such as the status, duration, and
-progress of all jobs and the overall event timeline. When you click on a job on the summary
-page, you see the detailed page for that job. The detailed page further shows the event timeline,
-DAG visualization, and all stages of the job.
-
-### Stages Tab
-The Stages tab displays a summary page that shows the current state of all stages of all jobs in
-the Spark application, and, when you click on a stage, a detailed page for that stage. The details
-page shows the event timeline, DAG visualization, and all tasks for the stage.
-
-### Storage Tab
-The Storage tab displays the persisted RDDs, if any, in the application. The summary page shows
-the storage levels, sizes and partitions of all RDDs, and the detailed page shows the sizes and
-using executors for all partitions in an RDD.
-
-### Environment Tab
-The Environment tab displays the values for the different environment and configuration variables,
-including JVM, Spark, and system properties.
-
-### Executors Tab
-The Executors tab displays summary information about the executors that were created for the
-application, including memory and disk usage and task and shuffle information. The Storage Memory
-column shows the amount of memory used and reserved for caching data.
-
-### SQL Tab
-If the application executes Spark SQL queries, the SQL tab displays information, such as the duration,
-jobs, and physical and logical plans for the queries. Here we include a basic example to illustrate
-this tab:
-{% highlight scala %}
-scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
-df: org.apache.spark.sql.DataFrame = [count: int, name: string]
-
-scala> df.count
-res0: Long = 3                                                                  
-
-scala> df.createGlobalTempView("df")
-
-scala> spark.sql("select name,sum(count) from global_temp.df group by name").show
-+----+----------+
-|name|sum(count)|
-+----+----------+
-|andy|         3|
-| bob|         2|
-+----+----------+
-{% endhighlight %}
-
-<p style="text-align: center;">
-  <img src="img/webui-sql-tab.png"
-       title="SQL tab"
-       alt="SQL tab"
-       width="80%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-Now the above three dataframe/SQL operators are shown in the list. If we click the
-'show at \<console\>: 24' link of the last query, we will see the DAG of the job.
-
-<p style="text-align: center;">
-  <img src="img/webui-sql-dag.png"
-       title="SQL DAG"
-       alt="SQL DAG"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-We can see that detailed information of each stage. The first block 'WholeStageCodegen'  
-compile multiple operator ('LocalTableScan' and 'HashAggregate') together into a single Java
-function to improve performance, and metrics like number of rows and spill size are listed in
-the block. The second block 'Exchange' shows the metrics on the shuffle exchange, including
-number of written shuffle records, total data size, etc.
-
-
-<p style="text-align: center;">
-  <img src="img/webui-sql-plan.png"
-       title="logical plans and the physical plan"
-       alt="logical plans and the physical plan"
-       width="80%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
-illustrate how Spark parse, analyze, optimize and perform the query.
-
-
-### Streaming Tab
-The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
-scheduling delay and processing time for each micro-batch in the data stream, which can be useful
-for troubleshooting the streaming application.
-
 
 ## Viewing After the Fact
 
