@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -374,7 +375,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeCommandBase | _: DescribeColumnCommand => true
+      case _: DescribeCommandBase
+          | _: DescribeColumnCommand
+          | _: DescribeTableStatement
+          | _: DescribeColumnStatement => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }

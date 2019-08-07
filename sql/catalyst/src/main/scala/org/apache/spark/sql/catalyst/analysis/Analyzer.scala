@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement, InsertIntoStatement}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -171,6 +171,7 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveAlterTable ::
+      ResolveDescribeTable ::
       ResolveInsertInto ::
       ResolveTables ::
       ResolveRelations ::
@@ -970,6 +971,21 @@ class Analyzer(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
           Seq(TableChange.setProperty("location", newLoc)))
+    }
+  }
+  /**
+   * Resolve DESCRIBE TABLE statements that use a DSv2 catalog.
+   *
+   * This rule converts unresolved DESCRIBE TABLE statements to v2 when a v2 catalog is responsible
+   * for the table identifier. A v2 catalog is responsible for an identifier when the identifier
+   * has a catalog specified, like prod_catalog.db.table, or when a default v2 catalog is set and
+   * the table identifier does not include a catalog.
+   */
+  object ResolveDescribeTable extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case describe @ DescribeTableStatement(
+          CatalogObjectIdentifier(Some(v2Catalog), ident), _, isExtended) =>
+        DescribeTable(UnresolvedRelation(describe.tableName), isExtended)
     }
   }
 

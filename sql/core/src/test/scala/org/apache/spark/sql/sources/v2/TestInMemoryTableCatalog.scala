@@ -71,7 +71,6 @@ class TestInMemoryTableCatalog extends TableCatalog {
       throw new TableAlreadyExistsException(ident)
     }
     TestInMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-
     val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
 
     tables.put(ident, table)
