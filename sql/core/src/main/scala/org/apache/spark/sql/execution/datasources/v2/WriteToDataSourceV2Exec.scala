@@ -26,7 +26,6 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SaveMode}
 import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
-import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter}
+import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 import org.apache.spark.sql.sources.v2.{StagedTable, SupportsWrite}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -518,21 +517,3 @@ private[v2] case class DataWritingSparkTaskResult(
  * Sink progress information collected after commit.
  */
 private[sql] case class StreamWriterCommitProgress(numOutputRows: Long)
-
-/**
- * A trait that allows Tables that use V1 Writer interfaces to append data.
- */
-trait SupportsV1Write extends SparkPlan {
-  def plan: LogicalPlan
-
-  protected def writeWithV1(
-      relation: CreatableRelationProvider,
-      options: CaseInsensitiveStringMap): RDD[InternalRow] = {
-    relation.createRelation(
-      sqlContext,
-      SaveMode.Append,
-      options.asCaseSensitiveMap().asScala.toMap,
-      Dataset.ofRows(sqlContext.sparkSession, plan))
-    sparkContext.emptyRDD
-  }
-}

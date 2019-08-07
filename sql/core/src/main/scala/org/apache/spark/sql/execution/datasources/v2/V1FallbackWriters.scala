@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Dataset, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
+import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter}
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -86,5 +89,23 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
 
   protected implicit def toV1WriteBuilder(builder: WriteBuilder): V1WriteBuilder = {
     builder.asInstanceOf[V1WriteBuilder]
+  }
+}
+
+/**
+ * A trait that allows Tables that use V1 Writer interfaces to append data.
+ */
+trait SupportsV1Write extends SparkPlan {
+  def plan: LogicalPlan
+
+  protected def writeWithV1(
+      relation: CreatableRelationProvider,
+      options: CaseInsensitiveStringMap): RDD[InternalRow] = {
+    relation.createRelation(
+      sqlContext,
+      SaveMode.Append,
+      options.asCaseSensitiveMap().asScala.toMap,
+      Dataset.ofRows(sqlContext.sparkSession, plan))
+    sparkContext.emptyRDD
   }
 }
