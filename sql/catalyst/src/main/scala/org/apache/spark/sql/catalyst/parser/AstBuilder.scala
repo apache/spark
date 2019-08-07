@@ -2426,7 +2426,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     ShowTablesStatement(
-      Option(ctx.db).map(visitMultipartIdentifier),
+      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
       Option(ctx.pattern).map(string))
   }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.types.{BooleanType, StringType}
+import org.apache.spark.sql.types.StringType
 
 /**
  * A SHOW TABLES statement, as parsed from SQL.
@@ -26,7 +26,6 @@ import org.apache.spark.sql.types.{BooleanType, StringType}
 case class ShowTablesStatement(namespace: Option[Seq[String]], pattern: Option[String])
     extends ParsedStatement {
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("database", StringType, nullable = false)(),
-    AttributeReference("tableName", StringType, nullable = false)(),
-    AttributeReference("isTemporary", BooleanType, nullable = false)())
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("tableName", StringType, nullable = false)())
 }
