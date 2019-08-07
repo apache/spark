@@ -482,7 +482,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
       logDebug(s"fetchFiles() took $e1 ms.")
       doSnapshot(files)
       cleanup(files)
-      cleanRocksDBBackupInstances(files)
+      cleanRocksDBCheckpoints(files)
     } catch {
       case NonFatal(e) =>
         logWarning(s"Error performing snapshot and cleaning up $this")
@@ -549,18 +549,29 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     }
   }
 
-  private def cleanRocksDBBackupInstances(files: Seq[WALUtils.StoreFile]): Unit = {
+  private def cleanRocksDBCheckpoints(files: Seq[WALUtils.StoreFile]): Unit = {
     try {
-      if (files.nonEmpty) {
-        val earliestVersionToRetain = files.last.version - storeConf.minVersionsToRetain
-        if (earliestVersionToRetain > 0) {
-          for (v <- (earliestVersionToRetain - 1) to 1 by -1) {
-            // Destroy the checkpointed path
-            logDebug(s"Destroying checkpoint version = $v")
-            RocksDbInstance.destroyDB(getCheckpointPath(v))
+      val (_, e2) = Utils.timeTakenMs {
+        if (files.nonEmpty) {
+          val earliestVersionToRetain = files.last.version - storeConf.minVersionsToRetain
+          if (earliestVersionToRetain > 0) {
+            new File(getCheckpointPath(earliestVersionToRetain)).getParentFile
+              .listFiles(new FileFilter {
+                def accept(f: File): Boolean = {
+                  try {
+                    f.getName.toLong < earliestVersionToRetain
+                  } catch {
+                    case _: NumberFormatException => false
+                  }
+                }
+              })
+              .foreach(p => RocksDbInstance.destroyDB(p.getAbsolutePath))
+            logInfo(
+              s"Deleted rocksDB checkpoints older than ${earliestVersionToRetain} for $this: ")
           }
         }
       }
+      logDebug(s"deleting rocksDB checkpoints took $e2 ms.")
     } catch {
       case NonFatal(e) => logWarning(s"Error cleaning up files for $this", e)
     }
