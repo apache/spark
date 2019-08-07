@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  * These expressions are used to pass transformations from the DataFrame API:
  *
  * {{{
- *   df.writeTo("catalog.db.table").partitionBy($"category", days($"timestamp")).create()
+ *   df.writeTo("catalog.db.table").partitionedBy($"category", days($"timestamp")).create()
  * }}}
  */
 abstract class PartitionTransformExpression extends Expression with Unevaluable {

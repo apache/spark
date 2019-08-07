@@ -69,6 +69,7 @@ import org.apache.spark.util.Utils
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */

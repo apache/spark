@@ -3213,7 +3213,7 @@ class Dataset[T] private[sql](
     // TODO: streaming could be adapted to use this interface
     if (isStreaming) {
       logicalPlan.failAnalysis(
-        "'write' can not be called on streaming Dataset/DataFrame")
+        "'writeTo' can not be called on streaming Dataset/DataFrame")
     }
     new DataFrameWriterV2[T](table, this)
   }
