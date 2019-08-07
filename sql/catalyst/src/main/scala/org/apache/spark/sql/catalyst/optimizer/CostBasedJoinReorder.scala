@@ -466,10 +466,37 @@ trait Crossover {
   def newChromo(father: Chromosome, mother: Chromosome) : Chromosome
 }
 
-case class EdgeTable(table: Map[JoinPlan, Seq[JoinPlan]])
-
 /**
- * This class implements the Genetic Edge Recombination algorithm.
+ * This class implements the Genetic Edge Recombination algorithm. The algorithm generates
+ * a new traveling path by choosing the edges in certain order from the parents' edge table,
+ * where the edge table contains links of vertexes of the parents' traveling paths.
+ *
+ * Here's an example. Suppose we have two traveling paths on a graph,
+ *      I, [A B C D E F]
+ *     II, [B D C A E F]
+ *
+ * The algorithm works as follows,
+ *  1. find the links of each vertex, then we have an 'Edge Table'
+ *      A: B F C E
+ *      B: A C D F
+ *      C: B D A
+ *      D: C E B
+ *      E: D F A
+ *      F: A E B
+ *  2. from one vertex, say A, choose one of it's neighbours as it's new neighbour, say F, we have
+ *      {A F}
+ *  3. then choose one from F's neighbours(note that vertex that has been chosen should not
+ *     be chosen again),
+ *      {A F E}
+ *  4. go on,
+ *      {A F E D}
+ *  5. go on,
+ *      {A F E D B}
+ *  6. go on,
+ *      {A F E D B C}
+ *  Note if the procedure ends before all of vertexes been chosen, start from another vertex that
+ *  has not been chosen, and go on the procedure.
+ *
  * For more information about the Genetic Edge Recombination,
  * see "Scheduling Problems and Traveling Salesmen: The Genetic Edge
  * Recombination Operator" by Darrell Whitley et al.
@@ -477,11 +504,11 @@ case class EdgeTable(table: Map[JoinPlan, Seq[JoinPlan]])
  */
 object EdgeRecombination extends Crossover {
 
-  def genEdgeTable(father: Chromosome, mother: Chromosome) : EdgeTable = {
+  def genEdgeTable(father: Chromosome, mother: Chromosome) : Map[JoinPlan, Seq[JoinPlan]] = {
     val fatherTable = father.basicPlans.map(g => g -> findNeighbours(father.basicPlans, g)).toMap
     val motherTable = mother.basicPlans.map(g => g -> findNeighbours(mother.basicPlans, g)).toMap
-    EdgeTable(
-      fatherTable.map(entry => entry._1 -> (entry._2 ++ motherTable(entry._1))))
+
+    fatherTable.map(entry => entry._1 -> (entry._2 ++ motherTable(entry._1)))
   }
 
   def findNeighbours(genes: Seq[JoinPlan], g: JoinPlan) : Seq[JoinPlan] = {
@@ -502,22 +529,22 @@ object EdgeRecombination extends Crossover {
   override def newChromo(father: Chromosome, mother: Chromosome): Chromosome = {
     var newGenes: Seq[JoinPlan] = Seq()
     // 1. Generate the edge table.
-    var table = genEdgeTable(father, mother).table
-    // 2. Choose a start point randomly from the heads of father/mother.
+    var table = genEdgeTable(father, mother)
+    // 2. Choose a start vertex randomly from the heads of father/mother.
     var current =
       if (util.Random.nextInt(2) == 0) father.basicPlans.head else mother.basicPlans.head
     newGenes :+= current
 
     var stop = false
     while (!stop) {
-      // 3. Filter out the chosen point from the edge table.
+      // 3. Filter out the chosen vertex from the edge table.
       table = table.map(
-        entry => entry._1 -> entry._2.filter(g => if (g == current) false else true)
+        entry => entry._1 -> entry._2.filter(_ != current)
       )
-      // 4. Choose next point among its neighbours. The criterion for choosing which point
+      // 4. Choose next vertex among its neighbours. The criterion for choosing which point
       // is that the one who has fewest neighbours. If two or more points has the same num
       // of neighbours, choose one randomly. If there's no neighbours available for this
-      // point but there're still other remaining points, choose one from them randomly.
+      // point but there're still other remaining vertexes, choose one from them randomly.
       val tobeVisited = table(current)
       val neighboursTable = tobeVisited.map(g => g -> table(g)).sortBy(-_._2.size).toMap
       val filteredTable = table.filter(_._2.nonEmpty)
@@ -672,28 +699,23 @@ case class Population(conf: SQLConf, chromos: Seq[Chromosome]) extends Logging {
 
   def evolve: Population = {
     // Sort chromos in the population first.
-    var tempChromos = chromos.sortWith((left, right) => left.fitness > right.fitness)
+    var evolvedChromos = chromos.sortWith((left, right) => left.fitness > right.fitness)
     // Begin iteration.
     val generations = chromos.size
     for (i <- 1 to generations) {
-      val father = JoinReorderUtils.select(conf, tempChromos, None)
-      val mother = JoinReorderUtils.select(conf, tempChromos, Some(father))
+      val father = JoinReorderUtils.select(conf, evolvedChromos, None)
+      val mother = JoinReorderUtils.select(conf, evolvedChromos, Some(father))
       val kid = EdgeRecombination.newChromo(father, mother)
-      tempChromos = putToPop(kid, tempChromos)
+      evolvedChromos = putToPop(kid, evolvedChromos)
       logDebug(s"Iteration $i, fitness for kid: ${kid.fitness}," +
-          s" and Fitness for plans: ${ tempChromos.map(c => c.fitness)}")
+          s" and Fitness for plans: ${ evolvedChromos.map(c => c.fitness)}")
     }
-    Population(conf, tempChromos)
+    Population(conf, evolvedChromos)
   }
 
   private def putToPop(kid: Chromosome, chromos: Seq[Chromosome]): Seq[Chromosome] = {
-    val tmp = mutable.Buffer[Chromosome](chromos: _*)
-    val index = chromos.indexWhere(_.fitness < kid.fitness)
-    if (index >= 0) {
-      tmp.insert(index, kid)
-      tmp.remove(tmp.size - 1)
-    }
-    Seq(tmp: _*)
+    val (l, r) = chromos.span(_.fitness > kid.fitness)
+    ((l :+ kid) ++ r).init
   }
 }
 
