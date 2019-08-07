@@ -179,7 +179,7 @@ case class DataSourceResolution(
       defaultCatalog match {
         case Some(_) =>
           throw new AnalysisException(
-            "The default database name cannot be deduced in v2 catalog yet")
+            "The default namespace cannot be deduced in v2 catalog yet")
         case None =>
           ShowTablesCommand(None, pattern)
       }
@@ -190,7 +190,7 @@ case class DataSourceResolution(
         case Some(v2Catalog) =>
           if (ns.isEmpty) {
             throw new AnalysisException(
-              "The default database name cannot be deduced in v2 catalog yet")
+              "The default namespace cannot be deduced in v2 catalog yet")
           }
           ShowTables(plan.output, v2Catalog.asTableCatalog, ns, pattern)
         case None =>

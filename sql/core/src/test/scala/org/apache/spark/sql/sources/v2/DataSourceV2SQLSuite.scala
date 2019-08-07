@@ -1753,7 +1753,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       runShowTablesSql("SHOW TABLES FROM testcat", Seq())
     }
 
-    assert(exception.getMessage.contains("default database name cannot be deduced"))
+    assert(exception.getMessage.contains("default namespace cannot be deduced"))
   }
 
   test("ShowTables: namespace is not specified and default v2 catalog is set") {
@@ -1765,7 +1765,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       runShowTablesSql("SHOW TABLES", Seq(), Some(sparkSession))
     }
 
-    assert(exception.getMessage.contains("default database name cannot be deduced"))
+    assert(exception.getMessage.contains("default namespace cannot be deduced"))
   }
 
   test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
