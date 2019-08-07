@@ -16,6 +16,7 @@
  */
 
 import java.io._
+import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.util.Locale
 
@@ -248,7 +249,7 @@ object SparkBuild extends PomBuild {
     javaVersion := SbtPomKeys.effectivePom.value.getProperties.get("java.version").asInstanceOf[String],
 
     javacOptions in Compile ++= Seq(
-      "-encoding", "UTF-8",
+      "-encoding", UTF_8.name(),
       "-source", javaVersion.value
     ),
     // This -target and Xlint:unchecked options cannot be set in the Compile configuration scope since

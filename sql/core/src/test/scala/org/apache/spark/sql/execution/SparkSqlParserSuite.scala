@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, Un
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -210,49 +211,10 @@ class SparkSqlParserSuite extends AnalysisTest {
       "no viable alternative at input")
   }
 
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    assertEqual("describe t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = false))
-    assertEqual("describe table extended t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
-    assertEqual("describe table formatted t",
-      DescribeTableCommand(TableIdentifier("t"), Map.empty, isExtended = true))
-  }
-
   test("describe query") {
     val query = "SELECT * FROM t"
     assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
     assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
-  }
-
-  test("describe table column") {
-    assertEqual("DESCRIBE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE t `abc.xyz`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc.xyz"), isExtended = false))
-    assertEqual("DESCRIBE t abc.xyz",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("abc", "xyz"), isExtended = false))
-    assertEqual("DESCRIBE t `a.b`.`x.y`",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("a.b", "x.y"), isExtended = false))
-
-    assertEqual("DESCRIBE TABLE t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = false))
-    assertEqual("DESCRIBE TABLE EXTENDED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-    assertEqual("DESCRIBE TABLE FORMATTED t col",
-      DescribeColumnCommand(
-        TableIdentifier("t"), Seq("col"), isExtended = true))
-
-    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
-      "DESC TABLE COLUMN for a specific partition is not supported")
   }
 
   test("analyze table statistics") {
