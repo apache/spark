@@ -1485,10 +1485,10 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
        2015-01-01
       > SELECT _FUNC_('2015-10-27', 'DECADE');
        2010-01-01
-      > SELECT _FUNC_('2015-10-27', 'century');
-       2001-01-01
-      > SELECT _FUNC_('2015-10-27', 'millennium');
-       2001-01-01
+      > SELECT _FUNC_('1981-01-19', 'century');
+       1901-01-01
+      > SELECT _FUNC_('1981-01-19', 'millennium');
+       1001-01-01
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
