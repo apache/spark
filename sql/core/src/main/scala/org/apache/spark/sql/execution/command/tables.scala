@@ -48,7 +48,6 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
 
 /**
  * A command to create a table with the same definition of the given existing table.
@@ -1100,7 +1099,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
     builder ++= s"USING ${metadata.provider.get}\n"
 
-    val dataSourceOptions = Utils.redact(metadata.storage.properties).map {
+    val dataSourceOptions = SQLConf.get.redactOptions(metadata.storage.properties).map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
     }
 
