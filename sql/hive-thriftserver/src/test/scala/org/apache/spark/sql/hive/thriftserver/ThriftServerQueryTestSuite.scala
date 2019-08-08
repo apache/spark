@@ -133,17 +133,17 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
           s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
             s"Try regenerate the result files.")
         Seq.tabulate(outputs.size) { i =>
-          val sqlStr = segments(i * 3 + 1).trim
-          val outputStr = segments(i * 3 + 3)
-          val output = if (isNeedSort(sqlStr)) {
-            outputStr.split("\n").sorted.mkString("\n")
+          val sql = segments(i * 3 + 1).trim
+          val originalOut = segments(i * 3 + 3)
+          val output = if (isNeedSort(sql)) {
+            originalOut.split("\n").sorted.mkString("\n")
           } else {
-            outputStr
-          }.replaceAll("\\s+$", "")
+            originalOut
+          }
           QueryOutput(
-            sql = sqlStr,
+            sql = sql,
             schema = "",
-            output = output
+            output = output.replaceAll("\\s+$", "")
           )
         }
       }
@@ -168,15 +168,14 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
           case s if s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW ")
             || s.sql.toUpperCase(Locale.ROOT).startsWith("SHOW\n") =>
           // AnalysisException should exactly match.
+          // SQLException should not exactly match. We only assert the result contains Exception.
           case _ if output.output.startsWith(classOf[SQLException].getName) =>
-            // In this case, Spark SQL and Thriftserver usually throw exceptions
-            // but the format is different. We only assert the result contains Exception.
             assert(expected.output.contains("Exception"),
               s"Exception did not match for query #$i\n${expected.sql}, " +
                 s"expected: ${expected.output}, but got: ${output.output}")
+          // HiveSQLException is usually a feature that our ThriftServer cannot support.
+          // Please add SQL to blackList.
           case _ if output.output.startsWith(classOf[HiveSQLException].getName) =>
-            // This exception is usually a feature that ThriftServer cannot support.
-            // Please add SQL to blackList.
             assert(false, s"${output.output} for query #$i\n${expected.sql}")
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
@@ -245,7 +244,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         // Also implement a crude way of masking expression IDs in the error message
         // with a generic pattern "###".
         val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x"))
+        Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")).sorted
       case NonFatal(e) =>
         // If there is an exception, put the exception class followed by the message.
         Seq(e.getClass.getName, e.getMessage)
@@ -333,13 +332,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   // Returns true if sql is retrieving data.
   private def isNeedSort(sql: String): Boolean = {
-    val removeComment = sql.split("\n").partition(_.trim.startsWith("--"))
-      ._2.map(_.trim).filter(_ != "").mkString("\n").toUpperCase(Locale.ROOT)
-    removeComment.startsWith("SELECT ") || removeComment.startsWith("SELECT\n") ||
-      removeComment.startsWith("WITH ") || removeComment.startsWith("WITH\n") ||
-      removeComment.startsWith("VALUES ") || removeComment.startsWith("VALUES\n") ||
+    val upperCase = sql.toUpperCase(Locale.ROOT)
+    upperCase.startsWith("SELECT ") || upperCase.startsWith("SELECT\n") ||
+      upperCase.startsWith("WITH ") || upperCase.startsWith("WITH\n") ||
+      upperCase.startsWith("VALUES ") || upperCase.startsWith("VALUES\n") ||
       // pgSQL/union.sql
-      removeComment.startsWith("(")
+      upperCase.startsWith("(")
   }
 
   private def getHiveResult(obj: Object): String = {
