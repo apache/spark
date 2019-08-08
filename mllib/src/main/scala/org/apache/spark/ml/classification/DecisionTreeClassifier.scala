@@ -223,6 +223,7 @@ class DecisionTreeClassificationModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { vector: Vector => predictLeaf(vector) }
       super.transform(dataset)

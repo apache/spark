@@ -227,19 +227,19 @@ class DecisionTreeRegressionModel private[ml] (
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
+      val predictUDF = udf { vector: Vector => predict(vector) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
+      val predictVarianceUDF = udf { vector: Vector => predictVariance(vector) }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
     }
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
     }

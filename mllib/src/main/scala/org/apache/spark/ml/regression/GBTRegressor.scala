@@ -265,7 +265,7 @@ class GBTRegressionModel private[ml](
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { (vector: Vector) => bcastModel.value.predict(vector) }
+      val predictUDF = udf { vector: Vector => bcastModel.value.predict(vector) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
     }
