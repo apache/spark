@@ -40,7 +40,5 @@ trait V1WriteBuilder extends WriteBuilder {
    *
    * @since 3.0.0
    */
-  def buildForV1Write(): InsertableRelation = {
-    throw new UnsupportedOperationException(getClass.getName + " does not support batch write")
-  }
+  def buildForV1Write(): InsertableRelation
 }

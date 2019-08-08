@@ -69,10 +69,10 @@ case class OverwriteByExpressionExecV1(
   override protected def doExecute(): RDD[InternalRow] = {
     writeBuilder match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Writer.buildForV1Write())
+        writeWithV1(builder.truncate().asV1Builder.buildForV1Write())
 
       case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Writer.buildForV1Write())
+        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write())
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
@@ -86,7 +86,7 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   override final def children: Seq[SparkPlan] = Nil
 
   protected implicit class toV1WriteBuilder(builder: WriteBuilder) {
-    def asV1Writer: V1WriteBuilder = builder match {
+    def asV1Builder: V1WriteBuilder = builder match {
       case v1: V1WriteBuilder => v1
       case other => throw new IllegalStateException(
         s"The returned writer ${other} was no longer a V1WriteBuilder.")
@@ -98,6 +98,7 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
  * A trait that allows Tables that use V1 Writer interfaces to append data.
  */
 trait SupportsV1Write extends SparkPlan {
+  // TODO: We should be able to work on SparkPlans at this point.
   def plan: LogicalPlan
 
   protected def writeWithV1(relation: InsertableRelation): RDD[InternalRow] = {

@@ -84,11 +84,11 @@ case class CreateTableAsSelectExec(
       catalog.createTable(
         ident, query.schema, partitioning.toArray, properties.asJava) match {
         case table: SupportsWrite =>
-          val writer = table.newWriteBuilder(writeOptions)
+          val writeBuilder = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
             .withQueryId(UUID.randomUUID().toString)
 
-          writer match {
+          writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
             case v2 => doWrite(v2.buildForBatch())
           }
@@ -178,11 +178,11 @@ case class ReplaceTableAsSelectExec(
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       createdTable match {
         case table: SupportsWrite =>
-          val writer = table.newWriteBuilder(writeOptions)
+          val writeBuilder = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
             .withQueryId(UUID.randomUUID().toString)
 
-          writer match {
+          writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
             case v2 => doWrite(v2.buildForBatch())
           }
@@ -480,11 +480,11 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
     Utils.tryWithSafeFinallyAndFailureCallbacks({
       stagedTable match {
         case table: SupportsWrite =>
-          val writer = table.newWriteBuilder(writeOptions)
+          val writeBuilder = table.newWriteBuilder(writeOptions)
             .withInputDataSchema(query.schema)
             .withQueryId(UUID.randomUUID().toString)
 
-          val writtenRows = writer match {
+          val writtenRows = writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
             case v2 => doWrite(v2.buildForBatch())
           }
