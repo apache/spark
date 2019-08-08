@@ -35,14 +35,18 @@ import org.apache.spark.sql.types.StructType
  *
  * Note that this rule is stateful and thus should not be reused across query executions.
  */
-case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan] {
+case class InsertAdaptiveSparkPlan(
+    session: SparkSession,
+    queryExecution: QueryExecution) extends Rule[SparkPlan] {
 
   private val conf = session.sessionState.conf
 
   // Exchange-reuse is shared across the entire query, including sub-queries.
   private val stageCache = new TrieMap[SparkPlan, QueryStageExec]()
 
-  override def apply(plan: SparkPlan): SparkPlan = plan match {
+  override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, queryExecution)
+
+  private def applyInternal(plan: SparkPlan, qe: QueryExecution): SparkPlan = plan match {
     case _: ExecutedCommandExec => plan
     case _ if conf.adaptiveExecutionEnabled && supportAdaptive(plan) =>
       try {
@@ -54,7 +58,7 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
           session.sessionState.conf, subqueryMap)
         val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preparations)
         logDebug(s"Adaptive execution enabled for plan: $plan")
-        AdaptiveSparkPlanExec(newPlan, session, subqueryMap, stageCache)
+        AdaptiveSparkPlanExec(newPlan, session, subqueryMap, stageCache, qe)
       } catch {
         case SubqueryAdaptiveNotSupportedException(subquery) =>
           logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
@@ -120,7 +124,7 @@ case class InsertAdaptiveSparkPlan(session: SparkSession) extends Rule[SparkPlan
     val queryExec = new QueryExecution(session, plan)
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
-    val adaptivePlan = this.apply(queryExec.sparkPlan)
+    val adaptivePlan = this.applyInternal(queryExec.sparkPlan, queryExec)
     if (!adaptivePlan.isInstanceOf[AdaptiveSparkPlanExec]) {
       throw SubqueryAdaptiveNotSupportedException(plan)
     }
