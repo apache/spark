@@ -92,6 +92,7 @@ private[spark] class EventLoggingListener(
 
   // Visible for tests only.
   private[scheduler] var logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
+  private[scheduler] var stopLogPath = logPath
 
   /**
    * Creates the log file in the configured log directory.
@@ -127,8 +128,9 @@ private[spark] class EventLoggingListener(
 
       EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
-      writer = Some(new PrintWriter(bstream))
-      stopWriter = writer
+      this.synchronized {
+        writer = Some(new PrintWriter(bstream))
+      }
       logInfo("Logging events to %s".format(logPath))
     } catch {
       case e: Exception =>
@@ -155,54 +157,18 @@ private[spark] class EventLoggingListener(
   /** cut the event log file **/
   private def logReload(): Unit = {
     val tlogPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
-    // 如果获取的logPath没变，就不用重新生成日志文件
+    // is the logPath is not change, then exit
     if (tlogPath == logPath) {
       return
     }
 
-    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
-      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
-    }
-
-    val workingPath = tlogPath + IN_PROGRESS
-    val path = new Path(workingPath)
-    val uri = path.toUri
-    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
-    val isDefaultLocal = defaultFs == null || defaultFs == "file"
-
-    if (shouldOverwrite && fileSystem.delete(path, true)) {
-      logWarning(s"Event log $path already exists. Overwriting...")
-    }
-
-    /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
-     * Therefore, for local files, use FileOutputStream instead. */
-    val dstream =
-      if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
-        new FileOutputStream(uri.getPath)
-      } else {
-        hadoopDataStream = Some(fileSystem.create(path))
-        hadoopDataStream.get
-      }
-
-    try {
-      val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
-      val bstream = new BufferedOutputStream(cstream, outputBufferSize)
-
-      EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
-      fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
-      writer = Some(new PrintWriter(bstream))
-      logInfo("Logging events to %s".format(tlogPath))
-    } catch {
-      case e: Exception =>
-        dstream.close()
-        throw e
-    }
-
-    // 关闭老的流
-    stop()
-
-    stopWriter = writer
+    stopLogPath = logPath
     logPath = tlogPath
+    stopWriter = writer
+    // start new writer
+    start()
+    // close the old writer
+    stop()
   }
 
   // Events that do not trigger a flush
@@ -310,9 +276,12 @@ private[spark] class EventLoggingListener(
    * ".inprogress" suffix.
    */
   def stop(): Unit = {
+    if (stopWriter == None){
+      stopWriter = writer
+    }
     stopWriter.foreach(_.close())
 
-    val target = new Path(logPath)
+    val target = new Path(stopLogPath)
     if (fileSystem.exists(target)) {
       if (shouldOverwrite) {
         logWarning(s"Event log $target already exists. Overwriting...")
@@ -320,10 +289,10 @@ private[spark] class EventLoggingListener(
           logWarning(s"Error deleting $target")
         }
       } else {
-        throw new IOException("Target log file already exists (%s)".format(logPath))
+        throw new IOException("Target log file already exists (%s)".format(stopLogPath))
       }
     }
-    fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+    fileSystem.rename(new Path(stopLogPath + IN_PROGRESS), target)
     // touch file to ensure modtime is current across those filesystems where rename()
     // does not set it, -and which support setTimes(); it's a no-op on most object stores
     try {
