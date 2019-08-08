@@ -312,8 +312,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val META_DATA_NUM_RETRIES = buildConf("spark.sql.metadata.num.retries")
-    .doc("the number of meta data log retries.")
+  val STREAMING_META_DATA_NUM_RETRIES = buildConf("spark.sql.streaming.metadata.num.retries")
+    .doc("The number of meta data log retries.")
     .intConf
     .checkValue(_ > 0, "The minimum number of metadata retries " +
       "must be a positive integer.")
@@ -2001,7 +2001,7 @@ class SQLConf extends Serializable with Logging {
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
-  def metaDataNumRetries: Int = getConf(META_DATA_NUM_RETRIES)
+  def streamingMetaDataNumRetries: Int = getConf(STREAMING_META_DATA_NUM_RETRIES)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 

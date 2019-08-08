@@ -196,14 +196,15 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       spark.conf.set(
         SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
         classOf[FakeFileSystemBasedCheckpointFileManager].getName)
-      spark.sessionState.conf.setConfString(SQLConf.META_DATA_NUM_RETRIES.key, 1.toString)
+      spark.sessionState.conf.setConfString(SQLConf.STREAMING_META_DATA_NUM_RETRIES.key, 1.toString)
       val metadataLog1 = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       intercept[IOException] {
         assert(metadataLog1.add(0, "batch"))
       }
 
       spark.sessionState.conf.setConfString(
-        SQLConf.META_DATA_NUM_RETRIES.key, SQLConf.META_DATA_NUM_RETRIES.defaultValue.get.toString)
+        SQLConf.STREAMING_META_DATA_NUM_RETRIES.key,
+        SQLConf.STREAMING_META_DATA_NUM_RETRIES.defaultValue.get.toString)
       val metadataLog2 = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog2.add(1, "batch1"))
       assert(metadataLog2.get(1) === Some("batch1"))

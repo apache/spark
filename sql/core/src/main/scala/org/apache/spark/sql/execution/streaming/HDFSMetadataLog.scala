@@ -62,7 +62,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   protected val fileManager =
     CheckpointFileManager.create(metadataPath, sparkSession.sessionState.newHadoopConf)
 
-  protected val metaDataNumRetries = sparkSession.sessionState.conf.metaDataNumRetries
+  protected val metaDataNumRetries = sparkSession.sessionState.conf.streamingMetaDataNumRetries
 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
@@ -111,13 +111,9 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     require(metadata != null, "'null' metadata cannot written to a metadata log")
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written
-      writeBatchToFile(metadata, batchIdToPath(batchId))
+      writeBatchToFileWithRetries(metadata, batchIdToPath(batchId))
       true
     }
-  }
-
-  private def writeBatchToFile(metadata: T, path: Path): Unit = {
-    writeBatchToFileWithRetries(metadata, path)
   }
 
   /**
