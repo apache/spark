@@ -250,13 +250,13 @@ private[deploy] class Master(
       if (state == RecoveryState.STANDBY) {
         workerRef.send(MasterInStandby)
       } else if (idToWorker.contains(id)) {
-        workerRef.send(RegisterWorkerFailed("Duplicate worker ID"))
+        workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, true))
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           workerRef, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
-          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress))
+          workerRef.send(RegisteredWorker(self, masterWebUiUrl, masterAddress, false))
           schedule()
         } else {
           val workerAddress = worker.endpoint.address

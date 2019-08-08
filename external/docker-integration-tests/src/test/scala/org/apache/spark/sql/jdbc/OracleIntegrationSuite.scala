@@ -376,8 +376,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val e = intercept[org.apache.spark.SparkException] {
       spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
     }
-    assert(e.getMessage.contains(
-      "requirement failed: Decimal precision 39 exceeds max precision 38"))
+    assert(e.getCause().isInstanceOf[ArithmeticException])
+    assert(e.getMessage.contains("Decimal precision 39 exceeds max precision 38"))
 
     // custom schema can read data
     val props = new Properties()
@@ -484,5 +484,33 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
           """"T" >= '2018-07-15 20:50:32.5'"""))
     }
     assert(df2.collect.toSet === expectedResult)
+  }
+
+  test("query JDBC option") {
+    val expectedResult = Set(
+      (1, "1991-11-09", "1996-01-01 01:23:45")
+    ).map { case (id, date, timestamp) =>
+      Row(BigDecimal.valueOf(id), Date.valueOf(date), Timestamp.valueOf(timestamp))
+    }
+
+    val query = "SELECT id, d, t FROM datetime WHERE id = 1"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .option("oracle.jdbc.mapDateToTimestamp", "false")
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl',
+         |   query '$query',
+         |   oracle.jdbc.mapDateToTimestamp false)
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
   }
 }

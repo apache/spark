@@ -41,6 +41,8 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
@@ -54,6 +56,7 @@ private[deploy] class Worker(
     workDirPath: String = null,
     val conf: SparkConf,
     val securityMgr: SecurityManager,
+    resourceFileOpt: Option[String] = None,
     externalShuffleServiceSupplier: Supplier[ExternalShuffleService] = null)
   extends ThreadSafeRpcEndpoint with Logging {
 
@@ -100,8 +103,8 @@ private[deploy] class Worker(
   // TTL for app folders/data;  after TTL expires it will be cleaned up
   private val APP_DATA_RETENTION_SECONDS = conf.get(APP_DATA_RETENTION)
 
-  // Whether or not cleanup the non-shuffle files on executor exits.
-  private val CLEANUP_NON_SHUFFLE_FILES_ENABLED =
+  // Whether or not cleanup the non-shuffle service served files on executor exits.
+  private val CLEANUP_FILES_AFTER_EXECUTOR_EXIT =
     conf.get(config.STORAGE_CLEANUP_FILES_AFTER_EXECUTOR_EXIT)
 
   private var master: Option[RpcEndpointRef] = None
@@ -176,6 +179,9 @@ private[deploy] class Worker(
     masterRpcAddresses.length // Make sure we can register with all masters at the same time
   )
 
+  // visible for tests
+  private[deploy] var resources: Map[String, ResourceInformation] = _
+
   var coresUsed = 0
   var memoryUsed = 0
 
@@ -208,6 +214,7 @@ private[deploy] class Worker(
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     startExternalShuffleService()
+    setupWorkerResources()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
@@ -218,6 +225,16 @@ private[deploy] class Worker(
     metricsSystem.start()
     // Attach the worker metrics servlet handler to the web ui after the metrics system is started.
     metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
+  }
+
+  private def setupWorkerResources(): Unit = {
+    try {
+      resources = getOrDiscoverAllResources(conf, SPARK_WORKER_PREFIX, resourceFileOpt)
+    } catch {
+      case e: Exception =>
+        logError("Failed to setup worker resources: ", e)
+        System.exit(1)
+    }
   }
 
   /**
@@ -393,12 +410,21 @@ private[deploy] class Worker(
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
-      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress) =>
-        if (preferConfiguredMasterAddress) {
-          logInfo("Successfully registered with master " + masterAddress.toSparkURL)
+      case RegisteredWorker(masterRef, masterWebUiUrl, masterAddress, duplicate) =>
+        val preferredMasterAddress = if (preferConfiguredMasterAddress) {
+          masterAddress.toSparkURL
         } else {
-          logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
+          masterRef.address.toSparkURL
         }
+
+        // there're corner cases which we could hardly avoid duplicate worker registration,
+        // e.g. Master disconnect(maybe due to network drop) and recover immediately, see
+        // SPARK-23191 for more details.
+        if (duplicate) {
+          logWarning(s"Duplicate registration at master $preferredMasterAddress")
+        }
+
+        logInfo(s"Successfully registered with master $preferredMasterAddress")
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
         forwardMessageScheduler.scheduleAtFixedRate(
@@ -750,7 +776,8 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
-          if (CLEANUP_NON_SHUFFLE_FILES_ENABLED) {
+
+          if (CLEANUP_FILES_AFTER_EXECUTOR_EXIT) {
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
           }
         case None =>
@@ -775,7 +802,8 @@ private[deploy] object Worker extends Logging {
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
     val rpcEnv = startRpcEnvAndEndpoint(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.masters, args.workDir, conf = conf)
+      args.memory, args.masters, args.workDir, conf = conf,
+      resourceFileOpt = conf.get(SPARK_WORKER_RESOURCE_FILE))
     // With external shuffle service enabled, if we request to launch multiple workers on one host,
     // we can only successfully launch the first worker and the rest fails, because with the port
     // bound, we may launch no more than one external shuffle service on each host.
@@ -799,7 +827,8 @@ private[deploy] object Worker extends Logging {
       masterUrls: Array[String],
       workDir: String,
       workerNumber: Option[Int] = None,
-      conf: SparkConf = new SparkConf): RpcEnv = {
+      conf: SparkConf = new SparkConf,
+      resourceFileOpt: Option[String] = None): RpcEnv = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX RPC Environments
     val systemName = SYSTEM_NAME + workerNumber.map(_.toString).getOrElse("")
@@ -807,7 +836,7 @@ private[deploy] object Worker extends Logging {
     val rpcEnv = RpcEnv.create(systemName, host, port, conf, securityMgr)
     val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL)
     rpcEnv.setupEndpoint(ENDPOINT_NAME, new Worker(rpcEnv, webUiPort, cores, memory,
-      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr))
+      masterAddresses, ENDPOINT_NAME, workDir, conf, securityMgr, resourceFileOpt))
     rpcEnv
   }
 

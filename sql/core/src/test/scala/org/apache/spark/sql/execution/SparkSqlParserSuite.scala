@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
@@ -59,12 +58,8 @@ class SparkSqlParserSuite extends AnalysisTest {
     comparePlans(normalized1, normalized2)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parser.parsePlan(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
 
   test("refresh resource") {
     assertEqual("REFRESH prefix_path", RefreshResource("prefix_path"))

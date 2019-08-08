@@ -600,11 +600,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_hash"
   )
 
-  /**
-   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
-   * blacklist are implicitly marked as ignored.
-   */
-  override def whiteList: Seq[String] = Seq(
+  private def commonWhiteList = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",
@@ -1141,4 +1137,16 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "view_cast",
     "view_inputs"
   )
+
+  /**
+   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
+   * blacklist are implicitly marked as ignored.
+   */
+  override def whiteList: Seq[String] = if (HiveUtils.isHive23) {
+    commonWhiteList ++ Seq(
+      "decimal_1_1"
+    )
+  } else {
+    commonWhiteList
+  }
 }

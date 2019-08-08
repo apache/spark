@@ -26,7 +26,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
@@ -70,38 +69,26 @@ class SimpleWritableDataSource extends TableProvider with SessionConfigSupport {
     override def readSchema(): StructType = tableSchema
   }
 
-  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsSaveMode {
+  class MyWriteBuilder(path: String) extends WriteBuilder with SupportsTruncate {
     private var queryId: String = _
-    private var mode: SaveMode = _
+    private var needTruncate = false
 
     override def withQueryId(queryId: String): WriteBuilder = {
       this.queryId = queryId
       this
     }
 
-    override def mode(mode: SaveMode): WriteBuilder = {
-      this.mode = mode
+    override def truncate(): WriteBuilder = {
+      this.needTruncate = true
       this
     }
 
     override def buildForBatch(): BatchWrite = {
-      assert(mode != null)
-
       val hadoopPath = new Path(path)
       val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
       val fs = hadoopPath.getFileSystem(hadoopConf)
 
-      if (mode == SaveMode.ErrorIfExists) {
-        if (fs.exists(hadoopPath)) {
-          throw new RuntimeException("data already exists.")
-        }
-      }
-      if (mode == SaveMode.Ignore) {
-        if (fs.exists(hadoopPath)) {
-          return null
-        }
-      }
-      if (mode == SaveMode.Overwrite) {
+      if (needTruncate) {
         fs.delete(hadoopPath, true)
       }
 

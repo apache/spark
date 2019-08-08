@@ -232,6 +232,29 @@ class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext 
       })
   }
 
+  test("prevent removing metadata files via method purge") {
+    withFakeCompactibleFileStreamLog(
+      fileCleanupDelayMs = 10000,
+      defaultCompactInterval = 2,
+      defaultMinBatchesToRetain = 3,
+      compactibleLog => {
+        // compaction batches: 1
+        compactibleLog.add(0, Array("some_path_0"))
+        compactibleLog.add(1, Array("some_path_1"))
+        compactibleLog.add(2, Array("some_path_2"))
+
+        val exc = intercept[UnsupportedOperationException] {
+          compactibleLog.purge(2)
+        }
+        assert(exc.getMessage.contains("Cannot purge as it might break internal state"))
+
+        // Below line would fail with IllegalStateException if we don't prevent purge:
+        // - purge(2) would delete batch 0 and 1 which batch 1 is compaction batch
+        // - allFiles() would read batch 1 (latest compaction) and 2 which batch 1 is deleted
+        compactibleLog.allFiles()
+      })
+  }
+
   private def withFakeCompactibleFileStreamLog(
     fileCleanupDelayMs: Long,
     defaultCompactInterval: Int,

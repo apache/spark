@@ -71,7 +71,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val appDesc = DeployTestUtils.createAppDesc()
   val drivers = mutable.HashSet[String]()
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredWorker(masterRef, _, _) =>
+    case RegisteredWorker(masterRef, _, _, _) =>
       masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
     case LaunchDriver(driverId, desc) =>
       drivers += driverId
@@ -626,7 +626,7 @@ class MasterSuite extends SparkFunSuite
       override val rpcEnv: RpcEnv = master.rpcEnv
 
       override def receive: PartialFunction[Any, Unit] = {
-        case RegisteredWorker(_, _, masterAddress) =>
+        case RegisteredWorker(_, _, masterAddress, _) =>
           receivedMasterAddress = masterAddress
       }
     })

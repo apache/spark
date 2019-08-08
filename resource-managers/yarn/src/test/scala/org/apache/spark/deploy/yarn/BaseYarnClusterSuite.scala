@@ -52,7 +52,7 @@ abstract class BaseYarnClusterSuite
     |log4j.logger.org.apache.hadoop=WARN
     |log4j.logger.org.eclipse.jetty=WARN
     |log4j.logger.org.mortbay=WARN
-    |log4j.logger.org.spark_project.jetty=WARN
+    |log4j.logger.org.sparkproject.jetty=WARN
     """.stripMargin
 
   private var yarnCluster: MiniYARNCluster = _

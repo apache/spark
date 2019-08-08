@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 
 
@@ -29,7 +30,7 @@ class StreamingQueryListenersConfSuite extends StreamTest with BeforeAndAfter {
   import testImplicits._
 
   override protected def sparkConf: SparkConf =
-    super.sparkConf.set("spark.sql.streaming.streamingQueryListeners",
+    super.sparkConf.set(STREAMING_QUERY_LISTENERS.key,
       "org.apache.spark.sql.streaming.TestListener")
 
   test("test if the configured query lister is loaded") {

@@ -377,6 +377,10 @@ class RankingMetrics(JavaModelWrapper):
     0.17...
     >>> metrics.meanAveragePrecision
     0.35...
+    >>> metrics.meanAveragePrecisionAt(1)
+    0.3333333333333333...
+    >>> metrics.meanAveragePrecisionAt(2)
+    0.25...
     >>> metrics.ndcgAt(3)
     0.33...
     >>> metrics.ndcgAt(10)
@@ -422,6 +426,15 @@ class RankingMetrics(JavaModelWrapper):
         a log warining is generated.
         """
         return self.call("meanAveragePrecision")
+
+    @since('3.0.0')
+    def meanAveragePrecisionAt(self, k):
+        """
+        Returns the mean average precision (MAP) at first k ranking of all the queries.
+        If a query has an empty ground truth set, the average precision will be zero and
+        a log warining is generated.
+        """
+        return self.call("meanAveragePrecisionAt", int(k))
 
     @since('1.4.0')
     def ndcgAt(self, k):
