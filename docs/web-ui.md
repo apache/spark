@@ -29,21 +29,21 @@ to monitor the status and resource consumption of your Spark cluster.
 {:toc}
 
 ## Jobs Tab
-The Jobs tab displays a summary page of all jobs in the Spark application and a detailed page
+The Jobs tab displays a summary page of all jobs in the Spark application and a details page
 for each job. The summary page shows high-level information, such as the status, duration, and
 progress of all jobs and the overall event timeline. When you click on a job on the summary
-page, you see the detailed page for that job. The detailed page further shows the event timeline,
+page, you see the details page for that job. The details page further shows the event timeline,
 DAG visualization, and all stages of the job.
 
 ## Stages Tab
 The Stages tab displays a summary page that shows the current state of all stages of all jobs in
-the Spark application, and, when you click on a stage, a detailed page for that stage. The details
+the Spark application, and, when you click on a stage, a details page for that stage. The details
 page shows the event timeline, DAG visualization, and all tasks for the stage.
 
 ## Storage Tab
-The Storage tab displays the persisted RDDs, if any, in the application. The summary page shows
-the storage levels, sizes and partitions of all RDDs, and the detailed page shows the sizes and
-using executors for all partitions in an RDD.
+The Storage tab displays the persisted RDDs and DataFrames, if any, in the application. The summary
+page shows the storage levels, sizes and partitions of all RDDs, and the details page shows the
+sizes and using executors for all partitions in an RDD or DataFrame.
 
 ## Environment Tab
 The Environment tab displays the values for the different environment and configuration variables,
@@ -95,7 +95,7 @@ Now the above three dataframe/SQL operators are shown in the list. If we click t
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-We can see that detailed information of each stage. The first block 'WholeStageCodegen'  
+We can see that details information of each stage. The first block 'WholeStageCodegen'  
 compile multiple operator ('LocalTableScan' and 'HashAggregate') together into a single Java
 function to improve performance, and metrics like number of rows and spill size are listed in
 the block. The second block 'Exchange' shows the metrics on the shuffle exchange, including
