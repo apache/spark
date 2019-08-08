@@ -419,6 +419,7 @@ object FunctionRegistry {
     expression[MakeTimestamp]("make_timestamp"),
     expression[Millennium]("millennium"),
     expression[Century]("century"),
+    expression[Decade]("decade"),
 
     // collection functions
     expression[CreateArray]("array"),

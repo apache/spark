@@ -106,6 +106,21 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("2015", "2015", "2013"))
   }
 
+  test("millennium") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("millennium(a)", "millennium(b)", "millennium(c)"), Row(3, 3, 3))
+  }
+
+  test("century") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("century(a)", "century(b)", "century(c)"), Row(21, 21, 21))
+  }
+
+  test("decade") {
+    val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
+    checkAnswer(df.selectExpr("decade(a)", "decade(b)", "decade(c)"), Row(201, 201, 201))
+  }
+
   test("year") {
     val df = Seq((d, sdfDate.format(d), ts)).toDF("a", "b", "c")
 
