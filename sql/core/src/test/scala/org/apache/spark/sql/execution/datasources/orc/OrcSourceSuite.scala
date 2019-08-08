@@ -178,6 +178,39 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       checkAnswer(spark.read.orc(path.getCanonicalPath), Row(ts))
     }
   }
+
+  test("SPARK-26859 Fix field writer index bug in non-vectorized ORC deserializer") {
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+
+        val df1 = Seq((1, 2, "abc"), (4, 5, "def"), (8, 9, null)).toDF("col1", "col2", "col3")
+        val df2 = Seq((10, null, 20, null), (40, "uvw", 50, "xyz"), (80, null, 90, null))
+          .toDF("col1", "col4", "col2", "col3")
+
+        val dir1 = s"$path${File.separator}part=one"
+        val dir2 = s"$path${File.separator}part=two"
+
+        val format = "orc"
+
+        df1.write.format(format).save(dir1)
+        df2.write.format(format).save(dir2)
+
+        val df = spark.read
+          .schema(df2.schema)
+          .format(format)
+          .load(path)
+
+        checkAnswer(df, Seq(
+          Row(1, null, 2, "abc", "one"),
+          Row(4, null, 5, "def", "one"),
+          Row(8, null, 9, null, "one"),
+          Row(10, null, 20, null, "two"),
+          Row(40, "uvw", 50, "xyz", "two"),
+          Row(80, null, 90, null, "two")))
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
