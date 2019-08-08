@@ -563,7 +563,7 @@ SELECT lpad('hi', 5)
 -- !query 68 schema
 struct<lpad(hi, 5,  ):string>
 -- !query 68 output
-hi
+   hi
 
 
 -- !query 69
@@ -683,7 +683,7 @@ SELECT chr(0)
 -- !query 83 schema
 struct<chr(CAST(0 AS BIGINT)):string>
 -- !query 83 output
-
+ 
 
 
 -- !query 84

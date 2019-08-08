@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
@@ -248,9 +249,10 @@ private[spark] class DAGScheduler(
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
+      metricPeaks: Array[Long],
       taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(
-      CompletionEvent(task, reason, result, accumUpdates, taskInfo))
+      CompletionEvent(task, reason, result, accumUpdates, metricPeaks, taskInfo))
   }
 
   /**
@@ -263,10 +265,10 @@ private[spark] class DAGScheduler(
       // (taskId, stageId, stageAttemptId, accumUpdates)
       accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId,
-      // executor metrics indexed by ExecutorMetricType.values
-      executorUpdates: ExecutorMetrics): Boolean = {
+      // (stageId, stageAttemptId) -> metrics
+      executorUpdates: mutable.Map[(Int, Int), ExecutorMetrics]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
-      Some(executorUpdates)))
+      executorUpdates))
     blockManagerMaster.driverEndpoint.askSync[Boolean](
       BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
@@ -1310,7 +1312,8 @@ private[spark] class DAGScheduler(
       }
 
     listenerBus.post(SparkListenerTaskEnd(event.task.stageId, event.task.stageAttemptId,
-      Utils.getFormattedClassName(event.task), event.reason, event.taskInfo, taskMetrics))
+      Utils.getFormattedClassName(event.task), event.reason, event.taskInfo,
+      new ExecutorMetrics(event.metricPeaks), taskMetrics))
   }
 
   /**
@@ -1574,7 +1577,7 @@ private[spark] class DAGScheduler(
                 // in the stage chains that connect to the `failedStage`. To speed up the stage
                 // traversing, we collect the stages to rollback first. If a stage needs to
                 // rollback, all its succeeding stages need to rollback to.
-                val stagesToRollback = scala.collection.mutable.HashSet(failedStage)
+                val stagesToRollback = HashSet(failedStage)
 
                 def collectStagesToRollback(stageChain: List[Stage]): Unit = {
                   if (stagesToRollback.contains(stageChain.head)) {

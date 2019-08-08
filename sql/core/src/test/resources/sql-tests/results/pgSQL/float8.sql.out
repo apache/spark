@@ -183,7 +183,7 @@ SELECT '' AS five, * FROM FLOAT8_TBL
 -- !query 22 schema
 struct<five:string,f1:double>
 -- !query 22 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 	1.2345678901234E200
@@ -195,7 +195,7 @@ SELECT '' AS four, f.* FROM FLOAT8_TBL f WHERE f.f1 <> '1004.3'
 -- !query 23 schema
 struct<four:string,f1:double>
 -- !query 23 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 	1.2345678901234E200
@@ -206,7 +206,7 @@ SELECT '' AS one, f.* FROM FLOAT8_TBL f WHERE f.f1 = '1004.3'
 -- !query 24 schema
 struct<one:string,f1:double>
 -- !query 24 output
-1004.3
+	1004.3
 
 
 -- !query 25
@@ -214,7 +214,7 @@ SELECT '' AS three, f.* FROM FLOAT8_TBL f WHERE '1004.3' > f.f1
 -- !query 25 schema
 struct<three:string,f1:double>
 -- !query 25 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 
@@ -224,7 +224,7 @@ SELECT '' AS three, f.* FROM FLOAT8_TBL f WHERE  f.f1 < '1004.3'
 -- !query 26 schema
 struct<three:string,f1:double>
 -- !query 26 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 
@@ -234,7 +234,7 @@ SELECT '' AS four, f.* FROM FLOAT8_TBL f WHERE '1004.3' >= f.f1
 -- !query 27 schema
 struct<four:string,f1:double>
 -- !query 27 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 	1004.3
@@ -245,7 +245,7 @@ SELECT '' AS four, f.* FROM FLOAT8_TBL f WHERE  f.f1 <= '1004.3'
 -- !query 28 schema
 struct<four:string,f1:double>
 -- !query 28 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 	1004.3
@@ -258,7 +258,7 @@ SELECT '' AS three, f.f1, f.f1 * '-10' AS x
 -- !query 29 schema
 struct<three:string,f1:double,x:double>
 -- !query 29 output
-1.2345678901234E-200	-1.2345678901234E-199
+	1.2345678901234E-200	-1.2345678901234E-199
 	1.2345678901234E200	-1.2345678901234E201
 	1004.3	-10043.0
 
@@ -270,7 +270,7 @@ SELECT '' AS three, f.f1, f.f1 + '-10' AS x
 -- !query 30 schema
 struct<three:string,f1:double,x:double>
 -- !query 30 output
-1.2345678901234E-200	-10.0
+	1.2345678901234E-200	-10.0
 	1.2345678901234E200	1.2345678901234E200
 	1004.3	994.3
 
@@ -282,7 +282,7 @@ SELECT '' AS three, f.f1, f.f1 / '-10' AS x
 -- !query 31 schema
 struct<three:string,f1:double,x:double>
 -- !query 31 output
-1.2345678901234E-200	-1.2345678901234E-201
+	1.2345678901234E-200	-1.2345678901234E-201
 	1.2345678901234E200	-1.2345678901234E199
 	1004.3	-100.42999999999999
 
@@ -294,7 +294,7 @@ SELECT '' AS three, f.f1, f.f1 - '-10' AS x
 -- !query 32 schema
 struct<three:string,f1:double,x:double>
 -- !query 32 output
-1.2345678901234E-200	10.0
+	1.2345678901234E-200	10.0
 	1.2345678901234E200	1.2345678901234E200
 	1004.3	1014.3
 
@@ -305,7 +305,7 @@ SELECT '' AS five, f.f1, round(f.f1) AS round_f1
 -- !query 33 schema
 struct<five:string,f1:double,round_f1:double>
 -- !query 33 output
--34.84	-35.0
+	-34.84	-35.0
 	0.0	0.0
 	1.2345678901234E-200	0.0
 	1.2345678901234E200	1.2345678901234E200
@@ -431,7 +431,7 @@ SELECT '' AS three, f.f1, exp(ln(f.f1)) AS exp_ln_f1
 -- !query 46 schema
 struct<three:string,f1:double,exp_ln_f1:double>
 -- !query 46 output
-1.2345678901234E-200	1.2345678901233948E-200
+	1.2345678901234E-200	1.2345678901233948E-200
 	1.2345678901234E200	1.234567890123379E200
 	1004.3	1004.3000000000004
 
@@ -441,7 +441,7 @@ SELECT '' AS five, * FROM FLOAT8_TBL
 -- !query 47 schema
 struct<five:string,f1:double>
 -- !query 47 output
--34.84
+	-34.84
 	0.0
 	1.2345678901234E-200
 	1.2345678901234E200
@@ -464,7 +464,7 @@ SELECT '' AS bad, f.f1 * '1e200' from UPDATED_FLOAT8_TBL f
 -- !query 49 schema
 struct<bad:string,(f1 * CAST(1e200 AS DOUBLE)):double>
 -- !query 49 output
--1.0042999999999999E203
+	-1.0042999999999999E203
 	-1.2345678901234
 	-3.484E201
 	-Infinity
@@ -476,7 +476,7 @@ SELECT '' AS five, * FROM UPDATED_FLOAT8_TBL
 -- !query 50 schema
 struct<five:string,f1:double>
 -- !query 50 output
--1.2345678901234E-200
+	-1.2345678901234E-200
 	-1.2345678901234E200
 	-1004.3
 	-34.84
@@ -528,7 +528,7 @@ SELECT atanh(double('0.5'))
 -- !query 56 schema
 struct<ATANH(CAST(0.5 AS DOUBLE)):double>
 -- !query 56 output
-0.5493061443340549
+0.5493061443340548
 
 
 -- !query 57
@@ -728,7 +728,7 @@ SELECT '' AS five, * FROM FLOAT8_TBL
 -- !query 81 schema
 struct<five:string,f1:double>
 -- !query 81 output
--1.2345678901234E-200
+	-1.2345678901234E-200
 	-1.2345678901234E200
 	-1004.3
 	-34.84

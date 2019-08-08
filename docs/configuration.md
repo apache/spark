@@ -696,7 +696,7 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
   </td>
 </tr>
  <tr>

@@ -119,6 +119,21 @@ private[thriftserver] class SparkSQLOperationManager()
     operation
   }
 
+  override def newGetFunctionsOperation(
+      parentSession: HiveSession,
+      catalogName: String,
+      schemaName: String,
+      functionName: String): GetFunctionsOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      " initialized or had already closed.")
+    val operation = new SparkGetFunctionsOperation(sqlContext, parentSession,
+      catalogName, schemaName, functionName)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetFunctionsOperation with session=$parentSession.")
+    operation
+  }
+
   def setConfMap(conf: SQLConf, confMap: java.util.Map[String, String]): Unit = {
     val iterator = confMap.entrySet().iterator()
     while (iterator.hasNext) {

@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.sasl.SecretKeyHolder;
-import org.apache.spark.network.shuffle.ExternalShuffleClient;
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient;
 import org.apache.spark.network.shuffle.protocol.mesos.RegisterDriver;
 import org.apache.spark.network.util.TransportConf;
 
@@ -43,8 +43,9 @@ import org.apache.spark.network.util.TransportConf;
  * after the application exits. Mesos does not provide a great alternative to do this, so Spark
  * has to detect this itself.
  */
-public class MesosExternalShuffleClient extends ExternalShuffleClient {
-  private static final Logger logger = LoggerFactory.getLogger(MesosExternalShuffleClient.class);
+public class MesosExternalBlockStoreClient extends ExternalBlockStoreClient {
+  private static final Logger logger =
+      LoggerFactory.getLogger(MesosExternalBlockStoreClient.class);
 
   private final ScheduledExecutorService heartbeaterThread =
       Executors.newSingleThreadScheduledExecutor(
@@ -54,10 +55,10 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
           .build());
 
   /**
-   * Creates an Mesos external shuffle client that wraps the {@link ExternalShuffleClient}.
-   * Please refer to docs on {@link ExternalShuffleClient} for more information.
+   * Creates an Mesos external shuffle client that wraps the {@link ExternalBlockStoreClient}.
+   * Please refer to docs on {@link ExternalBlockStoreClient} for more information.
    */
-  public MesosExternalShuffleClient(
+  public MesosExternalBlockStoreClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled,
