@@ -27,9 +27,12 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{SecurityManager, SparkConf, TestUtils}
+import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -70,7 +73,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
           case _: Exception => None
         }
       }
-    val sites = mirrors.distinct :+ "https://archive.apache.org/dist"
+    val sites =
+      mirrors.distinct :+ "https://archive.apache.org/dist" :+ PROCESS_TABLES.releaseMirror
     logInfo(s"Trying to download Spark $version from $sites")
     for (site <- sites) {
       val filename = s"spark-$version-bin-hadoop2.7.tgz"
@@ -183,9 +187,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",
-        "--conf", "spark.ui.enabled=false",
-        "--conf", "spark.master.rest.enabled=false",
-        "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
+        "--conf", s"${UI_ENABLED.key}=false",
+        "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+        "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
         "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
         tempPyFile.getCanonicalPath)
@@ -200,9 +206,11 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
       "--master", "local[2]",
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.master.rest.enabled=false",
-      "--conf", s"spark.sql.warehouse.dir=${wareHousePath.getCanonicalPath}",
+      "--conf", s"${UI_ENABLED.key}=false",
+      "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=1.2.1",
+      "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
+      "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
     runSparkSubmit(args)
@@ -210,11 +218,12 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
+  val releaseMirror = "https://dist.apache.org/repos/dist/release"
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = {
     import scala.io.Source
     try {
-      Source.fromURL("https://dist.apache.org/repos/dist/release/spark/").mkString
+      Source.fromURL(s"${releaseMirror}/spark").mkString
         .split("\n")
         .filter(_.contains("""<li><a href="spark-"""))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))

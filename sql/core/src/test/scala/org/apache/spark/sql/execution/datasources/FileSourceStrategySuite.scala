@@ -201,7 +201,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("partitioned table - case insensitive") {
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val table =
         createTable(
           files = Seq(
@@ -279,7 +279,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("Locality support for FileScanRDD") {
-    val partition = FilePartition(0, Seq(
+    val partition = FilePartition(0, Array(
       PartitionedFile(InternalRow.empty, "fakePath0", 0, 10, Array("host0", "host1")),
       PartitionedFile(InternalRow.empty, "fakePath0", 10, 20, Array("host1", "host2")),
       PartitionedFile(InternalRow.empty, "fakePath1", 0, 5, Array("host3")),
@@ -437,7 +437,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("[SPARK-16818] exchange reuse respects differences in partition pruning") {
-    spark.conf.set("spark.sql.exchange.reuse", true)
+    spark.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, true)
     withTempPath { path =>
       val tempDir = path.getCanonicalPath
       spark.range(10)

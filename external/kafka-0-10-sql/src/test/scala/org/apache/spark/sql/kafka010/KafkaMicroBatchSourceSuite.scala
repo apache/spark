@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
+import org.apache.spark.sql.sources.v2.reader.streaming.SparkDataStream
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSQLContext
@@ -94,7 +95,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
       message: String = "",
       topicAction: (String, Option[Int]) => Unit = (_, _) => {}) extends AddData {
 
-    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
+    override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
       query match {
         // Make sure no Spark job is running when deleting a topic
         case Some(m: MicroBatchExecution) => m.processAllAvailable()
@@ -114,7 +115,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with Kaf
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
 
-      val sources: Seq[BaseStreamingSource] = {
+      val sources: Seq[SparkDataStream] = {
         query.get.logicalPlan.collect {
           case StreamingExecutionRelation(source: KafkaSource, _) => source
           case r: StreamingDataSourceV2Relation if r.stream.isInstanceOf[KafkaMicroBatchStream] ||
@@ -659,7 +660,23 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("allow group.id prefix") {
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
+  }
+
   test("allow group.id override") {
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
+  }
+
+  private def testGroupId(groupIdKey: String, validateGroupId: (String, Iterable[String]) => Unit) {
     // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
     // as well as KafkaOffsetReader.createConsumer(.)
     val topic = newTopic()
@@ -672,7 +689,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val dsKafka = spark
       .readStream
       .format("kafka")
-      .option("kafka.group.id", customGroupId)
+      .option(groupIdKey, customGroupId)
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
@@ -688,9 +705,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         val consumerGroups = testUtils.listConsumerGroups()
         val validGroups = consumerGroups.valid().get()
         val validGroupsId = validGroups.asScala.map(_.groupId())
-        assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
-          s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
-          s"expected group id: $customGroupId")
+        validateGroupId(customGroupId, validGroupsId)
       }
     )
   }
@@ -1051,7 +1066,7 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
-      "spark.sql.streaming.disabledV2MicroBatchReaders",
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key,
       classOf[KafkaSourceProvider].getCanonicalName)
   }
 
@@ -1127,7 +1142,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaMicroBatchInputPartition])
+          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
           inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }

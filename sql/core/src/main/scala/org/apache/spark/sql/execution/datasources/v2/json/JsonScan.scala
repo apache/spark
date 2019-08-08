@@ -50,6 +50,15 @@ case class JsonScan(
     JsonDataSource(parsedOptions).isSplitable && super.isSplitable(path)
   }
 
+  override def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
+    if (!super.isSplitable(path)) {
+      super.getFileUnSplittableReason(path)
+    } else {
+      "the json datasource is set multiLine mode"
+    }
+  }
+
   override def createReaderFactory(): PartitionReaderFactory = {
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)

@@ -28,21 +28,9 @@ It produces a DataFrame with the following columns and possibly partition column
 * `length`: LongType
 * `content`: BinaryType
 
-It supports the following read option:
-<table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
-  <tr>
-    <td><code>pathGlobFilter</code></td>
-    <td>none (accepts all)</td>
-    <td>
-    An optional glob pattern to only include files with paths matching the pattern.
-    The syntax follows <code>org.apache.hadoop.fs.GlobFilter</code>.
-    It does not change the behavior of partition discovery.
-    </td>
-  </tr>
-</table>
-
 To read whole binary files, you need to specify the data source `format` as `binaryFile`.
+To load files with paths matching a given glob pattern while keeping the behavior of partition discovery,
+you can use the general data source option `pathGlobFilter`.
 For example, the following code reads all PNG files from the input directory:
 
 <div class="codetabs">

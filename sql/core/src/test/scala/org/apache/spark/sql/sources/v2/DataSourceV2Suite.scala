@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
@@ -219,14 +219,14 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
         spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
-          .option("path", path).save()
+          .option("path", path).mode("append").save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
 
-        // test with different save modes
+        // default save mode is append
         spark.range(10).select('id as 'i, -'id as 'j).write.format(cls.getName)
-          .option("path", path).mode("append").save()
+          .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).union(spark.range(10)).select('id, -'id))
@@ -237,17 +237,17 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
 
-        spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
-          .option("path", path).mode("ignore").save()
-        checkAnswer(
-          spark.read.format(cls.getName).option("path", path).load(),
-          spark.range(5).select('id, -'id))
+        val e = intercept[AnalysisException] {
+          spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
+            .option("path", path).mode("ignore").save()
+        }
+        assert(e.message.contains("please use Append or Overwrite modes instead"))
 
-        val e = intercept[Exception] {
+        val e2 = intercept[AnalysisException] {
           spark.range(5).select('id as 'i, -'id as 'j).write.format(cls.getName)
             .option("path", path).mode("error").save()
         }
-        assert(e.getMessage.contains("data already exists"))
+        assert(e2.getMessage.contains("please use Append or Overwrite modes instead"))
 
         // test transaction
         val failingUdf = org.apache.spark.sql.functions.udf {
@@ -262,10 +262,10 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         }
         // this input data will fail to read middle way.
         val input = spark.range(10).select(failingUdf('id).as('i)).select('i, -'i as 'j)
-        val e2 = intercept[SparkException] {
+        val e3 = intercept[SparkException] {
           input.write.format(cls.getName).option("path", path).mode("overwrite").save()
         }
-        assert(e2.getMessage.contains("Writing job aborted"))
+        assert(e3.getMessage.contains("Writing job aborted"))
         // make sure we don't have partial data.
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
       }
@@ -371,24 +371,6 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
           assert(!new File(sessionPath).exists)
           checkAnswer(spark.read.format(format).option("path", optionPath).load(), df)
         }
-      }
-    }
-  }
-
-  test("SPARK-25700: do not read schema when writing in other modes except append and overwrite") {
-    withTempPath { file =>
-      val cls = classOf[SimpleWriteOnlyDataSource]
-      val path = file.getCanonicalPath
-      val df = spark.range(5).select('id as 'i, -'id as 'j)
-      // non-append mode should not throw exception, as they don't access schema.
-      df.write.format(cls.getName).option("path", path).mode("error").save()
-      df.write.format(cls.getName).option("path", path).mode("ignore").save()
-      // append and overwrite modes will access the schema and should throw exception.
-      intercept[SchemaReadAttemptException] {
-        df.write.format(cls.getName).option("path", path).mode("append").save()
-      }
-      intercept[SchemaReadAttemptException] {
-        df.write.format(cls.getName).option("path", path).mode("overwrite").save()
       }
     }
   }

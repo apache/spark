@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.python.PythonForeachWriter
-import org.apache.spark.sql.execution.streaming.BaseStreamingSink
 import org.apache.spark.sql.sources.v2.{SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
@@ -44,7 +43,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class ForeachWriterTable[T](
     writer: ForeachWriter[T],
     converter: Either[ExpressionEncoder[T], InternalRow => T])
-  extends Table with SupportsWrite with BaseStreamingSink {
+  extends Table with SupportsWrite {
 
   override def name(): String = "ForeachSink"
 

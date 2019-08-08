@@ -483,6 +483,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("Option pathGlobFilter") {
+    val testTableName = "FileStreamSourceTest"
+    withTable(testTableName) {
+      withTempPath { output =>
+        Seq("foo").toDS().write.text(output.getCanonicalPath)
+        Seq("bar").toDS().write.mode("append").orc(output.getCanonicalPath)
+        val df = spark.readStream.option("pathGlobFilter", "*.txt")
+          .format("text").load(output.getCanonicalPath)
+        val query = df.writeStream.format("memory").queryName(testTableName).start()
+        try {
+          query.processAllAvailable()
+          checkDatasetUnorderly(spark.table(testTableName).as[String], "foo")
+        } finally {
+          query.stop()
+        }
+      }
+    }
+  }
+
   test("read from textfile") {
     withTempDirs { case (src, tmp) =>
       val textStream = spark.readStream.textFile(src.getCanonicalPath)
@@ -1291,7 +1310,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
               val start = startId.map(new FileStreamSourceOffset(_))
               val end = FileStreamSourceOffset(endId)
 
-              withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+              withSQLConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED.key -> "false") {
                 assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
               }
             }

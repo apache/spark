@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Benchmark to measure whole stage codegen performance.
@@ -129,6 +130,20 @@ object MiscBenchmark extends SqlBasedBenchmark {
 
         df.selectExpr("*", "explode(arr) as arr_col")
           .select("col", "arr_col.*").count
+      }
+
+      withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
+        codegenBenchmark("generate big nested struct array", M) {
+          import spark.implicits._
+          val df = spark.sparkContext.parallelize(Seq(("1",
+            Array.fill(M)({
+              val i = math.random
+              (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
+            })))).toDF("col", "arr")
+            .selectExpr("col", "struct(col, arr) as st")
+            .selectExpr("col", "st.col as col1", "explode(st.arr) as arr_col")
+          df.collect()
+        }
       }
     }
   }

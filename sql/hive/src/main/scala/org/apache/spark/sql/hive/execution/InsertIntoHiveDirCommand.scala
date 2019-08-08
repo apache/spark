@@ -22,7 +22,6 @@ import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.mapred._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
@@ -80,13 +79,12 @@ case class InsertIntoHiveDirCommand(
     )
 
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
-    val jobConf = new JobConf(hadoopConf)
 
     val targetPath = new Path(storage.locationUri.get)
     val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
     val (writeToPath: Path, fs: FileSystem) =
       if (isLocal) {
-        val localFileSystem = FileSystem.getLocal(jobConf)
+        val localFileSystem = FileSystem.getLocal(hadoopConf)
         (localFileSystem.makeQualified(targetPath), localFileSystem)
       } else {
         val dfs = qualifiedPath.getFileSystem(hadoopConf)

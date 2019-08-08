@@ -53,6 +53,7 @@ import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTree
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -1142,12 +1143,21 @@ private[python] class PythonMLLibAPI extends Serializable {
     new RowMatrix(rows.rdd, numRows, numCols)
   }
 
+  def createRowMatrix(df: DataFrame, numRows: Long, numCols: Int): RowMatrix = {
+    require(df.schema.length == 1 && df.schema.head.dataType.getClass == classOf[VectorUDT],
+      "DataFrame must have a single vector type column")
+    new RowMatrix(df.rdd.map { case Row(vector: Vector) => vector }, numRows, numCols)
+  }
+
   /**
    * Wrapper around IndexedRowMatrix constructor.
    */
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
     // We use DataFrames for serialization of IndexedRows from Python,
     // so map each Row in the DataFrame back to an IndexedRow.
+    require(rows.schema.length == 2 && rows.schema.head.dataType == LongType &&
+      rows.schema(1).dataType.getClass == classOf[VectorUDT],
+      "DataFrame must consist of a long type index column and a vector type column")
     val indexedRows = rows.rdd.map {
       case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
     }

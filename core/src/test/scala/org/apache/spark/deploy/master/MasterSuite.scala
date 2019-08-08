@@ -71,7 +71,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val appDesc = DeployTestUtils.createAppDesc()
   val drivers = mutable.HashSet[String]()
   override def receive: PartialFunction[Any, Unit] = {
-    case RegisteredWorker(masterRef, _, _) =>
+    case RegisteredWorker(masterRef, _, _, _) =>
       masterRef.send(WorkerLatestState(id, Nil, drivers.toSeq))
     case LaunchDriver(driverId, desc) =>
       drivers += driverId
@@ -86,6 +86,17 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
         case None =>
       }
       driverIdToAppId.remove(driverId)
+  }
+}
+
+class MockExecutorLaunchFailWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf)
+  extends MockWorker(master, conf) {
+  var failedCnt = 0
+  override def receive: PartialFunction[Any, Unit] = {
+    case LaunchExecutor(_, appId, execId, _, _, _) =>
+      failedCnt += 1
+      master.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+    case otherMsg => super.receive(otherMsg)
   }
 }
 
@@ -615,7 +626,7 @@ class MasterSuite extends SparkFunSuite
       override val rpcEnv: RpcEnv = master.rpcEnv
 
       override def receive: PartialFunction[Any, Unit] = {
-        case RegisteredWorker(_, _, masterAddress) =>
+        case RegisteredWorker(_, _, masterAddress, _) =>
           receivedMasterAddress = masterAddress
       }
     })
@@ -632,6 +643,55 @@ class MasterSuite extends SparkFunSuite
 
     eventually(timeout(10.seconds)) {
       assert(receivedMasterAddress === RpcAddress("localhost2", 10000))
+    }
+  }
+
+  test("SPARK-27510: Master should avoid dead loop while launching executor failed in Worker") {
+    val master = makeMaster()
+    master.rpcEnv.setupEndpoint(Master.ENDPOINT_NAME, master)
+    eventually(timeout(10.seconds)) {
+      val masterState = master.self.askSync[MasterStateResponse](RequestMasterState)
+      assert(masterState.status === RecoveryState.ALIVE, "Master is not alive")
+    }
+
+    var worker: MockExecutorLaunchFailWorker = null
+    try {
+      worker = new MockExecutorLaunchFailWorker(master.self)
+      worker.rpcEnv.setupEndpoint("worker", worker)
+      val workerRegMsg = RegisterWorker(
+        worker.id,
+        "localhost",
+        9999,
+        worker.self,
+        10,
+        1234 * 3,
+        "http://localhost:8080",
+        master.rpcEnv.address)
+      master.self.send(workerRegMsg)
+      val driver = DeployTestUtils.createDriverDesc()
+      // mimic DriverClient to send RequestSubmitDriver to master
+      master.self.askSync[SubmitDriverResponse](RequestSubmitDriver(driver))
+      var appId: String = null
+      eventually(timeout(10.seconds)) {
+        // an app would be registered with Master once Driver set up
+        assert(worker.apps.nonEmpty)
+        appId = worker.apps.head._1
+        assert(master.idToApp.contains(appId))
+      }
+
+      eventually(timeout(10.seconds)) {
+        // Master would continually launch executors until reach MAX_EXECUTOR_RETRIES
+        assert(worker.failedCnt == master.conf.get(MAX_EXECUTOR_RETRIES))
+        // Master would remove the app if no executor could be launched for it
+        assert(!master.idToApp.contains(appId))
+      }
+    } finally {
+      if (worker != null) {
+        worker.rpcEnv.shutdown()
+      }
+      if (master != null) {
+        master.rpcEnv.shutdown()
+      }
     }
   }
 

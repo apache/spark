@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.sources.v2.{SupportsWrite, TableProvider}
 import org.apache.spark.sql.sources.v2.TableCapability._
@@ -311,7 +310,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         provider.getTable(dsOptions) match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
-            table.asInstanceOf[BaseStreamingSink]
+            table
           case _ => createV1Sink()
         }
       } else {
@@ -331,7 +330,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def createV1Sink(): BaseStreamingSink = {
+  private def createV1Sink(): Sink = {
     val ds = DataSource(
       df.sparkSession,
       className = source,

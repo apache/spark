@@ -206,7 +206,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
         checkAnswer(table("t"), testDF)
-        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        if (HiveUtils.isHive23) {
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+            Seq("1.100\t1", "2.100\t2"))
+        } else {
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+            Seq("1.1\t1", "2.1\t2"))
+        }
       }
     }
 
@@ -238,8 +244,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
           checkAnswer(table("t"), testDF)
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
-            Seq("1.1\t1", "2.1\t2"))
+          if (HiveUtils.isHive23) {
+            assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+              Seq("1.100\t1", "2.100\t2"))
+          } else {
+            assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+              Seq("1.1\t1", "2.1\t2"))
+          }
         }
       }
     }

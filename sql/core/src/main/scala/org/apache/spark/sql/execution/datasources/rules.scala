@@ -37,7 +37,7 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
-    sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
+    sparkSession.sessionState.conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -45,8 +45,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       try {
         val dataSource = DataSource(
           sparkSession,
-          paths = u.tableIdentifier.table :: Nil,
-          className = u.tableIdentifier.database.get)
+          paths = u.multipartIdentifier.last :: Nil,
+          className = u.multipartIdentifier.head)
 
         // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
         // will catch it and return the original plan, so that the analyzer can report table not
@@ -55,7 +55,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         if (!isFileFormat ||
             dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
-            s"${u.tableIdentifier.database.get}")
+            s"${dataSource.className}")
         }
         LogicalRelation(dataSource.resolveRelation())
       } catch {

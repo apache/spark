@@ -25,9 +25,11 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
+
+  import NestedColumnAliasingSuite._
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Nested column pruning", FixedPoint(100),
@@ -221,7 +223,53 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, expected)
   }
 
-  private def collectGeneratedAliases(query: LogicalPlan): ArrayBuffer[String] = {
+  test("nested field pruning for getting struct field in array of struct") {
+    val field1 = GetArrayStructFields(child = 'friends,
+      field = StructField("first", StringType),
+      ordinal = 0,
+      numFields = 3,
+      containsNull = true)
+    val field2 = GetStructField('employer, 0, Some("id"))
+
+    val query = contact
+      .limit(5)
+      .select(field1, field2)
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = contact
+      .select(field1, field2)
+      .limit(5)
+      .analyze
+    comparePlans(optimized, expected)
+  }
+
+  test("nested field pruning for getting struct field in map") {
+    val field1 = GetStructField(GetMapValue('relatives, Literal("key")), 0, Some("first"))
+    val field2 = GetArrayStructFields(child = MapValues('relatives),
+      field = StructField("middle", StringType),
+      ordinal = 1,
+      numFields = 3,
+      containsNull = true)
+
+    val query = contact
+      .limit(5)
+      .select(field1, field2)
+      .analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected = contact
+      .select(field1, field2)
+      .limit(5)
+      .analyze
+    comparePlans(optimized, expected)
+  }
+}
+
+object NestedColumnAliasingSuite {
+  def collectGeneratedAliases(query: LogicalPlan): ArrayBuffer[String] = {
     val aliases = ArrayBuffer[String]()
     query.transformAllExpressions {
       case a @ Alias(_, name) if name.startsWith("_gen_alias_") =>

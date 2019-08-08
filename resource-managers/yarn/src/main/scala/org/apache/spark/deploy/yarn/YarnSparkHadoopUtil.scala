@@ -25,8 +25,10 @@ import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {

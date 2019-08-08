@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -956,38 +957,92 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
   }
 
-  test("SPARK-26706: Fix Cast.mayTruncate for bytes") {
-    assert(!Cast.mayTruncate(ByteType, ByteType))
-    assert(!Cast.mayTruncate(DecimalType.ByteDecimal, ByteType))
-    assert(Cast.mayTruncate(ShortType, ByteType))
-    assert(Cast.mayTruncate(IntegerType, ByteType))
-    assert(Cast.mayTruncate(LongType, ByteType))
-    assert(Cast.mayTruncate(FloatType, ByteType))
-    assert(Cast.mayTruncate(DoubleType, ByteType))
-    assert(Cast.mayTruncate(DecimalType.IntDecimal, ByteType))
-  }
-
-  test("canSafeCast and mayTruncate must be consistent for numeric types") {
-    import DataTypeTestUtils._
-
+  test("up-cast") {
     def isCastSafe(from: NumericType, to: NumericType): Boolean = (from, to) match {
       case (_, dt: DecimalType) => dt.isWiderThan(from)
       case (dt: DecimalType, _) => dt.isTighterThan(to)
       case _ => numericPrecedence.indexOf(from) <= numericPrecedence.indexOf(to)
     }
 
+    def makeComplexTypes(dt: NumericType, nullable: Boolean): Seq[DataType] = {
+      Seq(
+        new StructType().add("a", dt, nullable).add("b", dt, nullable),
+        ArrayType(dt, nullable),
+        MapType(dt, dt, nullable),
+        ArrayType(new StructType().add("a", dt, nullable), nullable),
+        new StructType().add("a", ArrayType(dt, nullable), nullable)
+      )
+    }
+
+    import DataTypeTestUtils.numericTypes
     numericTypes.foreach { from =>
       val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
 
       safeTargetTypes.foreach { to =>
-        assert(Cast.canSafeCast(from, to), s"It should be possible to safely cast $from to $to")
-        assert(!Cast.mayTruncate(from, to), s"No truncation is expected when casting $from to $to")
+        assert(Cast.canUpCast(from, to), s"It should be possible to up-cast $from to $to")
+
+        // If the nullability is compatible, we can up-cast complex types too.
+        Seq(true -> true, false -> false, false -> true).foreach { case (fn, tn) =>
+          makeComplexTypes(from, fn).zip(makeComplexTypes(to, tn)).foreach {
+            case (complexFromType, complexToType) =>
+              assert(Cast.canUpCast(complexFromType, complexToType))
+          }
+        }
+
+        makeComplexTypes(from, true).zip(makeComplexTypes(to, false)).foreach {
+          case (complexFromType, complexToType) =>
+            assert(!Cast.canUpCast(complexFromType, complexToType))
+        }
       }
 
       unsafeTargetTypes.foreach { to =>
-        assert(!Cast.canSafeCast(from, to), s"It shouldn't be possible to safely cast $from to $to")
-        assert(Cast.mayTruncate(from, to), s"Truncation is expected when casting $from to $to")
+        assert(!Cast.canUpCast(from, to), s"It shouldn't be possible to up-cast $from to $to")
+        makeComplexTypes(from, true).zip(makeComplexTypes(to, true)).foreach {
+          case (complexFromType, complexToType) =>
+            assert(!Cast.canUpCast(complexFromType, complexToType))
+        }
       }
+    }
+    numericTypes.foreach { dt =>
+      makeComplexTypes(dt, true).foreach { complexType =>
+        assert(!Cast.canUpCast(complexType, StringType))
+      }
+    }
+  }
+
+  test("SPARK-27671: cast from nested null type in struct") {
+    import DataTypeTestUtils._
+
+    atomicTypes.foreach { atomicType =>
+      val struct = Literal.create(
+        InternalRow(null),
+        StructType(Seq(StructField("a", NullType, nullable = true))))
+
+      val ret = cast(struct, StructType(Seq(
+        StructField("a", atomicType, nullable = true))))
+      assert(ret.resolved)
+      checkEvaluation(ret, InternalRow(null))
+    }
+  }
+
+  test("SPARK-28470: Cast should honor nullOnOverflow property") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "true") {
+      checkEvaluation(Cast(Literal("134.12"), DecimalType(3, 2)), null)
+      checkEvaluation(
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)), null)
+      checkEvaluation(Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), null)
+      checkEvaluation(Cast(Literal(134.12), DecimalType(3, 2)), null)
+    }
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key -> "false") {
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal("134.12"), DecimalType(3, 2)), "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal(Timestamp.valueOf("2019-07-25 22:04:36")), DecimalType(3, 2)),
+        "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal(BigDecimal(134.12)), DecimalType(3, 2)), "cannot be represented")
+      checkExceptionInExpression[ArithmeticException](
+        Cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
     }
   }
 }

@@ -75,10 +75,9 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
-  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
-      "spark.kubernetes.authenticate.driver"
-  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
-      "spark.kubernetes.authenticate.driver.mounted"
+  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
+  val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
+  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"
   val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
@@ -122,6 +121,12 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.driver.limit.cores")
       .doc("Specify the hard cpu limit for the driver pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_REQUEST_CORES =
+    ConfigBuilder("spark.kubernetes.driver.request.cores")
+      .doc("Specify the cpu request for the driver pod")
       .stringConf
       .createOptional
 
@@ -330,6 +335,13 @@ private[spark] object Config extends Logging {
       .doc("Time to wait for graceful deletion of Spark pods when spark-submit" +
         " is used for killing an application.")
       .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  val KUBERNETES_FILE_UPLOAD_PATH =
+    ConfigBuilder("spark.kubernetes.file.upload.path")
+      .doc("Hadoop compatible file system path where files from the local file system " +
+        "will be uploded to in cluster mode.")
+      .stringConf
       .createOptional
 
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
