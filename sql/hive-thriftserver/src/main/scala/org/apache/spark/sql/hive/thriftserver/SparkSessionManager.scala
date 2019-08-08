@@ -73,7 +73,8 @@ class SparkSessionManager extends Logging {
         UserGroupInformation.getLoginUser
       }
       val delegationToken = getDelegationToken(session.getUserName)
-      Utils.setTokenStr(ugi, delegationToken, STS_TOKEN)
+      if (delegationToken != null)
+        Utils.setTokenStr(ugi, delegationToken, STS_TOKEN)
       ugi
     } catch {
       case e: IOException =>
