@@ -106,7 +106,7 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val hashUDF = udf { terms: Seq[_] =>
       val termFrequencies = mutable.HashMap.empty[Int, Double].withDefaultValue(0.0)
       terms.foreach { term =>
-        val i = Utils.nonNegativeMod(hashFunc(term), localNumFeatures)
+        val i = indexOf(term)
         if (localBinary) {
           termFrequencies(i) = 1.0
         } else {

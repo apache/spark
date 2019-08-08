@@ -77,7 +77,6 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("indexOf method") {
-    val df = Seq((0, "a a b b c d".split(" ").toSeq)).toDF("id", "words")
     val n = 100
     val hashingTF = new HashingTF()
       .setInputCol("words")
