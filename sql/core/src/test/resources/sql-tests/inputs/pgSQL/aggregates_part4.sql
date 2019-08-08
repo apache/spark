@@ -59,7 +59,7 @@
 -- select percentile_disc(array[0.25,0.5,0.75]) within group (order by x)
 -- from unnest('{fred,jim,fred,jack,jill,fred,jill,jim,jim,sheila,jim,sheila}'::text[]) u(x);
 
--- pg_collation_for is PostgreSQL system information functions
+-- [SPARK-28669] System Information Functions
 -- check collation propagates up in suitable cases:
 -- select pg_collation_for(percentile_disc(1) within group (order by x collate "POSIX"))
 --   from (values ('fred'),('jim')) v(x);
