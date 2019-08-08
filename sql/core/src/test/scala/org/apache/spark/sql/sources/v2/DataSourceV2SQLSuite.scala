@@ -41,7 +41,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   private val v2Source = classOf[FakeV2Provider].getName
 
   private def catalog(name: String): CatalogPlugin = {
-    spark.sessionState.analyzer.catalogManager.catalog(name)
+    spark.sessionState.catalogManager.catalog(name)
   }
 
   before {
@@ -58,7 +58,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   after {
-    spark.sessionState.analyzer.catalogManager.reset()
+    spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.clear()
   }
 

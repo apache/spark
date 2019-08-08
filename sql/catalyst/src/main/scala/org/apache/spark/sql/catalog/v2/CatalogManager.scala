@@ -29,21 +29,12 @@ import org.apache.spark.sql.internal.SQLConf
  */
 class CatalogManager(conf: SQLConf) extends Logging {
 
-  /**
-   * Tracks all the registered catalogs.
-   */
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
-  /**
-   * Looks up a catalog by name.
-   */
   def catalog(name: String): CatalogPlugin = synchronized {
     catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
   }
 
-  /**
-   * Returns the default catalog specified by config.
-   */
   def defaultCatalog: Option[CatalogPlugin] = {
     conf.defaultV2Catalog.flatMap { catalogName =>
       try {
@@ -66,8 +57,31 @@ class CatalogManager(conf: SQLConf) extends Logging {
     }
   }
 
+  private var _currentCatalog = conf.defaultV2Catalog
+
+  // Returns the name of current catalog. None means the current catalog is the builtin catalog.
+  def currentCatalog: Option[String] = _currentCatalog
+
+  def setCurrentCatalog(catalog: String): Unit = {
+    _currentCatalog = Some(catalog)
+  }
+
+  private var _currentNamespace = defaultCatalog.map {
+    case c: SupportsNamespaces => c.defaultNamespace()
+    case _ => Array.empty[String]
+  }.getOrElse(Array("default")) // The builtin catalog use "default" as the default database.
+
+  def currentNamespace: Array[String] = _currentNamespace
+
+  def setCurrentNamespace(namespace: Array[String]): Unit = {
+    _currentNamespace = namespace
+  }
+
   // Clear all the registered catalogs. Only used in tests.
-  private[sql] def reset(): Unit = catalogs.clear()
+  private[sql] def reset(): Unit = {
+    catalogs.clear()
+    _currentCatalog = conf.defaultV2Catalog
+  }
 }
 
 object CatalogManager {
