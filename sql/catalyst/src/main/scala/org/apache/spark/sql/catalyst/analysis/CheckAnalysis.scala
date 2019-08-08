@@ -300,7 +300,7 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case create: V2TableCreation =>
+          case create: V2CreateTablePlan =>
             val references = create.partitioning.flatMap(_.references).toSet
             val badReferences = references.map(_.fieldNames).flatMap { column =>
               create.tableSchema.findNestedField(column) match {

@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2.expressions._
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 
 /**
@@ -131,22 +131,6 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Checks if input column names have duplicate identifiers even in if they are nested. This
-   * throws an exception if the duplication exists.
-   *
-   * @param schema the schema to check for duplicates
-   * @param checkType contextual information around the check, used in an exception message
-   * @param isCaseSensitive Whether to be case sensitive when comparing column names
-   */
-  def checkV2ColumnNameDuplication(
-      schema: StructType,
-      checkType: String,
-      isCaseSensitive: Boolean): Unit = {
-    val columnNames = explodeNestedFieldNames(schema)
-    checkColumnNameDuplication(columnNames, checkType, isCaseSensitive)
-  }
-
-  /**
    * Checks if the partitioning transforms are being duplicated or not. Throws an exception if
    * duplication exists.
    *
@@ -175,7 +159,7 @@ private[spark] object SchemaUtils {
     val normalizedTransforms = if (isCaseSensitive) {
       extractedTransforms
     } else {
-      extractedTransforms.map(t => t._1 -> t._2.map(_.toLowerCase(Locale.getDefault)))
+      extractedTransforms.map(t => t._1 -> t._2.map(_.toLowerCase(Locale.ROOT)))
     }
 
     if (normalizedTransforms.distinct.length != normalizedTransforms.length) {
