@@ -23,7 +23,6 @@ import java.sql.Date;
 import java.sql.Timestamp;
 
 import org.apache.hadoop.hive.common.type.HiveChar;
-import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
@@ -138,14 +137,6 @@ public class ColumnValue {
       tStringValue.setValue(value.toString());
     }
     return TColumnValue.stringVal(tStringValue);
-  }
-
-  private static TColumnValue stringValue(HiveDecimal value) {
-    TStringValue tStrValue = new TStringValue();
-    if (value != null) {
-      tStrValue.setValue(value.toString());
-    }
-    return TColumnValue.stringVal(tStrValue);
   }
 
   private static TColumnValue stringValue(HiveIntervalYearMonth value) {
