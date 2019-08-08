@@ -929,19 +929,43 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-28610: temporary overflow on sum of long should not fail") {
-    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true",
-        SQLConf.SUM_DECIMAL_BUFFER_FOR_LONG.key -> "true") {
+  test("SPARK-28610: overflow on sum of long should not fail with decimal") {
+    // Temporary overflow
+    withSQLConf(SQLConf.SUM_DECIMAL_RESULT_FOR_LONG.key -> "true") {
+      val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, -1000L), 1).toDF("a")
+      checkAnswer(df.select(sum($"a")), Row(BigDecimal(Long.MaxValue - 900L)))
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false",
+        SQLConf.SUM_DECIMAL_RESULT_FOR_LONG.key -> "false") {
       val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, -1000L), 1).toDF("a")
       checkAnswer(df.select(sum($"a")), Row(Long.MaxValue - 900L))
     }
     withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true",
-      SQLConf.SUM_DECIMAL_BUFFER_FOR_LONG.key -> "false") {
+        SQLConf.SUM_DECIMAL_RESULT_FOR_LONG.key -> "false") {
       val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, -1000L), 1).toDF("a")
       val e = intercept[SparkException] {
         df.select(sum($"a")).collect()
       }
       assert(e.getCause.isInstanceOf[ArithmeticException])
+    }
+    // Resulting overflow
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "false",
+      SQLConf.SUM_DECIMAL_RESULT_FOR_LONG.key -> "false") {
+      val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, 1000L), 1).toDF("a")
+      // wrong result
+      checkAnswer(df.select(sum($"a")), Row(Long.MinValue + 1099L))
+    }
+    withSQLConf(SQLConf.ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW.key -> "true",
+      SQLConf.SUM_DECIMAL_RESULT_FOR_LONG.key -> "false") {
+      val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, 1000L), 1).toDF("a")
+      val e = intercept[SparkException] {
+        df.select(sum($"a")).collect()
+      }
+      assert(e.getCause.isInstanceOf[ArithmeticException])
+    }
+    withSQLConf(SQLConf.SUM_DECIMAL_RESULT_FOR_LONG.key -> "true") {
+      val df = sparkContext.parallelize(Seq(100L, Long.MaxValue, 1000L), 1).toDF("a")
+      checkAnswer(df.select(sum($"a")), Row(BigDecimal("9223372036854776907")))
     }
   }
 }

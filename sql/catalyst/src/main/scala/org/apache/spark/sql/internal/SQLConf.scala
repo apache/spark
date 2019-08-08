@@ -1789,12 +1789,10 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val SUM_DECIMAL_BUFFER_FOR_LONG =
-    buildConf("spark.sql.sum.decimalBufferForLong")
-      .doc("If it is set to true, sum of long uses decimal type for the buffer. When false " +
-        "(default), long is used to the buffer. If spark.sql.arithmeticOperations.failOnOverFlow" +
-        " is turned on, having this config set to true allows operations which have temporary " +
-        "overflows to execute properly without the exception thrown when this flag is false.")
+  val SUM_DECIMAL_RESULT_FOR_LONG =
+    buildConf("spark.sql.sum.decimalResultForLong")
+      .doc("If it is set to true, sum of long returns decimal type. When false (default), " +
+        "long is returned.")
       .internal()
       .booleanConf
       .createWithDefault(false)
