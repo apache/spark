@@ -360,6 +360,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     assertNotBucketed("insertInto")
 
@@ -376,6 +377,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         insertInto(catalog, ident)
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
+      case other =>
+        // TODO(SPARK-28667): This should go through V2SessionCatalog
+        throw new UnsupportedOperationException(
+          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
 
@@ -488,6 +493,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     val session = df.sparkSession
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
@@ -496,6 +502,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
+
+      case other =>
+        // TODO(SPARK-28666): This should go through V2SessionCatalog
+        throw new UnsupportedOperationException(
+          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
 
