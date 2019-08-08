@@ -1393,18 +1393,18 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 
   /**
    * @param input internalRow (time)
-   * @param maxLevel Maximum level that can be used for truncation (e.g MONTH for Date input)
+   * @param minLevel Minimum level that can be used for truncation (e.g WEEK for Date input)
    * @param truncFunc function: (time, level) => time
    */
-  protected def evalHelper(input: InternalRow, maxLevel: Int)(
+  protected def evalHelper(input: InternalRow, minLevel: Int)(
     truncFunc: (Any, Int) => Any): Any = {
     val level = if (format.foldable) {
       truncLevel
     } else {
       DateTimeUtils.parseTruncLevel(format.eval().asInstanceOf[UTF8String])
     }
-    if (level == DateTimeUtils.TRUNC_INVALID || level > maxLevel) {
-      // unknown format or too large level
+    if (level < minLevel) {
+      // unknown format or too small level
       null
     } else {
       val t = instant.eval(input)
@@ -1419,7 +1419,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
   protected def codeGenHelper(
       ctx: CodegenContext,
       ev: ExprCode,
-      maxLevel: Int,
+      minLevel: Int,
       orderReversed: Boolean = false)(
       truncFunc: (String, String) => String)
     : ExprCode = {
@@ -1427,7 +1427,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
 
     val javaType = CodeGenerator.javaType(dataType)
     if (format.foldable) {
-      if (truncLevel == DateTimeUtils.TRUNC_INVALID || truncLevel > maxLevel) {
+      if (truncLevel < minLevel) {
         ev.copy(code = code"""
           boolean ${ev.isNull} = true;
           $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
@@ -1453,7 +1453,7 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
         val truncFuncStr = truncFunc(dateVal, form)
         s"""
           int $form = $dtu.parseTruncLevel($fmt);
-          if ($form == -1 || $form > $maxLevel) {
+          if ($form < $minLevel) {
             ${ev.isNull} = true;
           } else {
             ${ev.value} = $dtu.$truncFuncStr
@@ -1503,13 +1503,13 @@ case class TruncDate(date: Expression, format: Expression)
   override val instant = date
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = MAX_LEVEL_OF_DATE_TRUNC) { (d: Any, level: Int) =>
+    evalHelper(input, minLevel = MIN_LEVEL_OF_DATE_TRUNC) { (d: Any, level: Int) =>
       DateTimeUtils.truncDate(d.asInstanceOf[Int], level)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    codeGenHelper(ctx, ev, maxLevel = MAX_LEVEL_OF_DATE_TRUNC) {
+    codeGenHelper(ctx, ev, minLevel = MIN_LEVEL_OF_DATE_TRUNC) {
       (date: String, fmt: String) => s"truncDate($date, $fmt);"
     }
   }
@@ -1563,14 +1563,14 @@ case class TruncTimestamp(
   def this(format: Expression, timestamp: Expression) = this(format, timestamp, None)
 
   override def eval(input: InternalRow): Any = {
-    evalHelper(input, maxLevel = MAX_LEVEL_OF_TIMESTAMP_TRUNC) { (t: Any, level: Int) =>
+    evalHelper(input, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC) { (t: Any, level: Int) =>
       DateTimeUtils.truncTimestamp(t.asInstanceOf[Long], level, timeZone)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val tz = ctx.addReferenceObj("timeZone", timeZone)
-    codeGenHelper(ctx, ev, maxLevel = MAX_LEVEL_OF_TIMESTAMP_TRUNC, true) {
+    codeGenHelper(ctx, ev, minLevel = MIN_LEVEL_OF_TIMESTAMP_TRUNC, true) {
       (date: String, fmt: String) =>
         s"truncTimestamp($date, $fmt, $tz);"
     }
