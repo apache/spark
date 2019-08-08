@@ -220,6 +220,10 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.next())
         assert(rs.getString(1) === "ABC")
       }
+      testExecuteStatementWithProtocolVersion(version, "SELECT cast(null as binary)") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === null)
+      }
     }
 
     test(s"$version get boolean type") {
