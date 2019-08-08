@@ -568,7 +568,7 @@ class CatalogSuite
   }
 
   private def checkTableNullType(schema: StructType): Unit = {
-    val expectedMsg = "DataType NullType is not supported for create table"
+    val expectedMsg = "Cannot create tables with null-type column"
     withTable("t") {
       val e = intercept[AnalysisException] {
         spark.catalog.createTable(
