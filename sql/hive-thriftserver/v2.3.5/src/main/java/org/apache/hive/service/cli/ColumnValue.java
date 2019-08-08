@@ -37,6 +37,8 @@ import org.apache.hive.service.rpc.thrift.TI32Value;
 import org.apache.hive.service.rpc.thrift.TI64Value;
 import org.apache.hive.service.rpc.thrift.TStringValue;
 
+import org.apache.spark.unsafe.types.UTF8String;
+
 /**
  * Protocols before HIVE_CLI_SERVICE_PROTOCOL_V6 (used by RowBasedSet)
  *
@@ -199,7 +201,8 @@ public class ColumnValue {
     case DECIMAL_TYPE:
       return stringValue((HiveDecimal)value, typeDescriptor);
     case BINARY_TYPE:
-      return stringValue((String)value);
+      String strVal = value == null ? null : UTF8String.fromBytes((byte[])value).toString();
+      return stringValue(strVal);
     case ARRAY_TYPE:
     case MAP_TYPE:
     case STRUCT_TYPE:
