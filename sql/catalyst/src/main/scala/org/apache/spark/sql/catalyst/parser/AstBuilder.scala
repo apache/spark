@@ -1400,6 +1400,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Millennium(expression(ctx.source))
       case "CENTURY" =>
         Century(expression(ctx.source))
+      case "DECADE" =>
+        Decade(expression(ctx.source))
       case "YEAR" =>
         Year(expression(ctx.source))
       case "QUARTER" =>

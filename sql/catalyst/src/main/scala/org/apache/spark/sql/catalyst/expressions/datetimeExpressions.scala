@@ -1862,3 +1862,31 @@ case class Century(child: Expression) extends UnaryExpression with ImplicitCastI
     defineCodeGen(ctx, ev, c => s"$dtu.getCentury($c)")
   }
 }
+
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the decade of the date/timestamp.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2019-08-08');
+       201
+      > SELECT _FUNC_('2010-08-06');
+       201
+      > SELECT _FUNC_('2009-08-06');
+       200
+  """,
+  since = "3.0.0")
+case class Decade(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getDecade(date.asInstanceOf[Int])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getDecade($c)")
+  }
+}

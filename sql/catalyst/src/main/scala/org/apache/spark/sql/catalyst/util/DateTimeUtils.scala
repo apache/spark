@@ -472,19 +472,14 @@ object DateTimeUtils {
     result
   }
 
-  /**
-   * Returns the millennium for the given date. The date is expressed in days since 1.1.1970.
-   * */
-  def getMillennium(date: SQLDate): Int = {
-    extractFromYear(date, 1000)
-  }
+  /** Returns the millennium for the given date. The date is expressed in days since 1.1.1970. */
+  def getMillennium(date: SQLDate): Int = extractFromYear(date, 1000)
 
-  /**
-   * Returns the century for the given date. The date is expressed in days since 1.1.1970.
-   * */
-  def getCentury(date: SQLDate): Int = {
-    extractFromYear(date, 100)
-  }
+  /** Returns the century for the given date. The date is expressed in days since 1.1.1970. */
+  def getCentury(date: SQLDate): Int = extractFromYear(date, 100)
+
+  /** Returns the decade for the given date. The date is expressed in days since 1.1.1970. */
+  def getDecade(date: SQLDate): Int = Math.floorDiv(getYear(date), 10)
 
   /**
    * Returns the year value for the given date. The date is expressed in days
