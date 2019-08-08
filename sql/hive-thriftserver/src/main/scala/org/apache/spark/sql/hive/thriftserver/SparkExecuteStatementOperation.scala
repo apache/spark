@@ -218,7 +218,9 @@ private[hive] class SparkExecuteStatementOperation(
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
     // Always set current username to local properties
-    sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_CURRENT_USER, parentSession.getUserName)
+    sqlContext.sparkContext
+      .setLocalProperty(SparkContext.SPARK_JOB_CURRENT_USER,
+        parentSession.getUserName)
     if(dfsDelegationToken != null) {
       sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_TOKENS, dfsDelegationToken)
     }

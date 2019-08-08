@@ -19,10 +19,9 @@ package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.security.Credentials
-import org.apache.hive.service.cli.session._
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, HiveSessionImplwithUGI, HiveSessionProxy, SessionManager}
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.server.HiveServer2
-
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
