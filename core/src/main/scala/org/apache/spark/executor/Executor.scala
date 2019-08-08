@@ -26,14 +26,8 @@ import java.security.PrivilegedAction
 import java.util.Properties
 import java.util.concurrent._
 
-import javax.annotation.concurrent.GuardedBy
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-import scala.concurrent.duration._
-import scala.util.control.NonFatal
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import javax.annotation.concurrent.GuardedBy
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.token.Token
@@ -51,6 +45,11 @@ import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
+import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 /**
  * Spark executor, backed by a threadpool to run tasks.
@@ -371,7 +370,8 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
-      val currentUser: String = taskDescription.properties.getProperty(SparkContext.SPARK_JOB_CURRENT_USER, null)
+      val currentUser: String = taskDescription.properties
+        .getProperty(SparkContext.SPARK_JOB_CURRENT_USER, null)
       currentUser match {
         case user: String =>
           val ugi = UserGroupInformation.createProxyUser(user, UserGroupInformation.getCurrentUser)
