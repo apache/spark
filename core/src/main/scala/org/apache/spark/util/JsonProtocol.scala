@@ -824,7 +824,7 @@ private[spark] object JsonProtocol {
 
     val taskInfo =
       new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
-    taskInfo.setPartitionId(partitionId)
+    taskInfo.partitionId = partitionId
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed

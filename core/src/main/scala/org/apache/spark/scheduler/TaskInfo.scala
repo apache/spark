@@ -70,14 +70,10 @@ class TaskInfo(
 
   var killed = false
 
-  var partitionId = -1
+  var partitionId: Int = -1
 
   private[spark] def markGettingResult(time: Long) {
     gettingResultTime = time
-  }
-
-  private[spark] def setPartitionId(partitionId: Int): Unit = {
-    this.partitionId = partitionId
   }
 
   private[spark] def markFinished(state: TaskState, time: Long) {

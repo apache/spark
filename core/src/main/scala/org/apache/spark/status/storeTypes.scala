@@ -141,7 +141,7 @@ private[spark] object TaskIndexNames {
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
   final val COMPLETION_TIME = "ct"
-  final val PARTITION_ID = "pid"
+  final val PARTITION_ID = "partid"
 }
 
 /**
