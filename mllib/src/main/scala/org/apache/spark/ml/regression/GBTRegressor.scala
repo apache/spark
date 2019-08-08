@@ -34,7 +34,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
 /**
@@ -258,27 +258,12 @@ class GBTRegressionModel private[ml](
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    var predictionColNames = Seq.empty[String]
-    var predictionColumns = Seq.empty[Column]
-
-    if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { features: Vector => predict(features) }
-      predictionColNames :+= $(predictionCol)
-      predictionColumns :+= predictUDF(col($(featuresCol)))
-    }
-
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
-      predictionColNames :+= $(leafCol)
-      predictionColumns :+= leafUDF(col($(featuresCol)))
-    }
-
-    if (predictionColNames.nonEmpty) {
-      dataset.withColumns(predictionColNames, predictionColumns)
+      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
+      super.transform(dataset)
+        .withColumn($(leafCol), leafUDF(col($(featuresCol))))
     } else {
-      this.logWarning(s"$uid: GBTRegressionModel.transform() does nothing" +
-        " because no output columns were set.")
-      dataset.toDF()
+      super.transform(dataset)
     }
   }
 

@@ -34,7 +34,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 
 /**
@@ -299,12 +299,12 @@ class GBTClassificationModel private[ml](
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    if ($(leafCol).isEmpty) {
-      super.transform(dataset)
-    } else {
+    if ($(leafCol).nonEmpty) {
       val leafUDF = udf { vector: Vector => predictLeaf(vector) }
       super.transform(dataset)
         .withColumn($(leafCol), leafUDF(col($(featuresCol))))
+    } else {
+      super.transform(dataset)
     }
   }
 
