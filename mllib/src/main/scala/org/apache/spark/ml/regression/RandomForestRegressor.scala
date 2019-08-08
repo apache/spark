@@ -31,7 +31,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestModel}
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 
 /**
@@ -204,12 +204,30 @@ class RandomForestRegressionModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
+    val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+
+    if ($(predictionCol).nonEmpty) {
+      val predictUDF = udf { (vector: Vector) => bcastModel.value.predict(vector) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)))
+    }
+
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
-      super.transform(dataset)
-        .withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      val leafUDF = udf { vector: Vector => bcastModel.value.predictLeaf(vector) }
+      predictionColNames :+= $(leafCol)
+      predictionColumns :+= leafUDF(col($(featuresCol)))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      super.transform(dataset)
+      this.logWarning(s"$uid: RandomForestRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
     }
   }
 
