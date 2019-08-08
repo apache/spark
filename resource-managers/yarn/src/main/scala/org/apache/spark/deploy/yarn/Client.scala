@@ -349,7 +349,7 @@ private[spark] class Client(
     logInfo("Verifying our application has not requested more than the maximum " +
       s"memory capability of the cluster ($maxMem MB per container)")
     val executorMem =
-      executorMemory + executorOffHeapMemory +executorMemoryOverhead + pysparkWorkerMemory
+      executorMemory + executorOffHeapMemory + executorMemoryOverhead + pysparkWorkerMemory
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory ($executorMemory MB), " +
         s"offHeap memory ($executorOffHeapMemory) MB, overhead ($executorMemoryOverhead MB), " +
