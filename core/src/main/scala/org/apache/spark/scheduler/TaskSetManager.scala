@@ -955,8 +955,10 @@ private[spark] class TaskSetManager(
    */
   override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
-    // zombie or is from a barrier stage.
-    if (isZombie || isBarrier || numTasks == 1) {
+    // zombie or is from a barrier stage. Also, for the scenario of indeterminate stage rerunning,
+    // speculation will cause correctness bugs, see more details in SPARK-23243.
+    if (isZombie || isBarrier || numTasks == 1 ||
+        (taskSet.stageAttemptId > 0 && taskSet.isIndeterminate)) {
       return false
     }
     var foundTasks = false
