@@ -2516,4 +2516,13 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-28443: fail the DDL command if it creates a table with null-type columns") {
+    withTable("t") {
+      val e = intercept[AnalysisException]{
+        sql(s"CREATE TABLE t as SELECT NULL AS c")
+      }
+      assert(e.message.contains("DataType NullType is not supported for create table"))
+    }
+  }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, UpdateColumnType}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
@@ -413,7 +414,7 @@ object DDLCheck extends (LogicalPlan => Unit) {
         fields.foreach{field => throwWhenExistsNullType(field.dataType)}
 
       case other if other == NullType =>
-        failAnalysis("DataType NullType is not supported for create table")
+        failAnalysis("DataType NullType is not supported for create table.")
 
       case _ => // OK
     }
@@ -431,6 +432,9 @@ object DDLCheck extends (LogicalPlan => Unit) {
       case CreateV2Table(_, _, tableSchema, _, _, _) =>
         checkSchema(tableSchema)
 
+      case CreateTableAsSelect(_, _, _, query, _, _, _) =>
+        checkSchema(query.schema)
+
       // DataSourceAnalysis will convert CreateTable to CreateDataSourceTableCommand before check
       case CreateDataSourceTableCommand(table, _) =>
         checkSchema(table.schema)
@@ -441,6 +445,18 @@ object DDLCheck extends (LogicalPlan => Unit) {
 
       case ReplaceTable(_, _, tableSchema, _, _, _) =>
         checkSchema(tableSchema)
+
+      case ReplaceTableAsSelect(_, _, _, query, _, _, _) =>
+        checkSchema(query.schema)
+
+      case AlterTable(_, _, _, changes) =>
+        changes.foreach {
+          case add: AddColumn =>
+            throwWhenExistsNullType(add.dataType())
+          case update: UpdateColumnType =>
+            throwWhenExistsNullType(update.newDataType())
+          case _ => // skip
+        }
 
       case _ => // skip
     }
