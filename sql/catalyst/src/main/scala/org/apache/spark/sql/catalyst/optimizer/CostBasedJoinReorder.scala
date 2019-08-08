@@ -428,7 +428,7 @@ object JoinReorderGA extends PredicateHelper with Logging {
 
     val topOutputSet = AttributeSet(output)
 
-    val pop = Population(conf, itemsWithIndex, conditions, topOutputSet).evolve
+    val pop = Population(conf, itemsWithIndex.values.toSeq, conditions, topOutputSet).evolve
 
     val durationInMs = (System.nanoTime() - startTime) / (1000 * 1000)
     logInfo(s"Join reordering finished. Duration: $durationInMs ms, number of items: " +
@@ -504,36 +504,32 @@ trait Crossover {
  */
 object EdgeRecombination extends Crossover {
 
-  def genEdgeTable(father: Chromosome, mother: Chromosome) : Map[JoinPlan, Seq[JoinPlan]] = {
-    val fatherTable = father.basicPlans.map(g => g -> findNeighbours(father.basicPlans, g)).toMap
-    val motherTable = mother.basicPlans.map(g => g -> findNeighbours(mother.basicPlans, g)).toMap
+  def genEdgeTable(father: Chromosome, mother: Chromosome): Map[JoinPlan, Seq[JoinPlan]] = {
+    val length = father.basicPlans.length
+
+    val fatherIndexed = father.basicPlans.toIndexedSeq
+    val fatherTable = fatherIndexed.map(p => {
+      val index = fatherIndexed.indexOf(p)
+      p -> Seq(fatherIndexed((index - 1 + length) % length), fatherIndexed((index + 1) % length))
+    }).toMap
+
+    val motherIndexed = mother.basicPlans.toIndexedSeq
+    val motherTable = motherIndexed.map(p => {
+      val index = motherIndexed.indexOf(p)
+      p -> Seq(motherIndexed((index - 1 + length) % length), motherIndexed((index + 1) % length))
+    }).toMap
 
     fatherTable.map(entry => entry._1 -> (entry._2 ++ motherTable(entry._1)))
   }
 
-  def findNeighbours(genes: Seq[JoinPlan], g: JoinPlan) : Seq[JoinPlan] = {
-    val genesIndexed = genes.toIndexedSeq
-    val index = genesIndexed.indexOf(g)
-    val length = genes.size
-    if (index > 0 && index < length - 1) {
-      Seq(genesIndexed(index - 1), genesIndexed(index + 1))
-    } else if (index == 0) {
-      Seq(genesIndexed(1), genesIndexed(length - 1))
-    } else if (index == length - 1) {
-      Seq(genesIndexed(0), genesIndexed(length - 2))
-    } else {
-      Seq()
-    }
-  }
-
   override def newChromo(father: Chromosome, mother: Chromosome): Chromosome = {
-    var newGenes: Seq[JoinPlan] = Seq()
+    var newGenes: mutable.Buffer[JoinPlan] = mutable.Buffer()
     // 1. Generate the edge table.
     var table = genEdgeTable(father, mother)
     // 2. Choose a start vertex randomly from the heads of father/mother.
     var current =
       if (util.Random.nextInt(2) == 0) father.basicPlans.head else mother.basicPlans.head
-    newGenes :+= current
+    newGenes += current
 
     var stop = false
     while (!stop) {
@@ -553,16 +549,16 @@ object EdgeRecombination extends Crossover {
         var numCand = 0
         neighboursTable.foreach(entry => if (entry._2.size == numBase) numCand += 1)
         current = neighboursTable.toIndexedSeq(util.Random.nextInt(numCand))._1
-        newGenes :+= current
+        newGenes += current
       } else if (filteredTable.nonEmpty) {
         current = filteredTable.toIndexedSeq(util.Random.nextInt(filteredTable.size))._2.head
-        newGenes :+= current
+        newGenes += current
       } else {
         stop = true
       }
     }
 
-    Chromosome(father.conf, newGenes, father.conditions, father.topOutputSet)
+    Chromosome(father.conf, Seq(newGenes: _*), father.conditions, father.topOutputSet)
   }
 }
 
@@ -650,12 +646,12 @@ case class Chromosome(
 object Population {
   def apply(
       conf: SQLConf,
-      itemsMap: Map[Int, JoinPlan],
+      items: Seq[JoinPlan],
       conditions: Set[Expression],
       topOutputSet: AttributeSet) : Population = {
 
-    val chromos: Seq[Chromosome] = Seq.fill(determinePopSize(conf, itemsMap.size)) {
-      Chromosome(conf, shuffle(itemsMap), conditions, topOutputSet)
+    val chromos: Seq[Chromosome] = Seq.fill(determinePopSize(conf, items.size)) {
+      Chromosome(conf, util.Random.shuffle(items), conditions, topOutputSet)
     }
 
     Population(conf, chromos)
@@ -689,17 +685,13 @@ object Population {
 
     math.ceil(math.max(math.min(max, size), min)).toInt
   }
-
-  private def shuffle(itemsMap: Map[Int, JoinPlan]) : Seq[JoinPlan] = {
-    util.Random.shuffle(itemsMap.values).toSeq
-  }
 }
 
 case class Population(conf: SQLConf, chromos: Seq[Chromosome]) extends Logging {
 
   def evolve: Population = {
     // Sort chromos in the population first.
-    var evolvedChromos = chromos.sortWith((left, right) => left.fitness > right.fitness)
+    var evolvedChromos = chromos.sortBy(- _.fitness)
     // Begin iteration.
     val generations = chromos.size
     for (i <- 1 to generations) {
