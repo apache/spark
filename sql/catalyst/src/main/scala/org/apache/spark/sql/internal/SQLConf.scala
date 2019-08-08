@@ -1532,8 +1532,9 @@ object SQLConf {
     .createWithDefault(false)
 
   val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .internal()
     .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types.")
+      "if both sides are integral types. This is for PostgreSQL test cases only.")
     .booleanConf
     .createWithDefault(false)
 
