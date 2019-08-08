@@ -33,10 +33,9 @@ import scala.concurrent.duration._
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.security.token.Token
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.Token
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
@@ -30,8 +32,6 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 import org.apache.spark.sql.hive.thriftserver.util.{ThriftServerHadoopUtils, ThriftServerHDFSDelegationTokenProvider}
-
-import scala.collection.JavaConverters._
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
