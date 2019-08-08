@@ -1034,7 +1034,7 @@ class JDBCSuite extends QueryTest
     val password = "testPass"
     val tableName = "tab1"
     withTable(tableName) {
-      val df = sql(
+      sql(
         s"""
            |CREATE TABLE $tableName
            |USING org.apache.spark.sql.jdbc
