@@ -195,7 +195,7 @@ public class ColumnValue {
     case INTERVAL_DAY_TIME_TYPE:
       return stringValue((HiveIntervalDayTime) value);
     case DECIMAL_TYPE:
-      return getDecimalType(value);
+      return stringValue(((BigDecimal)value).toPlainString());
     case BINARY_TYPE:
       String strVal = value == null ? null : UTF8String.fromBytes((byte[])value).toString();
       return stringValue(strVal);
@@ -210,14 +210,6 @@ public class ColumnValue {
     default:
       return null;
     }
-  }
-
-  private static TColumnValue getDecimalType(Object value) {
-    Object decV = value;
-    if (value instanceof BigDecimal) {
-      decV = HiveDecimal.create((BigDecimal) decV);
-    }
-    return stringValue(((HiveDecimal) decV));
   }
 
   private static Boolean getBooleanValue(TBoolValue tBoolValue) {
