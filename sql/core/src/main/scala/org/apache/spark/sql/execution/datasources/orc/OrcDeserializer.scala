@@ -54,17 +54,15 @@ class OrcDeserializer(
   }
 
   def deserialize(orcStruct: OrcStruct): InternalRow = {
-    var fieldWriterIndex = 0
     var targetColumnIndex = 0
-    while (targetColumnIndex < requestedColIds.length) {
-      if (requestedColIds(targetColumnIndex) != -1) {
+    while (targetColumnIndex < fieldWriters.length) {
+      if (fieldWriters(targetColumnIndex) != null) {
         val value = orcStruct.getFieldValue(requestedColIds(targetColumnIndex))
         if (value == null) {
           resultRow.setNullAt(targetColumnIndex)
         } else {
-          fieldWriters(fieldWriterIndex)(value)
+          fieldWriters(targetColumnIndex)(value)
         }
-        fieldWriterIndex += 1
       }
       targetColumnIndex += 1
     }
