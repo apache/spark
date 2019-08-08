@@ -54,7 +54,7 @@ class KafkaSourceProviderSuite extends SparkFunSuite {
     })
     verifyFieldsInMicroBatchStream(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, expected,
         stream => {
-      assert(expected.toLong === stream.kafkaOffsetReader.offsetFetchAttemptIntervalMs))
+      assert(expected.toLong === stream.kafkaOffsetReader.offsetFetchAttemptIntervalMs)
     })
   }
 
