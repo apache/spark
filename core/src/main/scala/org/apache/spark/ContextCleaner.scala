@@ -224,7 +224,7 @@ private[spark] class ContextCleaner(
     try {
       logDebug("Cleaning shuffle " + shuffleId)
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-      shuffleDriverComponents.removeShuffleData(shuffleId, blocking)
+      shuffleDriverComponents.removeShuffle(shuffleId, blocking)
       listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
       logDebug("Cleaned shuffle " + shuffleId)
     } catch {

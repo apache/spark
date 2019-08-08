@@ -17,13 +17,13 @@
 
 package org.apache.spark.shuffle.sort.lifecycle;
 
+import java.util.Map;
+
 import com.google.common.collect.ImmutableMap;
+
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.api.ShuffleDriverComponents;
 import org.apache.spark.storage.BlockManagerMaster;
-
-import java.io.IOException;
-import java.util.Map;
 
 public class DefaultShuffleDriverComponents implements ShuffleDriverComponents {
 
@@ -36,12 +36,7 @@ public class DefaultShuffleDriverComponents implements ShuffleDriverComponents {
   }
 
   @Override
-  public void cleanupApplication() {
-    // do nothing
-  }
-
-  @Override
-  public void removeShuffleData(int shuffleId, boolean blocking) throws IOException {
+  public void removeShuffle(int shuffleId, boolean blocking) {
     checkInitialized();
     blockManagerMaster.removeShuffle(shuffleId, blocking);
   }

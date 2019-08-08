@@ -40,7 +40,9 @@ public interface ShuffleDriverComponents {
   /**
    * Called once at the end of the Spark application to clean up any existing shuffle state.
    */
-  void cleanupApplication() throws IOException;
+  default void cleanupApplication() throws IOException {}
+
+  default void registerShuffle(int shuffleId) throws IOException {}
 
   /**
    * Removes shuffle data associated with the given shuffle Id.
@@ -48,5 +50,5 @@ public interface ShuffleDriverComponents {
    * @param shuffleId The unique identifier for the shuffle stage.
    * @param blocking Whether this call should block on the deletion of the data.
    */
-  void removeShuffleData(int shuffleId, boolean blocking) throws IOException;
+  void removeShuffle(int shuffleId, boolean blocking) throws IOException;
 }
