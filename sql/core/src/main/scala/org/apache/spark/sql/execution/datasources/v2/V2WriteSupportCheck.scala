@@ -51,9 +51,9 @@ object V2WriteSupportCheck extends (LogicalPlan => Unit) {
           }
       }
 
-    case DeleteFromTable(_, filter) =>
-      if (SubqueryExpression.hasSubquery(filter.condition)) {
-        failAnalysis(s"Delete by condition with subquery is not supported: $filter")
+    case DeleteFromTable(_, condition) =>
+      if (SubqueryExpression.hasSubquery(condition)) {
+        failAnalysis(s"Delete by condition with subquery is not supported: $condition")
       }
 
     case _ => // OK

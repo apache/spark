@@ -595,8 +595,10 @@ trait CheckAnalysis extends PredicateHelper {
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter => // Ok
+          case _: DeleteFromTable => // Ok
           case _ =>
-            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in a Filter: $plan")
+            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
+                s" Filter/DeleteFromTable: $plan")
         }
     }
 

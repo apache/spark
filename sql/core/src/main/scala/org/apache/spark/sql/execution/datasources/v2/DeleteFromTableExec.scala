@@ -27,10 +27,10 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class DeleteFromTableExec(
     table: SupportsDelete,
-    deleteWhere: Array[Filter]) extends LeafExecNode {
+    condition: Array[Filter]) extends LeafExecNode {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    table.deleteWhere(deleteWhere)
+    table.deleteWhere(condition)
     sparkContext.emptyRDD
   }
 

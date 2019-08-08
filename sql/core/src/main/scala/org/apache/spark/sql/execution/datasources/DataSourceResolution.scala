@@ -328,8 +328,7 @@ case class DataSourceResolution(
       delete: DeleteFromStatement): DeleteFromTable = {
     val relation = UnresolvedRelation(delete.tableName)
     val aliased = delete.tableAlias.map { SubqueryAlias(_, relation) }.getOrElse(relation)
-    val filter = Filter(delete.condition, aliased)
-    DeleteFromTable(aliased, filter)
+    DeleteFromTable(aliased, delete.condition)
   }
 
   private def convertTableProperties(
