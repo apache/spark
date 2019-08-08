@@ -20,13 +20,14 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
@@ -67,6 +68,7 @@ private[spark] class EventLoggingListener(
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
+  private val cutType = sparkConf.get(EVENT_LOG_CUTTYPE)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
@@ -83,12 +85,13 @@ private[spark] class EventLoggingListener(
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
   private var writer: Option[PrintWriter] = None
+  private var stopWriter: Option[PrintWriter] = None
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+  private[scheduler] var logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
 
   /**
    * Creates the log file in the configured log directory.
@@ -125,6 +128,7 @@ private[spark] class EventLoggingListener(
       EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
       writer = Some(new PrintWriter(bstream))
+      stopWriter = writer
       logInfo("Logging events to %s".format(logPath))
     } catch {
       case e: Exception =>
@@ -148,6 +152,59 @@ private[spark] class EventLoggingListener(
     }
   }
 
+  /** cut the event log file **/
+  private def logReload(): Unit = {
+    val tlogPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
+    // 如果获取的logPath没变，就不用重新生成日志文件
+    if (tlogPath == logPath) {
+      return
+    }
+
+    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory) {
+      throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
+    }
+
+    val workingPath = tlogPath + IN_PROGRESS
+    val path = new Path(workingPath)
+    val uri = path.toUri
+    val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
+    val isDefaultLocal = defaultFs == null || defaultFs == "file"
+
+    if (shouldOverwrite && fileSystem.delete(path, true)) {
+      logWarning(s"Event log $path already exists. Overwriting...")
+    }
+
+    /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
+     * Therefore, for local files, use FileOutputStream instead. */
+    val dstream =
+      if ((isDefaultLocal && uri.getScheme == null) || uri.getScheme == "file") {
+        new FileOutputStream(uri.getPath)
+      } else {
+        hadoopDataStream = Some(fileSystem.create(path))
+        hadoopDataStream.get
+      }
+
+    try {
+      val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
+      val bstream = new BufferedOutputStream(cstream, outputBufferSize)
+
+      EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
+      fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
+      writer = Some(new PrintWriter(bstream))
+      logInfo("Logging events to %s".format(tlogPath))
+    } catch {
+      case e: Exception =>
+        dstream.close()
+        throw e
+    }
+
+    // 关闭老的流
+    stop()
+
+    stopWriter = writer
+    logPath = tlogPath
+  }
+
   // Events that do not trigger a flush
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
 
@@ -166,7 +223,10 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
-  override def onJobStart(event: SparkListenerJobStart): Unit = logEvent(event, flushLogger = true)
+  override def onJobStart(event: SparkListenerJobStart): Unit = {
+    logReload()
+    logEvent(event, flushLogger = true)
+  }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
 
@@ -183,7 +243,15 @@ private[spark] class EventLoggingListener(
   }
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
-    logEvent(event, flushLogger = true)
+    val _event = event.copy()
+    if(cutType == "month"){
+      _event.appId = Option(event.appId.getOrElse("null") + "_" + new SimpleDateFormat("yyyy-MM").format(new Date))
+    }else if(cutType == "day"){
+      _event.appId = Option(event.appId.getOrElse("null") + "_" + new SimpleDateFormat("yyyy-MM-dd").format(new Date))
+    }else if(cutType == "hour"){
+      _event.appId = Option(event.appId.getOrElse("null") + "_" + new SimpleDateFormat("yyyy-MM-dd-HH").format(new Date))
+    }
+    logEvent(_event, flushLogger = true)
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
@@ -242,7 +310,7 @@ private[spark] class EventLoggingListener(
    * ".inprogress" suffix.
    */
   def stop(): Unit = {
-    writer.foreach(_.close())
+    stopWriter.foreach(_.close())
 
     val target = new Path(logPath)
     if (fileSystem.exists(target)) {
@@ -334,8 +402,21 @@ private[spark] object EventLoggingListener extends Logging {
       logBaseDir: URI,
       appId: String,
       appAttemptId: Option[String],
-      compressionCodecName: Option[String] = None): String = {
-    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
+      compressionCodecName: Option[String] = None,
+      cutType: String = "none"): String = {
+    var base = ""
+    if(cutType == "month"){
+      val month = new SimpleDateFormat("yyyy-MM").format(new Date)
+      base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId) + "_" + month
+    }else if(cutType == "day"){
+      val day = new SimpleDateFormat("yyyy-MM-dd").format(new Date)
+      base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId) + "_" + day
+    }else if(cutType == "hour"){
+      val hour = new SimpleDateFormat("yyyy-MM-dd-HH").format(new Date)
+      base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId) + "_" + hour
+    }else{
+      base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
+    }
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
       base + "_" + sanitize(appAttemptId.get) + codec

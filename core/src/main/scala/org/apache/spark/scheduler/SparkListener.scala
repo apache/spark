@@ -170,7 +170,7 @@ case class SparkListenerExecutorMetricsUpdate(
 @DeveloperApi
 case class SparkListenerApplicationStart(
     appName: String,
-    appId: Option[String],
+    var appId: Option[String],
     time: Long,
     sparkUser: String,
     appAttemptId: Option[String],

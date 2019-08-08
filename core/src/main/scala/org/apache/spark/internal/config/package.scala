@@ -65,6 +65,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EVENT_LOG_CUTTYPE =
+    ConfigBuilder("spark.eventLog.cuttype")
+      .doc("Event log cut type none month day hour.")
+      .internal()
+      .stringConf
+      .createWithDefault("none")
+
   private[spark] val EVENT_LOG_OUTPUT_BUFFER_SIZE = ConfigBuilder("spark.eventLog.buffer.kb")
     .doc("Buffer size to use when writing to output streams, in KiB unless otherwise specified.")
     .bytesConf(ByteUnit.KiB)
