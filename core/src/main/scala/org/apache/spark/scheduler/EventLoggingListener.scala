@@ -154,7 +154,7 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  /** cut the event log file **/
+  /** cut the event log file, reload the new log writer and stop the old writer**/
   private def logReload(): Unit = {
     val tlogPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
     // is the logPath is not change, then exit
