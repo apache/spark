@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{NullType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 
@@ -547,9 +547,28 @@ class CatalogSuite
     assert(spark.table("my_temp_table").storageLevel == StorageLevel.DISK_ONLY)
   }
 
-  test("SPARK-28443: Spark sql add exception when create field type NullType") {
+  test("SPARK-28443: fail the DDL command if it creates a table with null-type columns") {
+    val schema1 = new StructType().add("c", NullType)
+    checkTableNullType(schema1)
+
+    val schema2 = new StructType()
+      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
+    checkTableNullType(schema2)
+
+    val schema3 = new StructType().add("c", ArrayType(NullType))
+    checkTableNullType(schema3)
+
+    val schema4 = new StructType()
+      .add("c", MapType(StringType, NullType))
+    checkTableNullType(schema4)
+
+    val schema5 = new StructType()
+      .add("c", MapType(NullType, StringType))
+    checkTableNullType(schema5)
+  }
+
+  private def checkTableNullType(schema: StructType): Unit = {
     val expectedMsg = "DataType NullType is not supported for create table"
-    val schema = new StructType().add("c", NullType)
     withTable("t") {
       val e = intercept[AnalysisException] {
         spark.catalog.createTable(

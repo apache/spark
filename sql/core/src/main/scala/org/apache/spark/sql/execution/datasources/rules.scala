@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.command.{CreateDataSourceTableCommand, Cre
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, DataTypes, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -394,38 +394,55 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
 }
 
 /**
- * SPARK-28443: Spark sql add exception when create field type NullType
+ * SPARK-28443: fail the DDL command if it creates a table with null-type columns
  */
 object DDLCheck extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
-  def throwWhenExistsNullType(schema: StructType): Unit = {
-    if (schema.exists(f => DataTypes.NullType.sameType(f.dataType))) {
-      failAnalysis("DataType NullType is not supported for create table ")
+  def throwWhenExistsNullType(dataType: DataType): Unit = {
+    dataType match {
+      case ArrayType(elementType, _) =>
+        throwWhenExistsNullType(elementType)
+
+      case MapType(keyType, valueType, _) =>
+        throwWhenExistsNullType(keyType)
+        throwWhenExistsNullType(valueType)
+
+      case StructType(fields) =>
+        fields.foreach{field => throwWhenExistsNullType(field.dataType)}
+
+      case other if other == NullType =>
+        failAnalysis("DataType NullType is not supported for create table")
+
+      case _ => // OK
     }
+  }
+
+  def checkSchema(schema: StructType): Unit = {
+    schema.foreach{field => throwWhenExistsNullType(field.dataType)}
   }
 
   override def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case CreateTable(tableDesc, _, _) =>
-        throwWhenExistsNullType(tableDesc.schema)
+        checkSchema(tableDesc.schema)
 
       case CreateV2Table(_, _, tableSchema, _, _, _) =>
-        throwWhenExistsNullType(tableSchema)
+        checkSchema(tableSchema)
 
       // DataSourceAnalysis will convert CreateTable to CreateDataSourceTableCommand before check
       case CreateDataSourceTableCommand(table, _) =>
-        throwWhenExistsNullType(table.schema)
+        checkSchema(table.schema)
 
       // HiveAnalysis will convert CreateTable to CreateTableCommand before check
       case CreateTableCommand(table, _) =>
-        throwWhenExistsNullType(table.schema)
+        checkSchema(table.schema)
 
       case ReplaceTable(_, _, tableSchema, _, _, _) =>
-        throwWhenExistsNullType(tableSchema)
+        checkSchema(tableSchema)
 
-      case _ => // OK
+      case _ => // skip
     }
   }
 }
