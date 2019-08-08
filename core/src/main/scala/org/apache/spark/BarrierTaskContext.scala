@@ -118,7 +118,7 @@ class BarrierTaskContext private[spark] (
     timer.schedule(timerTask, 60000, 60000)
 
     try {
-      val cancelableRpcFuture = barrierCoordinator.askCancelable[Unit](
+      val cancelableRpcFuture = barrierCoordinator.askAbortable[Unit](
         message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
@@ -131,7 +131,7 @@ class BarrierTaskContext private[spark] (
       while(!taskContext.isCompleted()) {
         if (taskContext.isInterrupted()) {
           val reason = taskContext.getKillReason().get
-          cancelableRpcFuture.cancel(reason)
+          cancelableRpcFuture.abort(reason)
           throw new TaskKilledException(reason)
         }
         // wait RPC future for at most 1 second

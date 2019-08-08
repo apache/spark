@@ -47,13 +47,13 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   def send(message: Any): Unit
 
   /**
-   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
-   * receive the reply within the specified timeout.
-   * Return a `CancelableFuture` instance which wrap `Future` but with additional `cancel` method.
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a
+   * [[AbortableRpcFuture]] to receive the reply within the specified timeout.
+   * The [[AbortableRpcFuture]] instance wraps [[Future]] with additional `abort` method.
    *
    * This method only sends the message once and never retries.
    */
-  def askCancelable[T: ClassTag](message: Any, timeout: RpcTimeout): CancelableFuture[T] = {
+  def askAbortable[T: ClassTag](message: Any, timeout: RpcTimeout): AbortableRpcFuture[T] = {
     throw new UnsupportedOperationException()
   }
 
@@ -108,17 +108,17 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
 /**
  * An exception thrown if the RPC is canceled.
  */
-class RPCCanceledException(message: String) extends Exception(message)
+class RpcAbortException(message: String) extends Exception(message)
 
 /**
  * A wrapper for `Future` but add cancel method.
  * This is used in long run RPC and provide an approach to cancel the RPC.
  */
-private[spark] class CancelableFuture[T: ClassTag](
+private[spark] class AbortableRpcFuture[T: ClassTag](
     future: Future[T],
-    onCancel: String => Unit) {
+    onAbort: String => Unit) {
 
-  def cancel(reason: String): Unit = onCancel(reason)
+  def abort(reason: String): Unit = onAbort(reason)
 
   def toFuture: Future[T] = future
 }

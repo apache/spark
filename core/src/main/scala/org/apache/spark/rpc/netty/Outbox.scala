@@ -78,7 +78,7 @@ private[netty] case class RpcOutboxMessage(
     removeRpcRequest()
   }
 
-  def onCancel(): Unit = {
+  def onAbort(): Unit = {
     removeRpcRequest()
   }
 
