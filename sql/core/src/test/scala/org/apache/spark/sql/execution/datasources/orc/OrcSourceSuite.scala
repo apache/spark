@@ -179,7 +179,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  test("SPARK-26859 Append column into middle") {
+  test("SPARK-26859 Fix field writer index bug in non-vectorized ORC deserializer") {
     withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
