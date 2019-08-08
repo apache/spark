@@ -25,7 +25,6 @@ import java.nio.ByteBuffer
 import java.security.PrivilegedAction
 import java.util.Properties
 import java.util.concurrent._
-
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._

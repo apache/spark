@@ -61,7 +61,9 @@ private[thriftserver] class SparkSQLOperationManager()
       statement,
       confOverlay,
       runInBackground,
-      sessionToTokens.getOrDefault(parentSession.getSessionHandle, null))(sqlContext, sessionToActivePool)
+      sessionToTokens.getOrDefault(
+        parentSession.getSessionHandle,
+        null))(sqlContext, sessionToActivePool)
     handleToOperation.put(operation.getHandle, operation)
     logDebug(s"Created Operation for $statement with session=$parentSession, " +
       s"runInBackground=$runInBackground")

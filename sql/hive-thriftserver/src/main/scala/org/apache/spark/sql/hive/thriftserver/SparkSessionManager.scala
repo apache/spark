@@ -31,9 +31,9 @@ import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImplwithUGI}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv.sparkContext
 import org.apache.spark.sql.hive.thriftserver.util.ThriftServerHadoopUtils
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 
 class SparkSessionManager extends Logging {
   private val STS_TOKEN = "SparkThriftServer2ImpersonationToken"
@@ -99,7 +99,9 @@ class SparkSessionManager extends Logging {
             metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
             metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
             metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
-            sessionForSpecUser.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+            sessionForSpecUser.conf.set(
+              HiveUtils.FAKE_HIVE_VERSION.key,
+              HiveUtils.builtinHiveVersion)
             sessionForSpecUser
           }
         cachedSession.put(session.getUserName, sparkSession)
