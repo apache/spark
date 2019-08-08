@@ -26,6 +26,9 @@ import org.apache.hive.service.cli.GetInfoType
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
+import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.unsafe.types.UTF8String
+
 class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
 
   override def mode: ServerMode.Value = ServerMode.binary
@@ -219,6 +222,10 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
       testExecuteStatementWithProtocolVersion(version, "SELECT cast('ABC' as binary)") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "ABC")
+      }
+      testExecuteStatementWithProtocolVersion(version, "SELECT cast(49960 as binary)") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === UTF8String.fromBytes(NumberConverter.toBinary(49960)).toString)
       }
       testExecuteStatementWithProtocolVersion(version, "SELECT cast(null as binary)") { rs =>
         assert(rs.next())
