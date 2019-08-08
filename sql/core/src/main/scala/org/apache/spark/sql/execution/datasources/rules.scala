@@ -401,27 +401,27 @@ object DDLCheck extends (LogicalPlan => Unit) {
 
   def failAnalysis(msg: String): Unit = { throw new AnalysisException(msg) }
 
-  def throwWhenExistsNullType(dataType: DataType): Unit = {
+  def failNullType(dataType: DataType): Unit = {
     dataType match {
       case ArrayType(elementType, _) =>
-        throwWhenExistsNullType(elementType)
+        failNullType(elementType)
 
       case MapType(keyType, valueType, _) =>
-        throwWhenExistsNullType(keyType)
-        throwWhenExistsNullType(valueType)
+        failNullType(keyType)
+        failNullType(valueType)
 
       case StructType(fields) =>
-        fields.foreach{field => throwWhenExistsNullType(field.dataType)}
+        fields.foreach{field => failNullType(field.dataType)}
 
       case other if other == NullType =>
-        failAnalysis("DataType NullType is not supported for create table.")
+        failAnalysis("Cannot create tables with null-type column.")
 
       case _ => // OK
     }
   }
 
   def checkSchema(schema: StructType): Unit = {
-    schema.foreach{field => throwWhenExistsNullType(field.dataType)}
+    schema.foreach{field => failNullType(field.dataType)}
   }
 
   override def apply(plan: LogicalPlan): Unit = {
@@ -452,9 +452,9 @@ object DDLCheck extends (LogicalPlan => Unit) {
       case AlterTable(_, _, _, changes) =>
         changes.foreach {
           case add: AddColumn =>
-            throwWhenExistsNullType(add.dataType())
+            failNullType(add.dataType())
           case update: UpdateColumnType =>
-            throwWhenExistsNullType(update.newDataType())
+            failNullType(update.newDataType())
           case _ => // skip
         }
 
