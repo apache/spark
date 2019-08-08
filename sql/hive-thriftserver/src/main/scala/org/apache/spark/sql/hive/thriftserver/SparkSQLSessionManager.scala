@@ -70,21 +70,26 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
           ipAddress,
           delegationToken)
       if (UserGroupInformation.isSecurityEnabled) {
-        val ugi = sessionWithUGI.getSessionUgi
-        val originalCreds = ugi.getCredentials
-        val creds = new Credentials()
-        ThriftServerHadoopUtils.doAs(ugi)(() => hadoopTokenProvider
-          .obtainDelegationTokens(creds, username))
+        try {
+          val ugi = sessionWithUGI.getSessionUgi
+          val originalCreds = ugi.getCredentials
+          val creds = new Credentials()
+          ThriftServerHadoopUtils.doAs(ugi)(() => hadoopTokenProvider
+            .obtainDelegationTokens(creds, username))
 
-        val tokens: String = creds.getAllTokens.asScala.map(token => {
-          token.encodeToUrlString()
-        }).mkString(SparkContext.SPARK_JOB_TOKEN_DELIMiTER)
+          val tokens: String = creds.getAllTokens.asScala.map(token => {
+            token.encodeToUrlString()
+          }).mkString(SparkContext.SPARK_JOB_TOKEN_DELIMiTER)
 
-        ugi.addCredentials(creds)
-        val existing = ugi.getCredentials()
-        existing.mergeAll(originalCreds)
-        ugi.addCredentials(existing)
-        sparkSqlOperationManager.sessionToTokens.put(session.getSessionHandle, tokens)
+          ugi.addCredentials(creds)
+          val existing = ugi.getCredentials()
+          existing.mergeAll(originalCreds)
+          ugi.addCredentials(existing)
+          sparkSqlOperationManager.sessionToTokens.put(session.getSessionHandle, tokens)
+        } catch {
+          case e: Exception =>
+            throw new HiveSQLException(s"GOT HDFS TOKEN for user ${username} failed")
+        }
       }
       session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
       sessionWithUGI.setProxySession(session)

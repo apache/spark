@@ -79,7 +79,7 @@ class SparkSessionManager extends Logging {
       ugi
     } catch {
       case e: IOException =>
-        throw new HiveSQLException("Couldn't setup delegation token in the ugi", e)
+        throw new HiveSQLException("Couldn't setup delegation token in the ugi", e.getCause)
     }
   }
 
