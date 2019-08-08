@@ -255,8 +255,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
       }
     }
 
-    // TODO: enable this test case after port HIVE-10646
-    ignore(s"$version get void") {
+    test(s"$version get void") {
       testExecuteStatementWithProtocolVersion(version, "SELECT null") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === null)
