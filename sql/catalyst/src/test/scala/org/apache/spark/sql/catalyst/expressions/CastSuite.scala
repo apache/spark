@@ -1047,19 +1047,25 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Process Infinity, -Infinity, NaN in case insensitive manner") {
+    checkEvaluation(cast("inf", FloatType), Float.PositiveInfinity)
+    checkEvaluation(cast("+inf", FloatType), Float.PositiveInfinity)
     checkEvaluation(cast("infinity", FloatType), Float.PositiveInfinity)
     checkEvaluation(cast("+infiNity", FloatType), Float.PositiveInfinity)
     checkEvaluation(cast(" infinity ", FloatType), Float.PositiveInfinity)
     checkEvaluation(cast("-infinity", FloatType), Float.NegativeInfinity)
     checkEvaluation(cast("-infiniTy", FloatType), Float.NegativeInfinity)
     checkEvaluation(cast("  -infinity  ", FloatType), Float.NegativeInfinity)
+    checkEvaluation(cast("  -inf  ", FloatType), Float.NegativeInfinity)
 
+    checkEvaluation(cast("inf", DoubleType), Double.PositiveInfinity)
+    checkEvaluation(cast("+inf", DoubleType), Double.PositiveInfinity)
     checkEvaluation(cast("infinity", DoubleType), Double.PositiveInfinity)
     checkEvaluation(cast("+infiNity", DoubleType), Double.PositiveInfinity)
     checkEvaluation(cast(" infinity ", DoubleType), Double.PositiveInfinity)
     checkEvaluation(cast("-infinity", DoubleType), Double.NegativeInfinity)
     checkEvaluation(cast("-infiniTy", DoubleType), Double.NegativeInfinity)
     checkEvaluation(cast("  -infinity  ", DoubleType), Double.NegativeInfinity)
+    checkEvaluation(cast("-inf", DoubleType), Double.NegativeInfinity)
 
     checkEvaluation(cast("nan", FloatType), Float.NaN)
     checkEvaluation(cast("nAn", FloatType), Float.NaN)

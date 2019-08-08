@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit._
+import java.util.Locale
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{InternalRow, WalkedTypePath}
@@ -194,27 +195,14 @@ object Cast {
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 
   def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
-    val str = v.trim
-    if (str.equalsIgnoreCase("infinity") || str.equalsIgnoreCase("+infinity")) {
-      if (isFloat) {
-        Float.PositiveInfinity
-      } else {
-        Double.PositiveInfinity
-      }
-    } else if (str.equalsIgnoreCase("-infinity")) {
-      if (isFloat) {
-        Float.NegativeInfinity
-      } else {
-        Double.NegativeInfinity
-      }
-    } else if (str.equalsIgnoreCase("nan")) {
-      if (isFloat) {
-        Float.NaN
-      } else {
-        Double.NaN
-      }
-    } else {
-      null
+    v.trim.toLowerCase(Locale.ROOT) match {
+      case "inf" | "+inf" | "infinity" | "+infinity" =>
+        if (isFloat) Float.PositiveInfinity else Double.PositiveInfinity
+      case "-inf" | "-infinity" =>
+        if (isFloat) Float.NegativeInfinity else Double.NegativeInfinity
+      case "nan" =>
+        if (isFloat) Float.NaN else Double.NaN
+      case _ => null
     }
   }
 }
