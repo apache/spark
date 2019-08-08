@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.v2._
@@ -67,6 +67,32 @@ case class DataSourceV2Relation(
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
+  }
+}
+
+case class ReadDataSourceV2Relation(
+    scanBuilder: ScanBuilder,
+    scanOutput: Seq[AttributeReference],
+    projections: Seq[NamedExpression],
+    filters: Seq[Expression])
+  extends LeafNode with MultiInstanceRelation {
+
+  override lazy val output: Seq[Attribute] = projections.map(_.toAttribute)
+
+  override def computeStats(): Statistics = scanBuilder match {
+    case r: SupportsReportStatistics =>
+      val statistics = r.estimateStatistics()
+      DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes)
+    case _ =>
+      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  }
+
+  override def simpleString(maxFields: Int): String = {
+    s"RelationV2Read${truncatedString(output, "[", ", ", "]", maxFields)}"
+  }
+
+  override def newInstance(): ReadDataSourceV2Relation = {
+    this.copy()
   }
 }
 

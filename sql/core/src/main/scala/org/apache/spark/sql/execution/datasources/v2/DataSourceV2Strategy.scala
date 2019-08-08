@@ -114,12 +114,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(project, filters, relation: DataSourceV2Relation) =>
-      val scanBuilder = relation.newScanBuilder()
-
+    case ReadDataSourceV2Relation(scanBuilder, attributes, projections, filters) =>
       val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
       val normalizedFilters = DataSourceStrategy.normalizeFilters(
-        withoutSubquery, relation.output)
+        withoutSubquery, attributes)
 
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
