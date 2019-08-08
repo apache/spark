@@ -219,8 +219,8 @@ private[hive] class SparkExecuteStatementOperation(
     setState(OperationState.RUNNING)
     // Always set current username to local properties
     sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_CURRENT_USER, parentSession.getUserName)
-    if(dfsDelegationToken != null){
-      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_TOKENS,dfsDelegationToken)
+    if(dfsDelegationToken != null) {
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_JOB_TOKENS, dfsDelegationToken)
     }
 
     // Always use the latest class loader provided by executionHive's state.

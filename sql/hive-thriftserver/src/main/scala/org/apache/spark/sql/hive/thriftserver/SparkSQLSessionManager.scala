@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.security.Credentials
-
 import org.apache.hive.service.cli.session._
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.server.HiveServer2
@@ -41,7 +40,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
   private lazy val sparkSessionManager = new SparkSessionManager()
-  private lazy val hadoopTokenProvider = new ThriftServerHDFSDelegationTokenProvider(SparkSQLEnv.sparkContext.conf, SparkSQLEnv.sparkContext.hadoopConfiguration)
+  private lazy val hadoopTokenProvider =
+    new ThriftServerHDFSDelegationTokenProvider(
+      SparkSQLEnv.sparkContext.conf,
+      SparkSQLEnv.sparkContext.hadoopConfiguration)
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
@@ -59,11 +61,19 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     var session: HiveSession = null
     var sparkSession: SparkSession = null
     if (withImpersonation) {
-      val sessionWithUGI = new HiveSessionImplwithUGI(protocol, username, passwd, hiveConf, ipAddress, delegationToken)
+      val sessionWithUGI =
+        new HiveSessionImplwithUGI(
+          protocol,
+          username,
+          passwd,
+          hiveConf,
+          ipAddress,
+          delegationToken)
       val ugi = sessionWithUGI.getSessionUgi
       val originalCreds = ugi.getCredentials
       val creds = new Credentials()
-      ThriftServerHadoopUtils.doAs(ugi)(() => hadoopTokenProvider.obtainDelegationTokens(creds, username))
+      ThriftServerHadoopUtils.doAs(ugi)(() => hadoopTokenProvider
+        .obtainDelegationTokens(creds, username))
 
       val tokens: String = creds.getAllTokens.asScala.map(token => {
         token.encodeToUrlString()
@@ -97,8 +107,9 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
         session = null
         throw new HiveSQLException("Failed to open new session: " + e, e)
     }
-    if (isOperationLogEnabled)
+    if (isOperationLogEnabled){
       session.setOperationLogSessionDir(operationLogRootDir)
+    }
     handleToSession.put(session.getSessionHandle, session)
 
     val sessionHandle = session.getSessionHandle

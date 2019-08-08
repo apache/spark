@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException}
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli.HiveSQLException
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImplwithUGI}
@@ -44,7 +43,8 @@ class SparkSessionManager extends Logging {
 
   def getDelegationToken(userName: String): String = {
     if (userName != null &&
-      hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION).equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString) &&
+      hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
+        .equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString) &&
       hiveConf.getBoolVar(HiveConf.ConfVars.METASTORE_USE_THRIFT_SASL) &&
       hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
       try {
@@ -52,8 +52,11 @@ class SparkSessionManager extends Logging {
         Hive.get(hiveConf).getDelegationToken(userName, userName)
       } catch {
         case e: HiveException =>
-          if (e.getCause.isInstanceOf[UnsupportedOperationException]) throw e.getCause.asInstanceOf[UnsupportedOperationException]
-          else throw new HiveSQLException("Error connect metastore to setup impersonation", e)
+          if (e.getCause.isInstanceOf[UnsupportedOperationException]) {
+            throw e.getCause.asInstanceOf[UnsupportedOperationException]
+          } else {
+            throw new HiveSQLException("Error connect metastore to setup impersonation", e)
+          }
       }
     } else {
       null
@@ -78,29 +81,30 @@ class SparkSessionManager extends Logging {
     }
   }
 
-  def getOrCreteSparkSession(session: HiveSession, withImpersonation: Boolean): SparkSession = LOCK.synchronized {
-    if (cachedSession.containsKey(session.getUserName)) {
-      addHiveToken(session, withImpersonation)
-      cachedSession.get(session.getUserName).newSession()
-    } else {
-      val ugi = addHiveToken(session, withImpersonation)
-      val sparkSession: SparkSession =
-        ThriftServerHadoopUtils.doAs[SparkSession](ugi) { () =>
-          Hive.closeCurrent()
-          val sessionForSpecUser = new SparkSession(sparkContext)
-          sessionForSpecUser.catalog
-          sessionForSpecUser.sessionState.catalog
-          val metadataHive = sessionForSpecUser
-            .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
-          metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-          metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-          metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
-          sessionForSpecUser.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
-          sessionForSpecUser
-        }
-      cachedSession.put(session.getUserName, sparkSession)
-      sparkSession
+  def getOrCreteSparkSession(session: HiveSession, withImpersonation: Boolean): SparkSession = {
+    LOCK.synchronized {
+      if (cachedSession.containsKey(session.getUserName)) {
+        addHiveToken(session, withImpersonation)
+        cachedSession.get(session.getUserName).newSession()
+      } else {
+        val ugi = addHiveToken(session, withImpersonation)
+        val sparkSession: SparkSession =
+          ThriftServerHadoopUtils.doAs[SparkSession](ugi) { () =>
+            Hive.closeCurrent()
+            val sessionForSpecUser = new SparkSession(sparkContext)
+            sessionForSpecUser.catalog
+            sessionForSpecUser.sessionState.catalog
+            val metadataHive = sessionForSpecUser
+              .sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
+            metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+            metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+            metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+            sessionForSpecUser.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+            sessionForSpecUser
+          }
+        cachedSession.put(session.getUserName, sparkSession)
+        sparkSession
+      }
     }
-
   }
 }
