@@ -265,7 +265,8 @@ SPARK_MASTER_OPTS supports the following system properties:
   <td>(none)</td>
   <td>
     Path to resources file which is used to find various resources while worker starting up.
-    The content of resources file should be formatted like an array of <code>ResourceAllocation</code> class.
+    The content of resources file should be formatted like <code>
+    [[{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]]</code>.
     When <code>spark.resources.coordinate.enable</code> is off, resources file must assign different
     resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
     If a particular resource is not found in the resources file, the discovery script would be used to

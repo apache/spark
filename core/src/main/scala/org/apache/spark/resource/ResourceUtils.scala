@@ -26,7 +26,6 @@ import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.executeAndGetOutput
 
@@ -55,8 +54,7 @@ private[spark] case class ResourceRequirement(resourceName: String, amount: Int)
  * Cluster manager uses the JSON serialization of this case class to pass allocated resource info to
  * driver and executors. See the ``--resourcesFile`` option there.
  */
-@Evolving
-case class ResourceAllocation(id: ResourceID, addresses: Seq[String]) {
+private[spark] case class ResourceAllocation(id: ResourceID, addresses: Seq[String]) {
   def toResourceInformation: ResourceInformation = {
     new ResourceInformation(id.resourceName, addresses.toArray)
   }
