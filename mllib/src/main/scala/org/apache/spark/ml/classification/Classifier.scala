@@ -210,6 +210,9 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     outputData.toDF
   }
 
+  final override def transformImpl(dataset: Dataset[_]): DataFrame =
+    throw new UnsupportedOperationException(s"transformImpl is not supported in $getClass")
+
   /**
    * Predict label for the given features.
    * This method is used to implement `transform()` and output [[predictionCol]].

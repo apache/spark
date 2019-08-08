@@ -794,6 +794,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val FAIL_AMBIGUOUS_SELF_JOIN =
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
+      .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .internal()
@@ -1525,8 +1532,9 @@ object SQLConf {
     .createWithDefault(false)
 
   val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .internal()
     .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types.")
+      "if both sides are integral types. This is for PostgreSQL test cases only.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1777,6 +1785,14 @@ object SQLConf {
     .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
       "inherited from Hive. Otherwise, the return type is the data type of the operands.")
     .internal()
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
+    buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
+      .internal()
+      .doc("When true, the bucketed table scan will list files during planning to figure out the " +
+        "output ordering, which is expensive and may make the planning quite slow.")
     .booleanConf
     .createWithDefault(false)
 

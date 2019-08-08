@@ -15,24 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
-class HiveDataFrameJoinSuite extends QueryTest with TestHiveSingleton {
-  import spark.implicits._
-
-  // We should move this into SQL package if we make case sensitivity configurable in SQL.
-  test("join - self join auto resolve ambiguity with case insensitivity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("Key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
-      Row(2, "2", 2, "2") :: Nil)
+case class DescribeColumnStatement(
+    tableName: Seq[String],
+    colNameParts: Seq[String],
+    isExtended: Boolean) extends ParsedStatement {
+  override def output: Seq[Attribute] = {
+    Seq(
+      AttributeReference("info_name", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "name of the column info").build())(),
+      AttributeReference("info_value", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "value of the column info").build())()
+    )
   }
-
 }

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
@@ -557,6 +558,13 @@ object OverwritePartitionsDynamic {
   def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
     OverwritePartitionsDynamic(table, query, isByName = false)
   }
+}
+
+case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(table)
+
+  override val output = DescribeTableSchema.describeTableAttributes()
 }
 
 /**
