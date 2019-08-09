@@ -10,7 +10,6 @@ create temporary view varchar_tbl as select * from values
   ('2'),
   ('3'),
   (''),
-  -- ('cd'),
   ('c')
   as varchar_tbl(f1)
 -- !query 0 schema
