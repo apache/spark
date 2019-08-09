@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -90,10 +89,11 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
     val location = Option(properties.get("location"))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
+    val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
 
     val tableDesc = CatalogTable(
       identifier = ident.asTableIdentifier,
-      tableType = CatalogTableType.MANAGED,
+      tableType = tableType,
       storage = storage,
       schema = schema,
       provider = Some(provider),
@@ -252,4 +252,3 @@ private[sql] object V2SessionCatalog {
     (identityCols, bucketSpec)
   }
 }
-
