@@ -39,6 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
 case class DataSourceResolution(
+    builtinCatalog: SessionCatalog,
     conf: SQLConf,
     lookup: LookupCatalog)
   extends Rule[LogicalPlan] with CastSupport with TableChangeHelper {
@@ -410,6 +411,7 @@ case class DataSourceResolution(
   private def resolveAlterTable(
       identifier: TableIdentifier)(
       f: Option[AlterTable] => LogicalPlan): LogicalPlan = {
+    if (builtinCatalog.isTemporaryTable(identifier)) return f(None)
     val tbl = Identifier.of(identifier.database.toArray, identifier.table)
     val catalog = v2SessionCatalog.asTableCatalog
     catalog.loadTable(tbl) match {
