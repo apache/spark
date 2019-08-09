@@ -711,10 +711,32 @@ private[spark] class DAGScheduler(
     assert(partitions.nonEmpty)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
+    eagerPartitions(rdd)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
       Utils.cloneProperties(properties)))
     waiter
+  }
+
+  /**
+   * Responsible for eager evaluation of all dependency partitions.
+   * Takes effect only if <b>spark.rdd.eager.partitions</b> is true
+   *
+   * @param rdd : initial rdd to be evaluated
+   * @param visited: Set of rdd depndencies which are already visited
+   */
+  def eagerPartitions(
+      rdd: RDD[_],
+      visited: mutable.HashSet[RDD[_]] = new mutable.HashSet[RDD[_]]): Unit = {
+    try {
+      rdd.partitions
+      rdd.dependencies.filter(dep => !visited.contains(dep.rdd)) foreach { dep =>
+        visited.add(dep.rdd)
+        eagerPartitions(dep.rdd, visited)
+      }
+    } catch {
+      case t: Throwable => logError("Error in eager evaluation of partitions, ignoring", t)
+    }
   }
 
   /**
@@ -783,6 +805,7 @@ private[spark] class DAGScheduler(
     }
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+    eagerPartitions(rdd)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
       Utils.cloneProperties(properties)))
