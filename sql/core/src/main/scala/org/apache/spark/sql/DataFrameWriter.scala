@@ -28,13 +28,14 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchTableException, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -360,7 +361,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def insertInto(tableName: String): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
-    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     assertNotBucketed("insertInto")
 
@@ -493,13 +493,27 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     val session = df.sparkSession
+    val useV1Sources =
+      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
+    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
+    val shouldUseV1Source = cls.newInstance() match {
+      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
+      case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
+    }
+
+    val canUseV2 = !shouldUseV1Source && classOf[TableProvider].isAssignableFrom(cls)
+    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
-        // TODO(SPARK-28666): This should go through V2SessionCatalog
+
+      case CatalogObjectIdentifier(None, ident)
+          if canUseV2 && sessionCatalogOpt.isDefined && ident.namespace().length <= 1 =>
+        // We pass in the modeForDSV1, as using the V2 session catalog should maintain compatibility
+        // for now.
+        saveAsTable(sessionCatalogOpt.get.asTableCatalog, ident, modeForDSV1)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
@@ -522,6 +536,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val tableOpt = try Option(catalog.loadTable(ident)) catch {
       case _: NoSuchTableException => None
+    }
+    if (tableOpt.exists(_.isInstanceOf[CatalogTableAsV2])) {
+      return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
     }
 
     val command = (mode, tableOpt) match {

@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, InsertIntoStatement}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -171,7 +171,6 @@ class Analyzer(
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
       ResolveAlterTable ::
-      ResolveDescribeTable ::
       ResolveInsertInto ::
       ResolveTables ::
       ResolveRelations ::
@@ -324,8 +323,7 @@ class Analyzer(
         gid: Expression): Expression = {
       expr transform {
         case e: GroupingID =>
-          if (e.groupByExprs.isEmpty ||
-              e.groupByExprs.map(_.canonicalized) == groupByExprs.map(_.canonicalized)) {
+          if (e.groupByExprs.isEmpty || e.groupByExprs == groupByExprs) {
             Alias(gid, toPrettySQL(e))()
           } else {
             throw new AnalysisException(
@@ -650,8 +648,11 @@ class Analyzer(
           if catalog.isTemporaryTable(ident) =>
         u // temporary views take precedence over catalog table names
 
-      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
-        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
+      case u @ UnresolvedRelation(CatalogObjectIdentifier(maybeCatalog, ident)) =>
+        maybeCatalog.orElse(sessionCatalog)
+          .flatMap(loadTable(_, ident))
+          .map(DataSourceV2Relation.create)
+          .getOrElse(u)
     }
   }
 
@@ -973,21 +974,6 @@ class Analyzer(
           Seq(TableChange.setProperty("location", newLoc)))
     }
   }
-  /**
-   * Resolve DESCRIBE TABLE statements that use a DSv2 catalog.
-   *
-   * This rule converts unresolved DESCRIBE TABLE statements to v2 when a v2 catalog is responsible
-   * for the table identifier. A v2 catalog is responsible for an identifier when the identifier
-   * has a catalog specified, like prod_catalog.db.table, or when a default v2 catalog is set and
-   * the table identifier does not include a catalog.
-   */
-  object ResolveDescribeTable extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case describe @ DescribeTableStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), _, isExtended) =>
-        DescribeTable(UnresolvedRelation(describe.tableName), isExtended)
-    }
-  }
 
   /**
    * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from
@@ -1181,8 +1167,6 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
-      // intersect/except will be rewritten to join at the begininng of optimizer. Here we need to
-      // deduplicate the right side plan, so that we won't produce an invalid self-join later.
       case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
       case e @ Except(left, right, _) if !e.duplicateResolved =>
