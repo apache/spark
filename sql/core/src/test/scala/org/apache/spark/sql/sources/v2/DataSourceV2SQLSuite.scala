@@ -23,19 +23,22 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   private val orc2 = classOf[OrcDataSourceV2].getName
+  private val v2Source = classOf[FakeV2Provider].getName
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
@@ -69,6 +72,56 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
+  }
+
+  test("DescribeTable using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
+      " USING foo" +
+      " PARTITIONED BY (id)")
+    val descriptionDf = spark.sql("DESCRIBE TABLE testcat.table_name")
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
+      Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+    val description = descriptionDf.collect()
+    assert(description === Seq(
+      Row("id", "bigint", ""),
+      Row("data", "string", "")))
+  }
+
+  test("DescribeTable with v2 catalog when table does not exist.") {
+    intercept[AnalysisException] {
+      spark.sql("DESCRIBE TABLE testcat.table_name")
+    }
+  }
+
+  test("DescribeTable extended using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string)" +
+      " USING foo" +
+      " PARTITIONED BY (id)" +
+      " TBLPROPERTIES ('bar'='baz')")
+    val descriptionDf = spark.sql("DESCRIBE TABLE EXTENDED testcat.table_name")
+    assert(descriptionDf.schema.map(field => (field.name, field.dataType))
+      === Seq(
+        ("col_name", StringType),
+        ("data_type", StringType),
+        ("comment", StringType)))
+    assert(descriptionDf.collect()
+      .map(_.toSeq)
+      .map(_.toArray.map(_.toString.trim)) === Array(
+      Array("id", "bigint", ""),
+      Array("data", "string", ""),
+      Array("", "", ""),
+      Array("Partitioning", "", ""),
+      Array("--------------", "", ""),
+      Array("Part 0", "id", ""),
+      Array("", "", ""),
+      Array("Table Property", "Value", ""),
+      Array("----------------", "-------", ""),
+      Array("bar", "baz", ""),
+      Array("provider", "foo", "")))
+
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
@@ -1645,5 +1698,182 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
           Row(4, "keep", 2)))
       }
     }
+  }
+
+  test("tableCreation: partition column case insensitive resolution") {
+    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val sessionCatalog = spark.catalog("session").asTableCatalog
+
+    def checkPartitioning(cat: TableCatalog, partition: String): Unit = {
+      val table = cat.loadTable(Identifier.of(Array.empty, "tbl"))
+      val partitions = table.partitioning().map(_.references())
+      assert(partitions.length === 1)
+      val fieldNames = partitions.flatMap(_.map(_.fieldNames()))
+      assert(fieldNames === Array(Array(partition)))
+    }
+
+    sql(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkPartitioning(sessionCatalog, "a")
+    sql(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkPartitioning(testCatalog, "a")
+    sql(s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+    checkPartitioning(sessionCatalog, "b")
+    sql(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+    checkPartitioning(testCatalog, "b")
+  }
+
+  test("tableCreation: partition column case sensitive resolution") {
+    def checkFailure(statement: String): Unit = {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val e = intercept[AnalysisException] {
+          sql(statement)
+        }
+        assert(e.getMessage.contains("Couldn't find column"))
+      }
+    }
+
+    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+    checkFailure(
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+  }
+
+  test("tableCreation: duplicate column names in the table definition") {
+    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: duplicate nested column names in the table definition") {
+    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: bucket column names not in table definition") {
+    val errorMsg = "Couldn't find column c in"
+    testCreateAnalysisError(
+      s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+    testCreateAnalysisError(
+      s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+    testCreateAnalysisError(
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source " +
+        "CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+    testCreateAnalysisError(
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source " +
+        "CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+  }
+
+  test("tableCreation: column repeated in partition columns") {
+    val errorMsg = "Found duplicate column(s) in the partitioning"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: column repeated in bucket columns") {
+    val errorMsg = "Found duplicate column(s) in the bucket definition"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {
+    val errMsg = intercept[AnalysisException] {
+      sql(sqlStatement)
+    }.getMessage
+    assert(errMsg.contains(expectedError))
+  }
+}
+
+
+/** Used as a V2 DataSource for V2SessionCatalog DDL */
+class FakeV2Provider extends TableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
 }

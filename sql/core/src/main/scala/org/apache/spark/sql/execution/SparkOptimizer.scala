@@ -31,6 +31,9 @@ class SparkOptimizer(
 
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
+    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
+    Batch("Schema Pruning", Once, SchemaPruning)) ++
+    postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
       // `ExtractPythonUDFFromJoinCondition` can convert a join to a cartesian product.
@@ -45,9 +48,6 @@ class SparkOptimizer(
       ColumnPruning,
       PushPredicateThroughNonJoin,
       RemoveNoopOperators) :+
-    Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
-    Batch("Schema Pruning", Once, SchemaPruning)) ++
-    postHocOptimizationBatches :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+
@@ -65,6 +65,8 @@ class SparkOptimizer(
    * Optimization batches that are executed after the regular optimization batches, but before the
    * batch executing the [[ExperimentalMethods]] optimizer rules. This hook can be used to add
    * custom optimizer batches to the Spark optimizer.
+   *
+   * Note that 'Extract Python UDFs' batch is an exception and ran after the batches defined here.
    */
    def postHocOptimizationBatches: Seq[Batch] = Nil
 }
