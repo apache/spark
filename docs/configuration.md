@@ -2021,15 +2021,15 @@ Apart from these, the following properties are also available, and may be useful
 ### Barrier Execution Mode
 
 <table class="table">
-<tr><th>Property Name></th><th>Default</th><th>Meaning</th></tr>
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.barrier.sync.timeout</code></td>
   <td>365d</td>
   <td>
-    The timeout in seconds for each barrier() call from a barrier task. If the
+    The timeout in seconds for each <code>barrier()</code> call from a barrier task. If the
     coordinator didn't receive all the sync messages from barrier tasks within the
     configed time, throw a SparkException to fail all the tasks. The default value is set
-    to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.
+    to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
   </td>
 </tr>
 <tr>
