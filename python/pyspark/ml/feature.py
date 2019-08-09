@@ -902,19 +902,19 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> hashingTF.transform(df).head().features
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
-    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(5, {0: 1.0, 2: 1.0, 3: 1.0})
     >>> hashingTFPath = temp_path + "/hashing-tf"
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
     >>> hashingTF.indexOf("b")
-    1
+    5
 
     .. versionadded:: 1.3.0
     """

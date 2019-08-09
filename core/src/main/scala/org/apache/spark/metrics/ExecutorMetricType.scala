@@ -201,7 +201,6 @@ private[spark] object ExecutorMetricType {
     GarbageCollectionMetrics
   )
 
-
   val (metricToOffset, numMetrics) = {
     var numberOfMetrics = 0
     val definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]

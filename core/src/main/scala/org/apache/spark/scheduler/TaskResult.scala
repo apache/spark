@@ -23,33 +23,38 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.{AccumulatorV2, Utils}
 
-// Task result. Also contains updates to accumulator variables.
+// Task result. Also contains updates to accumulator variables and executor metric peaks.
 private[spark] sealed trait TaskResult[T]
 
 /** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
 private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
   extends TaskResult[T] with Serializable
 
-/** A TaskResult that contains the task's return value and accumulator updates. */
+/** A TaskResult that contains the task's return value, accumulator updates and metric peaks. */
 private[spark] class DirectTaskResult[T](
     var valueBytes: ByteBuffer,
-    var accumUpdates: Seq[AccumulatorV2[_, _]])
+    var accumUpdates: Seq[AccumulatorV2[_, _]],
+    var metricPeaks: Array[Long])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
-  def this() = this(null.asInstanceOf[ByteBuffer], null)
+  def this() = this(null.asInstanceOf[ByteBuffer], null,
+    new Array[Long](ExecutorMetricType.numMetrics))
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeInt(valueBytes.remaining)
     Utils.writeByteBuffer(valueBytes, out)
     out.writeInt(accumUpdates.size)
     accumUpdates.foreach(out.writeObject)
+    out.writeInt(metricPeaks.length)
+    metricPeaks.foreach(out.writeLong)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -67,6 +72,16 @@ private[spark] class DirectTaskResult[T](
         _accumUpdates += in.readObject.asInstanceOf[AccumulatorV2[_, _]]
       }
       accumUpdates = _accumUpdates
+    }
+
+    val numMetrics = in.readInt
+    if (numMetrics == 0) {
+      metricPeaks = Array.empty
+    } else {
+      metricPeaks = new Array[Long](numMetrics)
+      (0 until numMetrics).foreach { i =>
+        metricPeaks(i) = in.readLong
+      }
     }
     valueObjectDeserialized = false
   }

@@ -44,11 +44,11 @@ You can install using pip or conda from the conda-forge channel. See PyArrow
 Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
 using the call `toPandas()` and when creating a Spark DataFrame from a Pandas DataFrame with
 `createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
-the Spark configuration 'spark.sql.execution.arrow.pyspark.enabled' to 'true'. This is disabled by default.
+the Spark configuration `spark.sql.execution.arrow.pyspark.enabled` to `true`. This is disabled by default.
 
-In addition, optimizations enabled by 'spark.sql.execution.arrow.pyspark.enabled' could fallback automatically
+In addition, optimizations enabled by `spark.sql.execution.arrow.pyspark.enabled` could fallback automatically
 to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
-This can be controlled by 'spark.sql.execution.arrow.pyspark.fallback.enabled'.
+This can be controlled by `spark.sql.execution.arrow.pyspark.fallback.enabled`.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">

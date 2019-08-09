@@ -386,7 +386,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val command = modeForDSV2 match {
       case SaveMode.Append =>
-        AppendData.byName(table, df.logicalPlan)
+        AppendData.byPosition(table, df.logicalPlan)
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
@@ -394,9 +394,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
-          OverwritePartitionsDynamic.byName(table, df.logicalPlan)
+          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan)
         } else {
-          OverwriteByExpression.byName(table, df.logicalPlan, Literal(true))
+          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true))
         }
 
       case other =>

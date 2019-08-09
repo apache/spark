@@ -41,13 +41,12 @@ import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.util.TransportConf;
 
 /**
- * Client for reading shuffle blocks which points to an external (outside of executor) server.
- * This is instead of reading shuffle blocks directly from other executors (via
- * BlockTransferService), which has the downside of losing the shuffle data if we lose the
- * executors.
+ * Client for reading both RDD blocks and shuffle blocks which points to an external
+ * (outside of executor) server. This is instead of reading blocks directly from other executors
+ * (via BlockTransferService), which has the downside of losing the data if we lose the executors.
  */
-public class ExternalShuffleClient extends ShuffleClient {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalShuffleClient.class);
+public class ExternalBlockStoreClient extends BlockStoreClient {
+  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockStoreClient.class);
 
   private final TransportConf conf;
   private final boolean authEnabled;
@@ -61,7 +60,7 @@ public class ExternalShuffleClient extends ShuffleClient {
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
    * then secretKeyHolder may be null.
    */
-  public ExternalShuffleClient(
+  public ExternalBlockStoreClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
       boolean authEnabled,
@@ -77,8 +76,8 @@ public class ExternalShuffleClient extends ShuffleClient {
   }
 
   /**
-   * Initializes the ShuffleClient, specifying this Executor's appId.
-   * Must be called before any other method on the ShuffleClient.
+   * Initializes the BlockStoreClient, specifying this Executor's appId.
+   * Must be called before any other method on the BlockStoreClient.
    */
   public void init(String appId) {
     this.appId = appId;
