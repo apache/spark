@@ -228,9 +228,8 @@ the final POST command to make a large "multi-part" upload visible. Those
 operations are postponed until the job commit itself. As a result, task and
 job commit are much faster, and task failures do not affect the result. 
 
-To switch to the S3A committers, use a version of Spark which includes the
-Hadoop-3.1+ binaries, and switch the committers through the following
-options.
+To switch to the S3A committers, use a version of Spark was built with Hadoop
+3.1 or later, and switch the committers through the following options.
 
 ```
 spark.hadoop.fs.s3a.committer.name directory

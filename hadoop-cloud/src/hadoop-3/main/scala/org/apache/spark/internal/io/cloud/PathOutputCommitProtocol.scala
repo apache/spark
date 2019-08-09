@@ -45,7 +45,6 @@ import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
  * @param dynamicPartitionOverwrite does the caller want support for dynamic
  *                                  partition overwrite. If so, it will be
  *                                  refused.
- * @throws IOException when an unsupported dynamicPartitionOverwrite option is supplied.
  */
 class PathOutputCommitProtocol(
     jobId: String,
@@ -82,7 +81,7 @@ class PathOutputCommitProtocol(
    * of the V1 `mapred.FileOutputFormat` methods.
    * @param context task attempt
    * @return the committer to use. This will always be a subclass of
-   *         [[PathOutputCommitter]].
+   *         `PathOutputCommitter`.
    */
   override protected def setupCommitter(context: TaskAttemptContext): PathOutputCommitter = {
     logTrace(s"Setting up committer for path $destination")

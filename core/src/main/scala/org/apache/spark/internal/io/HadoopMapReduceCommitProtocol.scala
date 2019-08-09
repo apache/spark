@@ -132,7 +132,7 @@ class HadoopMapReduceCommitProtocol(
     // Include a UUID here to prevent file collisions for one task writing to different dirs.
     // In principle we could include hash(absoluteDir) instead but this is simpler.
     val tmpOutputPath = new Path(stagingDir, UUID.randomUUID().toString() + "-" + filename).toString
-    logTrace(s"Creating temporary file $tmpOutputPath for absolute path for dir $absoluteDir")
+
     addedAbsPathFiles(tmpOutputPath) = absOutputPath
     tmpOutputPath
   }
@@ -164,7 +164,6 @@ class HadoopMapReduceCommitProtocol(
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
-    logTrace(s"commit job ${jobContext.getJobID} with ${taskCommits.length} task commit message(s)")
     committer.commitJob(jobContext)
 
     if (hasValidPath) {
@@ -215,7 +214,6 @@ class HadoopMapReduceCommitProtocol(
    * @param jobContext job context
    */
   override def abortJob(jobContext: JobContext): Unit = {
-    logTrace(s"Abort job ${jobContext.getJobID}")
     try {
       committer.abortJob(jobContext, JobStatus.State.FAILED)
     } catch {
@@ -256,7 +254,6 @@ class HadoopMapReduceCommitProtocol(
    * @param taskContext context
    */
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
-    logTrace(s"Abort task ${taskContext.getTaskAttemptID}")
     try {
       committer.abortTask(taskContext)
     } catch {
