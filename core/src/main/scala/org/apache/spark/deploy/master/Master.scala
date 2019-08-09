@@ -704,6 +704,9 @@ private[deploy] class Master(
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(canLaunchExecutor(_, app.desc))
           .sortBy(_.coresFree).reverse
+        if (waitingApps.length == 1 && usableWorkers.isEmpty) {
+          logWarning(s"App ${app.id} requires more resource than any of Workers could have.")
+        }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
@@ -788,9 +791,11 @@ private[deploy] class Master(
       // start from the last worker that was assigned a driver, and continue onwards until we have
       // explored all alive workers.
       var launched = false
+      var isClusterIdle = true
       var numWorkersVisited = 0
       while (numWorkersVisited < numWorkersAlive && !launched) {
         val worker = shuffledAliveWorkers(curPos)
+        isClusterIdle = worker.drivers.isEmpty && worker.executors.isEmpty
         numWorkersVisited += 1
         if (canLaunchDriver(worker, driver.desc)) {
           val allocated = worker.acquireResources(driver.desc.resourceReqs)
@@ -800,6 +805,9 @@ private[deploy] class Master(
           launched = true
         }
         curPos = (curPos + 1) % numWorkersAlive
+      }
+      if (!launched && isClusterIdle) {
+        logWarning(s"Driver ${driver.id} requires more resource than any of Workers could have.")
       }
     }
     startExecutorsOnWorkers()
