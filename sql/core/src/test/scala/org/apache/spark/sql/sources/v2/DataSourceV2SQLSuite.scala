@@ -1700,7 +1700,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     }
   }
 
-<<<<<<< HEAD
   test("tableCreation: partition column case insensitive resolution") {
     val testCatalog = spark.catalog("testcat").asTableCatalog
     val sessionCatalog = spark.catalog("session").asTableCatalog
