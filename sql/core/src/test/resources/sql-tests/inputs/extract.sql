@@ -12,6 +12,12 @@ select extract(day from c) from t;
 
 select extract(dayofweek from c) from t;
 
+select extract(dow from c) from t;
+
+select extract(isodow from c) from t;
+
+select extract(doy from c) from t;
+
 select extract(hour from c) from t;
 
 select extract(minute from c) from t;

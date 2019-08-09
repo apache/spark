@@ -1290,7 +1290,7 @@ private[ml] class MultiClassSummarizer extends Serializable {
    * @param weight The weight of this instances.
    * @return This MultilabelSummarizer
    */
-  def add(label: Double, weight: Double = 1.0): this.type = {
+  def add(label: Double, weight: Double = 1.0): MultiClassSummarizer = {
     require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
     if (weight == 0.0) return this

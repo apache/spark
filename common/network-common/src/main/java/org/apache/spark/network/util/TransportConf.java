@@ -108,8 +108,8 @@ public class TransportConf {
     return conf.getInt(SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY, 1);
   }
 
-  /** Requested maximum length of the queue of incoming connections. Default -1 for no backlog. */
-  public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, -1); }
+  /** Requested maximum length of the queue of incoming connections. Default is 64. */
+  public int backLog() { return conf.getInt(SPARK_NETWORK_IO_BACKLOG_KEY, 64); }
 
   /** Number of threads used in the server thread pool. Default to 0, which is 2x#cores. */
   public int serverThreads() { return conf.getInt(SPARK_NETWORK_IO_SERVERTHREADS_KEY, 0); }
@@ -339,6 +339,15 @@ public class TransportConf {
     int threads =
       this.serverThreads() > 0 ? this.serverThreads() : 2 * NettyRuntime.availableProcessors();
     return (int) Math.ceil(threads * (chunkFetchHandlerThreadsPercent / 100.0));
+  }
+
+  /**
+   * Whether to use the old protocol while doing the shuffle block fetching.
+   * It is only enabled while we need the compatibility in the scenario of new spark version
+   * job fetching blocks from old version external shuffle service.
+   */
+  public boolean useOldFetchProtocol() {
+    return conf.getBoolean("spark.shuffle.useOldFetchProtocol", false);
   }
 
 }

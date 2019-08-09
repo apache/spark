@@ -19,8 +19,6 @@ package org.apache.spark.sql.sources
 
 import java.util.Locale
 
-import scala.language.existentials
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
@@ -53,13 +51,13 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     def unhandled(filter: Filter): Boolean = {
       filter match {
-        case EqualTo(col, v) => col == "b"
-        case EqualNullSafe(col, v) => col == "b"
-        case LessThan(col, v: Int) => col == "b"
-        case LessThanOrEqual(col, v: Int) => col == "b"
-        case GreaterThan(col, v: Int) => col == "b"
-        case GreaterThanOrEqual(col, v: Int) => col == "b"
-        case In(col, values) => col == "b"
+        case EqualTo(col, _) => col == "b"
+        case EqualNullSafe(col, _) => col == "b"
+        case LessThan(col, _: Int) => col == "b"
+        case LessThanOrEqual(col, _: Int) => col == "b"
+        case GreaterThan(col, _: Int) => col == "b"
+        case GreaterThanOrEqual(col, _: Int) => col == "b"
+        case In(col, _) => col == "b"
         case IsNull(col) => col == "b"
         case IsNotNull(col) => col == "b"
         case Not(pred) => unhandled(pred)
@@ -109,7 +107,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
       case StringEndsWith("c", v) => _.endsWith(v)
       case StringContains("c", v) => _.contains(v)
       case EqualTo("c", v: String) => _.equals(v)
-      case EqualTo("c", v: UTF8String) => sys.error("UTF8String should not appear in filters")
+      case EqualTo("c", _: UTF8String) => sys.error("UTF8String should not appear in filters")
       case In("c", values) => (s: String) => values.map(_.asInstanceOf[String]).toSet.contains(s)
       case _ => (c: String) => true
     }
@@ -154,39 +152,39 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
   sqlTest(
     "SELECT * FROM oneToTenFiltered",
     (1 to 10).map(i => Row(i, i * 2, (i - 1 + 'a').toChar.toString * 5
-      + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)).toSeq)
+      + (i - 1 + 'a').toChar.toString.toUpperCase(Locale.ROOT) * 5)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i, i * 2)).toSeq)
+    (1 to 10).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT b, a FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i * 2, i)).toSeq)
+    (1 to 10).map(i => Row(i * 2, i)))
 
   sqlTest(
     "SELECT a FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i)).toSeq)
+    (1 to 10).map(i => Row(i)))
 
   sqlTest(
     "SELECT b FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i * 2)).toSeq)
+    (1 to 10).map(i => Row(i * 2)))
 
   sqlTest(
     "SELECT a * 2 FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i * 2)).toSeq)
+    (1 to 10).map(i => Row(i * 2)))
 
   sqlTest(
     "SELECT A AS b FROM oneToTenFiltered",
-    (1 to 10).map(i => Row(i)).toSeq)
+    (1 to 10).map(i => Row(i)))
 
   sqlTest(
     "SELECT x.b, y.a FROM oneToTenFiltered x JOIN oneToTenFiltered y ON x.a = y.b",
-    (1 to 5).map(i => Row(i * 4, i)).toSeq)
+    (1 to 5).map(i => Row(i * 4, i)))
 
   sqlTest(
     "SELECT x.a, y.b FROM oneToTenFiltered x JOIN oneToTenFiltered y ON x.a = y.b",
-    (2 to 10 by 2).map(i => Row(i, i)).toSeq)
+    (2 to 10 by 2).map(i => Row(i, i)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a = 1",
@@ -210,11 +208,11 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a IS NOT NULL",
-    (1 to 10).map(i => Row(i, i * 2)).toSeq)
+    (1 to 10).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a < 5 AND a > 1",
-    (2 to 4).map(i => Row(i, i * 2)).toSeq)
+    (2 to 4).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE a < 3 OR a > 8",
@@ -222,7 +220,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
   sqlTest(
     "SELECT a, b FROM oneToTenFiltered WHERE NOT (a < 6)",
-    (6 to 10).map(i => Row(i, i * 2)).toSeq)
+    (6 to 10).map(i => Row(i, i * 2)))
 
   sqlTest(
     "SELECT a, b, c FROM oneToTenFiltered WHERE c like 'c%'",

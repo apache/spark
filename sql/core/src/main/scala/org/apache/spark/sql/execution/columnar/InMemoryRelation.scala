@@ -55,6 +55,9 @@ case class CachedRDDBuilder(
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
+  val cachedName = tableName.map(n => s"In-memory table $n")
+    .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
+
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
       synchronized {
@@ -130,9 +133,7 @@ case class CachedRDDBuilder(
       }
     }.persist(storageLevel)
 
-    cached.setName(
-      tableName.map(n => s"In-memory table $n")
-        .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024)))
+    cached.setName(cachedName)
     cached
   }
 }
@@ -185,8 +186,6 @@ case class InMemoryRelation(
       cacheBuilder,
       outputOrdering)
 
-  override def producedAttributes: AttributeSet = outputSet
-
   @transient val partitionStatistics = new PartitionStatistics(output)
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
@@ -222,6 +221,13 @@ case class InMemoryRelation(
       cacheBuilder,
       outputOrdering,
       statsOfPlanToCache).asInstanceOf[this.type]
+  }
+
+  // override `clone` since the default implementation won't carry over mutable states.
+  override def clone(): LogicalPlan = {
+    val cloned = this.copy()
+    cloned.statsOfPlanToCache = this.statsOfPlanToCache
+    cloned
   }
 
   override def simpleString(maxFields: Int): String =

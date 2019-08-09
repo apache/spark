@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.{mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -307,6 +307,55 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     nameToIndex.get(name)
   }
 
+  /**
+   * Returns a field in this struct and its child structs.
+   *
+   * If includeCollections is true, this will return fields that are nested in maps and arrays.
+   */
+  private[sql] def findNestedField(
+      fieldNames: Seq[String],
+      includeCollections: Boolean = false): Option[StructField] = {
+    fieldNames.headOption.flatMap(nameToField.get) match {
+      case Some(field) =>
+        (fieldNames.tail, field.dataType, includeCollections) match {
+          case (Seq(), _, _) =>
+            Some(field)
+
+          case (names, struct: StructType, _) =>
+            struct.findNestedField(names, includeCollections)
+
+          case (_, _, false) =>
+            None // types nested in maps and arrays are not used
+
+          case (Seq("key"), MapType(keyType, _, _), true) =>
+            // return the key type as a struct field to include nullability
+            Some(StructField("key", keyType, nullable = false))
+
+          case (Seq("key", names @ _*), MapType(struct: StructType, _, _), true) =>
+            struct.findNestedField(names, includeCollections)
+
+          case (Seq("value"), MapType(_, valueType, isNullable), true) =>
+            // return the value type as a struct field to include nullability
+            Some(StructField("value", valueType, nullable = isNullable))
+
+          case (Seq("value", names @ _*), MapType(_, struct: StructType, _), true) =>
+            struct.findNestedField(names, includeCollections)
+
+          case (Seq("element"), ArrayType(elementType, isNullable), true) =>
+            // return the element type as a struct field to include nullability
+            Some(StructField("element", elementType, nullable = isNullable))
+
+          case (Seq("element", names @ _*), ArrayType(struct: StructType, _), true) =>
+            struct.findNestedField(names, includeCollections)
+
+          case _ =>
+            None
+        }
+      case _ =>
+        None
+    }
+  }
+
   protected[sql] def toAttributes: Seq[AttributeReference] =
     map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
@@ -493,7 +542,7 @@ object StructType extends AbstractDataType {
           leftContainsNull || rightContainsNull)
 
       case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = ArrayBuffer.empty[StructField]
+        val newFields = mutable.ArrayBuffer.empty[StructField]
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
@@ -552,7 +601,10 @@ object StructType extends AbstractDataType {
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
-    import scala.collection.breakOut
-    fields.map(s => (s.name, s))(breakOut)
+    // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
+    val map = mutable.Map[String, StructField]()
+    map.sizeHint(fields.length)
+    fields.foreach(s => map.put(s.name, s))
+    map
   }
 }

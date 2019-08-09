@@ -38,7 +38,7 @@ import org.apache.spark.util.NextIterator
  * that need to be prepended to each row.
  *
  * @param partitionValues value of partition columns to be prepended to each row.
- * @param filePath path of the file to read
+ * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
  * @param locations locality information (list of nodes that have the data).

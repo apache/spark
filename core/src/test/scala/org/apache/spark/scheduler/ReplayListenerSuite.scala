@@ -50,15 +50,15 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Simple replay") {
     val logFilePath = getFilePath(testDir, "events.txt")
     val fstream = fileSystem.create(logFilePath)
-    val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
-    // scalastyle:off println
-    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
-    // scalastyle:on println
-    writer.close()
+    Utils.tryWithResource(new PrintWriter(fstream)) { writer =>
+      // scalastyle:off println
+      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
+      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      // scalastyle:on println
+    }
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
@@ -132,16 +132,16 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   test("Replay incompatible event log") {
     val logFilePath = getFilePath(testDir, "incompatible.txt")
     val fstream = fileSystem.create(logFilePath)
-    val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Incompatible App", None,
       125L, "UserUsingIncompatibleVersion", None)
     val applicationEnd = SparkListenerApplicationEnd(1000L)
-    // scalastyle:off println
-    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-    writer.println("""{"Event":"UnrecognizedEventOnlyForTest","Timestamp":1477593059313}""")
-    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
-    // scalastyle:on println
-    writer.close()
+    Utils.tryWithResource(new PrintWriter(fstream)) { writer =>
+      // scalastyle:off println
+      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
+      writer.println("""{"Event":"UnrecognizedEventOnlyForTest","Timestamp":1477593059313}""")
+      writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+      // scalastyle:on println
+    }
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
@@ -218,9 +218,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
-    val originalEvents = sc.eventLogger.get.loggedEvents.filter { e =>
-      !JsonProtocol.sparkEventFromJson(e).isInstanceOf[SparkListenerStageExecutorMetrics]
-    }
+    val originalEvents = sc.eventLogger.get.loggedEvents
     val replayedEvents = eventMonster.loggedEvents
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       // Don't compare the JSON here because accumulators in StageInfo may be out of order

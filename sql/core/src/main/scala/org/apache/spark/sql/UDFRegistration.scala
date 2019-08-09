@@ -142,16 +142,16 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       val anyCast = s".asInstanceOf[UDF$i[$anyTypeArgs]]"
       val anyParams = (1 to i).map(_ => "_: Any").mkString(", ")
       val version = if (i == 0) "2.3.0" else "1.3.0"
-      val funcCall = if (i == 0) "() => func" else "func"
+      val funcCall = if (i == 0) s"() => f$anyCast.call($anyParams)" else s"f$anyCast.call($anyParams)"
       println(s"""
         |/**
         | * Register a deterministic Java UDF$i instance as user-defined function (UDF).
         | * @since $version
         | */
         |def register(name: String, f: UDF$i[$extTypeArgs], returnType: DataType): Unit = {
-        |  val func = f$anyCast.call($anyParams)
+        |  val func = $funcCall
         |  def builder(e: Seq[Expression]) = if (e.length == $i) {
-        |    ScalaUDF($funcCall, returnType, e, e.map(_ => false), udfName = Some(name))
+        |    ScalaUDF(func, returnType, e, e.map(_ => false), udfName = Some(name))
         |  } else {
         |    throw new AnalysisException("Invalid number of arguments for function " + name +
         |      ". Expected: $i; Found: " + e.length)
@@ -635,7 +635,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   private[sql] def registerJava(name: String, className: String, returnDataType: DataType): Unit = {
 
     try {
-      val clazz = Utils.classForName(className)
+      val clazz = Utils.classForName[AnyRef](className)
       val udfInterfaces = clazz.getGenericInterfaces
         .filter(_.isInstanceOf[ParameterizedType])
         .map(_.asInstanceOf[ParameterizedType])
@@ -699,7 +699,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    */
   private[sql] def registerJavaUDAF(name: String, className: String): Unit = {
     try {
-      val clazz = Utils.classForName(className)
+      val clazz = Utils.classForName[AnyRef](className)
       if (!classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
         throw new AnalysisException(s"class $className doesn't implement interface UserDefinedAggregateFunction")
       }
@@ -717,9 +717,9 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.3.0
    */
   def register(name: String, f: UDF0[_], returnType: DataType): Unit = {
-    val func = f.asInstanceOf[UDF0[Any]].call()
+    val func = () => f.asInstanceOf[UDF0[Any]].call()
     def builder(e: Seq[Expression]) = if (e.length == 0) {
-      ScalaUDF(() => func, returnType, e, e.map(_ => false), udfName = Some(name))
+      ScalaUDF(func, returnType, e, e.map(_ => false), udfName = Some(name))
     } else {
       throw new AnalysisException("Invalid number of arguments for function " + name +
         ". Expected: 0; Found: " + e.length)

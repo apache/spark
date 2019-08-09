@@ -33,7 +33,9 @@ import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 object OrcUtils extends Logging {
 
@@ -82,11 +84,33 @@ object OrcUtils extends Logging {
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConf()
-    // TODO: We need to support merge schema. Please see SPARK-11412.
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
         CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType]
+    }
+  }
+
+  /**
+   * Reads ORC file schemas in multi-threaded manner, using native version of ORC.
+   * This is visible for testing.
+   */
+  def readOrcSchemasInParallel(
+    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles)
+        .map(s => CatalystSqlParser.parseDataType(s.toString).asInstanceOf[StructType])
+    }.flatten
+  }
+
+  def inferSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
+    : Option[StructType] = {
+    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
+    if (orcOptions.mergeSchema) {
+      SchemaMergeUtils.mergeSchemasInParallel(
+        sparkSession, files, OrcUtils.readOrcSchemasInParallel)
+    } else {
+      OrcUtils.readSchema(sparkSession, files)
     }
   }
 

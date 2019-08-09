@@ -117,7 +117,7 @@ public class TransportClientFactorySuite {
       }
 
       Assert.assertEquals(0, failed.get());
-      Assert.assertEquals(clients.size(), maxConnections);
+      Assert.assertTrue(clients.size() <= maxConnections);
 
       for (TransportClient client : clients) {
         client.close();

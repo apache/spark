@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
@@ -65,6 +66,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
           prunedDataSchema => {
             val prunedFileTable = table match {
               case o: OrcTable => o.copy(userSpecifiedSchema = Some(prunedDataSchema))
+              case p: ParquetTable => p.copy(userSpecifiedSchema = Some(prunedDataSchema))
               case _ =>
                 val message = s"${table.formatName} data source doesn't support schema pruning."
                 throw new AnalysisException(message)
@@ -121,7 +123,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * Checks to see if the given [[FileTable]] can be pruned. Currently we support ORC v2.
    */
   private def canPruneTable(table: FileTable) =
-    table.isInstanceOf[OrcTable]
+    table.isInstanceOf[OrcTable] || table.isInstanceOf[ParquetTable]
 
   /**
    * Normalizes the names of the attribute references in the given projects and filters to reflect

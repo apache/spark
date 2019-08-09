@@ -18,6 +18,7 @@
 package org.apache.spark.ui.storage
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
@@ -239,7 +240,7 @@ private[ui] class BlockPagedTable(
     executorSummaries.map { ex => (ex.id, ex.hostPort) }.toMap)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     basePath +
       s"&$pageNumberFormField=$page" +
       s"&block.sort=$encodedSortColumn" +
@@ -248,7 +249,7 @@ private[ui] class BlockPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$basePath&block.sort=$encodedSortColumn&block.desc=$desc"
   }
 
@@ -269,7 +270,7 @@ private[ui] class BlockPagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             basePath +
-              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&block.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&block.desc=${!desc}" +
               s"&block.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
@@ -282,7 +283,7 @@ private[ui] class BlockPagedTable(
         } else {
           val headerLink = Unparsed(
             basePath +
-              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&block.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&block.pageSize=$pageSize")
           <th>
             <a href={headerLink}>

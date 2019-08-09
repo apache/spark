@@ -18,13 +18,14 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.JavaConverters._
 import scala.xml._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
@@ -160,7 +161,7 @@ private[ui] class StagePagedTable(
   )
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
@@ -170,7 +171,7 @@ private[ui] class StagePagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
   }
 
@@ -217,7 +218,7 @@ private[ui] class StagePagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$stageTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&$stageTag.desc=${!desc}" +
               s"&$stageTag.pageSize=$pageSize") +
               s"#$tableHeaderId"
@@ -234,7 +235,7 @@ private[ui] class StagePagedTable(
           if (sortable) {
             val headerLink = Unparsed(
               parameterPath +
-                s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$stageTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
                 s"&$stageTag.pageSize=$pageSize") +
                 s"#$tableHeaderId"
 
@@ -412,8 +413,6 @@ private[ui] class StageDataSource(
   }
 
   private def stageRow(stageData: v1.StageData): StageTableRowData = {
-    val description = stageData.description.getOrElse("")
-
     val formattedSubmissionTime = stageData.submissionTime match {
       case Some(t) => UIUtils.formatDate(t)
       case None => "Unknown"

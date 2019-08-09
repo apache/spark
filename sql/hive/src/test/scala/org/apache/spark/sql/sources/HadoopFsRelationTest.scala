@@ -38,7 +38,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
-  protected val parquetDataSourceName: String = "parquet"
+  protected val parquetDataSourceName: String =
+    classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat].getCanonicalName
 
   private def isParquetDataSource: Boolean = dataSourceName == parquetDataSourceName
 

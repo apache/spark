@@ -63,7 +63,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
 
-    withSQLConf("spark.sql.sources.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+    withSQLConf(SQLConf.BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
       // within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {
         withTable("t") {
