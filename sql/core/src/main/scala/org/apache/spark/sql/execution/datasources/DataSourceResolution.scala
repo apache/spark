@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
@@ -173,9 +174,14 @@ case class DataSourceResolution(
       // only top-level adds are supported using AlterTableAddColumnsCommand
       AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
 
-    case PhysicalOperation(
-        projects, filters, DataSourceV2Relation(t: SupportsRead, output, opts)) =>
-      ReadDataSourceV2Relation(t.newScanBuilder(opts), output, projects, filters)
+    case plan @ PhysicalOperation(
+        projects, filters, DataSourceV2Relation(t: SupportsRead, _, opts)) =>
+      ReadDataSourceV2Relation(
+        t.name(),
+        t.newScanBuilder(opts),
+        plan.output.map(_.asInstanceOf[AttributeReference]),
+        projects,
+        filters)
 
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)

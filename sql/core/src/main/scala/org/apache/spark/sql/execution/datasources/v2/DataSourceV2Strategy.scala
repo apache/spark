@@ -26,59 +26,15 @@ import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Attri
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation}
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.CatalystScan
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
-
-  /**
-   * Pushes down filters to the data source reader
-   *
-   * @return pushed filter and post-scan filters.
-   */
-  private def pushFilters(
-      scanBuilder: ScanBuilder,
-      filters: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
-    scanBuilder match {
-      case r: SupportsPushDownFilters =>
-        // A map from translated data source leaf node filters to original catalyst filter
-        // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
-        // pushed down. This map can be used to construct a catalyst filter expression from the
-        // input filter, or a superset(partial push down filter) of the input filter.
-        val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
-        val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
-        // Catalyst filter expression that can't be translated to data source filters.
-        val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
-
-        for (filterExpr <- filters) {
-          val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr))
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
-          } else {
-            translatedFilters += translated.get
-          }
-        }
-
-        // Data source filters that need to be evaluated again after scanning. which means
-        // the data source cannot guarantee the rows returned can pass these filters.
-        // As a result we must return it so Spark can plan an extra filter operator.
-        val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
-          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
-        }
-        // The filters which are marked as pushed to this data source
-        val pushedFilters = r.pushedFilters().map { filter =>
-          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
-        }
-        (pushedFilters, untranslatableExprs ++ postScanFilters)
-
-      case _ => (Nil, filters)
-    }
-  }
 
   /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
@@ -114,29 +70,41 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
   import DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case ReadDataSourceV2Relation(scanBuilder, attributes, projections, filters) =>
-      val (withSubquery, withoutSubquery) = filters.partition(SubqueryExpression.hasSubquery)
-      val normalizedFilters = DataSourceStrategy.normalizeFilters(
-        withoutSubquery, attributes)
+    case ReadDataSourceV2Relation(name, scanBuilder, output, project, filters) =>
+      scanBuilder match {
+        case r: SupportsPushDownRequiredColumns =>
+          val exprs = project ++ filters
+          val requiredColumns = AttributeSet(exprs.flatMap(_.references))
+          val neededOutput = output.filter(requiredColumns.contains)
+          if (neededOutput != output) {
+            r.pruneColumns(neededOutput.toStructType)
+          }
+        case _ =>
+      }
 
-      // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
-      // `postScanFilters` need to be evaluated after the scan.
-      // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
-      val (pushedFilters, postScanFiltersWithoutSubquery) =
-        pushFilters(scanBuilder, normalizedFilters)
-      val postScanFilters = postScanFiltersWithoutSubquery ++ withSubquery
-      val (scan, output) = pruneColumns(scanBuilder, relation, project ++ postScanFilters)
+      val pushedFilters = scanBuilder match {
+        case s: SupportsPushDownFilters => s.pushedFilters().toSeq
+        case _ => Nil
+      }
+
+      val scan = scanBuilder.build()
+      val nameToAttr = output.map(o => o.name -> o).toMap
+      val newOutput = scan.readSchema().toAttributes.map {
+        // We have to keep the attribute id during transformation.
+        a => a.withExprId(nameToAttr(a.name).exprId)
+      }
+
       logInfo(
         s"""
-           |Pushing operators to ${relation.name}
+           |Pushing operators to $name
            |Pushed Filters: ${pushedFilters.mkString(", ")}
-           |Post-Scan Filters: ${postScanFilters.mkString(",")}
-           |Output: ${output.mkString(", ")}
+           |Post-Scan Filters: ${filters.mkString(",")}
+           |Output: ${newOutput.mkString(", ")}
          """.stripMargin)
 
-      val plan = BatchScanExec(output, scan)
+      val plan = BatchScanExec(newOutput, scan)
 
-      val filterCondition = postScanFilters.reduceLeftOption(And)
+      val filterCondition = filters.reduceLeftOption(And)
       val withFilter = filterCondition.map(FilterExec(_, plan)).getOrElse(plan)
 
       // always add the projection, which will produce unsafe rows required by some operators

@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPla
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable, ReadDataSourceV2Relation}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 /**

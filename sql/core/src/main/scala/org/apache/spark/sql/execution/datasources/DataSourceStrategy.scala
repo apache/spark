@@ -36,10 +36,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ReadDataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.reader.{SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1ScanBuilder}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -264,6 +266,64 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   import DataSourceStrategy._
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
+    case ReadDataSourceV2Relation(_, v1Builder: V1ScanBuilder, output, projects, filters)
+        if !v1Builder.buildV1Scan().isInstanceOf[HadoopFsRelation] =>
+      v1Builder match {
+        case r: SupportsPushDownRequiredColumns =>
+          val exprs = projects ++ filters
+          val requiredColumns = AttributeSet(exprs.flatMap(_.references))
+          val neededOutput = output.filter(requiredColumns.contains)
+          if (neededOutput != output) {
+            r.pruneColumns(neededOutput.toStructType)
+          }
+        case _ =>
+      }
+
+      val pushedFilters = v1Builder match {
+        case s: SupportsPushDownFilters => s.pushedFilters().toSeq
+        case _ => Nil
+      }
+
+      val l = LogicalRelation(v1Builder.buildV1Scan(), output, None, isStreaming = false)
+      l.relation match {
+        case fsRelation: HadoopFsRelation =>
+          // Leave to FileSourceStrategy
+          Nil
+
+        case catalyst: CatalystScan =>
+          pruneFilterProjectRaw(
+            l,
+            projects,
+            filters,
+            (requestedColumns, allPredicates, _) => toCatalystRDD(
+              l, requestedColumns, catalyst.buildScan(requestedColumns, allPredicates))) :: Nil
+        case pfs: PrunedFilteredScan =>
+          pruneFilterProject(
+            l,
+            projects,
+            filters,
+            (a, f) => toCatalystRDD(l, a, pfs.buildScan(a.map(_.name).toArray, f))) :: Nil
+
+        case ps: PrunedScan =>
+          pruneFilterProject(
+            l,
+            projects,
+            filters,
+            (a, _) => toCatalystRDD(l, a, ps.buildScan(a.map(_.name).toArray))) :: Nil
+
+        case t: TableScan =>
+          RowDataSourceScanExec(
+            l.output,
+            l.output.indices,
+            Set.empty,
+            Set.empty,
+            toCatalystRDD(l, t.buildScan()),
+            t,
+            None) :: Nil
+        case _ => Nil
+
+      }
+
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
       pruneFilterProjectRaw(
         l,

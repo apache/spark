@@ -71,13 +71,11 @@ case class DataSourceV2Relation(
 }
 
 case class ReadDataSourceV2Relation(
+    relationName: String,
     scanBuilder: ScanBuilder,
-    scanOutput: Seq[AttributeReference],
+    output: Seq[AttributeReference],
     projections: Seq[NamedExpression],
-    filters: Seq[Expression])
-  extends LeafNode with MultiInstanceRelation {
-
-  override lazy val output: Seq[Attribute] = projections.map(_.toAttribute)
+    filters: Seq[Expression]) extends LeafNode {
 
   override def computeStats(): Statistics = scanBuilder match {
     case r: SupportsReportStatistics =>
@@ -89,10 +87,6 @@ case class ReadDataSourceV2Relation(
 
   override def simpleString(maxFields: Int): String = {
     s"RelationV2Read${truncatedString(output, "[", ", ", "]", maxFields)}"
-  }
-
-  override def newInstance(): ReadDataSourceV2Relation = {
-    this.copy()
   }
 }
 

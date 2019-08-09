@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.datasources.v2.ReadDataSourceV2Relation
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.sources.v2.reader.{SupportsPushDownFilters, SupportsPushDownRequiredColumns, V1ScanBuilder}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -137,6 +139,103 @@ object FileSourceStrategy extends Strategy with Logging {
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case ReadDataSourceV2Relation(_, v1Builder: V1ScanBuilder, output, projects, filters)
+        if v1Builder.buildV1Scan().isInstanceOf[HadoopFsRelation] =>
+      v1Builder match {
+        case r: SupportsPushDownRequiredColumns =>
+          val exprs = projects ++ filters
+          val requiredColumns = AttributeSet(exprs.flatMap(_.references))
+          val neededOutput = output.filter(requiredColumns.contains)
+          if (neededOutput != output) {
+            r.pruneColumns(neededOutput.toStructType)
+          }
+        case _ =>
+      }
+
+      val pushedFilters = v1Builder match {
+        case s: SupportsPushDownFilters => s.pushedFilters().toSeq
+        case _ => Nil
+      }
+
+      val fsRelation = v1Builder.buildV1Scan().asInstanceOf[HadoopFsRelation]
+      val l = LogicalRelation(fsRelation, output, None, isStreaming = false)
+
+      // Filters on this relation fall into four categories based on where we can use them to avoid
+      // reading unneeded data:
+      //  - partition keys only - used to prune directories to read
+      //  - bucket keys only - optionally used to prune files to read
+      //  - keys stored in the data only - optionally used to skip groups of data in files
+      //  - filters that need to be evaluated again after the scan
+      val filterSet = ExpressionSet(filters)
+
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, l.output)
+
+      val partitionColumns =
+        l.resolve(
+          fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+      val partitionSet = AttributeSet(partitionColumns)
+      val partitionKeyFilters =
+        ExpressionSet(normalizedFilters
+          .filter(_.references.subsetOf(partitionSet)))
+
+      logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
+
+      // subquery expressions are filtered out because they can't be used to prune buckets or pushed
+      // down as data filters, yet they would be executed
+      val normalizedFiltersWithoutSubqueries =
+      normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
+
+      val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
+      val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
+        genBucketSet(normalizedFiltersWithoutSubqueries, bucketSpec.get)
+      } else {
+        None
+      }
+
+      val dataColumns =
+        l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
+
+      // Partition keys are not available in the statistics of the files.
+      val dataFilters =
+        normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
+
+      // Predicates with both partition keys and attributes need to be evaluated after the scan.
+      val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
+      logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
+
+      val filterAttributes = AttributeSet(afterScanFilters)
+      val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
+      val requiredAttributes = AttributeSet(requiredExpressions)
+
+      val readDataColumns =
+        dataColumns
+          .filter(requiredAttributes.contains)
+          .filterNot(partitionColumns.contains)
+      val outputSchema = readDataColumns.toStructType
+      logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
+
+      val outputAttributes = readDataColumns ++ partitionColumns
+
+      val scan =
+        FileSourceScanExec(
+          fsRelation,
+          outputAttributes,
+          outputSchema,
+          partitionKeyFilters.toSeq,
+          bucketSet,
+          dataFilters,
+          None)
+
+      val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
+      val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
+      val withProjections = if (projects == withFilter.output) {
+        withFilter
+      } else {
+        execution.ProjectExec(projects, withFilter)
+      }
+
+      withProjections :: Nil
+
     case PhysicalOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
