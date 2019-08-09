@@ -24,6 +24,8 @@ select extract(minute from c) from t;
 
 select extract(second from c) from t;
 
+select extract(milliseconds from c) from t;
+
 select extract(microseconds from c) from t;
 
 select extract(not_supported from c) from t;

@@ -456,6 +456,14 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns seconds, including fractional parts, multiplied by 1 000. The timestamp
+   * is expressed in microseconds since the epoch.
+   */
+  def getMilliseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Int = {
+    getMicroseconds(timestamp, timeZone) / MICROS_PER_MILLIS.toInt
+  }
+
+  /**
    * Returns seconds, including fractional parts, multiplied by 1 000 000. The timestamp
    * is expressed in microseconds since the epoch.
    */
