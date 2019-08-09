@@ -175,7 +175,7 @@ case class DataSourceResolution(
       AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
 
     case plan @ PhysicalOperation(
-        projects, filters, DataSourceV2Relation(t: SupportsRead, _, opts)) =>
+        projects, filters, DataSourceV2Relation(t: SupportsRead, _, opts)) if plan.resolved =>
       ReadDataSourceV2Relation(
         t.name(),
         t.newScanBuilder(opts),
