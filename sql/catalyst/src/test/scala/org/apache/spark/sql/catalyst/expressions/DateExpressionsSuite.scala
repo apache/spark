@@ -596,6 +596,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+
+    testTrunc(Date.valueOf("2000-03-08"), "decade", Date.valueOf("2000-01-01"))
+    testTrunc(Date.valueOf("2000-03-08"), "century", Date.valueOf("1901-01-01"))
   }
 
   test("TruncTimestamp") {
@@ -664,6 +667,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(inputDate, null, null)
       testTrunc(null, "MON", null)
       testTrunc(null, null, null)
+
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "decade",
+        Timestamp.valueOf("2000-01-01 00:00:00"))
+      testTrunc(Timestamp.valueOf("2000-03-08 11:12:13"), "century",
+        Timestamp.valueOf("1901-01-01 00:00:00"))
     }
   }
 
