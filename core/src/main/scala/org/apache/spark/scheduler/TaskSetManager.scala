@@ -958,7 +958,7 @@ private[spark] class TaskSetManager(
     // zombie or is from a barrier stage. Also, for the scenario of indeterminate stage rerunning,
     // speculation will cause correctness bugs, see more details in SPARK-23243.
     if (isZombie || isBarrier || numTasks == 1 ||
-        (taskSet.stageAttemptId > 0 && taskSet.isIndeterminate)) {
+        (taskSet.stageAttemptId > 0 && taskSet.isIndeterminateRerun)) {
       return false
     }
     var foundTasks = false
