@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.ZoneId
-import java.util.concurrent.TimeUnit._
 import java.util.Locale
+import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{InternalRow, WalkedTypePath}
