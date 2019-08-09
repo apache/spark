@@ -273,7 +273,8 @@ class ContextTestsWithResources(unittest.TestCase):
         self.tempFile.close()
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
-        conf = SparkConf().set("spark.driver.resource.gpu.amount", "1")
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.driver.resource.gpu.amount", "1")
         conf = conf.set("spark.driver.resource.gpu.discoveryScript", self.tempFile.name)
         self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
 
