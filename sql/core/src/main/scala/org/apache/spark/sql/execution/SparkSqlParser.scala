@@ -1396,6 +1396,17 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       compressed = false,
       properties = rowStorage.properties ++ fileStorage.properties)
 
-    (ctx.LOCAL != null, storage, Some(DDLUtils.HIVE_PROVIDER))
+    val fileFormat = extractFileFormat(fileStorage.serde)
+    (ctx.LOCAL != null, storage, Some(fileFormat))
+  }
+
+  private def extractFileFormat(serde: Option[String]): String = {
+    if (serde.toString.contains("parquet")) {
+      "parquet"
+    } else if (serde.toString.contains("orc")) {
+      "orc"
+    } else {
+      DDLUtils.HIVE_PROVIDER
+    }
   }
 }
