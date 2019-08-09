@@ -48,17 +48,19 @@ class SparkSessionManager extends Logging {
       hiveConf.getBoolVar(HiveConf.ConfVars.METASTORE_USE_THRIFT_SASL) &&
       UserGroupInformation.isSecurityEnabled &&
       hiveConf.getTrimmed("hive.metastore.uris", "").nonEmpty) {
+      var token: String = null
       try {
         Hive.closeCurrent()
-        Hive.get(hiveConf).getDelegationToken(userName, userName)
+        token = Hive.get(hiveConf).getDelegationToken(userName, userName)
       } catch {
         case e: HiveException =>
           if (e.getCause.isInstanceOf[UnsupportedOperationException]) {
-            throw new HiveSQLException("Error get hive delegation token, meet UnsupportedOperationException")
+            token = null
           } else {
             throw new HiveSQLException("Error connect metastore to setup impersonation", e)
           }
       }
+      token
     } else {
       null
     }
