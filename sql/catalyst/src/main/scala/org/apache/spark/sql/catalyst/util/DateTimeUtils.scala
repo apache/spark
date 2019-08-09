@@ -456,6 +456,14 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns seconds, including fractional parts, multiplied by 1 000 000. The timestamp
+   * is expressed in microseconds since the epoch.
+   */
+  def getMicroseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Int = {
+    Math.floorMod(localTimestamp(timestamp, timeZone), MICROS_PER_SECOND * 60).toInt
+  }
+
+  /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
