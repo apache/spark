@@ -1853,7 +1853,7 @@ case class Epoch(child: Expression, timeZoneId: Option[String] = None)
     extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  override def dataType: DataType = DoubleType
+  override def dataType: DataType = DecimalType(20, 6)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 

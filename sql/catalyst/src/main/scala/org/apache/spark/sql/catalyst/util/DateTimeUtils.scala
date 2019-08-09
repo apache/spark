@@ -795,8 +795,12 @@ object DateTimeUtils {
     convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
   }
 
-  def getEpoch(time: SQLTimestamp, zoneId: ZoneId): Double = {
+  /**
+   * Returns the number of seconds with fractional part in microsecond precision
+   * since 1970-01-01 00:00:00 local time.
+   */
+  def getEpoch(time: SQLTimestamp, zoneId: ZoneId): BigDecimal = {
     val offset = zoneId.getRules.getOffset(microsToInstant(time))
-    time.toDouble / MICROS_PER_SECOND + offset.getTotalSeconds
+    BigDecimal(time) / MICROS_PER_SECOND + offset.getTotalSeconds
   }
 }
