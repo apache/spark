@@ -27,6 +27,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util.loadTable
+import org.apache.spark.sql.catalog.v2.utils.TableChangeHelper
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -902,75 +903,57 @@ class Analyzer(
    * has a catalog specified, like prod_catalog.db.table, or when a default v2 catalog is set and
    * the table identifier does not include a catalog.
    */
-  object ResolveAlterTable extends Rule[LogicalPlan] {
+  object ResolveAlterTable extends Rule[LogicalPlan] with TableChangeHelper {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case alter @ AlterTableAddColumnsStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
-        val changes = cols.map { col =>
-          TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
-        }
-
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          changes)
+          addColumns(cols))
 
       case alter @ AlterTableAlterColumnStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), colName, dataType, comment) =>
-        val typeChange = dataType.map { newDataType =>
-          TableChange.updateColumnType(colName.toArray, newDataType, true)
-        }
-
-        val commentChange = comment.map { newComment =>
-          TableChange.updateColumnComment(colName.toArray, newComment)
-        }
-
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          typeChange.toSeq ++ commentChange.toSeq)
+          alterColumn(colName, dataType, comment))
 
       case alter @ AlterTableRenameColumnStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), col, newName) =>
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          Seq(TableChange.renameColumn(col.toArray, newName)))
+          renameColumn(col, newName))
 
       case alter @ AlterTableDropColumnsStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
-        val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          changes)
+          deleteColumns(cols))
 
       case alter @ AlterTableSetPropertiesStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), props) =>
-        val changes = props.map {
-          case (key, value) =>
-            TableChange.setProperty(key, value)
-        }
-
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          changes.toSeq)
+          setProperties(props))
 
       case alter @ AlterTableUnsetPropertiesStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), keys, _) =>
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          keys.map(key => TableChange.removeProperty(key)))
+          removeProperties(keys))
 
       case alter @ AlterTableSetLocationStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), newLoc) =>
         AlterTable(
           v2Catalog.asTableCatalog, ident,
           UnresolvedRelation(alter.tableName),
-          Seq(TableChange.setProperty("location", newLoc)))
+          setLocation(newLoc))
     }
   }
   /**

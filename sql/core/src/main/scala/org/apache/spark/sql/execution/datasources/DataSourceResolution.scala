@@ -24,29 +24,30 @@ import scala.collection.mutable
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.utils.TableChangeHelper
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan, ReplaceTable, ReplaceTableAsSelect}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
-import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 
 case class DataSourceResolution(
     conf: SQLConf,
     lookup: LookupCatalog)
-  extends Rule[LogicalPlan] with CastSupport {
+  extends Rule[LogicalPlan] with CastSupport with TableChangeHelper {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
   import lookup._
 
   lazy val v2SessionCatalog: CatalogPlugin = lookup.sessionCatalog
-      .getOrElse(throw new AnalysisException("No v2 session catalog implementation is available"))
+    .getOrElse(throw new AnalysisException("No v2 session catalog implementation is available"))
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
@@ -154,24 +155,65 @@ case class DataSourceResolution(
       DropTableCommand(tableName, ifExists, isView = true, purge = false)
 
     case AlterTableSetPropertiesStatement(AsTableIdentifier(table), properties) =>
-      AlterTableSetPropertiesCommand(table, properties, isView = false)
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = setProperties(properties))
+        case _ =>
+          AlterTableSetPropertiesCommand(table, properties, isView = false)
+      }
 
     case AlterViewSetPropertiesStatement(AsTableIdentifier(table), properties) =>
       AlterTableSetPropertiesCommand(table, properties, isView = true)
 
     case AlterTableUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
-      AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = false)
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = removeProperties(propertyKeys))
+        case _ =>
+          AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = false)
+      }
 
     case AlterViewUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
       AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = true)
 
     case AlterTableSetLocationStatement(AsTableIdentifier(table), newLocation) =>
-      AlterTableSetLocationCommand(table, None, newLocation)
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = setLocation(newLocation))
+        case _ =>
+          AlterTableSetLocationCommand(table, None, newLocation)
+      }
 
-    case AlterTableAddColumnsStatement(AsTableIdentifier(table), newColumns)
-        if newColumns.forall(_.name.size == 1) =>
-      // only top-level adds are supported using AlterTableAddColumnsCommand
-      AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
+    case AlterTableAddColumnsStatement(AsTableIdentifier(table), newColumns) =>
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = addColumns(newColumns))
+        case _ if newColumns.forall(_.name.size == 1) =>
+          // only top-level adds are supported using AlterTableAddColumnsCommand
+          AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
+      }
+
+    case alter @ AlterTableAlterColumnStatement(
+        AsTableIdentifier(table), colName, dataType, comment) =>
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = alterColumn(colName, dataType, comment))
+        case _ => alter
+      }
+
+    case alter @ AlterTableRenameColumnStatement(AsTableIdentifier(table), col, newName) =>
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = renameColumn(col, newName))
+        case _ => alter
+      }
+
+    case alter @ AlterTableDropColumnsStatement(AsTableIdentifier(table), cols) =>
+      resolveAlterTable(table) {
+        case Some(alterV2) =>
+          alterV2.copy(changes = deleteColumns(cols))
+        case _ => alter
+      }
 
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)
@@ -363,5 +405,18 @@ case class DataSourceResolution(
       cleanedDataType,
       nullable = true,
       builder.build())
+  }
+
+  private def resolveAlterTable(
+      identifier: TableIdentifier)(
+      f: Option[AlterTable] => LogicalPlan): LogicalPlan = {
+    val tbl = Identifier.of(identifier.database.toArray, identifier.table)
+    val catalog = v2SessionCatalog.asTableCatalog
+    catalog.loadTable(tbl) match {
+      case v2 if !v2.isInstanceOf[CatalogTableAsV2] =>
+        f(Option(AlterTable(catalog, tbl, DataSourceV2Relation.create(v2), Nil)))
+      case _ =>
+        f(None)
+    }
   }
 }
