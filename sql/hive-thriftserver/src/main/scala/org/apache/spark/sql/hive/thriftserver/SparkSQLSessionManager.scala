@@ -59,7 +59,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     var session: HiveSession = null
-    var sparkSession: SparkSession = null
+    var sessionUGI: UserGroupInformation = null
     if (withImpersonation) {
       val sessionWithUGI =
         new HiveSessionImplwithUGI(
@@ -93,11 +93,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       }
       session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
       sessionWithUGI.setProxySession(session)
-
-      sparkSession = sparkSessionManager.getOrCreteSparkSession(sessionWithUGI, true)
+      sessionUGI = sessionWithUGI.getSessionUgi
     } else {
       session = new HiveSessionImpl(protocol, username, passwd, hiveConf, ipAddress)
-      sparkSession = sparkSessionManager.getOrCreteSparkSession(session, false)
+      sessionUGI = UserGroupInformation.getLoginUser
     }
     session.setSessionManager(this)
     session.setOperationManager(operationManager)
@@ -119,6 +118,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     }
     handleToSession.put(session.getSessionHandle, session)
 
+    val sparkSession = sparkSessionManager.getOrCreteSparkSession(session, sessionUGI, withImpersonation)
     val sessionHandle = session.getSessionHandle
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)

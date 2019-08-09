@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli.HiveSQLException
-import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImplwithUGI}
+import org.apache.hive.service.cli.session.{HiveSession}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -67,18 +67,16 @@ class SparkSessionManager extends Logging {
   }
 
 
-  def obtainHiveToken(session: HiveSession, withImpersonation: Boolean): UserGroupInformation = {
+  def obtainHiveToken(session: HiveSession,
+                      sessionUgi: UserGroupInformation,
+                      withImpersonation: Boolean):Unit = {
     sparkContext.conf.set("hive.metastore.token.signature", STS_TOKEN)
     try {
       if (withImpersonation) {
-        val sessionUgi = session.asInstanceOf[HiveSessionImplwithUGI].getSessionUgi
         val delegationToken = getDelegationToken(session.getUserName)
         if (delegationToken != null) {
           Utils.setTokenStr(sessionUgi, delegationToken, STS_TOKEN)
         }
-        sessionUgi
-      } else {
-        UserGroupInformation.getLoginUser
       }
     } catch {
       case e: IOException =>
@@ -87,15 +85,17 @@ class SparkSessionManager extends Logging {
   }
 
 
-  def getOrCreteSparkSession(session: HiveSession, withImpersonation: Boolean): SparkSession = {
+  def getOrCreteSparkSession(session: HiveSession,
+                             sessionUgi: UserGroupInformation,
+                             withImpersonation: Boolean): SparkSession = {
     LOCK.synchronized {
       if (cachedSession.containsKey(session.getUserName)) {
-        obtainHiveToken(session, withImpersonation)
+        obtainHiveToken(session, sessionUgi, withImpersonation)
         cachedSession.get(session.getUserName).newSession()
       } else {
-        val ugi = obtainHiveToken(session, withImpersonation)
+        obtainHiveToken(session, sessionUgi, withImpersonation)
         val sparkSession: SparkSession =
-          ThriftServerHadoopUtils.doAs[SparkSession](ugi) { () =>
+          ThriftServerHadoopUtils.doAs[SparkSession](sessionUgi) { () =>
             Hive.closeCurrent()
             val sessionForSpecUser = new SparkSession(sparkContext)
             sessionForSpecUser.catalog
