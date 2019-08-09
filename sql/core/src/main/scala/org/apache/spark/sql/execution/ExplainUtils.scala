@@ -69,7 +69,8 @@ object ExplainUtils {
       append("\n")
       var i: Integer = 0
       for ((opId, curPlan) <- operationIDToPlan) {
-        append(curPlan.verboseString(planToOperationID, planToWholeStageID.get(curPlan)))
+        append(curPlan.asInstanceOf[QueryPlan[_]].verboseString(planToOperationID,
+          planToWholeStageID.get(curPlan)))
       }
     } catch {
       case e: AnalysisException => append(e.toString)

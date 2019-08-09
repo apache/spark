@@ -181,6 +181,16 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
+  def verboseString(
+    planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+    wholeStageCodegenId: Option[Int]): String = {
+    val codegenIdStr = wholeStageCodegenId.map("[codegen id : " + _ + "]").getOrElse("")
+    val opId = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
+    s"""
+       |($opId) $nodeName $codegenIdStr
+     """.stripMargin
+  }
+
   /**
    * All the subqueries of current plan.
    */

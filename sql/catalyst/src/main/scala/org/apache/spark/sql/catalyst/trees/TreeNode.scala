@@ -544,17 +544,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /** ONE line description of this node with some suffix information */
   def verboseStringWithSuffix(maxFields: Int): String = verboseString(maxFields)
-
-  def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
-      wholeStageCodegenId: Option[Int]): String = {
-    val codegenIdStr = wholeStageCodegenId.map("[codegen id : " + _ + "]").getOrElse("")
-    val opId = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
-    s"""
-       |($opId) $nodeName $codegenIdStr
-     """.stripMargin
-  }
-
+  
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
