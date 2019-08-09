@@ -36,6 +36,23 @@ package object config {
   private[spark] val SPARK_EXECUTOR_PREFIX = "spark.executor"
   private[spark] val SPARK_TASK_PREFIX = "spark.task"
 
+  private[spark] val SPARK_RESOURCES_COORDINATE =
+    ConfigBuilder("spark.resources.coordinate.enable")
+      .doc("Whether to coordinate resources automatically among workers/drivers(client only) " +
+        "in Standalone. If false, the user is responsible for configuring different resources " +
+        "for workers/drivers that run on the same host.")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SPARK_RESOURCES_DIR =
+    ConfigBuilder("spark.resources.dir")
+      .doc("Directory used to coordinate resources among workers/drivers(client only) in " +
+        "Standalone. Default is SPARK_HOME. Make sure to use the same directory for worker " +
+        "and drivers in client mode that run on the same host. Don't clean up this directory " +
+        "while workers/drivers are still alive to avoid the most likely resources conflict. ")
+      .stringConf
+      .createOptional
+
   private[spark] val DRIVER_RESOURCES_FILE =
     ConfigBuilder("spark.driver.resourcesFile")
       .internal()
