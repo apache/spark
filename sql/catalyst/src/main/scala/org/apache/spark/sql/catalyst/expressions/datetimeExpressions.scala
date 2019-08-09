@@ -1811,16 +1811,6 @@ case class MakeTimestamp(
   override def prettyName: String = "make_timestamp"
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the millennium of the date/timestamp.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2000-01-19');
-       2
-      > SELECT _FUNC_('2019-08-06');
-       3
-  """,
-  since = "3.0.0")
 case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -1837,16 +1827,6 @@ case class Millennium(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the century of the date/timestamp.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2000-01-19');
-       20
-      > SELECT _FUNC_('2019-08-06');
-       21
-  """,
-  since = "3.0.0")
 case class Century(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -1863,18 +1843,6 @@ case class Century(child: Expression) extends UnaryExpression with ImplicitCastI
   }
 }
 
-@ExpressionDescription(
-  usage = "_FUNC_(date) - Returns the decade of the date/timestamp.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('2019-08-08');
-       201
-      > SELECT _FUNC_('2010-08-06');
-       201
-      > SELECT _FUNC_('2009-08-06');
-       200
-  """,
-  since = "3.0.0")
 case class Decade(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
