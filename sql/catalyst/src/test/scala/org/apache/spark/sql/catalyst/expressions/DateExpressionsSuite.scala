@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -959,5 +959,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(23), Literal(59), Literal(60.0))
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
     checkEvaluation(makeTimestampExpr.copy(sec = Literal(60.5)), null)
+  }
+
+  test("epoch") {
+    val zoneId = ZoneId.systemDefault()
+    val secFractions = 0.123456
+    val timestamp = Epoch(MakeTimestamp(
+      Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0), Literal(secFractions),
+      Some(Literal(zoneId.getId))))
+    val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, 123456)
+      .atZone(zoneId).toInstant
+    val expected = instant.getEpochSecond + secFractions
+    checkEvaluation(timestamp, expected)
   }
 }

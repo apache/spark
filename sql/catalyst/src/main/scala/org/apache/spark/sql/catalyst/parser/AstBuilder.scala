@@ -1424,6 +1424,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Milliseconds(expression(ctx.source))
       case "MICROSECONDS" =>
         Microseconds(expression(ctx.source))
+      case "EPOCH" =>
+        Epoch(expression(ctx.source))
       case other =>
         throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
     }

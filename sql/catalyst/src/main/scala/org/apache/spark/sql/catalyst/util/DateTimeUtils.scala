@@ -794,4 +794,9 @@ object DateTimeUtils {
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
     convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
   }
+
+  def getEpoch(time: SQLTimestamp, zoneId: ZoneId): Double = {
+    val offset = zoneId.getRules.getOffset(microsToInstant(time))
+    time.toDouble / MICROS_PER_SECOND + offset.getTotalSeconds
+  }
 }
