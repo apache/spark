@@ -379,7 +379,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
       case other =>
-        throw new AnalysisError(
+        throw new AnalysisException(
           s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
@@ -505,7 +505,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         saveAsTable(tableIdentifier)
 
       case other =>
-        throw new AnalysisError(
+        throw new AnalysisException(
           s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
