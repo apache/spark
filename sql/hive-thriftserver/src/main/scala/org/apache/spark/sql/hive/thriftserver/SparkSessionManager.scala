@@ -46,14 +46,15 @@ class SparkSessionManager extends Logging {
       hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
         .equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString) &&
       hiveConf.getBoolVar(HiveConf.ConfVars.METASTORE_USE_THRIFT_SASL) &&
-      hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ENABLE_DOAS)) {
+      UserGroupInformation.isSecurityEnabled &&
+      hiveConf.getTrimmed("hive.metastore.uris", "").nonEmpty) {
       try {
         Hive.closeCurrent()
         Hive.get(hiveConf).getDelegationToken(userName, userName)
       } catch {
         case e: HiveException =>
           if (e.getCause.isInstanceOf[UnsupportedOperationException]) {
-            throw e.getCause.asInstanceOf[UnsupportedOperationException]
+            throw new HiveSQLException("Error get hive delegation token, meet UnsupportedOperationException")
           } else {
             throw new HiveSQLException("Error connect metastore to setup impersonation", e)
           }
@@ -64,32 +65,33 @@ class SparkSessionManager extends Logging {
   }
 
 
-  def addHiveToken(session: HiveSession, withImpersonation: Boolean): UserGroupInformation = {
+  def obtainHiveToken(session: HiveSession, withImpersonation: Boolean): UserGroupInformation = {
     sparkContext.conf.set("hive.metastore.token.signature", STS_TOKEN)
     try {
-      val ugi = if (withImpersonation) {
-        session.asInstanceOf[HiveSessionImplwithUGI].getSessionUgi
+      if (withImpersonation) {
+        val sessionUgi = session.asInstanceOf[HiveSessionImplwithUGI].getSessionUgi
+        val delegationToken = getDelegationToken(session.getUserName)
+        if (delegationToken != null) {
+          Utils.setTokenStr(sessionUgi, delegationToken, STS_TOKEN)
+        }
+        sessionUgi
       } else {
         UserGroupInformation.getLoginUser
       }
-      val delegationToken = getDelegationToken(session.getUserName)
-      if (delegationToken != null) {
-        Utils.setTokenStr(ugi, delegationToken, STS_TOKEN)
-      }
-      ugi
     } catch {
       case e: IOException =>
         throw new HiveSQLException("Couldn't setup delegation token in the ugi", e.getCause)
     }
   }
 
+
   def getOrCreteSparkSession(session: HiveSession, withImpersonation: Boolean): SparkSession = {
     LOCK.synchronized {
       if (cachedSession.containsKey(session.getUserName)) {
-        addHiveToken(session, withImpersonation)
+        obtainHiveToken(session, withImpersonation)
         cachedSession.get(session.getUserName).newSession()
       } else {
-        val ugi = addHiveToken(session, withImpersonation)
+        val ugi = obtainHiveToken(session, withImpersonation)
         val sparkSession: SparkSession =
           ThriftServerHadoopUtils.doAs[SparkSession](ugi) { () =>
             Hive.closeCurrent()
