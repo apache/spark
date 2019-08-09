@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{Predicate => GenPredic
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType

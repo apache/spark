@@ -23,7 +23,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.TreeNode
 
 object ExplainUtils {
   /**
@@ -126,7 +125,7 @@ object ExplainUtils {
    *    2. operator identifier starts at startIdx + 1
    */
   private def generateOperatorIDs(
-      plan: TreeNode[_],
+      plan: QueryPlan[_],
       startOperatorID: Int,
       planToOperationID: mutable.LinkedHashMap[QueryPlan[_], Int],
       operationIDToPlan: mutable.LinkedHashMap[Int, QueryPlan[_]]): Int = {
@@ -159,7 +158,7 @@ object ExplainUtils {
    *    1. operator -> whole stage codegen id
    */
   private def generateWholeStageCodegenIdMap(
-      plan: TreeNode[_],
+      plan: QueryPlan[_],
       planToWholeStageID: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {

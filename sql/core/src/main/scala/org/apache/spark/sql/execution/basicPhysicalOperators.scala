@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.ThreadUtils
