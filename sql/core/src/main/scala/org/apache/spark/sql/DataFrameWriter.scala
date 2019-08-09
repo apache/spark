@@ -375,11 +375,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     df.sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         insertInto(catalog, ident)
+      // TODO(SPARK-28667): Support the V2SessionCatalog
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
       case other =>
-        // TODO(SPARK-28667): This should go through V2SessionCatalog
-        throw new UnsupportedOperationException(
+        throw new AnalysisError(
           s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
@@ -499,13 +499,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
+        // TODO(SPARK-28666): This should go through V2SessionCatalog
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
 
       case other =>
-        // TODO(SPARK-28666): This should go through V2SessionCatalog
-        throw new UnsupportedOperationException(
+        throw new AnalysisError(
           s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
     }
   }
