@@ -2028,7 +2028,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The timeout in seconds for each <code>barrier()</code> call from a barrier task. If the
     coordinator didn't receive all the sync messages from barrier tasks within the
-    configed time, throw a SparkException to fail all the tasks. The default value is set
+    configured time, throw a SparkException to fail all the tasks. The default value is set
     to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
   </td>
 </tr>
