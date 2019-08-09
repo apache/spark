@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy.pushFilters
 import org.apache.spark.sql.execution.datasources.v2.ReadDataSourceV2Relation
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.v2.reader.{ScanBuilder, SupportsPushDownFilters}
