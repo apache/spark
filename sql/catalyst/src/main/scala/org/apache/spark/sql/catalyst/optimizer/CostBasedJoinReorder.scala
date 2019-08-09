@@ -507,17 +507,18 @@ object EdgeRecombination extends Crossover {
   def genEdgeTable(father: Chromosome, mother: Chromosome): Map[JoinPlan, Seq[JoinPlan]] = {
     val length = father.basicPlans.length
 
-    val fatherIndexed = father.basicPlans.toIndexedSeq
-    val fatherTable = fatherIndexed.map(p => {
-      val index = fatherIndexed.indexOf(p)
-      p -> Seq(fatherIndexed((index - 1 + length) % length), fatherIndexed((index + 1) % length))
-    }).toMap
+    val fatherTable = father.basicPlans.zipWithIndex.flatMap {
+      case (p, idx) =>
+        Seq(p -> Seq(father.basicPlans((idx - 1 + length) % length),
+          father.basicPlans((idx + 1) % length)))
+    }.toMap
 
     val motherIndexed = mother.basicPlans.toIndexedSeq
-    val motherTable = motherIndexed.map(p => {
-      val index = motherIndexed.indexOf(p)
-      p -> Seq(motherIndexed((index - 1 + length) % length), motherIndexed((index + 1) % length))
-    }).toMap
+    val motherTable = mother.basicPlans.zipWithIndex.flatMap {
+      case (p, idx) =>
+        Seq(p -> Seq(mother.basicPlans((idx - 1 + length) % length),
+          mother.basicPlans((idx + 1) % length)))
+    }.toMap
 
     fatherTable.map(entry => entry._1 -> (entry._2 ++ motherTable(entry._1)))
   }
