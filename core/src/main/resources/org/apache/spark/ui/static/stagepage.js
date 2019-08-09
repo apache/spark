@@ -897,14 +897,14 @@ $(document).ready(function () {
                     // Get the column
                     var para = $(this).attr('data-column');
                     if (para == "0") {
-                        var column = taskTableSelector.columns(optionalColumns);
+                        var allColumns = taskTableSelector.columns(optionalColumns);
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
-                            column.visible(true);
+                            allColumns.visible(true);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
-                            column.visible(false);
+                            allColumns.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
                                 taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
