@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources.v2
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -139,6 +139,68 @@ class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with Be
         dfr.write.mode("overwrite").insertInto(t1)
         checkAnswer(spark.table(t1), df.union(sql("SELECT 4L, 'keep'")))
       }
+    }
+  }
+
+  testQuietly("saveAsTable: table doesn't exist => create table") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df.write.saveAsTable(t1)
+      checkAnswer(spark.table(t1), df)
+    }
+  }
+
+  testQuietly("saveAsTable: table exists => append by name") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      // Default saveMode is append, therefore this doesn't throw a table already exists exception
+      df.write.saveAsTable(t1)
+      checkAnswer(spark.table(t1), df)
+
+      // also appends are by name not by position
+      df.select('data, 'id).write.saveAsTable(t1)
+      checkAnswer(spark.table(t1), df.union(df))
+    }
+  }
+
+  testQuietly("saveAsTable: table overwrite and table doesn't exist => create table") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df.write.mode("overwrite").saveAsTable(t1)
+      checkAnswer(spark.table(t1), df)
+    }
+  }
+
+  testQuietly("saveAsTable: table overwrite and table exists => replace table") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df.write.mode("overwrite").saveAsTable(t1)
+      checkAnswer(spark.table(t1), df)
+    }
+  }
+
+  testQuietly("saveAsTable: ignore mode and table doesn't exist => create table") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df.write.mode("ignore").saveAsTable(t1)
+      checkAnswer(spark.table(t1), df)
+    }
+  }
+
+  testQuietly("saveAsTable: ignore mode and table exists => do nothing") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      sql(s"CREATE TABLE $t1 USING foo AS SELECT 'c', 'd'")
+      df.write.mode("ignore").saveAsTable(t1)
+      checkAnswer(spark.table(t1), Seq(Row("c", "d")))
     }
   }
 }
