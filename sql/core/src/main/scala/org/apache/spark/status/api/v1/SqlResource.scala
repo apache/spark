@@ -32,26 +32,19 @@ private[v1] class SqlResource extends BaseAppResource {
   def sqlList(): Seq[ExecutionData] = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-
-      var executions = sqlStore.executionsList()
-        .map(exec => prepareExecutionData(exec))
-      if (executions.nonEmpty) {
-        executions = executions.sortBy(x => x.id)
-      }
-      executions
+      sqlStore.executionsList().map(prepareExecutionData)
     }
   }
 
   @GET
   @Path("{executionId:\\d+}")
-  def sql(@PathParam("executionId") execId: Long): Seq[ExecutionData] = {
+  def sql(@PathParam("executionId") execId: Long): ExecutionData = {
     withUI { ui =>
       val sqlStore = new SQLAppStatusStore(ui.store.store)
-
       sqlStore
         .execution(execId)
-        .map(exec => prepareExecutionData(exec))
-        .toSeq
+        .map(prepareExecutionData)
+        .getOrElse(throw new NotFoundException("unknown id: " + execId))
     }
   }
 

@@ -16,7 +16,8 @@
  */
 package org.apache.spark.status.api.v1
 
-class ExecutionData (val id : Long,
+class ExecutionData (
+    val id : Long,
     val status: String,
     val description: String,
     val submissionTime: String,
