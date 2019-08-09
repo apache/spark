@@ -179,10 +179,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def simpleString(maxFields: Int): String = statePrefix + super.simpleString(maxFields)
 
+  override def simpleString(planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
+    val operatorID = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
+    s"$nodeName ($operatorID)".trim
+  }
+
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   def verboseString(
-    planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
     wholeStageCodegenId: Option[Int]): String = {
     val codegenIdStr = wholeStageCodegenId.map("[codegen id : " + _ + "]").getOrElse("")
     val opId = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
@@ -348,7 +353,7 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      planToOpID: mutable.LinkedHashMap[TreeNode[_], Int] = mutable.LinkedHashMap.empty): Unit = {
+      planToOpID: mutable.LinkedHashMap[QueryPlan[_], Int] = mutable.LinkedHashMap.empty): Unit = {
     try {
       plan.treeString(append, verbose, addSuffix, maxFields, planToOpID)
     } catch {

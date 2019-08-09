@@ -24,6 +24,7 @@ import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{BinaryExecNode, ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -70,7 +71,7 @@ case class CartesianProductExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
       codegenId: Option[Int]): String = {
     val joinCondStr = if (condition.isDefined) {
       s"${condition.get}"

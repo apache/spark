@@ -31,6 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -227,7 +228,7 @@ case class AdaptiveSparkPlanExec(
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): Unit = {
+      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
     super.generateTreeString(depth,
       lastChildren,
       append,

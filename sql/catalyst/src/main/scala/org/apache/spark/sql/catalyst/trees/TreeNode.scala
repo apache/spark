@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.JoinType
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, Partitioning}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -534,17 +535,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     s"$nodeName ${argString(maxFields)}".trim
   }
 
-  def simpleString(planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
-    val operatorID = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
-    s"$nodeName ($operatorID)".trim
-  }
+  def simpleString(
+     planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): String = s"$nodeName".trim
 
-  /** ONE line description of this node with more information */
+    /** ONE line description of this node with more information */
   def verboseString(maxFields: Int): String
 
   /** ONE line description of this node with some suffix information */
   def verboseStringWithSuffix(maxFields: Int): String = verboseString(maxFields)
-  
+
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
@@ -561,11 +560,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   def treeString(
-      append: String => Unit,
-      verbose: Boolean,
-      addSuffix: Boolean,
-      maxFields: Int,
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int] ): Unit = {
+    append: String => Unit,
+    verbose: Boolean,
+    addSuffix: Boolean,
+    maxFields: Int,
+    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int] ): Unit = {
     generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, planToOperatorID)
   }
 
@@ -634,7 +633,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int]): Unit = {
+      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>

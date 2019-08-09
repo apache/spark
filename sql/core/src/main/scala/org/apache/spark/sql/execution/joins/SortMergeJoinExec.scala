@@ -51,13 +51,13 @@ case class SortMergeJoinExec(
     s"$nodeName $joinType"
   }
 
-  override def simpleString(planLabelMap: mutable.LinkedHashMap[TreeNode[_], Int]): String = {
+  override def simpleString(planLabelMap: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
     val label = planLabelMap.get(this).getOrElse(-1)
     s"$nodeName $joinType ($label)".trim
   }
 
   override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
       codegenId: Option[Int]): String = {
     val joinCondStr = if (condition.isDefined) {
       s"${condition.get}"

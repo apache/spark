@@ -24,6 +24,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -89,7 +90,7 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   }
 
   override def verboseString(
-    planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
     codegenId: Option[Int]): String = {
     val cdgen = wholestageCodegenIdStr(codegenId)
     val reuse_op = planToOperatorID.get(child)

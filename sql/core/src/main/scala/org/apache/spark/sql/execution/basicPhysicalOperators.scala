@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -84,7 +85,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def verboseString(
-    planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
     codegenId: Option[Int]): String = {
     s"""
        |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
@@ -240,7 +241,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[TreeNode[_], Int],
+      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
       codegenId: Option[Int]): String = {
     s"""
        |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
@@ -713,7 +714,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
     prefix: String = "",
     addSuffix: Boolean = false,
     maxFields: Int,
-    planLabelMap: mutable.LinkedHashMap[TreeNode[_], Int]): Unit = {
+    planLabelMap: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
     if (planLabelMap.isEmpty) {
       super.generateTreeString(
         depth,
