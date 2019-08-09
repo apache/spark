@@ -97,9 +97,9 @@ def fail(msg):
 def run_cmd(cmd):
     print(cmd)
     if isinstance(cmd, list):
-        return subprocess.check_output(cmd).decode(sys.stdout.encoding)
+        return subprocess.check_output(cmd).decode(sys.getdefaultencoding())
     else:
-        return subprocess.check_output(cmd.split(" ")).decode(sys.stdout.encoding)
+        return subprocess.check_output(cmd.split(" ")).decode(sys.getdefaultencoding())
 
 
 def continue_maybe(prompt):
