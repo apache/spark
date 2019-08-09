@@ -2,6 +2,8 @@ CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c;
 
 select extract(year from c) from t;
 
+select extract(isoyear from c) from t;
+
 select extract(quarter from c) from t;
 
 select extract(month from c) from t;

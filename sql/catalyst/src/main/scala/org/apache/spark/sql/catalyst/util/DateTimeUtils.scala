@@ -488,6 +488,14 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering
+   * year begins with the Monday of the week containing the 4th of January.
+   */
+  def getIsoYear(date: SQLDate): Int = {
+    daysToLocalDate(date).get(IsoFields.WEEK_BASED_YEAR)
+  }
+
+  /**
    * Returns the quarter for the given date. The date is expressed in days
    * since 1.1.1970.
    */

@@ -972,4 +972,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expected = instant.getEpochSecond + secFractions
     checkEvaluation(timestamp, expected)
   }
+
+  test("ISO 8601 week-numbering year") {
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
+  }
 }

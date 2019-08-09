@@ -1398,6 +1398,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     ctx.field.getText.toUpperCase(Locale.ROOT) match {
       case "YEAR" =>
         Year(expression(ctx.source))
+      case "ISOYEAR" =>
+        IsoYear(expression(ctx.source))
       case "QUARTER" =>
         Quarter(expression(ctx.source))
       case "MONTH" =>
