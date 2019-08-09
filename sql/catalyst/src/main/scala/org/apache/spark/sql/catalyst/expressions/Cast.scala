@@ -194,6 +194,10 @@ object Cast {
 
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
 
+  /**
+   * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
+   * insensitive manner to be compatible with other database systems such as Postgres and DB2.
+   */
   def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
     v.trim.toLowerCase(Locale.ROOT) match {
       case "inf" | "+inf" | "infinity" | "+infinity" =>
