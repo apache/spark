@@ -1057,14 +1057,6 @@ class JDBCSuite extends QueryTest
   }
 
   test("Replace CatalogUtils.maskCredentials with SQLConf.get.redactOptions") {
-    def assertRedacted(rows: Array[Row]): Unit = {
-      assert(rows.length === 1)
-      rows.foreach { r =>
-        r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}")
-        r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}")
-      }
-    }
-
     val password = "testPass"
     val tableName = "tab1"
     withTable(tableName) {
@@ -1082,15 +1074,27 @@ class JDBCSuite extends QueryTest
       val storageProps = sql(s"DESC FORMATTED $tableName")
         .filter("col_name = 'Storage Properties'")
         .select("data_type").collect()
-      assertRedacted(storageProps)
+      assert(storageProps.length === 1)
+      storageProps.foreach { r =>
+        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+      }
 
       val information = sql(s"SHOW TABLE EXTENDED LIKE '$tableName'")
         .select("information").collect()
-      assertRedacted(information)
+      assert(information.length === 1)
+      information.foreach { r =>
+        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+      }
 
       val createTabStmt = sql(s"SHOW CREATE TABLE $tableName")
         .select("createtab_stmt").collect()
-      assertRedacted(createTabStmt)
+      assert(createTabStmt.length === 1)
+      createTabStmt.foreach { r =>
+        assert(r.getString(0).contains(s"`url` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"`password` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+      }
     }
   }
 
