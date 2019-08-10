@@ -128,7 +128,7 @@ class BarrierTaskContext private[spark] (
       // Wait the RPC future to be completed, but every 1 second it will jump out waiting
       // and check whether current spark task is killed. If killed, then throw
       // a `TaskKilledException`, otherwise continue wait RPC until it completes.
-      while(!taskContext.isCompleted()) {
+      while(!cancelableRpcFuture.toFuture.isCompleted) {
         if (taskContext.isInterrupted()) {
           val reason = taskContext.getKillReason().get
           cancelableRpcFuture.abort(reason)

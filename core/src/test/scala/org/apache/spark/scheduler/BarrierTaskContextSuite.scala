@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import java.io.File
+
 import scala.util.Random
 
 import org.apache.spark._
@@ -152,5 +154,54 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
     assert(error.contains("within 1 second(s)"))
+  }
+
+  test("barrier task killed") {
+    val conf = new SparkConf()
+      .set("spark.barrier.sync.timeout", "1")
+      .set(TEST_NO_STAGE_RETRY, true)
+      .setMaster("local-cluster[4, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+
+    withTempDir { dir =>
+      val killedFlagFile = "barrier.task.killed"
+      val rdd = sc.makeRDD(Seq(0, 1), 2)
+      val rdd2 = rdd.barrier().mapPartitions { it =>
+        val context = BarrierTaskContext.get()
+        if (context.partitionId() == 0) {
+          try {
+            context.barrier()
+          } catch {
+            case _: TaskKilledException =>
+              new File(dir, killedFlagFile).createNewFile()
+          }
+        } else {
+          Thread.sleep(5000)
+          context.barrier()
+        }
+        it
+      }
+
+      val listener = new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          new Thread {
+            override def run: Unit = {
+              Thread.sleep(1000)
+              sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = false)
+            }
+          }.start()
+        }
+      }
+      sc.addSparkListener(listener)
+
+      intercept[SparkException] {
+        rdd2.collect()
+      }
+
+      sc.removeSparkListener(listener)
+
+      assert(new File(dir, killedFlagFile).exists(), "Expect barrier task being killed.")
+    }
   }
 }
