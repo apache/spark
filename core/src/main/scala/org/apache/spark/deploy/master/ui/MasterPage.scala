@@ -19,6 +19,7 @@ package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable
 import scala.xml.Node
 
 import org.json4s.JValue
@@ -67,11 +68,35 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
   }
 
+  private def formatWorkerResources(worker: WorkerInfo): String = {
+    if (worker.resources.isEmpty) return "None"
+    worker.resources.map { case (rName, rInfo) =>
+      val free = rInfo.availableAddrs.mkString("[", ", ", "]")
+      val used = rInfo.assignedAddrs.mkString("[", ", ", "]")
+      s"$rName: Free: $free / Used: $used"
+    }.mkString(", ")
+  }
+
+  private def formatResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
+    val use = aliveWorkers.foldLeft(new mutable.HashMap[String, (Int, Int)]) { (usage, w) =>
+      val free = w.resourcesFree
+      val total = w.resources.map(r => r._1 -> r._2.addresses.length)
+      total.foreach { case (rName, all) =>
+        val usedAndAll = usage.getOrElseUpdate(rName, (0, 0))
+        val newAll = usedAndAll._2 + all
+        val newUsed = usedAndAll._1 + all - free(rName)
+        usage(rName) = (newUsed, newAll)
+      }
+      usage
+    }.map { case (rName, (used, total)) => s"$used / $total $rName"}.mkString(", ")
+    if (use.isEmpty) "None" else use
+  }
+
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = getMasterState
 
-    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
+    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
     val workers = state.workers.sortBy(_.id)
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
@@ -113,6 +138,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
+              <li><strong>Resources in use:</strong> {formatResourcesInUse(aliveWorkers)}</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.length} <a href="#running-app">Running</a>,
                 {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
@@ -236,6 +262,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(worker.memory)}
         ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
+      <td>{formatWorkerResources(worker)}</td>
     </tr>
   }
 
