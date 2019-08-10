@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
@@ -1704,7 +1704,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     }
   }
 
-  test("ShowTables using v2 catalog") {
+  test("ShowTables: using v2 catalog") {
     spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
     spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
 
@@ -1715,7 +1715,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       Seq(Row("n1.n2.db", "table_name")))
   }
 
-  test("ShowTables using v2 catalog with a pattern") {
+  test("ShowTables: using v2 catalog with a pattern") {
     spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
     spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
     spark.sql("CREATE TABLE testcat.db.table_name_2 (id bigint, data string) USING foo")
@@ -1741,22 +1741,34 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
   }
 
+  test("ShowTables: using v1 catalog") {
+    runShowTablesSql(
+      "SHOW TABLES FROM default",
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
+  }
+
   test("ShowTables: using v1 catalog, db doesn't exist ") {
     // 'db' below resolves to a database name for v1 catalog because there is no catalog named
     // 'db' and there is no default catalog set.
     val exception = intercept[NoSuchDatabaseException] {
-      runShowTablesSql("SHOW TABLES FROM db", Seq())
+      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
     }
 
     assert(exception.getMessage.contains("Database 'db' not found"))
   }
 
-  test("ShowTables: using v2 catalog, namespace is not specified") {
+  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
     val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES FROM testcat", Seq())
+      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
     }
 
-    assert(exception.getMessage.contains("default namespace cannot be deduced"))
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
+  test("ShowTables: using v2 catalog with empty namespace") {
+    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
+    runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
   }
 
   test("ShowTables: namespace is not specified and default v2 catalog is set") {
@@ -1768,7 +1780,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       runShowTablesSql("SHOW TABLES", Seq(), Some(sparkSession))
     }
 
-    assert(exception.getMessage.contains("default namespace cannot be deduced"))
+    assert(exception.getMessage.contains("current namespace is not available in v2 catalog"))
   }
 
   test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
@@ -1781,6 +1793,35 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       "SHOW TABLES LIKE '*2'",
       Seq(Row("", "source2", true)),
       expectV2Catalog = false)
+  }
+
+  private def runShowTablesSql(
+      sqlText: String,
+      expected: Seq[Row],
+      sparkSession: Option[SparkSession] = None,
+      expectV2Catalog: Boolean = true): Unit = {
+    val schema = if (expectV2Catalog) {
+      new StructType()
+        .add("namespace", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+    } else {
+      new StructType()
+        .add("database", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+        .add("isTemporary", BooleanType, nullable = false)
+    }
+
+    val actual = runSqlWithSchemaCheck(sparkSession.getOrElse(spark), sqlText, schema)
+    assert(expected === actual)
+  }
+
+  private def runSqlWithSchemaCheck(
+      sparkSession: SparkSession,
+      sqlText: String,
+      schema: StructType): Seq[Row] = {
+    val df = sparkSession.sql(sqlText)
+    assert(df.schema == schema)
+    df.collect()
   }
 
   test("tableCreation: partition column case insensitive resolution") {
@@ -1943,35 +1984,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
         )
       }
     }
-  }
-
-  private def runShowTablesSql(
-      sqlText: String,
-      expected: Seq[Row],
-      sparkSession: Option[SparkSession] = None,
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-    } else {
-      new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-    }
-
-    val actual = runSqlWithSchemaCheck(sparkSession.getOrElse(spark), sqlText, schema)
-    assert(expected === actual)
-  }
-
-  private def runSqlWithSchemaCheck(
-      sparkSession: SparkSession,
-      sqlText: String,
-      schema: StructType): Seq[Row] = {
-    val df = sparkSession.sql(sqlText)
-    assert(df.schema == schema)
-    df.collect()
   }
 
   private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {

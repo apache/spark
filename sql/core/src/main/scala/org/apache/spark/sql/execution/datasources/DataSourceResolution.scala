@@ -180,7 +180,7 @@ case class DataSourceResolution(
       defaultCatalog match {
         case Some(_) =>
           throw new AnalysisException(
-            "The default namespace cannot be deduced in v2 catalog yet")
+            "The current namespace is not available in v2 catalog yet")
         case None =>
           ShowTablesCommand(None, pattern)
       }
@@ -189,12 +189,12 @@ case class DataSourceResolution(
       val CatalogNamespace(maybeCatalog, ns) = namespace
       maybeCatalog match {
         case Some(v2Catalog) =>
-          if (ns.isEmpty) {
-            throw new AnalysisException(
-              "The default namespace cannot be deduced in v2 catalog yet")
-          }
           ShowTables(plan.output, v2Catalog.asTableCatalog, ns, pattern)
         case None =>
+          if (namespace.length != 1) {
+            throw new AnalysisException(
+              s"The database name is not valid: ${namespace.quoted}")
+          }
           ShowTablesCommand(Some(namespace.quoted), pattern)
       }
   }
