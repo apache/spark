@@ -3391,6 +3391,7 @@ object functions {
    * in the input array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform(column: Column, f: Column => Column): Column = withExpr {
     ArrayTransform(column.expr, createLambda(f))
@@ -3401,6 +3402,7 @@ object functions {
    * in the input array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform(column: Column, f: (Column, Column) => Column): Column = withExpr {
     ArrayTransform(column.expr, createLambda(f))
@@ -3410,6 +3412,7 @@ object functions {
    * (Scala-specific) Returns whether a predicate holds for one or more elements in the array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def exists(column: Column, f: Column => Column): Column = withExpr {
     ArrayExists(column.expr, createLambda(f))
@@ -3419,6 +3422,7 @@ object functions {
    * (Scala-specific) Returns whether a predicate holds for every element in the array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def forall(column: Column, f: Column => Column): Column = withExpr {
     ArrayForAll(column.expr, createLambda(f))
@@ -3428,6 +3432,7 @@ object functions {
    * (Scala-specific) Returns an array of elements for which a predicate holds in a given array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def filter(column: Column, f: Column => Column): Column = withExpr {
     ArrayFilter(column.expr, createLambda(f))
@@ -3439,6 +3444,7 @@ object functions {
    * by applying a finish function.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column,
                 finish: Column => Column): Column = withExpr {
@@ -3455,6 +3461,7 @@ object functions {
    * and reduces this to a single state.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def aggregate(expr: Column, zero: Column, merge: (Column, Column) => Column): Column =
     aggregate(expr, zero, merge, c => c)
@@ -3465,6 +3472,7 @@ object functions {
    * array, before applying the function.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def zip_with(left: Column, right: Column, f: (Column, Column) => Column): Column = withExpr {
     ZipWith(left.expr, right.expr, createLambda(f))
@@ -3475,6 +3483,7 @@ object functions {
    * a map with the results of those applications as the new keys for the pairs.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform_keys(expr: Column, f: (Column, Column) => Column): Column = withExpr {
     TransformKeys(expr.expr, createLambda(f))
@@ -3485,6 +3494,7 @@ object functions {
    * a map with the results of those applications as the new values for the pairs.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform_values(expr: Column, f: (Column, Column) => Column): Column = withExpr {
     TransformValues(expr.expr, createLambda(f))
@@ -3494,6 +3504,7 @@ object functions {
    * (Scala-specific) Returns a map whose key-value pairs satisfy a predicate.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def map_filter(expr: Column, f: (Column, Column) => Column): Column = withExpr {
     MapFilter(expr.expr, createLambda(f))
@@ -3503,6 +3514,7 @@ object functions {
    * (Scala-specific) Merge two given maps, key-wise into a single map using a function.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def map_zip_with(left: Column, right: Column,
                    f: (Column, Column, Column) => Column): Column = withExpr {
@@ -3514,6 +3526,7 @@ object functions {
    * in the input array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayTransform(column.expr, createLambda(f))
@@ -3524,6 +3537,7 @@ object functions {
    * in the input array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform(column: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     ArrayTransform(column.expr, createLambda(f))
@@ -3533,6 +3547,7 @@ object functions {
    * (Java-specific) Returns whether a predicate holds for one or more elements in the array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def exists(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayExists(column.expr, createLambda(f))
@@ -3542,6 +3557,7 @@ object functions {
    * (Java-specific) Returns whether a predicate holds for every element in the array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def forall(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayForAll(column.expr, createLambda(f))
@@ -3551,6 +3567,7 @@ object functions {
    * (Java-specific) Returns an array of elements for which a predicate holds in a given array.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def filter(column: Column, f: JavaFunction[Column, Column]): Column = withExpr {
     ArrayFilter(column.expr, createLambda(f))
@@ -3562,6 +3579,7 @@ object functions {
    * by applying a finish function.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def aggregate(expr: Column, zero: Column, merge: JavaFunction2[Column, Column, Column],
                 finish: JavaFunction[Column, Column]): Column = withExpr {
@@ -3578,6 +3596,7 @@ object functions {
    * and reduces this to a single state.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def aggregate(expr: Column, zero: Column, merge: JavaFunction2[Column, Column, Column]): Column =
     aggregate(
@@ -3589,6 +3608,7 @@ object functions {
    * array, before applying the function.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def zip_with(left: Column, right: Column, f: JavaFunction2[Column, Column, Column]): Column =
     withExpr {
@@ -3600,6 +3620,7 @@ object functions {
    * a map with the results of those applications as the new keys for the pairs.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform_keys(expr: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     TransformKeys(expr.expr, createLambda(f))
@@ -3610,6 +3631,7 @@ object functions {
    * a map with the results of those applications as the new values for the pairs.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def transform_values(expr: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     TransformValues(expr.expr, createLambda(f))
@@ -3619,6 +3641,7 @@ object functions {
    * (Java-specific) Returns a map whose key-value pairs satisfy a predicate.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def map_filter(expr: Column, f: JavaFunction2[Column, Column, Column]): Column = withExpr {
     MapFilter(expr.expr, createLambda(f))
@@ -3628,6 +3651,7 @@ object functions {
    * (Java-specific) Merge two given maps, key-wise into a single map using a function.
    *
    * @group collection_funcs
+   * @since 3.0.0
    */
   def map_zip_with(left: Column, right: Column,
                    f: JavaFunction3[Column, Column, Column, Column]): Column = withExpr {
