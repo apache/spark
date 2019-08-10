@@ -23,6 +23,7 @@ import java.util.TimeZone
 
 import scala.util.Random
 
+import org.apache.spark.api.java.function.{Function => JavaFunction, Function2 => JavaFunction2, Function3 => JavaFunction3}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -37,6 +38,9 @@ import org.apache.spark.sql.types._
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
 class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
+  type JFunc = JavaFunction[Column, Column]
+  type JFunc2 = JavaFunction2[Column, Column, Column]
+  type JFunc3 = JavaFunction3[Column, Column, Column, Column]
   import testImplicits._
 
   test("array with column name") {
@@ -1917,31 +1921,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // transform(i, x -> x + 1)
+    val resA = Seq(
+      Row(Seq(2, 10, 9, 8)),
+      Row(Seq(6, 9, 10, 8, 3)),
+      Row(Seq.empty),
+      Row(null))
+
+    // transform(i, (x, i) -> x + i)
+    val resB = Seq(
+      Row(Seq(1, 10, 10, 10)),
+      Row(Seq(5, 9, 11, 10, 6)),
+      Row(Seq.empty),
+      Row(null))
+
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("transform(i, x -> x + 1)"),
-        Seq(
-          Row(Seq(2, 10, 9, 8)),
-          Row(Seq(6, 9, 10, 8, 3)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.selectExpr("transform(i, (x, i) -> x + i)"),
-        Seq(
-          Row(Seq(1, 10, 10, 10)),
-          Row(Seq(5, 9, 11, 10, 6)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("i"), x => x + 1)),
-        Seq(
-          Row(Seq(2, 10, 9, 8)),
-          Row(Seq(6, 9, 10, 8, 3)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("i"), (x, i) => x + i)),
-        Seq(
-          Row(Seq(1, 10, 10, 10)),
-          Row(Seq(5, 9, 11, 10, 6)),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("transform(i, x -> x + 1)"), resA)
+      checkAnswer(df.selectExpr("transform(i, (x, i) -> x + i)"), resB)
+
+      checkAnswer(df.select(transform(col("i"), x => x + 1)), resA)
+      checkAnswer(df.select(transform(col("i"), (x, i) => x + i)), resB)
+
+      checkAnswer(df.select(transform(col("i"), new JFunc {
+        def call(x: Column) = x + 1
+      })), resA)
+      checkAnswer(df.select(transform(col("i"), new JFunc2 {
+        def call(x: Column, i: Column) = x + i
+      })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -1959,31 +1965,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // transform(i, x -> x + 1)
+    val resA = Seq(
+      Row(Seq(2, 10, 9, null, 8)),
+      Row(Seq(6, null, 9, 10, 8, 3)),
+      Row(Seq.empty),
+      Row(null))
+
+    // transform(i, (x, i) -> x + i)
+    val resB = Seq(
+      Row(Seq(1, 10, 10, null, 11)),
+      Row(Seq(5, null, 10, 12, 11, 7)),
+      Row(Seq.empty),
+      Row(null))
+
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("transform(i, x -> x + 1)"),
-        Seq(
-          Row(Seq(2, 10, 9, null, 8)),
-          Row(Seq(6, null, 9, 10, 8, 3)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.selectExpr("transform(i, (x, i) -> x + i)"),
-        Seq(
-          Row(Seq(1, 10, 10, null, 11)),
-          Row(Seq(5, null, 10, 12, 11, 7)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("i"), x => x + 1)),
-        Seq(
-          Row(Seq(2, 10, 9, null, 8)),
-          Row(Seq(6, null, 9, 10, 8, 3)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("i"), (x, i) => x + i)),
-        Seq(
-          Row(Seq(1, 10, 10, null, 11)),
-          Row(Seq(5, null, 10, 12, 11, 7)),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("transform(i, x -> x + 1)"), resA)
+      checkAnswer(df.selectExpr("transform(i, (x, i) -> x + i)"), resB)
+
+      checkAnswer(df.select(transform(col("i"), x => x + 1)), resA)
+      checkAnswer(df.select(transform(col("i"), (x, i) => x + i)), resB)
+
+      checkAnswer(df.select(transform(col("i"), new JFunc {
+        def call(x: Column) = x + 1
+      })), resA)
+      checkAnswer(df.select(transform(col("i"), new JFunc2 {
+        def call(x: Column, i: Column) = x + i
+      })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2001,31 +2009,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
+    // transform(s, x -> concat(x, x))
+    val resA = Seq(
+      Row(Seq("cc", "aa", "bb")),
+      Row(Seq("bb", null, "cc", null)),
+      Row(Seq.empty),
+      Row(null))
+
+    // transform(s, (x, i) -> concat(x, i))
+    val resB = Seq(
+      Row(Seq("c0", "a1", "b2")),
+      Row(Seq("b0", null, "c2", null)),
+      Row(Seq.empty),
+      Row(null))
+
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("transform(s, x -> concat(x, x))"),
-        Seq(
-          Row(Seq("cc", "aa", "bb")),
-          Row(Seq("bb", null, "cc", null)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.selectExpr("transform(s, (x, i) -> concat(x, i))"),
-        Seq(
-          Row(Seq("c0", "a1", "b2")),
-          Row(Seq("b0", null, "c2", null)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("s"), x => concat(x, x))),
-        Seq(
-          Row(Seq("cc", "aa", "bb")),
-          Row(Seq("bb", null, "cc", null)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("s"), (x, i) => concat(x, i))),
-        Seq(
-          Row(Seq("c0", "a1", "b2")),
-          Row(Seq("b0", null, "c2", null)),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("transform(s, x -> concat(x, x))"), resA)
+      checkAnswer(df.selectExpr("transform(s, (x, i) -> concat(x, i))"), resB)
+
+      checkAnswer(df.select(transform(col("s"), x => concat(x, x))), resA)
+      checkAnswer(df.select(transform(col("s"), (x, i) => concat(x, i))), resB)
+
+      checkAnswer(df.select(transform(col("s"), new JFunc {
+        def call(x: Column) = concat(x, x)
+      })), resA)
+      checkAnswer(df.select(transform(col("s"), new JFunc2 {
+        def call(x: Column, i: Column) = concat(x, i)
+      })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2043,59 +2053,54 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("arg")
 
+    // transform(arg, arg -> arg)
+    val resA =
+        Seq(
+          Row(Seq("c", "a", "b")),
+          Row(Seq("b", null, "c", null)),
+          Row(Seq.empty),
+          Row(null))
+
+    // transform(arg, arg)
+    val resB = Seq(
+      Row(Seq(Seq("c", "a", "b"), Seq("c", "a", "b"), Seq("c", "a", "b"))),
+      Row(Seq(
+        Seq("b", null, "c", null),
+        Seq("b", null, "c", null),
+        Seq("b", null, "c", null),
+        Seq("b", null, "c", null))),
+      Row(Seq.empty),
+      Row(null))
+
+    // transform(arg, x -> concat(arg, array(x)))
+    val resC = Seq(
+      Row(Seq(Seq("c", "a", "b", "c"), Seq("c", "a", "b", "a"), Seq("c", "a", "b", "b"))),
+      Row(Seq(
+        Seq("b", null, "c", null, "b"),
+        Seq("b", null, "c", null, null),
+        Seq("b", null, "c", null, "c"),
+        Seq("b", null, "c", null, null))),
+      Row(Seq.empty),
+      Row(null))
+
     def testSpecialCases(): Unit = {
-      checkAnswer(df.selectExpr("transform(arg, arg -> arg)"),
-        Seq(
-          Row(Seq("c", "a", "b")),
-          Row(Seq("b", null, "c", null)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.selectExpr("transform(arg, arg)"),
-        Seq(
-          Row(Seq(Seq("c", "a", "b"), Seq("c", "a", "b"), Seq("c", "a", "b"))),
-          Row(Seq(
-            Seq("b", null, "c", null),
-            Seq("b", null, "c", null),
-            Seq("b", null, "c", null),
-            Seq("b", null, "c", null))),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.selectExpr("transform(arg, x -> concat(arg, array(x)))"),
-        Seq(
-          Row(Seq(Seq("c", "a", "b", "c"), Seq("c", "a", "b", "a"), Seq("c", "a", "b", "b"))),
-          Row(Seq(
-            Seq("b", null, "c", null, "b"),
-            Seq("b", null, "c", null, null),
-            Seq("b", null, "c", null, "c"),
-            Seq("b", null, "c", null, null))),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("arg"), arg => arg)),
-        Seq(
-          Row(Seq("c", "a", "b")),
-          Row(Seq("b", null, "c", null)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("arg"), _ => col("arg"))),
-        Seq(
-          Row(Seq(Seq("c", "a", "b"), Seq("c", "a", "b"), Seq("c", "a", "b"))),
-          Row(Seq(
-            Seq("b", null, "c", null),
-            Seq("b", null, "c", null),
-            Seq("b", null, "c", null),
-            Seq("b", null, "c", null))),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(transform(col("arg"), x => concat(col("arg"), array(x)))),
-        Seq(
-          Row(Seq(Seq("c", "a", "b", "c"), Seq("c", "a", "b", "a"), Seq("c", "a", "b", "b"))),
-          Row(Seq(
-            Seq("b", null, "c", null, "b"),
-            Seq("b", null, "c", null, null),
-            Seq("b", null, "c", null, "c"),
-            Seq("b", null, "c", null, null))),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("transform(arg, arg -> arg)"), resA)
+      checkAnswer(df.selectExpr("transform(arg, arg)"), resB)
+      checkAnswer(df.selectExpr("transform(arg, x -> concat(arg, array(x)))"), resC)
+
+      checkAnswer(df.select(transform(col("arg"), arg => arg)), resA)
+      checkAnswer(df.select(transform(col("arg"), _ => col("arg"))), resB)
+      checkAnswer(df.select(transform(col("arg"), x => concat(col("arg"), array(x)))), resC)
+
+      checkAnswer(df.select(transform(col("arg"), new JFunc {
+        def call(arg: Column) = arg
+      })), resA)
+      checkAnswer(df.select(transform(col("arg"), new JFunc {
+        def call(arg: Column) = col("arg")
+      })), resB)
+      checkAnswer(df.select(transform(col("arg"), new JFunc {
+        def call(x: Column) = concat(col("arg"), array(x))
+      })), resC)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2123,10 +2128,34 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
+    val ex2a = intercept[AnalysisException] {
+      df.select(transform(col("i"), x => x))
+    }
+    assert(ex2a.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex2b = intercept[AnalysisException] {
+      df.select(transform(col("i"), new JFunc {
+        def call(x: Column) = x
+      }))
+    }
+    assert(ex2b.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("transform(a, x -> x)")
     }
     assert(ex3.getMessage.contains("cannot resolve '`a`'"))
+
+    val ex3a = intercept[AnalysisException] {
+      df.select(transform(col("a"), x => x))
+    }
+    assert(ex3a.getMessage.contains("cannot resolve '`a`'"))
+
+    val ex3b = intercept[AnalysisException] {
+      df.select(transform(col("a"), new JFunc {
+        def call(x: Column) = x
+      }))
+    }
+    assert(ex3b.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("map_filter") {
