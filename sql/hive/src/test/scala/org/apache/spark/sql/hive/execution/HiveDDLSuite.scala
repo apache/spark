@@ -2516,4 +2516,29 @@ class HiveDDLSuite
       }
     }
   }
+
+  test("SPARK-28659: hive insert overwrite directory should use data source " +
+    "if it is convertible") {
+    Seq("orc", "parquet").foreach { format =>
+
+      withTable("t1") {
+        sql(s"CREATE TABLE t1 (id int)")
+        sql(s"INSERT INTO t1 SELECT * FROM range(1, 100, 1, 10)")
+
+        withTempDir { dir =>
+          val pathUri = dir.toURI
+
+          sql(
+            s"""
+               |INSERT OVERWRITE DIRECTORY '${pathUri}'
+               |STORED AS $format
+               |SELECT * FROM t1
+           """.stripMargin)
+
+          val snappyFile = dir.listFiles().find(_.getName.startsWith("part"))
+          assertCompression(snappyFile, format, "SNAPPY")
+        }
+      }
+    }
+  }
 }
