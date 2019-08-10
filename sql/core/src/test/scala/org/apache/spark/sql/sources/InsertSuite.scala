@@ -441,7 +441,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         sql(
           s"""
              |INSERT OVERWRITE LOCAL DIRECTORY '$path'
-             |STORED AS orc
              |SELECT 1, 2
            """.stripMargin)
       }.getMessage
