@@ -2416,19 +2416,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // exists(i, x -> x % 2 == 0)
+    val res = Seq(
+      Row(true),
+      Row(false),
+      Row(false),
+      Row(null))
+
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"),
-        Seq(
-          Row(true),
-          Row(false),
-          Row(false),
-          Row(null)))
-      checkAnswer(df.select(exists(col("i"), _ % 2 === 0)),
-        Seq(
-          Row(true),
-          Row(false),
-          Row(false),
-          Row(null)))
+      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"), res)
+      checkAnswer(df.select(exists(col("i"), _ % 2 === 0)), res)
+      checkAnswer(df.select(exists(col("i"), new JFunc {
+        def call(x: Column): Column = x % 2 === 0
+      })), res)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2447,21 +2447,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // exists(i, x -> x % 2 == 0)
+    val res = Seq(
+      Row(true),
+      Row(false),
+      Row(null),
+      Row(false),
+      Row(null))
+
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"),
-        Seq(
-          Row(true),
-          Row(false),
-          Row(null),
-          Row(false),
-          Row(null)))
-      checkAnswer(df.select(exists(col("i"), _ % 2 === 0)),
-        Seq(
-          Row(true),
-          Row(false),
-          Row(null),
-          Row(false),
-          Row(null)))
+      checkAnswer(df.selectExpr("exists(i, x -> x % 2 == 0)"), res)
+      checkAnswer(df.select(exists(col("i"), _ % 2 === 0)), res)
+      checkAnswer(df.select(exists(col("i"), new JFunc {
+        def call(x: Column): Column = x % 2 === 0
+      })), res)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2479,19 +2478,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
+    // exists(s, x -> x is null)
+    val res = Seq(
+      Row(false),
+      Row(true),
+      Row(false),
+      Row(null))
+
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("exists(s, x -> x is null)"),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(false),
-          Row(null)))
-      checkAnswer(df.select(exists(col("s"), x => x.isNull)),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(false),
-          Row(null)))
+      checkAnswer(df.selectExpr("exists(s, x -> x is null)"), res)
+      checkAnswer(df.select(exists(col("s"), x => x.isNull)), res)
+      checkAnswer(df.select(exists(col("s"), new JFunc {
+        def call(x: Column): Column = x.isNull
+      })), res)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2524,6 +2523,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
+    val ex2b = intercept[AnalysisException] {
+      df.select(exists(col("i"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex2b.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("exists(s, x -> x)")
     }
@@ -2533,6 +2539,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(exists(df("s"), x => x))
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex3b = intercept[AnalysisException] {
+      df.select(exists(df("s"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex3b.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
