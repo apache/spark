@@ -292,7 +292,7 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
-  def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+  protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
 
   override def nullable: Boolean = true
 
@@ -387,7 +387,7 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2` rounded to the long integer. It returns NULL if an operand is NULL or `expr2` is 0.",
+  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long if spark.sql.legacy.integralDivide.returnBigint is true, otherwise the datatype of the operands is returned.",
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
