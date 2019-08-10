@@ -1056,6 +1056,44 @@ class JDBCSuite extends QueryTest
     }
   }
 
+  test("Replace CatalogUtils.maskCredentials with SQLConf.get.redactOptions") {
+    def assertRedacted(rows: Array[Row]): Unit = {
+      assert(rows.length === 1)
+      rows.foreach { r =>
+        r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}")
+        r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}")
+      }
+    }
+
+    val password = "testPass"
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (
+           | url '$urlWithUserAndPass',
+           | dbtable 'TEST.PEOPLE',
+           | user 'testUser',
+           | password '$password')
+         """.stripMargin)
+
+      val storageProps = sql(s"DESC FORMATTED $tableName")
+        .filter("col_name = 'Storage Properties'")
+        .select("data_type").collect()
+      assertRedacted(storageProps)
+
+      val information = sql(s"SHOW TABLE EXTENDED LIKE '$tableName'")
+        .select("information").collect()
+      assertRedacted(information)
+
+      val createTabStmt = sql(s"SHOW CREATE TABLE $tableName")
+        .select("createtab_stmt").collect()
+      assertRedacted(createTabStmt)
+    }
+  }
+
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).
