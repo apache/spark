@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -807,8 +808,9 @@ object DateTimeUtils {
    * Returns the number of seconds with fractional part in microsecond precision
    * since 1970-01-01 00:00:00 local time.
    */
-  def getEpoch(time: SQLTimestamp, zoneId: ZoneId): BigDecimal = {
-    val offset = zoneId.getRules.getOffset(microsToInstant(time))
-    BigDecimal(time) / MICROS_PER_SECOND + offset.getTotalSeconds
+  def getEpoch(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
+    val offset = zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds
+    val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
+    new Decimal().set(sinceEpoch, 20, 6)
   }
 }
