@@ -110,7 +110,7 @@ number of written shuffle records, total data size, etc.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
-illustrate how Spark parse, analyze, optimize and perform the query.
+illustrate how Spark parses, analyzes, optimizes and performs the query.
 
 
 ## Streaming Tab
