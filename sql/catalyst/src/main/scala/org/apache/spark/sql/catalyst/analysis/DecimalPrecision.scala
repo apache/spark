@@ -182,7 +182,10 @@ object DecimalPrecision extends TypeCoercionRule {
       if (expr.dataType.isInstanceOf[DecimalType]) {
         // This follows division rule
         val intDig = p1 - s1 + s2
-        // No precision loss can happen as the result scale is 0, so only overflow can happen
+        // No precision loss can happen as the result scale is 0.
+        // Overflow can happen only in the promote precision of the operands, but if none of them
+        // overflows in that phase, no overflow can happen, but CheckOverflow is needed in order
+        // to return a decimal with the proper scale and precision
         CheckOverflow(promotedExpr, DecimalType.bounded(intDig, 0), nullOnOverflow)
       } else {
         promotedExpr
