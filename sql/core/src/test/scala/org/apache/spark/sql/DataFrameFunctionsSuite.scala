@@ -2164,37 +2164,54 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Map(1 -> -1, 2 -> -2, 3 -> -3),
       Map(1 -> 10, 2 -> 5, 3 -> -3)).toDF("m")
 
+    // map_filter(m, (k, v) -> k * 10 = v), map_filter(m, (k, v) -> k = -v
+    val resA = Seq(
+      Row(Map(1 -> 10, 2 -> 20, 3 -> 30), Map()),
+      Row(Map(), Map(1 -> -1, 2 -> -2, 3 -> -3)),
+      Row(Map(1 -> 10), Map(3 -> -3)))
+
     checkAnswer(dfInts.selectExpr(
       "map_filter(m, (k, v) -> k * 10 = v)", "map_filter(m, (k, v) -> k = -v)"),
-      Seq(
-        Row(Map(1 -> 10, 2 -> 20, 3 -> 30), Map()),
-        Row(Map(), Map(1 -> -1, 2 -> -2, 3 -> -3)),
-        Row(Map(1 -> 10), Map(3 -> -3))))
+      resA)
 
     checkAnswer(dfInts.select(
       map_filter(col("m"), (k, v) => k * 10 === v),
       map_filter(col("m"), (k, v) => k === (v * -1))),
-      Seq(
-        Row(Map(1 -> 10, 2 -> 20, 3 -> 30), Map()),
-        Row(Map(), Map(1 -> -1, 2 -> -2, 3 -> -3)),
-        Row(Map(1 -> 10), Map(3 -> -3))))
+      resA)
+
+    checkAnswer(dfInts.select(
+      map_filter(col("m"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k * 10 === v
+      }),
+      map_filter(col("m"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k === (v * -1)
+      })), resA)
 
     val dfComplex = Seq(
       Map(1 -> Seq(Some(1)), 2 -> Seq(Some(1), Some(2)), 3 -> Seq(Some(1), Some(2), Some(3))),
       Map(1 -> null, 2 -> Seq(Some(-2), Some(-2)), 3 -> Seq[Option[Int]](None))).toDF("m")
 
+    // map_filter(m, (k, v) -> k = v[0]), map_filter(m, (k, v) -> k = size(v))
+    val resB = Seq(
+      Row(Map(1 -> Seq(1)), Map(1 -> Seq(1), 2 -> Seq(1, 2), 3 -> Seq(1, 2, 3))),
+      Row(Map(), Map(2 -> Seq(-2, -2))))
+
     checkAnswer(dfComplex.selectExpr(
       "map_filter(m, (k, v) -> k = v[0])", "map_filter(m, (k, v) -> k = size(v))"),
-      Seq(
-        Row(Map(1 -> Seq(1)), Map(1 -> Seq(1), 2 -> Seq(1, 2), 3 -> Seq(1, 2, 3))),
-        Row(Map(), Map(2 -> Seq(-2, -2)))))
+      resB)
 
     checkAnswer(dfComplex.select(
       map_filter(col("m"), (k, v) => k === element_at(v, 1)),
       map_filter(col("m"), (k, v) => k === size(v))),
-      Seq(
-        Row(Map(1 -> Seq(1)), Map(1 -> Seq(1), 2 -> Seq(1, 2), 3 -> Seq(1, 2, 3))),
-        Row(Map(), Map(2 -> Seq(-2, -2)))))
+      resB)
+
+    checkAnswer(dfComplex.select(
+      map_filter(col("m"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k === element_at(v, 1)
+      }),
+      map_filter(col("m"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k === size(v)
+      })), resB)
 
     // Invalid use cases
     val df = Seq(
@@ -2223,10 +2240,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires map type"))
 
+    val ex3b = intercept[AnalysisException] {
+      df.select(map_filter(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k > v
+      }))
+    }
+    assert(ex3b.getMessage.contains("data type mismatch: argument 1 requires map type"))
+
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_filter(a, (k, v) -> k > v)")
     }
     assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+
+    val ex4a = intercept[AnalysisException] {
+      df.select(map_filter(col("a"), (k, v) => k > v))
+    }
+    assert(ex4a.getMessage.contains("cannot resolve '`a`'"))
+
+    val ex4b = intercept[AnalysisException] {
+      df.select(map_filter(col("a"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k > v
+      }))
+    }
+    assert(ex4b.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("filter function - array for primitive type not containing null") {
