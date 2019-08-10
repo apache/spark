@@ -2273,19 +2273,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // filter(i, x -> x % 2 == 0)
+    val res = Seq(
+      Row(Seq(8)),
+      Row(Seq(8, 2)),
+      Row(Seq.empty),
+      Row(null))
+
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("filter(i, x -> x % 2 == 0)"),
-        Seq(
-          Row(Seq(8)),
-          Row(Seq(8, 2)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(filter(col("i"), _ % 2 === 0)),
-        Seq(
-          Row(Seq(8)),
-          Row(Seq(8, 2)),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("filter(i, x -> x % 2 == 0)"), res)
+      checkAnswer(df.select(filter(col("i"), _ % 2 === 0)), res)
+      checkAnswer(df.select(filter(col("i"), new JFunc {
+        def call(x: Column): Column = x % 2 === 0
+      })), res)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2303,19 +2303,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // filter(i, x -> x % 2 == 0)
+    val res = Seq(
+      Row(Seq(8)),
+      Row(Seq(8, 2)),
+      Row(Seq.empty),
+      Row(null))
+
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("filter(i, x -> x % 2 == 0)"),
-        Seq(
-          Row(Seq(8)),
-          Row(Seq(8, 2)),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(filter(col("i"), _ % 2 === 0)),
-        Seq(
-          Row(Seq(8)),
-          Row(Seq(8, 2)),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("filter(i, x -> x % 2 == 0)"), res)
+      checkAnswer(df.select(filter(col("i"), _ % 2 === 0)), res)
+      checkAnswer(df.select(filter(col("i"), new JFunc {
+        def call(x: Column): Column = x % 2 === 0
+      })), res)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2333,19 +2333,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
+    // filter(s, x -> x is not null)
+    val res = Seq(
+      Row(Seq("c", "a", "b")),
+      Row(Seq("b", "c")),
+      Row(Seq.empty),
+      Row(null))
+
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("filter(s, x -> x is not null)"),
-        Seq(
-          Row(Seq("c", "a", "b")),
-          Row(Seq("b", "c")),
-          Row(Seq.empty),
-          Row(null)))
-      checkAnswer(df.select(filter(col("s"), x => x.isNotNull)),
-        Seq(
-          Row(Seq("c", "a", "b")),
-          Row(Seq("b", "c")),
-          Row(Seq.empty),
-          Row(null)))
+      checkAnswer(df.selectExpr("filter(s, x -> x is not null)"), res)
+      checkAnswer(df.select(filter(col("s"), x => x.isNotNull)), res)
+      checkAnswer(df.select(filter(col("s"), new JFunc {
+        def call(x: Column) = x.isNotNull
+      })), res)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2378,6 +2378,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2a.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
+    val ex2b = intercept[AnalysisException] {
+      df.select(filter(col("i"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex2b.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("filter(s, x -> x)")
     }
@@ -2387,6 +2394,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(filter(col("s"), x => x))
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex3b = intercept[AnalysisException] {
+      df.select(filter(col("s"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex3b.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("filter(a, x -> x)")
