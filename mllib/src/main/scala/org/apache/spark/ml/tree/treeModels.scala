@@ -90,11 +90,13 @@ private[spark] trait DecisionTreeModel {
     }
   }
 
-  @transient private lazy val leafIndices: Map[LeafNode, Int] =
+  @transient private lazy val leafIndices: Map[LeafNode, Int] = {
     leafIterator(rootNode).zipWithIndex.toMap
+  }
 
-  private[ml] def predictLeafImpl(features: Vector): Double =
+  def predictLeaf(features: Vector): Double = {
     leafIndices(rootNode.predictImpl(features)).toDouble
+  }
 }
 
 /**
@@ -136,8 +138,8 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 
-  private[ml] def predictLeafImpl(features: Vector): Vector = {
-    val indices = trees.map(_.predictLeafImpl(features))
+  def predictLeaf(features: Vector): Vector = {
+    val indices = trees.map(_.predictLeaf(features))
     Vectors.dense(indices)
   }
 }

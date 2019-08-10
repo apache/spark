@@ -213,33 +213,27 @@ class DecisionTreeRegressionModel private[ml] (
   @Since("3.0.0")
   def setLeafCol(value: String): this.type = set(leafCol, value)
 
-  @Since("3.0.0")
-  def predictLeaf(features: Vector): Double = predictLeafImpl(features)
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    transformImpl(dataset)
-  }
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
     if ($(predictionCol).nonEmpty) {
-      val predictUDF = udf { vector: Vector => predict(vector) }
+      val predictUDF = udf { features: Vector => predict(features) }
       predictionColNames :+= $(predictionCol)
       predictionColumns :+= predictUDF(col($(featuresCol)))
     }
 
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      val predictVarianceUDF = udf { vector: Vector => predictVariance(vector) }
+      val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
       predictionColNames :+= $(varianceCol)
       predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
     }
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
       predictionColNames :+= $(leafCol)
       predictionColumns :+= leafUDF(col($(featuresCol)))
     }

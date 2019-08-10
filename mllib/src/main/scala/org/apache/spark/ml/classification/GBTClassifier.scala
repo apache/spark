@@ -294,14 +294,11 @@ class GBTClassificationModel private[ml](
   @Since("3.0.0")
   def setLeafCol(value: String): this.type = set(leafCol, value)
 
-  @Since("3.0.0")
-  def predictLeaf(features: Vector): Vector = predictLeafImpl(features)
-
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { vector: Vector => predictLeaf(vector) }
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
       super.transform(dataset)
         .withColumn($(leafCol), leafUDF(col($(featuresCol))))
     } else {
