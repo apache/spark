@@ -5,17 +5,6 @@
 -- AGGREGATES [Part 3]
 -- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L352-L605
 
-create temporary view varchar_tbl as select * from values
-  ('a'),
-  ('A'),
-  ('1'),
-  ('2'),
-  ('3'),
-  (''),
-  -- ('cd'),
-  ('c')
-  as varchar_tbl(f1);
-
 -- We do not support inheritance tree, skip related tests.
 -- try it on an inheritance tree
 -- create table minmaxtest(f1 int);
@@ -207,16 +196,15 @@ create temporary view varchar_tbl as select * from values
 -- select aggfns(distinct a,a,c order by a,b)
 --   from (values (1,1,'foo')) v(a,b,c), generate_series(1,2) i;
 
--- [SPARK-27978] We use concat_ws(delimiter, collect_list(expression)) to rewrite string_agg
+-- [SPARK-27978] Add built-in Aggregate Functions: string_agg
 -- string_agg tests
-select concat_ws(',', collect_list(a)) from (values('aaaa'),('bbbb'),('cccc')) g(a);
-select concat_ws(',', collect_list(a)) from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);
-select concat_ws('AB', collect_list(a)) from (values(null),(null),('bbbb'),('cccc')) g(a);
--- The result is different: collect_list returns an empty list, but string_agg results NULL
-select concat_ws(',', collect_list(a)) from (values(null),(null)) g(a);
+-- select string_agg(a,',') from (values('aaaa'),('bbbb'),('cccc')) g(a);
+-- select string_agg(a,',') from (values('aaaa'),(null),('bbbb'),('cccc')) g(a);
+-- select string_agg(a,'AB') from (values(null),(null),('bbbb'),('cccc')) g(a);
+-- select string_agg(a,',') from (values(null),(null)) g(a);
 
 -- check some implicit casting cases, as per bug #5564
-select concat_ws(',', sort_array(array_distinct(collect_list(f1)))) from varchar_tbl;
+-- select string_agg(distinct f1, ',' order by f1) from varchar_tbl;  -- ok
 -- select string_agg(distinct f1::text, ',' order by f1) from varchar_tbl;  -- not ok
 -- select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl;  -- not ok
 -- select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -- ok
@@ -239,25 +227,23 @@ select concat_ws(',', sort_array(array_distinct(collect_list(f1)))) from varchar
 
 -- drop table bytea_test_table;
 
--- [SPARK-27986] Support Aggregate Expressions
+-- [SPARK-27986] Support Aggregate Expressions with filter
 -- FILTER tests
 
-select min(CASE WHEN unique1> 100 THEN unique1 END) from tenk1;
+-- select min(unique1) filter (where unique1 > 100) from tenk1;
 
--- The result is different: we added cast here because [SPARK-2659]
-select sum(CASE WHEN ten > 0 THEN cast(1/ten as integer) END) from tenk1;
+-- select sum(1/ten) filter (where ten > 0) from tenk1;
 
--- [SPARK-27987] Support POSIX Regular Expressions
 -- select ten, sum(distinct four) filter (where four::text ~ '123') from onek a
 -- group by ten;
 
-select ten, sum(distinct CASE WHEN four > 10 THEN four END)  from onek a
-group by ten
-having exists (select 1 from onek b where sum(distinct a.four) = b.four);
+-- select ten, sum(distinct four) filter (where four > 10) from onek a
+-- group by ten
+-- having exists (select 1 from onek b where sum(distinct a.four) = b.four);
 
--- Rewrite this SQL by removing COLLATE
-select max(CASE WHEN bar > '0' THEN foo END)
-from (values ('a', 'b')) AS v(foo,bar);
+-- [SPARK-28682] ANSI SQL: Collation Support
+-- select max(foo COLLATE "C") filter (where (bar collate "POSIX") > '0')
+-- from (values ('a', 'b')) AS v(foo,bar);
 
 -- outer reference in FILTER (PostgreSQL extension)
 select (select count(*)
