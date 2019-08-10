@@ -25,7 +25,7 @@ import scala.xml.Node
 import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
@@ -141,8 +141,10 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
           listener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
           taskInfo.markFinished(TaskState.FINISHED, System.currentTimeMillis())
           val taskMetrics = TaskMetrics.empty
+          val executorMetrics = new ExecutorMetrics
           taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
-          listener.onTaskEnd(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, taskMetrics))
+          listener.onTaskEnd(SparkListenerTaskEnd(0, 0, "result", Success, taskInfo,
+            executorMetrics, taskMetrics))
       }
       listener.onStageCompleted(SparkListenerStageCompleted(stageInfo))
       page.render(request)

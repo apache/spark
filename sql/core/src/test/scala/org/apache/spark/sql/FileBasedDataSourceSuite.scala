@@ -340,7 +340,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         }
         def validateErrorMessage(msg: String): Unit = {
           val msg1 = "cannot save interval data type into external storage."
-          val msg2 = "data source does not support calendarinterval data type."
+          val msg2 = "data source does not support interval data type."
           assert(msg.toLowerCase(Locale.ROOT).contains(msg1) ||
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
@@ -662,15 +662,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         withTempDir { dir =>
           dir.delete()
           spark.range(1000).write.orc(dir.toString)
-          // ignore hidden files
-          val allFiles = dir.listFiles(new FilenameFilter {
-            override def accept(dir: File, name: String): Boolean = {
-              !name.startsWith(".") && !name.startsWith("_")
-            }
-          })
-          val totalSize = allFiles.map(_.length()).sum
           val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(totalSize))
+          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
         }
       }
     }
@@ -678,8 +671,8 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
 
   test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
     Seq(1.0, 0.5).foreach { compressionFactor =>
-      withSQLConf("spark.sql.sources.fileCompressionFactor" -> compressionFactor.toString,
-        "spark.sql.autoBroadcastJoinThreshold" -> "250") {
+      withSQLConf(SQLConf.FILE_COMRESSION_FACTOR.key -> compressionFactor.toString,
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
         withTempPath { workDir =>
           // the file size is 486 bytes
           val workDirPath = workDir.getAbsolutePath

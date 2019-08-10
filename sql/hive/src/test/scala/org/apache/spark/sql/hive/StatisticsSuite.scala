@@ -1453,4 +1453,75 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-28518 fix getDataSize refer to ChecksumFileSystem#isChecksumFile") {
+    withTempDir { tempDir =>
+      withTable("t1") {
+        spark.range(5).write.mode(SaveMode.Overwrite).parquet(tempDir.getCanonicalPath)
+        Utils.tryWithResource(new PrintWriter(new File(tempDir + "/temp.crc"))) { writer =>
+          writer.write("1,2")
+        }
+
+        spark.sql(
+          s"""
+             |CREATE EXTERNAL TABLE t1(id BIGINT)
+             |STORED AS parquet
+             |LOCATION '${tempDir.getCanonicalPath}'
+             |TBLPROPERTIES (
+             |'rawDataSize'='-1', 'numFiles'='0', 'totalSize'='0',
+             |'COLUMN_STATS_ACCURATE'='false', 'numRows'='-1'
+             |)""".stripMargin)
+
+        spark.sql("REFRESH TABLE t1")
+        val relation1 = spark.table("t1").queryExecution.analyzed.children.head
+        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+
+        spark.sql("REFRESH TABLE t1")
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+          val relation2 = spark.table("t1").queryExecution.analyzed.children.head
+          assert(relation2.stats.sizeInBytes === getDataSize(tempDir))
+        }
+      }
+    }
+  }
+
+  test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
+    withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
+        sql("INSERT INTO t1 VALUES (1, 'a')")
+        checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
+        sql("CREATE TABLE t2 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
+        sql("INSERT INTO t2 VALUES (1, 'a')")
+        checkKeywordsExist(sql("EXPLAIN SELECT * FROM t1, t2 WHERE t1.id=t2.id"),
+          "BroadcastHashJoin")
+      }
+    }
+  }
+
+  test("SPARK-25474: should not fall back to hdfs when table statistics exists" +
+    " for CatalogFileIndex dataSourceTable") {
+
+    var sizeInBytesDisabledFallBack, sizeInBytesEnabledFallBack = 0L
+    Seq(true, false).foreach { fallBackToHdfs =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> fallBackToHdfs.toString) {
+        withTable("t1") {
+          sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
+          sql("INSERT INTO t1 VALUES (1, 'a')")
+          // Analyze command updates the statistics of table `t1`
+          sql("ANALYZE TABLE t1 COMPUTE STATISTICS")
+          val catalogTable = getCatalogTable("t1")
+          assert(catalogTable.stats.isDefined)
+
+          if (!fallBackToHdfs) {
+            sizeInBytesDisabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
+          } else {
+            sizeInBytesEnabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
+          }
+          checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
+        }
+      }
+    }
+    assert(sizeInBytesEnabledFallBack === sizeInBytesDisabledFallBack)
+  }
 }

@@ -37,6 +37,7 @@ class ShortType private() extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[InternalType]]
+  override private[sql] val exactNumeric = ShortExactNumeric
 
   /**
    * The default size of a value of the ShortType is 2 bytes.

@@ -35,6 +35,7 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
+from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
@@ -295,7 +296,10 @@ def read_udfs(pickleSer, infile, eval_type):
     is_map_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
     if is_scalar_iter or is_map_iter:
-        assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
+        if is_scalar_iter:
+            assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
+        if is_map_iter:
+            assert num_udfs == 1, "One MAP_ITER UDF expected here."
 
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
@@ -318,7 +322,7 @@ def read_udfs(pickleSer, infile, eval_type):
             for result_batch, result_type in result_iter:
                 num_output_rows += len(result_batch)
                 assert is_map_iter or num_output_rows <= num_input_rows[0], \
-                    "Pandas SCALAR_ITER UDF outputted more rows than input rows."
+                    "Pandas MAP_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
             if is_scalar_iter:
@@ -432,6 +436,16 @@ def main(infile, outfile):
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
         taskContext._taskAttemptId = read_long(infile)
+        taskContext._resources = {}
+        for r in range(read_int(infile)):
+            key = utf8_deserializer.loads(infile)
+            name = utf8_deserializer.loads(infile)
+            addresses = []
+            taskContext._resources = {}
+            for a in range(read_int(infile)):
+                addresses.append(utf8_deserializer.loads(infile))
+            taskContext._resources[key] = ResourceInformation(name, addresses)
+
         taskContext._localProperties = dict()
         for i in range(read_int(infile)):
             k = utf8_deserializer.loads(infile)

@@ -186,8 +186,6 @@ case class InMemoryRelation(
       cacheBuilder,
       outputOrdering)
 
-  override def producedAttributes: AttributeSet = outputSet
-
   @transient val partitionStatistics = new PartitionStatistics(output)
 
   def cachedPlan: SparkPlan = cacheBuilder.cachedPlan
@@ -223,6 +221,13 @@ case class InMemoryRelation(
       cacheBuilder,
       outputOrdering,
       statsOfPlanToCache).asInstanceOf[this.type]
+  }
+
+  // override `clone` since the default implementation won't carry over mutable states.
+  override def clone(): LogicalPlan = {
+    val cloned = this.copy()
+    cloned.statsOfPlanToCache = this.statsOfPlanToCache
+    cloned
   }
 
   override def simpleString(maxFields: Int): String =

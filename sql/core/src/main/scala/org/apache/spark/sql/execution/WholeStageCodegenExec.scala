@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.Writer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -491,12 +490,8 @@ trait InputRDDCodegen extends CodegenSupport {
  *
  * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
  * that consumes an RDD iterator of InternalRow.
- *
- * @param isChildColumnar true if the inputRDD is really columnar data hidden by type erasure,
- *                        false if inputRDD is really an RDD[InternalRow]
  */
-case class InputAdapter(child: SparkPlan, isChildColumnar: Boolean)
-    extends UnaryExecNode with InputRDDCodegen {
+case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCodegen {
 
   override def output: Seq[Attribute] = child.output
 
@@ -522,13 +517,10 @@ case class InputAdapter(child: SparkPlan, isChildColumnar: Boolean)
     child.executeColumnar()
   }
 
-  override def inputRDD: RDD[InternalRow] = {
-    if (isChildColumnar) {
-      child.executeColumnar().asInstanceOf[RDD[InternalRow]] // Hack because of type erasure
-    } else {
-      child.execute()
-    }
-  }
+  // `InputAdapter` can only generate code to process the rows from its child. If the child produces
+  // columnar batches, there must be a `ColumnarToRowExec` above `InputAdapter` to handle it by
+  // overriding `inputRDDs` and calling `InputAdapter#executeColumnar` directly.
+  override def inputRDD: RDD[InternalRow] = child.execute()
 
   // This is a leaf node so the node can produce limit not reached checks.
   override protected def canCheckLimitNotReached: Boolean = true
@@ -709,11 +701,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
         s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
         s"for this plan (id=$codegenStageId). To avoid this, you can raise the limit " +
         s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
-      child match {
-        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
-        case f: FileSourceScanExec if f.supportsBatch => // do nothing
-        case _ => return child.execute()
-      }
+      return child.execute()
     }
 
     val references = ctx.references.toArray
@@ -874,55 +862,45 @@ case class CollapseCodegenStages(
   /**
    * Inserts an InputAdapter on top of those that do not support codegen.
    */
-  private def insertInputAdapter(plan: SparkPlan, isColumnarInput: Boolean): SparkPlan = {
-    val isColumnar = adjustColumnar(plan, isColumnarInput)
+  private def insertInputAdapter(plan: SparkPlan): SparkPlan = {
     plan match {
       case p if !supportCodegen(p) =>
         // collapse them recursively
-        InputAdapter(insertWholeStageCodegen(p, isColumnar), isColumnar)
+        InputAdapter(insertWholeStageCodegen(p))
       case j: SortMergeJoinExec =>
         // The children of SortMergeJoin should do codegen separately.
         j.withNewChildren(j.children.map(
-          child => InputAdapter(insertWholeStageCodegen(child, isColumnar), isColumnar)))
-      case p =>
-        p.withNewChildren(p.children.map(insertInputAdapter(_, isColumnar)))
+          child => InputAdapter(insertWholeStageCodegen(child))))
+      case p => p.withNewChildren(p.children.map(insertInputAdapter))
     }
   }
 
   /**
    * Inserts a WholeStageCodegen on top of those that support codegen.
    */
-  private def insertWholeStageCodegen(plan: SparkPlan, isColumnarInput: Boolean): SparkPlan = {
-    val isColumnar = adjustColumnar(plan, isColumnarInput)
+  private def insertWholeStageCodegen(plan: SparkPlan): SparkPlan = {
     plan match {
       // For operators that will output domain object, do not insert WholeStageCodegen for it as
       // domain object can not be written into unsafe row.
       case plan if plan.output.length == 1 && plan.output.head.dataType.isInstanceOf[ObjectType] =>
-        plan.withNewChildren(plan.children.map(insertWholeStageCodegen(_, isColumnar)))
+        plan.withNewChildren(plan.children.map(insertWholeStageCodegen))
+      case plan: LocalTableScanExec =>
+        // Do not make LogicalTableScanExec the root of WholeStageCodegen
+        // to support the fast driver-local collect/take paths.
+        plan
       case plan: CodegenSupport if supportCodegen(plan) =>
-        WholeStageCodegenExec(
-          insertInputAdapter(plan, isColumnar))(codegenStageCounter.incrementAndGet())
+        // The whole-stage-codegen framework is row-based. If a plan supports columnar execution,
+        // it can't support whole-stage-codegen at the same time.
+        assert(!plan.supportsColumnar)
+        WholeStageCodegenExec(insertInputAdapter(plan))(codegenStageCounter.incrementAndGet())
       case other =>
-        other.withNewChildren(other.children.map(insertWholeStageCodegen(_, isColumnar)))
+        other.withNewChildren(other.children.map(insertWholeStageCodegen))
     }
-  }
-
-  /**
-   * Depending on the stage in the plan and if we currently are columnar or not
-   * return if we are still columnar or not.
-   */
-  private def adjustColumnar(plan: SparkPlan, isColumnar: Boolean): Boolean =
-    // We are walking up the plan, so columnar starts when we transition to rows
-    // and ends when we transition to columns
-  plan match {
-    case c2r: ColumnarToRowExec => true
-    case r2c: RowToColumnarExec => false
-    case _ => isColumnar
   }
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (conf.wholeStageEnabled) {
-      insertWholeStageCodegen(plan, false)
+      insertWholeStageCodegen(plan)
     } else {
       plan
     }

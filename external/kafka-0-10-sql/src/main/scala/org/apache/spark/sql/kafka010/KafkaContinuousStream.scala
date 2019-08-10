@@ -46,7 +46,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *                       properly read.
  */
 class KafkaContinuousStream(
-    offsetReader: KafkaOffsetReader,
+    private[kafka010] val offsetReader: KafkaOffsetReader,
     kafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
@@ -54,7 +54,7 @@ class KafkaContinuousStream(
     failOnDataLoss: Boolean)
   extends ContinuousStream with Logging {
 
-  private val pollTimeoutMs =
+  private[kafka010] val pollTimeoutMs =
     options.getLong(KafkaSourceProvider.CONSUMER_POLL_TIMEOUT, 512)
 
   // Initialized when creating reader factories. If this diverges from the partitions at the latest

@@ -26,10 +26,11 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
@@ -857,10 +858,7 @@ class JDBCSuite extends QueryTest
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
-    val errMsg = intercept[IllegalArgumentException] {
-      Postgres.getJDBCType(ByteType)
-    }
-    assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
+    assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
   }
 
   test("DerbyDialect jdbc type mapping") {
@@ -895,6 +893,17 @@ class JDBCSuite extends QueryTest
       "BIT")
     assert(msSqlServerDialect.getJDBCType(BinaryType).map(_.databaseTypeDefinition).get ==
       "VARBINARY(MAX)")
+    assert(msSqlServerDialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get ==
+      "SMALLINT")
+  }
+
+  test("SPARK-28152 MsSqlServerDialect catalyst type mapping") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder().putLong("scale", 1)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.SMALLINT, "SMALLINT", 1,
+      metadata).get == ShortType)
+    assert(msSqlServerDialect.getCatalystType(java.sql.Types.REAL, "REAL", 1,
+      metadata).get == FloatType)
   }
 
   test("table exists query by jdbc dialect") {
@@ -1017,6 +1026,32 @@ class JDBCSuite extends QueryTest
         sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
           assert(!r.toString().contains(password))
         }
+      }
+    }
+  }
+
+  test("Hide credentials in show create table") {
+    val password = "testPass"
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (
+           | url '$urlWithUserAndPass',
+           | dbtable 'TEST.PEOPLE',
+           | user 'testUser',
+           | password '$password')
+         """.stripMargin)
+
+      val show = ShowCreateTableCommand(TableIdentifier(tableName))
+      spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+        assert(!r.toString.contains(password))
+      }
+
+      sql(s"SHOW CREATE TABLE $tableName").collect().foreach { r =>
+        assert(!r.toString().contains(password))
       }
     }
   }
@@ -1322,7 +1357,7 @@ class JDBCSuite extends QueryTest
 
     testJdbcParitionColumn("THEID", "THEID")
     testJdbcParitionColumn("\"THEID\"", "THEID")
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       testJdbcParitionColumn("ThEiD", "THEID")
     }
     testJdbcParitionColumn("THE ID", "THE ID")

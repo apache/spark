@@ -35,6 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
+  private val checkOverflow = SQLConf.get.arithmeticOperationsFailOnOverflow
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -42,10 +43,28 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 
   override def toString: String = s"-$child"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
+    case ByteType | ShortType if checkOverflow =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val javaBoxedType = CodeGenerator.boxedType(dataType)
+        val javaType = CodeGenerator.javaType(dataType)
+        val originValue = ctx.freshName("origin")
+        s"""
+           |$javaType $originValue = ($javaType)($eval);
+           |if ($originValue == $javaBoxedType.MIN_VALUE) {
+           |  throw new ArithmeticException("- " + $originValue + " caused overflow.");
+           |}
+           |${ev.value} = ($javaType)(-($originValue));
+           """.stripMargin
+      })
+    case IntegerType | LongType if checkOverflow =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val mathClass = classOf[Math].getName
+        s"${ev.value} = $mathClass.negateExact($eval);"
+      })
     case dt: NumericType => nullSafeCodeGen(ctx, ev, eval => {
       val originValue = ctx.freshName("origin")
       // codegen would fail to compile if we just write (-($c))
@@ -117,6 +136,8 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
+  protected val checkOverflow = SQLConf.get.arithmeticOperationsFailOnOverflow
+
   override def dataType: DataType = left.dataType
 
   override lazy val resolved: Boolean = childrenResolved && checkInputDataTypes().isSuccess
@@ -129,17 +150,57 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   def calendarIntervalMethod: String =
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
+  /** Name of the function for the exact version of this expression in [[Math]]. */
+  def exactMathMethod: String =
+    sys.error("BinaryArithmetics must override either exactMathMethod or genCode")
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
+      // Overflow is handled in the CheckOverflow operator
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
     case CalendarIntervalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$calendarIntervalMethod($eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
-      defineCodeGen(ctx, ev,
-        (eval1, eval2) => s"(${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2)")
-    case _ =>
-      defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1 $symbol $eval2")
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        val tmpResult = ctx.freshName("tmpResult")
+        val overflowCheck = if (checkOverflow) {
+          val javaType = CodeGenerator.boxedType(dataType)
+          s"""
+             |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
+             |  throw new ArithmeticException($eval1 + " $symbol " + $eval2 + " caused overflow.");
+             |}
+           """.stripMargin
+        } else {
+          ""
+        }
+        s"""
+           |${CodeGenerator.JAVA_INT} $tmpResult = $eval1 $symbol $eval2;
+           |$overflowCheck
+           |${ev.value} = (${CodeGenerator.javaType(dataType)})($tmpResult);
+         """.stripMargin
+      })
+    case IntegerType | LongType =>
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        val operation = if (checkOverflow) {
+          val mathClass = classOf[Math].getName
+          s"$mathClass.$exactMathMethod($eval1, $eval2)"
+        } else {
+          s"$eval1 $symbol $eval2"
+        }
+        s"""
+           |${ev.value} = $operation;
+         """.stripMargin
+      })
+    case DoubleType | FloatType =>
+      // When Double/Float overflows, there can be 2 cases:
+      // - precision loss: according to SQL standard, the number is truncated;
+      // - returns (+/-)Infinite: same behavior also other DBs have (eg. Postgres)
+      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+        s"""
+           |${ev.value} = $eval1 $symbol $eval2;
+         """.stripMargin
+      })
   }
 }
 
@@ -164,7 +225,7 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def calendarIntervalMethod: String = "add"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     if (dataType.isInstanceOf[CalendarIntervalType]) {
@@ -173,6 +234,8 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
       numeric.plus(input1, input2)
     }
   }
+
+  override def exactMathMethod: String = "addExact"
 }
 
 @ExpressionDescription(
@@ -192,7 +255,7 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
 
   override def calendarIntervalMethod: String = "subtract"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     if (dataType.isInstanceOf[CalendarIntervalType]) {
@@ -201,6 +264,8 @@ case class Subtract(left: Expression, right: Expression) extends BinaryArithmeti
       numeric.minus(input1, input2)
     }
   }
+
+  override def exactMathMethod: String = "subtractExact"
 }
 
 @ExpressionDescription(
@@ -217,9 +282,11 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
   override def symbol: String = "*"
   override def decimalMethod: String = "$times"
 
-  private lazy val numeric = TypeUtils.getNumeric(dataType)
+  private lazy val numeric = TypeUtils.getNumeric(dataType, checkOverflow)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = numeric.times(input1, input2)
+
+  override def exactMathMethod: String = "multiplyExact"
 }
 
 // Common base trait for Divide and Remainder, since these two classes are almost identical

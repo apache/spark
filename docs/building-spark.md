@@ -83,10 +83,13 @@ Example:
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 1.2.1 bindings.
+By default, Spark will use Hive 1.2.1 with the `hadoop-2.7` profile, and Hive 2.3.5 with the `hadoop-3.2` profile.
 
     # With Hive 1.2.1 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
+
+    # With Hive 2.3.5 support
+    ./build/mvn -Pyarn -Phive -Phive-thriftserver -Phadoop-3.2 -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
 
@@ -238,8 +241,8 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
 
-    R -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
-    R -e "devtools::install_version('testthat', version = '1.0.2', repos='https://cloud.r-project.org/')"
+    Rscript -e "install.packages(c('knitr', 'rmarkdown', 'devtools', 'e1071', 'survival'), repos='https://cloud.r-project.org/')"
+    Rscript -e "devtools::install_version('testthat', version = '1.0.2', repos='https://cloud.r-project.org/')"
 
 You can run just the SparkR tests using the command:
 

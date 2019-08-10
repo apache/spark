@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
+import org.apache.spark.sql.execution.adaptive.rule.ReduceNumShufflePartitions
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.internal.SQLConf
@@ -60,7 +61,8 @@ case class AdaptiveSparkPlanExec(
     initialPlan: SparkPlan,
     @transient session: SparkSession,
     @transient subqueryMap: Map[Long, ExecSubqueryExpression],
-    @transient stageCache: TrieMap[SparkPlan, QueryStageExec])
+    @transient stageCache: TrieMap[SparkPlan, QueryStageExec],
+    @transient queryExecution: QueryExecution)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -82,6 +84,9 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    ReduceNumShufflePartitions(conf),
+    ApplyColumnarRulesAndInsertTransitions(session.sessionState.conf,
+      session.sessionState.columnarRules),
     CollapseCodegenStages(conf)
   )
 
@@ -114,8 +119,15 @@ case class AdaptiveSparkPlanExec(
     if (isFinalPlan) {
       currentPhysicalPlan.execute()
     } else {
+      // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
+      // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
+      // their own execution IDs and therefore rely on the main query to update UI.
       val executionId = Option(
-        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).map(_.toLong)
+        session.sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)).flatMap { idStr =>
+        val id = idStr.toLong
+        val qe = SQLExecution.getQueryExecution(id)
+        if (qe.eq(queryExecution)) Some(id) else None
+      }
       var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
@@ -167,10 +179,11 @@ case class AdaptiveSparkPlanExec(
       currentPhysicalPlan = applyPhysicalRules(result.newPlan, queryStageOptimizerRules)
       currentPhysicalPlan.setTagValue(SparkPlan.LOGICAL_PLAN_TAG, currentLogicalPlan)
       isFinalPlan = true
+
+      val ret = currentPhysicalPlan.execute()
       logDebug(s"Final plan: $currentPhysicalPlan")
       executionId.foreach(onUpdatePlan)
-
-      currentPhysicalPlan.execute()
+      ret
     }
   }
 

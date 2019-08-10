@@ -3,7 +3,7 @@
 --
 --
 -- FLOAT4
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/float4.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/float4.sql
 
 CREATE TABLE FLOAT4_TBL (f1  float) USING parquet;
 

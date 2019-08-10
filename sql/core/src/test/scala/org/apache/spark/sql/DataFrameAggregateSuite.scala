@@ -167,6 +167,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 1, 1, 3) :: Nil
     )
 
+    // use column reference in `grouping_id` instead of column name
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping_id(courseSales("course"), courseSales("year"))),
+      Row("Java", 2012, 0) ::
+        Row("Java", 2013, 0) ::
+        Row("Java", null, 1) ::
+        Row("dotNET", 2012, 0) ::
+        Row("dotNET", 2013, 0) ::
+        Row("dotNET", null, 1) ::
+        Row(null, 2012, 2) ::
+        Row(null, 2013, 2) ::
+        Row(null, null, 3) :: Nil
+    )
+
     intercept[AnalysisException] {
       courseSales.groupBy().agg(grouping("course")).explain()
     }
@@ -725,13 +740,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26021: NaN and -0.0 in grouping expressions") {
-    import java.lang.Float.floatToRawIntBits
-    import java.lang.Double.doubleToRawLongBits
-
-    // 0.0/0.0 and NaN are different values.
-    assert(floatToRawIntBits(0.0f/0.0f) != floatToRawIntBits(Float.NaN))
-    assert(doubleToRawLongBits(0.0/0.0) != doubleToRawLongBits(Double.NaN))
-
     checkAnswer(
       Seq(0.0f, -0.0f, 0.0f/0.0f, Float.NaN).toDF("f").groupBy("f").count(),
       Row(0.0f, 2) :: Row(Float.NaN, 2) :: Nil)

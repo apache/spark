@@ -11,7 +11,7 @@ is subject to change. Note that currently the integration tests only run with Ja
 The simplest way to run the integration tests is to install and run Minikube, then run the following from this
 directory:
 
-    dev/dev-run-integration-tests.sh
+    ./dev/dev-run-integration-tests.sh
 
 The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
@@ -62,11 +62,11 @@ By default, the test framework will build new Docker images on every test execut
 and it is written to file at `target/imageTag.txt`. To reuse the images built in a previous run, or to use a Docker 
 image tag that you have built by other means already, pass the tag to the test script:
 
-    dev/dev-run-integration-tests.sh --image-tag <tag>
+    ./dev/dev-run-integration-tests.sh --image-tag <tag>
 
 where if you still want to use images that were built before by the test framework:
 
-    dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
+    ./dev/dev-run-integration-tests.sh --image-tag $(cat target/imageTag.txt)
     
 ### Customising the Image Names
 
@@ -74,11 +74,11 @@ If your image names do not follow the standard Spark naming convention - `spark`
 
 If you use the same basic pattern but a different prefix for the name e.g. `apache-spark` you can just set `--base-image-name <base-name>` e.g.
 
-    dev/dev-run-integration-tests.sh --base-image-name apache-spark
+    ./dev/dev-run-integration-tests.sh --base-image-name apache-spark
     
 Alternatively if you use completely custom names then you can set each individually via the `--jvm-image-name <name>`, `--python-image-name <name>` and `--r-image-name <name>` arguments e.g.
 
-    dev/dev-run-integration-tests.sh --jvm-image-name jvm-spark --python-image-name pyspark --r-image-name sparkr
+    ./dev/dev-run-integration-tests.sh --jvm-image-name jvm-spark --python-image-name pyspark --r-image-name sparkr
 
 ## Spark Distribution Under Test
 

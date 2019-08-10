@@ -134,6 +134,16 @@ private[spark] object KafkaTokenUtil extends Logging {
       }
     }
 
+    logDebug("AdminClient params before specified params: " +
+      s"${KafkaRedactionUtil.redactParams(adminClientProperties.asScala.toSeq)}")
+
+    clusterConf.specifiedKafkaParams.foreach { param =>
+      adminClientProperties.setProperty(param._1, param._2)
+    }
+
+    logDebug("AdminClient params after specified params: " +
+      s"${KafkaRedactionUtil.redactParams(adminClientProperties.asScala.toSeq)}")
+
     adminClientProperties
   }
 

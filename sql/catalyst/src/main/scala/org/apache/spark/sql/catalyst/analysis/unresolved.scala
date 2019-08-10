@@ -40,11 +40,14 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  *
  * @param multipartIdentifier table name
  */
-case class UnresolvedRelation(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedRelation(
+    multipartIdentifier: Seq[String]) extends LeafNode with NamedRelation {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   /** Returns a `.` separated name for this relation. */
   def tableName: String = multipartIdentifier.quoted
+
+  override def name: String = tableName
 
   override def output: Seq[Attribute] = Nil
 
