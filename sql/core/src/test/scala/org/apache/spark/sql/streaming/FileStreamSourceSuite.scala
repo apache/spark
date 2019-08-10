@@ -1577,6 +1577,25 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       )
     }
   }
+
+  test("SPARK-28651: force streaming file source to be nullable") {
+    withTempDir { temp =>
+      val schema = StructType(Seq(StructField("foo", LongType, false)))
+      val nullableSchema = StructType(Seq(StructField("foo", LongType, true)))
+      val streamingSchema = spark.readStream.schema(schema).json(temp.getCanonicalPath).schema
+      assert(nullableSchema === streamingSchema)
+
+      // Verify we have the same behavior as batch DataFrame.
+      val batchSchema = spark.read.schema(schema).json(temp.getCanonicalPath).schema
+      assert(batchSchema === streamingSchema)
+
+      // Verify the flag works
+      withSQLConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE.key -> "false") {
+        val streamingSchema = spark.readStream.schema(schema).json(temp.getCanonicalPath).schema
+        assert(schema === streamingSchema)
+      }
+    }
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {

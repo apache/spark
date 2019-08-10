@@ -26,10 +26,11 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
@@ -1025,6 +1026,32 @@ class JDBCSuite extends QueryTest
         sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
           assert(!r.toString().contains(password))
         }
+      }
+    }
+  }
+
+  test("Hide credentials in show create table") {
+    val password = "testPass"
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (
+           | url '$urlWithUserAndPass',
+           | dbtable 'TEST.PEOPLE',
+           | user 'testUser',
+           | password '$password')
+         """.stripMargin)
+
+      val show = ShowCreateTableCommand(TableIdentifier(tableName))
+      spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
+        assert(!r.toString.contains(password))
+      }
+
+      sql(s"SHOW CREATE TABLE $tableName").collect().foreach { r =>
+        assert(!r.toString().contains(password))
       }
     }
   }

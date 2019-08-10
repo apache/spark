@@ -19,8 +19,23 @@ package org.apache.spark.deploy.master
 
 import scala.collection.mutable
 
+import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
+
+private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
+  extends ResourceAllocator(name, addresses) {
+
+  def toResourceInformation(): ResourceInformation = {
+    new ResourceInformation(name, addresses.toArray)
+  }
+
+  def acquire(amount: Int): ResourceInformation = {
+    val allocated = availableAddrs.take(amount)
+    acquire(allocated)
+    new ResourceInformation(name, allocated.toArray)
+  }
+}
 
 private[spark] class WorkerInfo(
     val id: String,
@@ -29,7 +44,9 @@ private[spark] class WorkerInfo(
     val cores: Int,
     val memory: Int,
     val endpoint: RpcEndpointRef,
-    val webUiAddress: String)
+    val webUiAddress: String,
+    val resources: Map[String, WorkerResourceInfo],
+    val pid: Int = 0)
   extends Serializable {
 
   Utils.checkHost(host)
@@ -47,6 +64,11 @@ private[spark] class WorkerInfo(
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
+  def resourcesFree: Map[String, Int] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> rInfo.availableAddrs.length
+    }
+  }
 
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
@@ -78,6 +100,7 @@ private[spark] class WorkerInfo(
       executors -= exec.fullId
       coresUsed -= exec.cores
       memoryUsed -= exec.memory
+      releaseResources(exec.resources)
     }
   }
 
@@ -95,6 +118,7 @@ private[spark] class WorkerInfo(
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
+    releaseResources(driver.resources)
   }
 
   def setState(state: WorkerState.Value): Unit = {
@@ -102,4 +126,36 @@ private[spark] class WorkerInfo(
   }
 
   def isAlive(): Boolean = this.state == WorkerState.ALIVE
+
+  /**
+   * acquire specified amount resources for driver/executor from the worker
+   * @param resourceReqs the resources requirement from driver/executor
+   */
+  def acquireResources(resourceReqs: Seq[ResourceRequirement])
+    : Map[String, ResourceInformation] = {
+    resourceReqs.map { req =>
+      val rName = req.resourceName
+      val amount = req.amount
+      rName -> resources(rName).acquire(amount)
+    }.toMap
+  }
+
+  /**
+   * used during master recovery
+   */
+  def recoverResources(expected: Map[String, ResourceInformation]): Unit = {
+    expected.foreach { case (rName, rInfo) =>
+      resources(rName).acquire(rInfo.addresses)
+    }
+  }
+
+  /**
+   * release resources to worker from the driver/executor
+   * @param allocated the resources which allocated to driver/executor previously
+   */
+  private def releaseResources(allocated: Map[String, ResourceInformation]): Unit = {
+    allocated.foreach { case (rName, rInfo) =>
+      resources(rName).release(rInfo.addresses)
+    }
+  }
 }

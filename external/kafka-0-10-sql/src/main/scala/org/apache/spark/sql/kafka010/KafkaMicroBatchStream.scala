@@ -56,19 +56,19 @@ import org.apache.spark.util.UninterruptibleThread
  * and not use wrong broker addresses.
  */
 private[kafka010] class KafkaMicroBatchStream(
-    kafkaOffsetReader: KafkaOffsetReader,
+    private[kafka010] val kafkaOffsetReader: KafkaOffsetReader,
     executorKafkaParams: ju.Map[String, Object],
     options: CaseInsensitiveStringMap,
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean) extends RateControlMicroBatchStream with Logging {
 
-  private val pollTimeoutMs = options.getLong(
+  private[kafka010] val pollTimeoutMs = options.getLong(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
     SparkEnv.get.conf.get(NETWORK_TIMEOUT) * 1000L)
 
-  private val maxOffsetsPerTrigger = Option(options.get(KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER))
-    .map(_.toLong)
+  private[kafka010] val maxOffsetsPerTrigger = Option(options.get(
+    KafkaSourceProvider.MAX_OFFSET_PER_TRIGGER)).map(_.toLong)
 
   private val rangeCalculator = KafkaOffsetRangeCalculator(options)
 
