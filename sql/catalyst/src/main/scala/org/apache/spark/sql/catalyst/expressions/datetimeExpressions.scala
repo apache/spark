@@ -1828,3 +1828,35 @@ case class MakeTimestamp(
 
   override def prettyName: String = "make_timestamp"
 }
+
+case class DatePart(field: Expression, source: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(field: Expression, source: Expression) {
+    this(field, source, {
+      if (!field.foldable) {
+        throw new AnalysisException("The field parameter needs to be a foldable string value.")
+      }
+      val extractField = field.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT)
+      extractField match {
+        case "YEAR" => Year(source)
+        case "QUARTER" => Quarter(source)
+        case "MONTH" => Month(source)
+        case "WEEK" => WeekOfYear(source)
+        case "DAY" => DayOfMonth(source)
+        case "DAYOFWEEK" => DayOfWeek(source)
+        case "DOW" => Subtract(DayOfWeek(source), Literal(1))
+        case "ISODOW" => Add(WeekDay(source), Literal(1))
+        case "DOY" => DayOfYear(source)
+        case "HOUR" => Hour(source)
+        case "MINUTE" => Minute(source)
+        case "SECOND" => Second(source)
+        case other =>
+          throw new AnalysisException(s"Literals of type '$other' are currently not supported.")
+      }})
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(field, source)
+  override def sql: String = s"$prettyName(${field.sql}, ${source.sql})"
+  override def prettyName: String = "date_part"
+}
