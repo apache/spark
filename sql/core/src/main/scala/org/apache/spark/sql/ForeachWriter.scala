@@ -51,9 +51,11 @@ import org.apache.spark.annotation.Evolving
  * Important points to note:
  * <ul>
  * <li>Spark doesn't guarantee same output for (partitionId, epochId) on failure, so deduplication
- *     cannot be achieved with (partitionId, epochId). Refer SPARK-28650 for more details.
+ *     cannot be achieved with (partitionId, epochId). e.g. source provides different number of
+ *     partitions for some reason, Spark optimization changes number of partitions, etc.
+ *     Refer SPARK-28650 for more details.
  *
- *     You can still apply deduplication on `epochId`, but there's less benefit to leverage this,
+ *     `epochId` can still be used for deduplication, but there's less benefit to leverage this,
  *     as the chance for Spark to successfully write all partitions and fail to checkpoint the
  *     batch is small. You also need to care about whether epoch is fully written, via ensuring all
  *     partitions for the epochId are written successfully.
