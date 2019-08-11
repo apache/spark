@@ -358,23 +358,20 @@ create table foo (with baz)
 
 
 -- !query 38
--- fail, WITH is a reserved word
 create table foo (with ordinality)
 -- !query 38 schema
 struct<>
 -- !query 38 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'with'(line 2, pos 18)
+no viable alternative at input 'with'(line 1, pos 18)
 
 == SQL ==
--- fail, WITH is a reserved word
 create table foo (with ordinality)
 ------------------^^^
 
 
 -- !query 39
--- fail, WITH is a reserved word
 with ordinality as (select 1 as x) select * from ordinality
 -- !query 39 schema
 struct<x:int>

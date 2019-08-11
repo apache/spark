@@ -37,7 +37,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
+import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -158,7 +158,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     getRejectOfferDurationForReachedMaxCores(sc.conf)
 
   // A client for talking to the external shuffle service
-  private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
+  private val mesosExternalShuffleClient: Option[MesosExternalBlockStoreClient] = {
     if (shuffleServiceEnabled) {
       Some(getShuffleClient())
     } else {
@@ -167,8 +167,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   // This method is factored out for testability
-  protected def getShuffleClient(): MesosExternalShuffleClient = {
-    new MesosExternalShuffleClient(
+  protected def getShuffleClient(): MesosExternalBlockStoreClient = {
+    new MesosExternalBlockStoreClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
       securityManager,
       securityManager.isAuthenticationEnabled(),

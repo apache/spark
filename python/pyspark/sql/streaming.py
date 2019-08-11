@@ -1155,7 +1155,7 @@ def _test():
     globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
     globs['sdf'] = \
         spark.readStream.format('text').load('python/test_support/sql/streaming')
-    globs['sdf_schema'] = StructType([StructField("data", StringType(), False)])
+    globs['sdf_schema'] = StructType([StructField("data", StringType(), True)])
     globs['df'] = \
         globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 

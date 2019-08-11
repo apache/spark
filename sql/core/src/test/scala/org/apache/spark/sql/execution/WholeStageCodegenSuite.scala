@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -120,6 +120,30 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
   }
 
+  test("cache for primitive type should be in WholeStageCodegen with InMemoryTableScanExec") {
+    import testImplicits._
+
+    val dsInt = spark.range(3).cache()
+    dsInt.count()
+    val dsIntFilter = dsInt.filter(_ > 0)
+    val planInt = dsIntFilter.queryExecution.executedPlan
+    assert(planInt.collect {
+      case WholeStageCodegenExec(FilterExec(_,
+          ColumnarToRowExec(InputAdapter(_: InMemoryTableScanExec)))) => ()
+    }.length == 1)
+    assert(dsIntFilter.collect() === Array(1, 2))
+
+    // cache for string type is not supported for InMemoryTableScanExec
+    val dsString = spark.range(3).map(_.toString).cache()
+    dsString.count()
+    val dsStringFilter = dsString.filter(_ == "1")
+    val planString = dsStringFilter.queryExecution.executedPlan
+    assert(planString.collect {
+      case _: ColumnarToRowExec => ()
+    }.isEmpty)
+    assert(dsStringFilter.collect() === Array("1"))
+  }
+
   test("SPARK-19512 codegen for comparing structs is incorrect") {
     // this would raise CompileException before the fix
     spark.range(10)
@@ -194,6 +218,25 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val codeWithLongFunctions = genGroupByCode(50)
     val (_, maxCodeSize2) = CodeGenerator.compile(codeWithLongFunctions)
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
+  }
+
+  ignore("bytecode of batch file scan exceeds the limit of WHOLESTAGE_HUGE_METHOD_LIMIT") {
+    import testImplicits._
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(10).select(Seq.tabulate(201) {i => ('id + i).as(s"c$i")} : _*)
+      df.write.mode(SaveMode.Overwrite).parquet(path)
+
+      withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "202",
+        SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "2000") {
+        // wide table batch scan causes the byte code of codegen exceeds the limit of
+        // WHOLESTAGE_HUGE_METHOD_LIMIT
+        val df2 = spark.read.parquet(path)
+        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
+        assert(fileScan2.asInstanceOf[FileSourceScanExec].supportsColumnar)
+        checkAnswer(df2, df)
+      }
+    }
   }
 
   test("Control splitting consume function by operators with config") {

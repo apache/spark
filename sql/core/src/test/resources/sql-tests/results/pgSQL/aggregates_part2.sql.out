@@ -18,14 +18,11 @@ struct<>
 
 -- !query 1
 SELECT
-  -- boolean and transitions
-  -- null because strict
   (NULL AND NULL) IS NULL AS `t`,
   (TRUE AND NULL) IS NULL AS `t`,
   (FALSE AND NULL) IS NULL AS `t`,
   (NULL AND TRUE) IS NULL AS `t`,
   (NULL AND FALSE) IS NULL AS `t`,
-  -- and actual computations
   (TRUE AND TRUE) AS `t`,
   NOT (TRUE AND FALSE) AS `t`,
   NOT (FALSE AND TRUE) AS `t`,
@@ -38,14 +35,11 @@ true	true	false	true	false	true	true	true	true
 
 -- !query 2
 SELECT
-  -- boolean or transitions
-  -- null because strict
   (NULL OR NULL) IS NULL AS `t`,
   (TRUE OR NULL) IS NULL AS `t`,
   (FALSE OR NULL) IS NULL AS `t`,
   (NULL OR TRUE) IS NULL AS `t`,
   (NULL OR FALSE) IS NULL AS `t`,
-  -- actual computations
   (TRUE OR TRUE) AS `t`,
   (TRUE OR FALSE) AS `t`,
   (FALSE OR TRUE) AS `t`,

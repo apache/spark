@@ -328,38 +328,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[DescribeColumnCommand]] or [[DescribeTableCommand]] logical commands.
-   */
-  override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
-    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
-    if (ctx.describeColName != null) {
-      if (ctx.partitionSpec != null) {
-        throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
-      } else {
-        DescribeColumnCommand(
-          visitTableIdentifier(ctx.tableIdentifier),
-          ctx.describeColName.nameParts.asScala.map(_.getText),
-          isExtended)
-      }
-    } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
-        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
-        visitPartitionSpec(ctx.partitionSpec).map {
-          case (key, Some(value)) => key -> value
-          case (key, _) =>
-            throw new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
-        }
-      } else {
-        Map.empty[String, String]
-      }
-      DescribeTableCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
-        partitionSpec,
-        isExtended)
-    }
-  }
-
-  /**
    * Create a [[DescribeQueryCommand]] logical command.
    */
   override def visitDescribeQuery(ctx: DescribeQueryContext): LogicalPlan = withOrigin(ctx) {
