@@ -70,6 +70,24 @@ private[spark] class WorkerInfo(
     }
   }
 
+  def resourcesInfo: Map[String, ResourceInformation] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> rInfo.toResourceInformation()
+    }
+  }
+
+  def resourcesInfoFree: Map[String, ResourceInformation] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
+    }
+  }
+
+  def resourcesInfoUsed: Map[String, ResourceInformation] = {
+    resources.map { case (rName, rInfo) =>
+      rName -> new ResourceInformation(rName, rInfo.assignedAddrs.toArray)
+    }
+  }
+
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     init()

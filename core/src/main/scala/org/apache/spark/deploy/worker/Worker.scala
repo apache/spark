@@ -185,8 +185,7 @@ private[deploy] class Worker(
 
   var coresUsed = 0
   var memoryUsed = 0
-  // map from resource name to (used, total)
-  var resourcesUsed: HashMap[String, (Int, Int)] = _
+  var resourcesUsed: HashMap[String, ResourceInformation] = _
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -244,22 +243,21 @@ private[deploy] class Worker(
           System.exit(1)
         }
     }
-    resourcesUsed = resources.map { case (rName, rInfo) =>
-      rName -> (0, rInfo.addresses.length)
-    }.asInstanceOf[HashMap[String, (Int, Int)]]
+    resources.foreach { case (rName, _) =>
+      resourcesUsed(rName) = new ResourceInformation(rName, Array.empty[String])
+    }
   }
 
-  private def updateResourcesUsed(delta: Map[String, ResourceInformation], add: Boolean)
+  private def updateResourcesUsed(deltaInfo: Map[String, ResourceInformation], add: Boolean)
     : Unit = {
-    delta.foreach { case (rName, rInfo) =>
-      val d = if (add) {
-        rInfo.addresses.length
-      } else {
-        rInfo.addresses.length * -1
-      }
-      val used = resourcesUsed(rName)._1
-      val total = resourcesUsed(rName)._2
-      resourcesUsed(rName) = (used + d, total)
+    deltaInfo.foreach { case (rName, rInfo) =>
+      val curInfo = resourcesUsed(rName)
+      val newInfo = if (add) {
+          curInfo + rInfo
+        } else {
+          curInfo - rInfo
+        }
+      resourcesUsed(rName) = newInfo
     }
   }
 
@@ -681,7 +679,7 @@ private[deploy] class Worker(
       context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl, resourcesUsed.toMap))
+        coresUsed, memoryUsed, activeMasterWebUiUrl, resources, resourcesUsed.toMap))
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

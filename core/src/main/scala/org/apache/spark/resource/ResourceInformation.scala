@@ -39,6 +39,18 @@ class ResourceInformation(
     val name: String,
     val addresses: Array[String]) extends Serializable {
 
+  def + (other: ResourceInformation): ResourceInformation = {
+    assert(name == other.name, s"Inconsistent resource name, expected $name, " +
+      s"but got ${other.name}")
+    new ResourceInformation(name, addresses.union(other.addresses))
+  }
+
+  def - (other: ResourceInformation): ResourceInformation = {
+    assert(name == other.name, s"Inconsistent resource name, expected $name, " +
+      s"but got ${other.name}")
+    new ResourceInformation(name, addresses.diff(other.addresses))
+  }
+
   override def toString: String = s"[name: ${name}, addresses: ${addresses.mkString(",")}]"
 
   override def equals(obj: Any): Boolean = {
@@ -52,6 +64,8 @@ class ResourceInformation(
   }
 
   override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
+
+  def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
 }
 
 private[spark] object ResourceInformation {

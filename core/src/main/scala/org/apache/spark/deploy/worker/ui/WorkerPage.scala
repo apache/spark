@@ -74,7 +74,8 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
-            <li><strong>Resources:</strong> {formatResourcesUsed(workerState.resourcesUsed)}</li>
+            <li><strong>Resources:</strong>
+              {formatResourcesUsed(workerState.resources, workerState.resourcesUsed)}</li>
           </ul>
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>
