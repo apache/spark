@@ -159,7 +159,7 @@ private object ResourceRequestHelper extends Logging {
         case e: NoSuchMethodException =>
           logError(s"""Cannot find $RESOURCE_INFO_CLASS.setResourceInformation.
                     |This is likely due to a jar conflict between different yarn versions.
-                    |Unable to set resources.""".stripMargin().replace("\n", " "))
+                    |Unable to set resources.""".stripMargin.replace("\n", " "))
           return
       }
 
