@@ -50,14 +50,13 @@ import org.apache.spark.annotation.Evolving
  *
  * Important points to note:
  * <ul>
- * <li>The `partitionId` and `epochId` can be used to deduplicate generated data when failures
- *     cause reprocessing of some input data. This depends on the execution mode of the query. If
- *     the streaming query is being executed in the micro-batch mode, then every partition
- *     represented by a unique tuple (partitionId, epochId) is guaranteed to have the same data.
- *     Hence, (partitionId, epochId) can be used to deduplicate and/or transactionally commit data
- *     and achieve exactly-once guarantees. However, if the streaming query is being executed in the
- *     continuous mode, then this guarantee does not hold and therefore should not be used for
- *     deduplication.
+ * <li>Spark doesn't guarantee same output for (partitionId, epochId) on failure, so deduplication
+ *     cannot be achieved with (partitionId, epochId). Refer SPARK-28650 for more details.
+ *
+ *     You can still apply deduplication on `epochId`, but there's less benefit to leverage this,
+ *     as the chance for Spark to successfully write all partitions and fail to checkpoint the
+ *     batch is small. You also need to care about whether epoch is fully written, via ensuring all
+ *     partitions for the epochId are written successfully.
  *
  * <li>The `close()` method will be called if `open()` method returns successfully (irrespective
  *     of the return value), except if the JVM crashes in the middle.
