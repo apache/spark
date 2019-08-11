@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.DecimalPrecision
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -411,12 +412,19 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), Decimal(2))
       checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), Decimal(1))
       checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+        BigDecimal("99999999999999999999999999999999999000"))
     }
     withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "true") {
       checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
       checkEvaluation(IntegralDivide(Literal(Decimal(1.4)), Literal(Decimal(0.6))), 2L)
       checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(1.1))), 1L)
       checkEvaluation(IntegralDivide(Literal(Decimal(1.2)), Literal(Decimal(0.0))), null)
+      // overflows long and so returns a wrong result
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
+        687399551400672280L)
     }
   }
 
