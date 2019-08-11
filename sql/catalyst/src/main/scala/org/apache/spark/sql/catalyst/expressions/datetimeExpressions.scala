@@ -1887,6 +1887,9 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
       }
       val extractField = field.eval().asInstanceOf[UTF8String].toString.toUpperCase(Locale.ROOT)
       extractField match {
+        case "MILLENNIUM" => Millennium(source)
+        case "CENTURY" => Century(source)
+        case "DECADE" => Decade(source)
         case "YEAR" => Year(source)
         case "QUARTER" => Quarter(source)
         case "MONTH" => Month(source)

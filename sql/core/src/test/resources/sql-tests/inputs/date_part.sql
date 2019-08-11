@@ -1,5 +1,11 @@
 CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c;
 
+select date_part('millennium', c) from t;
+
+select date_part('century', c) from t;
+
+select date_part('decade', c) from t;
+
 select date_part('year', c) from t;
 
 select date_part('quarter', c) from t;
