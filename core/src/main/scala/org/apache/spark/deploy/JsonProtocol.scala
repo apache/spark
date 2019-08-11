@@ -19,6 +19,7 @@ package org.apache.spark.deploy
 
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
+
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master._
 import org.apache.spark.deploy.master.RecoveryState.MasterState

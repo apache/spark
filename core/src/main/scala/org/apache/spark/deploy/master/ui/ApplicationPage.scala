@@ -23,7 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
-import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourceRequirements}
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses}
 import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils

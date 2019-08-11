@@ -26,7 +26,7 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourceRequirements, formatResourcesUsed}
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses, formatResourcesUsed}
 import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -113,7 +113,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
     val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
-      "Memory", "Resources" ,"Main Class")
+      "Memory", "Resources", "Main Class")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse

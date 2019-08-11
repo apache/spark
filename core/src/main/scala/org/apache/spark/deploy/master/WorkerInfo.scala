@@ -45,8 +45,7 @@ private[spark] class WorkerInfo(
     val memory: Int,
     val endpoint: RpcEndpointRef,
     val webUiAddress: String,
-    val resources: Map[String, WorkerResourceInfo],
-    val pid: Int = 0)
+    val resources: Map[String, WorkerResourceInfo])
   extends Serializable {
 
   Utils.checkHost(host)
