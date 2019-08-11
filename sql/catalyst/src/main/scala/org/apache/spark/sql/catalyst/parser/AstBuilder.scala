@@ -1395,40 +1395,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    ctx.field.getText.toUpperCase(Locale.ROOT) match {
-      case "MILLENNIUM" =>
-        Millennium(expression(ctx.source))
-      case "CENTURY" =>
-        Century(expression(ctx.source))
-      case "DECADE" =>
-        Decade(expression(ctx.source))
-      case "YEAR" =>
-        Year(expression(ctx.source))
-      case "QUARTER" =>
-        Quarter(expression(ctx.source))
-      case "MONTH" =>
-        Month(expression(ctx.source))
-      case "WEEK" =>
-        WeekOfYear(expression(ctx.source))
-      case "DAY" =>
-        DayOfMonth(expression(ctx.source))
-      case "DAYOFWEEK" =>
-        DayOfWeek(expression(ctx.source))
-      case "DOW" =>
-        Subtract(DayOfWeek(expression(ctx.source)), Literal(1))
-      case "ISODOW" =>
-        Add(WeekDay(expression(ctx.source)), Literal(1))
-      case "DOY" =>
-        DayOfYear(expression(ctx.source))
-      case "HOUR" =>
-        Hour(expression(ctx.source))
-      case "MINUTE" =>
-        Minute(expression(ctx.source))
-      case "SECOND" =>
-        Second(expression(ctx.source))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
-    }
+    new DatePart(Literal(ctx.field.getText), expression(ctx.source))
   }
 
   /**
