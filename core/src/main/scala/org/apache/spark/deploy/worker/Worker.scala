@@ -185,7 +185,7 @@ private[deploy] class Worker(
 
   var coresUsed = 0
   var memoryUsed = 0
-  var resourcesUsed: HashMap[String, ResourceInformation] = _
+  val resourcesUsed = new HashMap[String, ResourceInformation]()
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed

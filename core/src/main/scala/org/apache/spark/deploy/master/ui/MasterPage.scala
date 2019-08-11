@@ -26,6 +26,7 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourceRequirements, formatResourcesUsed}
 import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -70,26 +71,29 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   private def formatWorkerResources(worker: WorkerInfo): String = {
     if (worker.resources.isEmpty) return "None"
-    worker.resources.map { case (rName, rInfo) =>
-      val free = rInfo.availableAddrs.mkString("[", ", ", "]")
-      val used = rInfo.assignedAddrs.mkString("[", ", ", "]")
+    val infoUsed = worker.resourcesInfoUsed
+    val infoFree = worker.resourcesInfoFree
+    infoUsed.map { case (rName, rInfo) =>
+      val used = rInfo.addresses.mkString("[", ", ", "]")
+      val free = infoFree(rName).addresses.mkString("[", ", ", "]")
       s"$rName: Free: $free / Used: $used"
     }.mkString(", ")
   }
 
-  private def formatResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
-    val use = aliveWorkers.foldLeft(new mutable.HashMap[String, (Int, Int)]) { (usage, w) =>
-      val free = w.resourcesFree
-      val total = w.resources.map(r => r._1 -> r._2.addresses.length)
-      total.foreach { case (rName, all) =>
-        val usedAndAll = usage.getOrElseUpdate(rName, (0, 0))
-        val newAll = usedAndAll._2 + all
-        val newUsed = usedAndAll._1 + all - free(rName)
-        usage(rName) = (newUsed, newAll)
+  private def formatMasterResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
+    val totalInfo = aliveWorkers.map(_.resourcesInfo)
+      .flatMap(_.toIterator)
+      .groupBy(_._1) // group by resource name
+      .map { case (rName, rInfoArr) =>
+        rName -> rInfoArr.map(_._2).reduce(_ + _)
       }
-      usage
-    }.map { case (rName, (used, total)) => s"$used / $total $rName"}.mkString(", ")
-    if (use.isEmpty) "None" else use
+    val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
+      .flatMap(_.toIterator)
+      .groupBy(_._1) // group by resource name
+      .map { case (rName, rInfoArr) =>
+      rName -> rInfoArr.map(_._2).reduce(_ + _)
+    }
+    if (totalInfo.isEmpty) "None" else formatResourcesUsed(totalInfo, usedInfo)
   }
 
   /** Index view listing applications and executors */
@@ -101,15 +105,15 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor", "Submitted Time",
-      "User", "State", "Duration")
+    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor",
+      "Resources Per Executor", "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
     val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
-      "Memory", "Main Class")
+      "Memory", "Resources" ,"Main Class")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
@@ -138,7 +142,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
-              <li><strong>Resources in use:</strong> {formatResourcesInUse(aliveWorkers)}</li>
+              <li><strong>Resources in use:</strong>
+                {formatMasterResourcesInUse(aliveWorkers)}</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.length} <a href="#running-app">Running</a>,
                 {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
@@ -299,6 +304,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={app.desc.memoryPerExecutorMB.toString}>
         {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
       </td>
+      <td>
+        {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
+      </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
@@ -339,6 +347,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
+      <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>{driver.desc.command.arguments(2)}</td>
     </tr>
   }

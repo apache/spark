@@ -64,7 +64,7 @@ private[spark] class WorkerInfo(
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
-  def resourcesFree: Map[String, Int] = {
+  def resourcesAmountFree: Map[String, Int] = {
     resources.map { case (rName, rInfo) =>
       rName -> rInfo.availableAddrs.length
     }
