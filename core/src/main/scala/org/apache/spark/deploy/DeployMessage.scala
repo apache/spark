@@ -238,7 +238,8 @@ private[deploy] object DeployMessages {
   case class WorkerStateResponse(host: String, port: Int, workerId: String,
     executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner],
     drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
-    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
+    cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String,
+    resourcesUsed: Map[String, (Int, Int)] = Map.empty) {
 
     Utils.checkHost(host)
     assert (port > 0)

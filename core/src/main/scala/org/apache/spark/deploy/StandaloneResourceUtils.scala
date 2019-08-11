@@ -345,4 +345,26 @@ private[spark] object StandaloneResourceUtils extends Logging {
   def needCoordinate(conf: SparkConf): Boolean = {
     conf.get(SPARK_RESOURCES_COORDINATE)
   }
+
+  // used for UI
+  def formatResourcesAddresses(resources: Map[String, ResourceInformation]): String = {
+    if (resources.isEmpty) return "None"
+    resources.map { case (rName, rInfo) =>
+      s"$rName: ${rInfo.addresses.mkString("[", ", ", "]")}"
+    }.mkString(", ")
+  }
+
+  // used for UI
+  def formatResourcesUsed(resources: Map[String, (Int, Int)]): String = {
+    if (resources.isEmpty) return "None"
+    resources.map { case (rName, (used, total)) =>
+      s"$used / $total $rName"
+    }.mkString(", ")
+  }
+
+  // used for UI
+  def formatResourceRequirements(requirements: Seq[ResourceRequirement]): String = {
+    if (requirements.isEmpty) return "None"
+    requirements.map { req => s"${req.amount} ${req.resourceName}"}.mkString(", ")
+  }
 }

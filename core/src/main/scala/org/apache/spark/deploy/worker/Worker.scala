@@ -185,6 +185,8 @@ private[deploy] class Worker(
 
   var coresUsed = 0
   var memoryUsed = 0
+  // map from resource name to (used, total)
+  var resourcesUsed: HashMap[String, (Int, Int)] = _
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -241,6 +243,23 @@ private[deploy] class Worker(
         if (!Utils.isTesting) {
           System.exit(1)
         }
+    }
+    resourcesUsed = resources.map { case (rName, rInfo) =>
+      rName -> (0, rInfo.addresses.length)
+    }.asInstanceOf[HashMap[String, (Int, Int)]]
+  }
+
+  private def updateResourcesUsed(delta: Map[String, ResourceInformation], add: Boolean)
+    : Unit = {
+    delta.foreach { case (rName, rInfo) =>
+      val d = if (add) {
+        rInfo.addresses.length
+      } else {
+        rInfo.addresses.length * -1
+      }
+      val used = resourcesUsed(rName)._1
+      val total = resourcesUsed(rName)._2
+      resourcesUsed(rName) = (used + d, total)
     }
   }
 
@@ -588,6 +607,7 @@ private[deploy] class Worker(
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
+          updateResourcesUsed(resources_, true)
         } catch {
           case e: Exception =>
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
@@ -634,6 +654,7 @@ private[deploy] class Worker(
 
       coresUsed += driverDesc.cores
       memoryUsed += driverDesc.mem
+      updateResourcesUsed(resources_, true)
 
     case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
@@ -660,7 +681,7 @@ private[deploy] class Worker(
       context.reply(WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl))
+        coresUsed, memoryUsed, activeMasterWebUiUrl, resourcesUsed.toMap))
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -773,6 +794,7 @@ private[deploy] class Worker(
     trimFinishedDriversIfNecessary()
     memoryUsed -= driver.driverDesc.mem
     coresUsed -= driver.driverDesc.cores
+    updateResourcesUsed(driver.resources, false)
   }
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
@@ -794,6 +816,7 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
+          updateResourcesUsed(executor.resources, false)
 
           if (CLEANUP_FILES_AFTER_EXECUTOR_EXIT) {
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
