@@ -136,6 +136,10 @@ private[spark] class AppStatusStore(
     store.read(classOf[StageDataWrapper], Array(stageId, stageAttemptId)).locality
   }
 
+  // SPARK-26119: we only want to consider successful tasks when calculating the metrics summary,
+  // but currently this is very expensive when using a disk store. So we only trigger the slower
+  // code path when we know we have all data in memory. The following method checks whether all
+  // the data will be in memory.
   private def isInMemoryStore: Boolean = store.isInstanceOf[InMemoryStore] || listener.isDefined
 
   /**
