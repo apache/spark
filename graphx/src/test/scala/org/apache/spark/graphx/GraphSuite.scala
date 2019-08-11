@@ -62,7 +62,7 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       assert( graph.edges.count() === rawEdges.size )
       // Vertices not explicitly provided but referenced by edges should be created automatically
       assert( graph.vertices.count() === 100)
-      graph.triplets.collect().map { et =>
+      graph.triplets.collect().foreach { et =>
         assert((et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr))
         assert((et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr))
       }
@@ -396,11 +396,11 @@ class GraphSuite extends SparkFunSuite with LocalSparkContext {
       val g = g0.partitionBy(PartitionStrategy.EdgePartition2D, 2)
       val cc = g.connectedComponents()
       assert(sc.getPersistentRDDs.nonEmpty)
-      cc.unpersist()
-      g.unpersist()
-      g0.unpersist()
-      vert.unpersist()
-      edges.unpersist()
+      cc.unpersist(blocking = true)
+      g.unpersist(blocking = true)
+      g0.unpersist(blocking = true)
+      vert.unpersist(blocking = true)
+      edges.unpersist(blocking = true)
       assert(sc.getPersistentRDDs.isEmpty)
     }
   }

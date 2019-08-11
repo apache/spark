@@ -48,6 +48,20 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("a||b"))
   }
 
+  test("string elt") {
+    val df = Seq[(String, String, String, Int)](("hello", "world", null, 15))
+      .toDF("a", "b", "c", "d")
+
+    checkAnswer(
+      df.selectExpr("elt(0, a, b, c)", "elt(1, a, b, c)", "elt(4, a, b, c)"),
+      Row(null, "hello", null))
+
+    // check implicit type cast
+    checkAnswer(
+      df.selectExpr("elt(4, a, b, c, d)", "elt('2', a, b, c, d)"),
+      Row("15", "world"))
+  }
+
   test("string Levenshtein distance") {
     val df = Seq(("kitten", "sitting"), ("frog", "fog")).toDF("l", "r")
     checkAnswer(df.select(levenshtein($"l", $"r")), Seq(Row(3), Row(1)))
@@ -63,8 +77,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
+        regexp_replace($"a", $"b", $"c"),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "100") :: Row("num-num", "100") :: Row("num-num", "100") :: Nil)
+      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
+        Row("num-num", "400-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,
@@ -76,6 +92,18 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
         "regexp_replace(a, b, c)",
         "regexp_extract(a, b, 1)"),
       Row("300", "100") :: Row("400", "100") :: Row("400-400", "100") :: Nil)
+  }
+
+  test("non-matching optional group") {
+    val df = Seq(Tuple1("aaaac")).toDF("s")
+    checkAnswer(
+      df.select(regexp_extract($"s", "(foo)", 1)),
+      Row("")
+    )
+    checkAnswer(
+      df.select(regexp_extract($"s", "(a+)(b)?(c)", 2)),
+      Row("")
+    )
   }
 
   test("string ascii function") {
@@ -99,6 +127,18 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("base64(a)", "unbase64(b)"),
       Row("AQIDBA==", bytes))
+  }
+
+  test("overlay function") {
+    // scalastyle:off
+    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
+    val df = Seq(("Spark SQL", "Spark的SQL")).toDF("a", "b")
+    checkAnswer(df.select(overlay($"a", "_", 6)), Row("Spark_SQL"))
+    checkAnswer(df.select(overlay($"a", "CORE", 7)), Row("Spark CORE"))
+    checkAnswer(df.select(overlay($"a", "ANSI ", 7, 0)), Row("Spark ANSI SQL"))
+    checkAnswer(df.select(overlay($"a", "tructured", 2, 4)), Row("Structured SQL"))
+    checkAnswer(df.select(overlay($"b", "_", 6)), Row("Spark_SQL"))
+    // scalastyle:on
   }
 
   test("string / binary substring function") {
@@ -133,11 +173,23 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("string trim functions") {
-    val df = Seq(("  example  ", "")).toDF("a", "b")
+    val df = Seq(("  example  ", "", "example")).toDF("a", "b", "c")
 
     checkAnswer(
       df.select(ltrim($"a"), rtrim($"a"), trim($"a")),
       Row("example  ", "  example", "example"))
+
+    checkAnswer(
+      df.select(ltrim($"c", "e"), rtrim($"c", "e"), trim($"c", "e")),
+      Row("xample", "exampl", "xampl"))
+
+    checkAnswer(
+      df.select(ltrim($"c", "xe"), rtrim($"c", "emlp"), trim($"c", "elxp")),
+      Row("ample", "exa", "am"))
+
+    checkAnswer(
+      df.select(trim($"c", "xyz")),
+      Row("example"))
 
     checkAnswer(
       df.selectExpr("ltrim(a)", "rtrim(a)", "trim(a)"),
@@ -212,6 +264,51 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("???hi", "hi???", "h", "h"))
   }
 
+  test("string parse_url function") {
+
+    def testUrl(url: String, expected: Row) {
+      checkAnswer(Seq[String]((url)).toDF("url").selectExpr(
+        "parse_url(url, 'HOST')", "parse_url(url, 'PATH')",
+        "parse_url(url, 'QUERY')", "parse_url(url, 'REF')",
+        "parse_url(url, 'PROTOCOL')", "parse_url(url, 'FILE')",
+        "parse_url(url, 'AUTHORITY')", "parse_url(url, 'USERINFO')",
+        "parse_url(url, 'QUERY', 'query')"), expected)
+    }
+
+    testUrl(
+      "http://userinfo@spark.apache.org/path?query=1#Ref",
+      Row("spark.apache.org", "/path", "query=1", "Ref",
+        "http", "/path?query=1", "userinfo@spark.apache.org", "userinfo", "1"))
+
+    testUrl(
+      "https://use%20r:pas%20s@example.com/dir%20/pa%20th.HTML?query=x%20y&q2=2#Ref%20two",
+      Row("example.com", "/dir%20/pa%20th.HTML", "query=x%20y&q2=2", "Ref%20two",
+        "https", "/dir%20/pa%20th.HTML?query=x%20y&q2=2", "use%20r:pas%20s@example.com",
+        "use%20r:pas%20s", "x%20y"))
+
+    testUrl(
+      "http://user:pass@host",
+      Row("host", "", null, null, "http", "", "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "http://user:pass@host/",
+      Row("host", "/", null, null, "http", "/", "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "http://user:pass@host/?#",
+      Row("host", "/", "", "", "http", "/?", "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "http://user:pass@host/file;param?query;p2",
+      Row("host", "/file;param", "query;p2", null, "http", "/file;param?query;p2",
+        "user:pass@host", "user:pass", null))
+
+    testUrl(
+      "inva lid://user:pass@host/file;param?query;p2",
+      Row(null, null, null, null, null, null, null, null, null))
+
+  }
+
   test("string repeat function") {
     val df = Seq(("hi", 2)).toDF("a", "b")
 
@@ -244,20 +341,57 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("   "))
   }
 
-  test("string split function") {
-    val df = Seq(("aa2bb3cc", "[1-9]+")).toDF("a", "b")
+  test("string split function with no limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
 
     checkAnswer(
       df.select(split($"a", "[1-9]+")),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
 
     checkAnswer(
       df.selectExpr("split(a, '[1-9]+')"),
-      Row(Seq("aa", "bb", "cc")))
+      Row(Seq("aa", "bb", "cc", "")))
+  }
+
+  test("string split function with limit explicitly set to 0") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", 0)),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', 0)"),
+      Row(Seq("aa", "bb", "cc", "")))
+  }
+
+  test("string split function with positive limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", 2)),
+      Row(Seq("aa", "bb3cc4")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', 2)"),
+      Row(Seq("aa", "bb3cc4")))
+  }
+
+  test("string split function with negative limit") {
+    val df = Seq(("aa2bb3cc4", "[1-9]+")).toDF("a", "b")
+
+    checkAnswer(
+      df.select(split($"a", "[1-9]+", -2)),
+      Row(Seq("aa", "bb", "cc", "")))
+
+    checkAnswer(
+      df.selectExpr("split(a, '[1-9]+', -2)"),
+      Row(Seq("aa", "bb", "cc", "")))
   }
 
   test("string / binary length function") {
-    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123)).toDF("a", "b", "c")
+    val df = Seq(("123", Array[Byte](1, 2, 3, 4), 123, 2.0f, 3.015))
+      .toDF("a", "b", "c", "d", "e")
     checkAnswer(
       df.select(length($"a"), length($"b")),
       Row(3, 4))
@@ -266,9 +400,10 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("length(a)", "length(b)"),
       Row(3, 4))
 
-    intercept[AnalysisException] {
-      df.selectExpr("length(c)") // int type of the argument is unacceptable
-    }
+    checkAnswer(
+      df.selectExpr("length(c)", "length(d)", "length(e)"),
+      Row(3, 3, 5)
+    )
   }
 
   test("initcap function") {
@@ -312,7 +447,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("6.4817"))
 
     checkAnswer(
-      df.select(format_number(lit(BigDecimal(7.128381)), 4)), // not convert anything
+      df.select(format_number(lit(BigDecimal("7.128381")), 4)), // not convert anything
       Row("7.1284"))
 
     intercept[AnalysisException] {
@@ -332,5 +467,48 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df2.filter("b>0").selectExpr("format_number(a, b)"),
       Row("5.0000") :: Row("4.000") :: Row("4.000") :: Row("4.000") :: Row("3.00") :: Nil)
+  }
+
+  test("string sentences function") {
+    val df = Seq(("Hi there! The price was $1,234.56.... But, not now.", "en", "US"))
+      .toDF("str", "language", "country")
+
+    checkAnswer(
+      df.selectExpr("sentences(str, language, country)"),
+      Row(Seq(Seq("Hi", "there"), Seq("The", "price", "was"), Seq("But", "not", "now"))))
+
+    // Type coercion
+    checkAnswer(
+      df.selectExpr("sentences(null)", "sentences(10)", "sentences(3.14)"),
+      Row(null, Seq(Seq("10")), Seq(Seq("3.14"))))
+
+    // Argument number exception
+    val m = intercept[AnalysisException] {
+      df.selectExpr("sentences()")
+    }.getMessage
+    assert(m.contains("Invalid number of arguments for function sentences"))
+  }
+
+  test("str_to_map function") {
+    val df1 = Seq(
+      ("a=1,b=2", "y"),
+      ("a=1,b=2,c=3", "y")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df1.selectExpr("str_to_map(a,',','=')"),
+      Seq(
+        Row(Map("a" -> "1", "b" -> "2")),
+        Row(Map("a" -> "1", "b" -> "2", "c" -> "3"))
+      )
+    )
+
+    val df2 = Seq(("a:1,b:2,c:3", "y")).toDF("a", "b")
+
+    checkAnswer(
+      df2.selectExpr("str_to_map(a)"),
+      Seq(Row(Map("a" -> "1", "b" -> "2", "c" -> "3")))
+    )
+
   }
 }

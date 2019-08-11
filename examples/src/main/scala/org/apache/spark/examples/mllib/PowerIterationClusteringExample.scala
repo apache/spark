@@ -28,7 +28,8 @@ import org.apache.spark.mllib.clustering.PowerIterationClustering
 import org.apache.spark.rdd.RDD
 
 /**
- * An example Power Iteration Clustering http://www.icml2010.org/papers/387.pdf app.
+ * An example Power Iteration Clustering app.
+ * http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf
  * Takes an input of K concentric circles and the number of points in the innermost circle.
  * The output should be K clusters - each cluster containing precisely the points associated
  * with each of the input circles.
@@ -77,14 +78,13 @@ object PowerIterationClusteringExample {
         .action((x, c) => c.copy(maxIterations = x))
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    }.getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName(s"PowerIterationClustering with $params")

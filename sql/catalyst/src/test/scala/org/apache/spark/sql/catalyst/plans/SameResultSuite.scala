@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Union}
+import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -29,6 +31,10 @@ import org.apache.spark.sql.catalyst.util._
 class SameResultSuite extends SparkFunSuite {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
   val testRelation2 = LocalRelation('a.int, 'b.int, 'c.int)
+
+  object Optimize extends RuleExecutor[LogicalPlan] {
+    val batches = Batch("EliminateResolvedHint", Once, EliminateResolvedHint) :: Nil
+  }
 
   def assertSameResult(a: LogicalPlan, b: LogicalPlan, result: Boolean = true): Unit = {
     val aAnalyzed = a.analyze
@@ -65,5 +71,19 @@ class SameResultSuite extends SparkFunSuite {
   test("union") {
     assertSameResult(Union(Seq(testRelation, testRelation2)),
       Union(Seq(testRelation2, testRelation)))
+  }
+
+  test("hint") {
+    val df1 = testRelation.join(ResolvedHint(testRelation))
+    val df2 = testRelation.join(testRelation)
+    assertSameResult(df1, df2)
+  }
+
+  test("join hint") {
+    val df1 = testRelation.join(testRelation.hint("broadcast"))
+    val df2 = testRelation.join(testRelation)
+    val df1Optimized = Optimize.execute(df1.analyze)
+    val df2Optimized = Optimize.execute(df2.analyze)
+    assertSameResult(df1Optimized, df2Optimized)
   }
 }

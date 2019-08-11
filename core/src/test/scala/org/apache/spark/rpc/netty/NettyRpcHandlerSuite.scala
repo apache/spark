@@ -21,7 +21,7 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
 import io.netty.channel.Channel
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 
 import org.apache.spark.SparkFunSuite
@@ -34,7 +34,7 @@ class NettyRpcHandlerSuite extends SparkFunSuite {
   val env = mock(classOf[NettyRpcEnv])
   val sm = mock(classOf[StreamManager])
   when(env.deserialize(any(classOf[TransportClient]), any(classOf[ByteBuffer]))(any()))
-    .thenReturn(RequestMessage(RpcAddress("localhost", 12345), null, null))
+    .thenReturn(new RequestMessage(RpcAddress("localhost", 12345), null, null))
 
   test("receive") {
     val dispatcher = mock(classOf[Dispatcher])

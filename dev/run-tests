@@ -20,4 +20,10 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
+PYTHON_VERSION_CHECK=$(python -c 'import sys; print(sys.version_info < (2, 7, 0))')
+if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
+  echo "Python versions prior to 2.7 are not supported."
+  exit -1
+fi
+
 exec python -u ./dev/run-tests.py "$@"

@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
@@ -33,14 +33,15 @@ import org.apache.spark.sql.types.{DataType, LongType}
  * Since this expression is stateful, it cannot be a case object.
  */
 @ExpressionDescription(
-  usage =
-    """_FUNC_() - Returns monotonically increasing 64-bit integers.
-      The generated ID is guaranteed to be monotonically increasing and unique, but not consecutive.
-      The current implementation puts the partition ID in the upper 31 bits, and the lower 33 bits
-      represent the record number within each partition. The assumption is that the data frame has
-      less than 1 billion partitions, and each partition has less than 8 billion records.""",
-  extended = "> SELECT _FUNC_();\n 0")
-private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
+  usage = """
+    _FUNC_() - Returns monotonically increasing 64-bit integers. The generated ID is guaranteed
+      to be monotonically increasing and unique, but not consecutive. The current implementation
+      puts the partition ID in the upper 31 bits, and the lower 33 bits represent the record number
+      within each partition. The assumption is that the data frame has less than 1 billion
+      partitions, and each partition has less than 8 billion records.
+      The function is non-deterministic because its result depends on partition IDs.
+  """)
+case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
@@ -50,9 +51,9 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
 
   @transient private[this] var partitionMask: Long = _
 
-  override protected def initInternal(): Unit = {
+  override protected def initializeInternal(partitionIndex: Int): Unit = {
     count = 0L
-    partitionMask = TaskContext.getPartitionId().toLong << 33
+    partitionMask = partitionIndex.toLong << 33
   }
 
   override def nullable: Boolean = false
@@ -66,18 +67,20 @@ private[sql] case class MonotonicallyIncreasingID() extends LeafExpression with 
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val countTerm = ctx.freshName("count")
-    val partitionMaskTerm = ctx.freshName("partitionMask")
-    ctx.addMutableState(ctx.JAVA_LONG, countTerm, s"$countTerm = 0L;")
-    ctx.addMutableState(ctx.JAVA_LONG, partitionMaskTerm,
-      s"$partitionMaskTerm = ((long) org.apache.spark.TaskContext.getPartitionId()) << 33;")
+    val countTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "count")
+    val partitionMaskTerm = "partitionMask"
+    ctx.addImmutableStateIfNotExists(CodeGenerator.JAVA_LONG, partitionMaskTerm)
+    ctx.addPartitionInitializationStatement(s"$countTerm = 0L;")
+    ctx.addPartitionInitializationStatement(s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 
-    ev.copy(code = s"""
-      final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
-      $countTerm++;""", isNull = "false")
+    ev.copy(code = code"""
+      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
+      $countTerm++;""", isNull = FalseLiteral)
   }
 
   override def prettyName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
+
+  override def freshCopy(): MonotonicallyIncreasingID = MonotonicallyIncreasingID()
 }

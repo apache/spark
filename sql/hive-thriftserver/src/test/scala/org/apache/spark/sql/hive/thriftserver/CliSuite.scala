@@ -31,6 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -91,6 +92,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
+         |  --hiveconf conf1=conftest
+         |  --hiveconf conf2=1
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
@@ -198,10 +201,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile =
-      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-        .split("/")
-        .mkString(File.separator)
+    val jarFile = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -271,5 +271,27 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       s"ADD FILE $dataFilePath;" -> "",
       s"LIST FILE $dataFilePath;" -> "small_kv.txt"
     )
+  }
+
+  test("apply hiveconf from cli command") {
+    runCliWithin(2.minute)(
+      "SET conf1;" -> "conftest",
+      "SET conf2;" -> "1",
+      "SET conf3=${hiveconf:conf1};" -> "conftest",
+      "SET conf3;" -> "conftest"
+    )
+  }
+
+  test("SPARK-21451: spark.sql.warehouse.dir should respect options in --hiveconf") {
+    runCliWithin(1.minute)("set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
+  }
+
+  test("SPARK-21451: Apply spark.hadoop.* configurations") {
+    val tmpDir = Utils.createTempDir(namePrefix = "SPARK-21451")
+    runCliWithin(
+      1.minute,
+      Seq(s"--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
+      "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
+    tmpDir.delete()
   }
 }

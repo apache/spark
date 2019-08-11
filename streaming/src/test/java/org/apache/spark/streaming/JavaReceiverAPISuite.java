@@ -39,6 +39,7 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class JavaReceiverAPISuite implements Serializable {
@@ -58,36 +59,28 @@ public class JavaReceiverAPISuite implements Serializable {
     TestServer server = new TestServer(0);
     server.start();
 
-    final AtomicLong dataCounter = new AtomicLong(0);
+    AtomicLong dataCounter = new AtomicLong(0);
 
     try {
       JavaStreamingContext ssc = new JavaStreamingContext("local[2]", "test", new Duration(200));
       JavaReceiverInputDStream<String> input =
         ssc.receiverStream(new JavaSocketReceiver("localhost", server.port()));
-      JavaDStream<String> mapped = input.map(new Function<String, String>() {
-        @Override
-        public String call(String v1) {
-          return v1 + ".";
-        }
-      });
-      mapped.foreachRDD(new VoidFunction<JavaRDD<String>>() {
-        @Override
-        public void call(JavaRDD<String> rdd) {
-          long count = rdd.count();
-          dataCounter.addAndGet(count);
-        }
+      JavaDStream<String> mapped = input.map((Function<String, String>) v1 -> v1 + ".");
+      mapped.foreachRDD((VoidFunction<JavaRDD<String>>) rdd -> {
+        long count = rdd.count();
+        dataCounter.addAndGet(count);
       });
 
       ssc.start();
-      long startTime = System.currentTimeMillis();
-      long timeout = 10000;
+      long startTimeNs = System.nanoTime();
+      long timeout = TimeUnit.SECONDS.toNanos(10);
 
       Thread.sleep(200);
       for (int i = 0; i < 6; i++) {
         server.send(i + "\n"); // \n to make sure these are separate lines
         Thread.sleep(100);
       }
-      while (dataCounter.get() == 0 && System.currentTimeMillis() - startTime < timeout) {
+      while (dataCounter.get() == 0 && System.nanoTime() - startTimeNs < timeout) {
         Thread.sleep(100);
       }
       ssc.stop();
@@ -110,11 +103,7 @@ public class JavaReceiverAPISuite implements Serializable {
 
     @Override
     public void onStart() {
-      new Thread()  {
-        @Override public void run() {
-          receive();
-        }
-      }.start();
+      new Thread(this::receive).start();
     }
 
     @Override

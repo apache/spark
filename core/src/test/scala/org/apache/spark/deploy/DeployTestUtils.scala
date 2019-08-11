@@ -18,7 +18,6 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.util.Date
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
@@ -39,7 +38,7 @@ private[deploy] object DeployTestUtils {
   }
 
   def createDriverCommand(): Command = new Command(
-    "org.apache.spark.FakeClass", Seq("some arg --and-some options -g foo"),
+    "org.apache.spark.FakeClass", Seq("WORKER_URL", "USER_JAR", "mainClass"),
     Map(("K1", "V1"), ("K2", "V2")), Seq("cp1", "cp2"), Seq("lp1", "lp2"), Seq("-Dfoo")
   )
 
@@ -47,10 +46,11 @@ private[deploy] object DeployTestUtils {
     new DriverDescription("hdfs://some-dir/some.jar", 100, 3, false, createDriverCommand())
 
   def createDriverInfo(): DriverInfo = new DriverInfo(3, "driver-3",
-    createDriverDesc(), new Date())
+    createDriverDesc(), JsonConstants.submitDate)
 
   def createWorkerInfo(): WorkerInfo = {
-    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, "http://publicAddress:80")
+    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null,
+      "http://publicAddress:80", Map.empty)
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }
@@ -64,6 +64,7 @@ private[deploy] object DeployTestUtils {
       1234,
       null,
       "workerId",
+      "http://",
       "host",
       123,
       "publicAddress",

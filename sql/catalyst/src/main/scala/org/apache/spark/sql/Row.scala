@@ -20,9 +20,14 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
+/**
+ * @since 1.3.0
+ */
+@Stable
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
@@ -43,7 +48,7 @@ object Row {
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * This method can be used to construct a [[Row]] from a `Seq` of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 
@@ -52,6 +57,7 @@ object Row {
   /**
    * Merge multiple rows into a single row, one after another.
    */
+  @deprecated("This method is deprecated and will be removed in future versions.", "3.0.0")
   def merge(rows: Row*): Row = {
     // TODO: Improve the performance of this if used in performance critical part.
     new GenericRow(rows.flatMap(_.toSeq).toArray)
@@ -69,7 +75,7 @@ object Row {
  * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
  * user must check `isNullAt` before attempting to retrieve a value that might be null.
  *
- * To create a new Row, use [[RowFactory.create()]] in Java or [[Row.apply()]] in Scala.
+ * To create a new Row, use `RowFactory.create()` in Java or `Row.apply()` in Scala.
  *
  * A [[Row]] object can be constructed by providing field values. Example:
  * {{{
@@ -117,8 +123,9 @@ object Row {
  * }
  * }}}
  *
- * @group row
+ * @since 1.3.0
  */
+@Stable
 trait Row extends Serializable {
   /** Number of elements in the Row. */
   def size: Int = length
@@ -263,11 +270,25 @@ trait Row extends Serializable {
   def getDate(i: Int): java.sql.Date = getAs[java.sql.Date](i)
 
   /**
+   * Returns the value at position i of date type as java.time.LocalDate.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getLocalDate(i: Int): java.time.LocalDate = getAs[java.time.LocalDate](i)
+
+  /**
    * Returns the value at position i of date type as java.sql.Timestamp.
    *
    * @throws ClassCastException when data type does not match.
    */
   def getTimestamp(i: Int): java.sql.Timestamp = getAs[java.sql.Timestamp](i)
+
+  /**
+   * Returns the value at position i of date type as java.time.Instant.
+   *
+   * @throws ClassCastException when data type does not match.
+   */
+  def getInstant(i: Int): java.time.Instant = getAs[java.time.Instant](i)
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
@@ -277,7 +298,7 @@ trait Row extends Serializable {
   def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
-   * Returns the value at position i of array type as [[java.util.List]].
+   * Returns the value at position i of array type as `java.util.List`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -292,7 +313,7 @@ trait Row extends Serializable {
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
-   * Returns the value at position i of array type as a [[java.util.Map]].
+   * Returns the value at position i of array type as a `java.util.Map`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -337,7 +358,7 @@ trait Row extends Serializable {
   }
 
   /**
-   * Returns a Map(name -> value) for the requested fieldNames
+   * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
    * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
@@ -351,7 +372,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString(): String = s"[${this.mkString(",")}]"
+  override def toString: String = this.mkString("[", ",", "]")
 
   /**
    * Make a copy of the current [[Row]] object.
@@ -444,25 +465,40 @@ trait Row extends Serializable {
   }
 
   /** Displays all elements of this sequence in a string (without a separator). */
-  def mkString: String = toSeq.mkString
+  def mkString: String = mkString("")
 
   /** Displays all elements of this sequence in a string using a separator string. */
-  def mkString(sep: String): String = toSeq.mkString(sep)
+  def mkString(sep: String): String = mkString("", sep, "")
 
   /**
    * Displays all elements of this traversable or iterator in a string using
    * start, end, and separator strings.
    */
-  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
+  def mkString(start: String, sep: String, end: String): String = {
+    val n = length
+    val builder = new StringBuilder
+    builder.append(start)
+    if (n > 0) {
+      builder.append(get(0))
+      var i = 1
+      while (i < n) {
+        builder.append(sep)
+        builder.append(get(i))
+        i += 1
+      }
+    }
+    builder.append(end)
+    builder.toString()
+  }
 
   /**
-   * Returns the value of a given fieldName.
+   * Returns the value at position i.
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i in null")
+    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
     else getAs[T](i)
 }

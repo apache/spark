@@ -17,14 +17,16 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{eq => meq}
+import org.mockito.Mockito.{never, reset, times, verify, when}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
+import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -32,15 +34,13 @@ import org.apache.spark.util.{ManualClock, Utils}
 class ExecutorAllocationManagerSuite extends SparkFunSuite
   with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
 
-  import ExecutorAllocationManager._
-
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
-  private var clock: ManualClock = null
+  private var clock: StreamManualClock = null
 
   before {
     allocationClient = mock[ExecutorAllocationClient]
-    clock = new ManualClock()
+    clock = new StreamManualClock()
   }
 
   test("basic functionality") {
@@ -57,10 +57,14 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         reset(allocationClient)
         when(allocationClient.getExecutorIds()).thenReturn(Seq("1", "2"))
         addBatchProcTime(allocationManager, batchProcTimeMs.toLong)
-        clock.advance(SCALING_INTERVAL_DEFAULT_SECS * 1000 + 1)
-        eventually(timeout(10 seconds)) {
-          body
+        val advancedTime = STREAMING_DYN_ALLOCATION_SCALING_INTERVAL.defaultValue.get * 1000 + 1
+        val expectedWaitTime = clock.getTimeMillis() + advancedTime
+        clock.advance(advancedTime)
+        // Make sure ExecutorAllocationManager.manageAllocation is called
+        eventually(timeout(10.seconds)) {
+          assert(clock.isStreamWaitingAt(expectedWaitTime))
         }
+        body
       }
 
       /** Verify that the expected number of total executor were requested */
@@ -96,25 +100,29 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       }
 
       // Batch proc time slightly more than the scale up ratio, should increase allocation by 1
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(Some(3))
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly less than the scale up ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_UP_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT + 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get + 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(None)
       }
 
       // Batch proc time slightly more than the scale down ratio, should not change allocation
-      addBatchProcTimeAndVerifyAllocation(batchDurationMillis * SCALING_DOWN_RATIO_DEFAULT - 1) {
+      addBatchProcTimeAndVerifyAllocation(
+        batchDurationMillis * STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO.defaultValue.get - 1) {
         verifyTotalRequestedExecs(None)
         verifyKilledExec(Some("2"))
       }
@@ -328,9 +336,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
 
     val confWithBothDynamicAllocationEnabled = new SparkConf()
       .set("spark.streaming.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
-    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled) === true)
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
+    require(Utils.isDynamicAllocationEnabled(confWithBothDynamicAllocationEnabled))
     withStreamingContext(confWithBothDynamicAllocationEnabled) { ssc =>
       intercept[IllegalArgumentException] {
         ssc.start()
@@ -380,8 +388,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 
   private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
-    conf.setMaster("local").setAppName(this.getClass.getSimpleName).set(
-      "spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
+    conf.setMaster("local-cluster[1,1,1024]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
     var ssc: StreamingContext = null
     try {
@@ -391,5 +400,29 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
     } finally {
       if (ssc != null) ssc.stop()
     }
+  }
+}
+
+/**
+ * A special manual clock that provide `isStreamWaitingAt` to allow the user to check if the clock
+ * is blocking.
+ */
+class StreamManualClock(time: Long = 0L) extends ManualClock(time) with Serializable {
+  private var waitStartTime: Option[Long] = None
+
+  override def waitTillTime(targetTime: Long): Long = synchronized {
+    try {
+      waitStartTime = Some(getTimeMillis())
+      super.waitTillTime(targetTime)
+    } finally {
+      waitStartTime = None
+    }
+  }
+
+  /**
+   * Returns if the clock is blocking and the time it started to block is the parameter `time`.
+   */
+  def isStreamWaitingAt(time: Long): Boolean = synchronized {
+    waitStartTime == Some(time)
   }
 }

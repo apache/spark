@@ -31,11 +31,6 @@ class CommandBuilderUtils {
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
 
-  /** The set of known JVM vendors. */
-  enum JavaVendor {
-    Oracle, IBM, OpenJDK, Unknown
-  }
-
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
     return s == null || s.isEmpty();
@@ -110,21 +105,6 @@ class CommandBuilderUtils {
   static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
-  }
-
-  /** Returns an enum value indicating whose JVM is being used. */
-  static JavaVendor getJavaVendor() {
-    String vendorString = System.getProperty("java.vendor");
-    if (vendorString.contains("Oracle")) {
-      return JavaVendor.Oracle;
-    }
-    if (vendorString.contains("IBM")) {
-      return JavaVendor.IBM;
-    }
-    if (vendorString.contains("OpenJDK")) {
-      return JavaVendor.OpenJDK;
-    }
-    return JavaVendor.Unknown;
   }
 
   /**
@@ -313,27 +293,6 @@ class CommandBuilderUtils {
   }
 
   /**
-   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
-   * set it.
-   */
-  static void addPermGenSizeOpt(List<String> cmd) {
-    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
-    if (getJavaVendor() == JavaVendor.IBM) {
-      return;
-    }
-    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
-      return;
-    }
-    for (String arg : cmd) {
-      if (arg.contains("-XX:MaxPermSize=")) {
-        return;
-      }
-    }
-
-    cmd.add("-XX:MaxPermSize=256m");
-  }
-
-  /**
    * Get the major version of the java version string supplied. This method
    * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
    * version strings such as 1.7.0_79
@@ -356,22 +315,17 @@ class CommandBuilderUtils {
    */
   static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
-    File libdir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      libdir = new File(sparkHome, "jars");
-      checkState(!failIfNotFound || libdir.isDirectory(),
-        "Library directory '%s' does not exist.",
-        libdir.getAbsolutePath());
-    } else {
+    File libdir = new File(sparkHome, "jars");
+    if (!libdir.isDirectory()) {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s/jars", scalaVersion));
       if (!libdir.isDirectory()) {
         checkState(!failIfNotFound,
           "Library directory '%s' does not exist; make sure Spark is built.",
           libdir.getAbsolutePath());
-        libdir = null;
+        return null;
       }
     }
-    return libdir != null ? libdir.getAbsolutePath() : null;
+    return libdir.getAbsolutePath();
   }
 
 }

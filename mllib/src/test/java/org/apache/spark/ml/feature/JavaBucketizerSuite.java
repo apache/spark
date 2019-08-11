@@ -61,4 +61,39 @@ public class JavaBucketizerSuite extends SharedSparkSession {
       Assert.assertTrue((index >= 0) && (index <= 1));
     }
   }
+
+  @Test
+  public void bucketizerMultipleColumnsTest() {
+    double[][] splitsArray = {
+      {-0.5, 0.0, 0.5},
+      {-0.5, 0.0, 0.2, 0.5}
+    };
+
+    StructType schema = new StructType(new StructField[]{
+      new StructField("feature1", DataTypes.DoubleType, false, Metadata.empty()),
+      new StructField("feature2", DataTypes.DoubleType, false, Metadata.empty()),
+    });
+    Dataset<Row> dataset = spark.createDataFrame(
+      Arrays.asList(
+        RowFactory.create(-0.5, -0.5),
+        RowFactory.create(-0.3, -0.3),
+        RowFactory.create(0.0, 0.0),
+        RowFactory.create(0.2, 0.3)),
+      schema);
+
+    Bucketizer bucketizer = new Bucketizer()
+      .setInputCols(new String[] {"feature1", "feature2"})
+      .setOutputCols(new String[] {"result1", "result2"})
+      .setSplitsArray(splitsArray);
+
+    List<Row> result = bucketizer.transform(dataset).select("result1", "result2").collectAsList();
+
+    for (Row r : result) {
+      double index1 = r.getDouble(0);
+      Assert.assertTrue((index1 >= 0) && (index1 <= 1));
+
+      double index2 = r.getDouble(1);
+      Assert.assertTrue((index2 >= 0) && (index2 <= 2));
+    }
+  }
 }

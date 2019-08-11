@@ -17,39 +17,34 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
+import java.util.Locale
 
-object StopWordsRemoverSuite extends SparkFunSuite {
-  def testStopWordsRemover(t: StopWordsRemover, dataset: Dataset[_]): Unit = {
-    t.transform(dataset)
-      .select("filtered", "expected")
-      .collect()
-      .foreach { case Row(tokens, wantedTokens) =>
-        assert(tokens === wantedTokens)
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.sql.{DataFrame, Row}
+
+class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
+
+  def testStopWordsRemover(t: StopWordsRemover, dataFrame: DataFrame): Unit = {
+    testTransformer[(Array[String], Array[String])](dataFrame, t, "filtered", "expected") {
+       case Row(tokens: Seq[_], wantedTokens: Seq[_]) =>
+         assert(tokens === wantedTokens)
     }
   }
-}
-
-class StopWordsRemoverSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
-
-  import StopWordsRemoverSuite._
 
   test("StopWordsRemover default") {
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
-    val dataSet = spark.createDataFrame(Seq(
+    val dataSet = Seq(
       (Seq("test", "test"), Seq("test", "test")),
-      (Seq("a", "b", "c", "d"), Seq("b", "c")),
+      (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
       (Seq("a", "the", "an"), Seq()),
       (Seq("A", "The", "AN"), Seq()),
       (Seq(null), Seq(null)),
       (Seq(), Seq())
-    )).toDF("raw", "expected")
+    ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
   }
@@ -60,16 +55,67 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
-    val dataSet = spark.createDataFrame(Seq(
+    val dataSet = Seq(
       (Seq("test", "test"), Seq()),
       (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
       (Seq("a", "the", "an"), Seq()),
       (Seq("A", "The", "AN"), Seq()),
       (Seq(null), Seq(null)),
       (Seq(), Seq())
-    )).toDF("raw", "expected")
+    ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with localed input (case insensitive)") {
+    val stopWords = Array("milk", "cookie")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+      .setCaseSensitive(false)
+      .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
+    val dataSet = Seq(
+      // scalastyle:off
+      (Seq("mİlk", "and", "nuts"), Seq("and", "nuts")),
+      // scalastyle:on
+      (Seq("cookIe", "and", "nuts"), Seq("cookIe", "and", "nuts")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with localed input (case sensitive)") {
+    val stopWords = Array("milk", "cookie")
+    val remover = new StopWordsRemover()
+      .setInputCol("raw")
+      .setOutputCol("filtered")
+      .setStopWords(stopWords)
+      .setCaseSensitive(true)
+      .setLocale("tr")  // Turkish alphabet: has no Q, W, X but has dotted and dotless 'I's.
+    val dataSet = Seq(
+      // scalastyle:off
+      (Seq("mİlk", "and", "nuts"), Seq("mİlk", "and", "nuts")),
+      // scalastyle:on
+      (Seq("cookIe", "and", "nuts"), Seq("cookIe", "and", "nuts")),
+      (Seq(null), Seq(null)),
+      (Seq(), Seq())
+    ).toDF("raw", "expected")
+
+    testStopWordsRemover(remover, dataSet)
+  }
+
+  test("StopWordsRemover with invalid locale") {
+    intercept[IllegalArgumentException] {
+      val stopWords = Array("test", "a", "an", "the")
+      new StopWordsRemover()
+        .setInputCol("raw")
+        .setOutputCol("filtered")
+        .setStopWords(stopWords)
+        .setLocale("rt")  // invalid locale
+    }
   }
 
   test("StopWordsRemover case sensitive") {
@@ -77,10 +123,10 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setCaseSensitive(true)
-    val dataSet = spark.createDataFrame(Seq(
+    val dataSet = Seq(
       (Seq("A"), Seq("A")),
       (Seq("The", "the"), Seq("The"))
-    )).toDF("raw", "expected")
+    ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
   }
@@ -98,10 +144,10 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
-    val dataSet = spark.createDataFrame(Seq(
+    val dataSet = Seq(
       (Seq("acaba", "ama", "biri"), Seq()),
       (Seq("hep", "her", "scala"), Seq("scala"))
-    )).toDF("raw", "expected")
+    ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
   }
@@ -112,10 +158,10 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords.toArray)
-    val dataSet = spark.createDataFrame(Seq(
+    val dataSet = Seq(
       (Seq("python", "scala", "a"), Seq("python", "scala", "a")),
       (Seq("Python", "Scala", "swift"), Seq("Python", "Scala", "swift"))
-    )).toDF("raw", "expected")
+    ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
   }
@@ -126,10 +172,10 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords.toArray)
-    val dataSet = spark.createDataFrame(Seq(
+    val dataSet = Seq(
       (Seq("python", "scala", "a"), Seq()),
       (Seq("Python", "Scala", "swift"), Seq("swift"))
-    )).toDF("raw", "expected")
+    ).toDF("raw", "expected")
 
     testStopWordsRemover(remover, dataSet)
   }
@@ -148,13 +194,27 @@ class StopWordsRemoverSuite
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol(outputCol)
-    val dataSet = spark.createDataFrame(Seq(
-      (Seq("The", "the", "swift"), Seq("swift"))
-    )).toDF("raw", outputCol)
+    val dataSet = Seq((Seq("The", "the", "swift"), Seq("swift"))).toDF("raw", outputCol)
 
-    val thrown = intercept[IllegalArgumentException] {
-      testStopWordsRemover(remover, dataSet)
+    testTransformerByInterceptingException[(Array[String], Array[String])](
+      dataSet,
+      remover,
+      s"requirement failed: Column $outputCol already exists.",
+      "expected")
+  }
+
+  test("SPARK-28365: Fallback to en_US if default locale isn't in available locales") {
+    val oldDefault = Locale.getDefault()
+    try {
+      val dummyLocale = Locale.forLanguageTag("test")
+      Locale.setDefault(dummyLocale)
+
+      val remover = new StopWordsRemover()
+        .setInputCol("raw")
+        .setOutputCol("filtered")
+      assert(remover.getLocale == "en_US")
+    } finally {
+      Locale.setDefault(oldDefault)
     }
-    assert(thrown.getMessage == s"requirement failed: Column $outputCol already exists.")
   }
 }

@@ -33,17 +33,17 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * A trait for use with reading custom classes in PySpark. Implement this trait and add custom
  * transformation code by overriding the convert method.
  */
-trait Converter[T, + U] extends Serializable {
+trait Converter[-T, +U] extends Serializable {
   def convert(obj: T): U
 }
 
 private[python] object Converter extends Logging {
 
-  def getInstance(converterClass: Option[String],
-                  defaultConverter: Converter[Any, Any]): Converter[Any, Any] = {
+  def getInstance[T, U](converterClass: Option[String],
+                        defaultConverter: Converter[_ >: T, _ <: U]): Converter[T, U] = {
     converterClass.map { cc =>
       Try {
-        val c = Utils.classForName(cc).newInstance().asInstanceOf[Converter[Any, Any]]
+        val c = Utils.classForName[Converter[T, U]](cc).getConstructor().newInstance()
         logInfo(s"Loaded converter: $cc")
         c
       } match {
@@ -176,8 +176,8 @@ private[python] object PythonHadoopUtil {
    * [[org.apache.hadoop.io.Writable]], into an RDD of base types, or vice versa.
    */
   def convertRDD[K, V](rdd: RDD[(K, V)],
-                       keyConverter: Converter[Any, Any],
-                       valueConverter: Converter[Any, Any]): RDD[(Any, Any)] = {
+                       keyConverter: Converter[K, Any],
+                       valueConverter: Converter[V, Any]): RDD[(Any, Any)] = {
     rdd.map { case (k, v) => (keyConverter.convert(k), valueConverter.convert(v)) }
   }
 

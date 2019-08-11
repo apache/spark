@@ -17,10 +17,12 @@
 
 package org.apache.spark.mllib.stat.distribution
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 
 class MultivariateGaussianSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("univariate") {
@@ -80,4 +82,23 @@ class MultivariateGaussianSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(dist.pdf(x) ~== 7.154782224045512E-5 absTol 1E-9)
   }
 
+  test("Kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    val mu = Vectors.dense(0.0, 0.0)
+    val sigma1 = Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0))
+    val dist1 = new MultivariateGaussian(mu, sigma1)
+
+    val sigma2 = Matrices.dense(2, 2, Array(4.0, -1.0, -1.0, 2.0))
+    val dist2 = new MultivariateGaussian(mu, sigma2)
+
+    Seq(dist1, dist2).foreach { i =>
+      val i2 = ser.deserialize[MultivariateGaussian](ser.serialize(i))
+      assert(i.sigma === i2.sigma)
+      assert(i.mu === i2.mu)
+    }
+  }
 }

@@ -28,7 +28,8 @@ import org.apache.spark.mllib.util.MLUtils
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
- * (see [[http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case]])
+ * (see <a href="http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case">
+ * Degenerate case in Multivariate normal distribution (Wikipedia)</a>)
  *
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
@@ -42,7 +43,7 @@ class MultivariateGaussian @Since("1.3.0") (
   require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
   require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
 
-  private val breezeMu = mu.asBreeze.toDenseVector
+  @transient private lazy val breezeMu = mu.asBreeze.toDenseVector
 
   /**
    * private[mllib] constructor
@@ -59,7 +60,7 @@ class MultivariateGaussian @Since("1.3.0") (
    *    rootSigmaInv = D^(-1/2)^ * U.t, where sigma = U * D * U.t
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    */
-  private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
+  @transient private lazy val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
 
   /**
    * Returns density of this multivariate Gaussian at given point, x

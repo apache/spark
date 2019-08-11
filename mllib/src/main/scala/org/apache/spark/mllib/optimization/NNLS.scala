@@ -53,8 +53,13 @@ private[spark] object NNLS {
    * projected gradient method.  That is, find x minimising ||Ax - b||_2 given A^T A and A^T b.
    *
    * We solve the problem
-   *   min_x      1/2 x^T ata x^T - x^T atb
-   *   subject to x >= 0
+   *
+   * <blockquote>
+   *    $$
+   *    min_x 1/2 x^T ata x^T - x^T atb
+   *    $$
+   * </blockquote>
+   * where x is nonnegative.
    *
    * The method used is similar to one described by Polyak (B. T. Polyak, The conjugate gradient
    * method in extremal problems, Zh. Vychisl. Mat. Mat. Fiz. 9(4)(1969), pp. 94-112) for bound-

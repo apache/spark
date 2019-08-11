@@ -32,13 +32,15 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
  */
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
+  import testImplicits._
+
   test("runWithValidation stops early and performs better on a validation dataset") {
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
     val trainRdd = sc.parallelize(OldGBTSuite.trainData, 2).map(_.asML)
     val validateRdd = sc.parallelize(OldGBTSuite.validateData, 2).map(_.asML)
-    val trainDF = spark.createDataFrame(trainRdd)
-    val validateDF = spark.createDataFrame(validateRdd)
+    val trainDF = trainRdd.toDF()
+    val validateDF = validateRdd.toDF()
 
     val algos = Array(Regression, Regression, Classification)
     val losses = Array(SquaredError, AbsoluteError, LogLoss)
@@ -48,12 +50,12 @@ class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext
       val boostingStrategy =
         new BoostingStrategy(treeStrategy, loss, numIterations, validationTol = 0.0)
       val (validateTrees, validateTreeWeights) = GradientBoostedTrees
-        .runWithValidation(trainRdd, validateRdd, boostingStrategy, 42L)
+        .runWithValidation(trainRdd, validateRdd, boostingStrategy, 42L, "all")
       val numTrees = validateTrees.length
       assert(numTrees !== numIterations)
 
       // Test that it performs better on the validation dataset.
-      val (trees, treeWeights) = GradientBoostedTrees.run(trainRdd, boostingStrategy, 42L)
+      val (trees, treeWeights) = GradientBoostedTrees.run(trainRdd, boostingStrategy, 42L, "all")
       val (errorWithoutValidation, errorWithValidation) = {
         if (algo == Classification) {
           val remappedRdd = validateRdd.map(x => new LabeledPoint(2 * x.label - 1, x.features))

@@ -19,15 +19,14 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -48,28 +47,29 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
 }
 
 /**
- * :: Experimental ::
  * Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
  * absolute value in each feature. It does not shift/center the data, and thus does not destroy
  * any sparsity.
  */
-@Experimental
-class MaxAbsScaler @Since("2.0.0") (override val uid: String)
+@Since("2.0.0")
+class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   extends Estimator[MaxAbsScalerModel] with MaxAbsScalerParams with DefaultParamsWritable {
 
   @Since("2.0.0")
   def this() = this(Identifiable.randomUID("maxAbsScal"))
 
   /** @group setParam */
+  @Since("2.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+    val input = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
     val summary = Statistics.colStats(input)
@@ -78,58 +78,63 @@ class MaxAbsScaler @Since("2.0.0") (override val uid: String)
     val n = minVals.length
     val maxAbs = Array.tabulate(n) { i => math.max(math.abs(minVals(i)), math.abs(maxVals(i))) }
 
-    copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs)).setParent(this))
+    copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs).compressed).setParent(this))
   }
 
+  @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("2.0.0")
   override def copy(extra: ParamMap): MaxAbsScaler = defaultCopy(extra)
 }
 
-@Since("1.6.0")
+@Since("2.0.0")
 object MaxAbsScaler extends DefaultParamsReadable[MaxAbsScaler] {
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): MaxAbsScaler = super.load(path)
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[MaxAbsScaler]].
  *
  */
-@Experimental
+@Since("2.0.0")
 class MaxAbsScalerModel private[ml] (
-    override val uid: String,
-    val maxAbs: Vector)
+    @Since("2.0.0") override val uid: String,
+    @Since("2.0.0") val maxAbs: Vector)
   extends Model[MaxAbsScalerModel] with MaxAbsScalerParams with MLWritable {
 
   import MaxAbsScalerModel._
 
   /** @group setParam */
+  @Since("2.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    // TODO: this looks hack, we may have to handle sparse and dense vectors separately.
-    val maxAbsUnzero = Vectors.dense(maxAbs.toArray.map(x => if (x == 0) 1 else x))
-    val reScale = udf { (vector: Vector) =>
-      val brz = vector.asBreeze / maxAbsUnzero.asBreeze
-      Vectors.fromBreeze(brz)
-    }
-    dataset.withColumn($(outputCol), reScale(col($(inputCol))))
+
+    val scale = maxAbs.toArray.map { v => if (v == 0) 1.0 else 1 / v }
+    val func = StandardScalerModel.getTransformFunc(
+      Array.empty, scale, false, true)
+    val transformer = udf(func)
+
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
+  @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("2.0.0")
   override def copy(extra: ParamMap): MaxAbsScalerModel = {
     val copied = new MaxAbsScalerModel(uid, maxAbs)
     copyValues(copied, extra).setParent(parent)
@@ -139,7 +144,7 @@ class MaxAbsScalerModel private[ml] (
   override def write: MLWriter = new MaxAbsScalerModelWriter(this)
 }
 
-@Since("1.6.0")
+@Since("2.0.0")
 object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
 
   private[MaxAbsScalerModel]
@@ -151,7 +156,7 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = new Data(instance.maxAbs)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -162,18 +167,18 @@ object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
     override def load(path: String): MaxAbsScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(maxAbs: Vector) = sqlContext.read.parquet(dataPath)
+      val Row(maxAbs: Vector) = sparkSession.read.parquet(dataPath)
         .select("maxAbs")
         .head()
       val model = new MaxAbsScalerModel(metadata.uid, maxAbs)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def read: MLReader[MaxAbsScalerModel] = new MaxAbsScalerModelReader
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): MaxAbsScalerModel = super.load(path)
 }

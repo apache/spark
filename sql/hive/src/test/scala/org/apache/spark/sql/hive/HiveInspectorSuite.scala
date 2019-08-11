@@ -28,13 +28,19 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.Row
 
 class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
+
+  def unwrap(data: Any, oi: ObjectInspector): Any = {
+    val unwrapper = unwrapperFor(oi)
+    unwrapper(data)
+  }
+
   test("Test wrap SettableStructObjectInspector") {
     val udaf = new UDAFPercentile.PercentileLongEvaluator()
     udaf.init()
@@ -75,6 +81,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
 
   val data =
     Literal(true) ::
+    Literal(null) ::
     Literal(0.asInstanceOf[Byte]) ::
     Literal(0.asInstanceOf[Short]) ::
     Literal(0) ::
@@ -83,7 +90,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     Literal(0.asInstanceOf[Double]) ::
     Literal("0") ::
     Literal(java.sql.Date.valueOf("2014-09-23")) ::
-    Literal(Decimal(BigDecimal(123.123))) ::
+    Literal(Decimal(BigDecimal("123.123"))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1, 2, 3)) ::
     Literal.create(Seq[Int](1, 2, 3), ArrayType(IntegerType)) ::

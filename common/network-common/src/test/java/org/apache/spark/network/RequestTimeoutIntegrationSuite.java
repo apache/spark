@@ -17,7 +17,6 @@
 
 package org.apache.spark.network;
 
-import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
@@ -49,6 +48,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class RequestTimeoutIntegrationSuite {
 
+  private TransportContext context;
   private TransportServer server;
   private TransportClientFactory clientFactory;
 
@@ -60,7 +60,7 @@ public class RequestTimeoutIntegrationSuite {
 
   @Before
   public void setUp() throws Exception {
-    Map<String, String> configMap = Maps.newHashMap();
+    Map<String, String> configMap = new HashMap<>();
     configMap.put("spark.shuffle.io.connectionTimeout", "10s");
     conf = new TransportConf("shuffle", new MapConfigProvider(configMap));
 
@@ -79,6 +79,9 @@ public class RequestTimeoutIntegrationSuite {
     }
     if (clientFactory != null) {
       clientFactory.close();
+    }
+    if (context !=  null) {
+      context.close();
     }
   }
 
@@ -107,7 +110,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
@@ -154,7 +157,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
 
@@ -205,7 +208,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
@@ -226,6 +229,8 @@ public class RequestTimeoutIntegrationSuite {
     callback0.latch.await(60, TimeUnit.SECONDS);
     assertTrue(callback0.failure instanceof IOException);
 
+    // make sure callback1 is called.
+    callback1.latch.await(60, TimeUnit.SECONDS);
     // failed at same time as previous
     assertTrue(callback1.failure instanceof IOException);
   }

@@ -19,15 +19,24 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import org.apache.spark.sql.catalyst.expressions.XXH64
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.catalyst.expressions.{HiveHasher, XXH64}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.util.Benchmark
 
 /**
  * Synthetic benchmark for MurMurHash 3 and xxHash64.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark catalyst test jar>
+ *   2. build/sbt "catalyst/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "catalyst/test:runMain <this class>"
+ *      Results will be written to "benchmarks/HashByteArrayBenchmark-results.txt".
+ * }}}
  */
-object HashByteArrayBenchmark {
+object HashByteArrayBenchmark extends BenchmarkBase {
   def test(length: Int, seed: Long, numArrays: Int, iters: Int): Unit = {
     val random = new Random(seed)
     val arrays = Array.fill[Array[Byte]](numArrays) {
@@ -36,10 +45,11 @@ object HashByteArrayBenchmark {
       bytes
     }
 
-    val benchmark = new Benchmark("Hash byte arrays with length " + length, iters * numArrays)
+    val benchmark = new Benchmark(
+      "Hash byte arrays with length " + length, iters * numArrays.toLong, output = output)
     benchmark.addCase("Murmur3_x86_32") { _: Int =>
+      var sum = 0L
       for (_ <- 0L until iters) {
-        var sum = 0
         var i = 0
         while (i < numArrays) {
           sum += Murmur3_x86_32.hashUnsafeBytes(arrays(i), Platform.BYTE_ARRAY_OFFSET, length, 42)
@@ -49,8 +59,8 @@ object HashByteArrayBenchmark {
     }
 
     benchmark.addCase("xxHash 64-bit") { _: Int =>
+      var sum = 0L
       for (_ <- 0L until iters) {
-        var sum = 0L
         var i = 0
         while (i < numArrays) {
           sum += XXH64.hashUnsafeBytes(arrays(i), Platform.BYTE_ARRAY_OFFSET, length, 42)
@@ -59,90 +69,31 @@ object HashByteArrayBenchmark {
       }
     }
 
+    benchmark.addCase("HiveHasher") { _: Int =>
+      var sum = 0L
+      for (_ <- 0L until iters) {
+        var i = 0
+        while (i < numArrays) {
+          sum += HiveHasher.hashUnsafeBytes(arrays(i), Platform.BYTE_ARRAY_OFFSET, length)
+          i += 1
+        }
+      }
+    }
+
     benchmark.run()
   }
 
-  def main(args: Array[String]): Unit = {
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 8:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             11 /   12        185.1           5.4       1.0X
-    xxHash 64-bit                              17 /   18        120.0           8.3       0.6X
-    */
-    test(8, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 16:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             18 /   18        118.6           8.4       1.0X
-    xxHash 64-bit                              20 /   21        102.5           9.8       0.9X
-    */
-    test(16, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 24:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             24 /   24         86.6          11.5       1.0X
-    xxHash 64-bit                              23 /   23         93.2          10.7       1.1X
-    */
-    test(24, 42L, 1 << 10, 1 << 11)
-
-    // Add 31 to all arrays to create worse case alignment for xxHash.
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 31:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             38 /   39         54.7          18.3       1.0X
-    xxHash 64-bit                              33 /   33         64.4          15.5       1.2X
-    */
-    test(31, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 95:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                             91 /   94         22.9          43.6       1.0X
-    xxHash 64-bit                              68 /   69         30.6          32.7       1.3X
-    */
-    test(64 + 31, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 287:   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                            268 /  268          7.8         127.6       1.0X
-    xxHash 64-bit                             108 /  109         19.4          51.6       2.5X
-    */
-    test(256 + 31, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 1055:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                            942 /  945          2.2         449.4       1.0X
-    xxHash 64-bit                             276 /  276          7.6         131.4       3.4X
-    */
-    test(1024 + 31, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 2079:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                           1839 / 1843          1.1         876.8       1.0X
-    xxHash 64-bit                             445 /  448          4.7         212.1       4.1X
-    */
-    test(2048 + 31, 42L, 1 << 10, 1 << 11)
-
-    /*
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 8223:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                           7307 / 7310          0.3        3484.4       1.0X
-    xxHash 64-bit                            1487 / 1488          1.4         709.1       4.9X
-     */
-    test(8192 + 31, 42L, 1 << 10, 1 << 11)
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    runBenchmark("Benchmark for MurMurHash 3 and xxHash64") {
+      test(8, 42L, 1 << 10, 1 << 11)
+      test(16, 42L, 1 << 10, 1 << 11)
+      test(24, 42L, 1 << 10, 1 << 11)
+      test(31, 42L, 1 << 10, 1 << 11)
+      test(64 + 31, 42L, 1 << 10, 1 << 11)
+      test(256 + 31, 42L, 1 << 10, 1 << 11)
+      test(1024 + 31, 42L, 1 << 10, 1 << 11)
+      test(2048 + 31, 42L, 1 << 10, 1 << 11)
+      test(8192 + 31, 42L, 1 << 10, 1 << 11)
+    }
   }
 }

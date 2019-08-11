@@ -20,6 +20,7 @@ package org.apache.spark.examples.ml;
 // $example on$
 import org.apache.spark.ml.clustering.KMeansModel;
 import org.apache.spark.ml.clustering.KMeans;
+import org.apache.spark.ml.evaluation.ClusteringEvaluator;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -51,9 +52,14 @@ public class JavaKMeansExample {
     KMeans kmeans = new KMeans().setK(2).setSeed(1L);
     KMeansModel model = kmeans.fit(dataset);
 
-    // Evaluate clustering by computing Within Set Sum of Squared Errors.
-    double WSSSE = model.computeCost(dataset);
-    System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+    // Make predictions
+    Dataset<Row> predictions = model.transform(dataset);
+
+    // Evaluate clustering by computing Silhouette score
+    ClusteringEvaluator evaluator = new ClusteringEvaluator();
+
+    double silhouette = evaluator.evaluate(predictions);
+    System.out.println("Silhouette with squared euclidean distance = " + silhouette);
 
     // Shows the result.
     Vector[] centers = model.clusterCenters();

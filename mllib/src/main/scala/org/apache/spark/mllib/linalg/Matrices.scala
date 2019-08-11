@@ -28,8 +28,9 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.array.ByteArrayMethods
 
 /**
  * Trait for a local matrix.
@@ -91,11 +92,15 @@ sealed trait Matrix extends Serializable {
   @Since("1.2.0")
   def copy: Matrix
 
-  /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
+  /**
+   * Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data.
+   */
   @Since("1.3.0")
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  /**
+   * Convenience method for `Matrix`-`DenseMatrix` multiplication.
+   */
   @Since("1.2.0")
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
@@ -103,13 +108,17 @@ sealed trait Matrix extends Serializable {
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
+  /**
+   * Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility.
+   */
   @Since("1.2.0")
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
-  /** Convenience method for `Matrix`-`Vector` multiplication. */
+  /**
+   * Convenience method for `Matrix`-`Vector` multiplication.
+   */
   @Since("1.4.0")
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
@@ -189,7 +198,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   }
 
   override def serialize(obj: Matrix): InternalRow = {
-    val row = new GenericMutableRow(7)
+    val row = new GenericInternalRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)
@@ -448,7 +457,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
   }
@@ -461,7 +470,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
   }
@@ -491,7 +500,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
@@ -505,7 +514,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue,
+    require(numRows.toLong * numCols <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
@@ -572,10 +581,13 @@ class SparseMatrix @Since("1.3.0") (
 
   require(values.length == rowIndices.length, "The number of row indices and values don't match! " +
     s"values.length: ${values.length}, rowIndices.length: ${rowIndices.length}")
-  // The Or statement is for the case when the matrix is transposed
-  require(colPtrs.length == numCols + 1 || colPtrs.length == numRows + 1, "The length of the " +
-    "column indices should be the number of columns + 1. Currently, colPointers.length: " +
-    s"${colPtrs.length}, numCols: $numCols")
+  if (isTransposed) {
+    require(colPtrs.length == numRows + 1,
+      s"Expecting ${numRows + 1} colPtrs when numRows = $numRows but got ${colPtrs.length}")
+  } else {
+    require(colPtrs.length == numCols + 1,
+      s"Expecting ${numCols + 1} colPtrs when numCols = $numCols but got ${colPtrs.length}")
+  }
   require(values.length == colPtrs.last, "The last value of colPtrs must equal the number of " +
     s"elements. values.length: ${values.length}, colPtrs.last: ${colPtrs.last}")
 
@@ -786,7 +798,7 @@ object SparseMatrix {
     var prevRow = -1
     var prevVal = 0.0
     // Append a dummy entry to include the last one at the end of the loop.
-    (sortedEntries.view :+ (numRows, numCols, 1.0)).foreach { case (i, j, v) =>
+    (sortedEntries.view :+ ((numRows, numCols, 1.0))).foreach { case (i, j, v) =>
       if (v != 0) {
         if (i == prevRow && j == prevCol) {
           prevVal += v
@@ -835,11 +847,11 @@ object SparseMatrix {
       s"density must be a double in the range 0.0 <= d <= 1.0. Currently, density: $density")
     val size = numRows.toLong * numCols
     val expected = size * density
-    assert(expected < Int.MaxValue,
-      "The expected number of nonzeros cannot be greater than Int.MaxValue.")
+    assert(expected < ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+      "The expected number of nonzeros cannot be greater than Int.MaxValue - 15.")
     val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
-      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array[Int](), Array[Double]())
+      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array.empty, Array.empty)
     } else if (density == 1.0) {
       val colPtrs = Array.tabulate(numCols + 1)(j => j * numRows)
       val rowIndices = Array.tabulate(size.toInt)(idx => idx % numRows)
@@ -980,16 +992,17 @@ object Matrices {
       case dm: BDM[Double] =>
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
-        // Spark-11507. work around breeze issue 479.
-        val mat = if (sm.colPtrs.last != sm.data.length) {
-          val matCopy = sm.copy
-          matCopy.compact()
-          matCopy
+        // There is no isTranspose flag for sparse matrices in Breeze
+        val nsm = if (sm.rowIndices.length > sm.activeSize) {
+          // This sparse matrix has trailing zeros.
+          // Remove them by compacting the matrix.
+          val csm = sm.copy
+          csm.compact()
+          csm
         } else {
           sm
         }
-        // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(mat.rows, mat.cols, mat.colPtrs, mat.rowIndices, mat.data)
+        new SparseMatrix(nsm.rows, nsm.cols, nsm.colPtrs, nsm.rowIndices, nsm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
@@ -1095,7 +1108,7 @@ object Matrices {
   @Since("1.3.0")
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty)
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1133,7 +1146,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i, j + startCol, v))
+                data += Tuple3(i, j + startCol, v)
               }
             }
             startCol += nCols
@@ -1154,7 +1167,7 @@ object Matrices {
   @Since("1.3.0")
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
-      return new DenseMatrix(0, 0, Array[Double]())
+      return new DenseMatrix(0, 0, Array.empty[Double])
     } else if (matrices.length == 1) {
       return matrices(0)
     }
@@ -1203,7 +1216,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i + startRow, j, v))
+                data += Tuple3(i + startRow, j, v)
               }
             }
             startRow += nRows

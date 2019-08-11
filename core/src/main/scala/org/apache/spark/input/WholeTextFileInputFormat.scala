@@ -21,11 +21,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapreduce.InputSplit
-import org.apache.hadoop.mapreduce.JobContext
+import org.apache.hadoop.mapreduce.{InputSplit, JobContext, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat
-import org.apache.hadoop.mapreduce.RecordReader
-import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 /**
  * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileInputFormat CombineFileInputFormat]] for
@@ -56,6 +53,19 @@ private[spark] class WholeTextFileInputFormat
     val totalLen = files.map(file => if (file.isDirectory) 0L else file.getLen).sum
     val maxSplitSize = Math.ceil(totalLen * 1.0 /
       (if (minPartitions == 0) 1 else minPartitions)).toLong
+
+    // For small files we need to ensure the min split size per node & rack <= maxSplitSize
+    val config = context.getConfiguration
+    val minSplitSizePerNode = config.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERNODE, 0L)
+    val minSplitSizePerRack = config.getLong(CombineFileInputFormat.SPLIT_MINSIZE_PERRACK, 0L)
+
+    if (maxSplitSize < minSplitSizePerNode) {
+      super.setMinSplitSizeNode(maxSplitSize)
+    }
+
+    if (maxSplitSize < minSplitSizePerRack) {
+      super.setMinSplitSizeRack(maxSplitSize)
+    }
     super.setMaxSplitSize(maxSplitSize)
   }
 }

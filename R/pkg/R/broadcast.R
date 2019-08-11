@@ -23,21 +23,21 @@
 .broadcastValues <- new.env()
 .broadcastIdToName <- new.env()
 
-# @title S4 class that represents a Broadcast variable
-# @description Broadcast variables can be created using the broadcast
-#              function from a \code{SparkContext}.
+# S4 class that represents a Broadcast variable
+#
+# Broadcast variables can be created using the broadcast
+# function from a \code{SparkContext}.
+#
 # @rdname broadcast-class
 # @seealso broadcast
 #
 # @param id Id of the backing Spark broadcast variable
-# @export
 setClass("Broadcast", slots = list(id = "character"))
 
 # @rdname broadcast-class
 # @param value Value of the broadcast variable
 # @param jBroadcastRef reference to the backing Java broadcast object
 # @param objName name of broadcasted object
-# @export
 Broadcast <- function(id, value, jBroadcastRef, objName) {
   .broadcastValues[[id]] <- value
   .broadcastNames[[as.character(objName)]] <- jBroadcastRef
@@ -71,7 +71,6 @@ setMethod("value",
 
 # @param bcastId The id of broadcast variable to set
 # @param value The value to be set
-# @export
 setBroadcastValue <- function(bcastId, value) {
   bcastIdStr <- as.character(bcastId)
   .broadcastValues[[bcastIdStr]] <- value

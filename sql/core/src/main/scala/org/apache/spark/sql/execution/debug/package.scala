@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.HashSet
+import java.util.Collections
 
-import org.apache.spark.{Accumulator, AccumulatorParam}
+import scala.collection.JavaConverters._
+
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.LongAccumulator
+import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.{AccumulatorV2, LongAccumulator}
 
 /**
  * Contains methods for debugging query execution.
@@ -39,6 +46,16 @@ import org.apache.spark.util.LongAccumulator
  *   sql("SELECT 1").debug()
  *   sql("SELECT 1").debugCodegen()
  * }}}
+ *
+ * or for streaming case (structured streaming):
+ * {{{
+ *   import org.apache.spark.sql.execution.debug._
+ *   val query = df.writeStream.<...>.start()
+ *   query.debugCodegen()
+ * }}}
+ *
+ * Note that debug in structured streaming is not supported, because it doesn't make sense for
+ * streaming to execute batch once while main query is running concurrently.
  */
 package object debug {
 
@@ -49,7 +66,36 @@ package object debug {
     // scalastyle:on println
   }
 
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
+   *
+   * @param plan the query plan for codegen
+   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
+   */
   def codegenString(plan: SparkPlan): String = {
+    val concat = new StringConcat()
+    writeCodegen(concat.append, plan)
+    concat.toString
+  }
+
+  def writeCodegen(append: String => Unit, plan: SparkPlan): Unit = {
+    val codegenSeq = codegenStringSeq(plan)
+    append(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
+    for (((subtree, code), i) <- codegenSeq.zipWithIndex) {
+      append(s"== Subtree ${i + 1} / ${codegenSeq.size} ==\n")
+      append(subtree)
+      append("\nGenerated code:\n")
+      append(s"${code}\n")
+    }
+  }
+
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+   *
+   * @param plan the query plan for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenStringSeq(plan: SparkPlan): Seq[(String, String)] = {
     val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
       case s: WholeStageCodegenExec =>
@@ -57,24 +103,47 @@ package object debug {
         s
       case s => s
     }
-    var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
-    for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
-      output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
-      output += s
-      output += "\nGenerated code:\n"
-      val (_, source) = s.doCodeGen()
-      output += s"${CodeFormatter.format(source)}\n"
+    codegenSubtrees.toSeq.map { subtree =>
+      val (_, source) = subtree.doCodeGen()
+      (subtree.toString, CodeFormatter.format(source))
     }
-    output
   }
 
   /**
-   * Augments [[SparkSession]] with debug methods.
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan into one String
+   *
+   * @param query the streaming query for codegen
+   * @return single String containing all WholeStageCodegen subtrees and corresponding codegen
    */
-  implicit class DebugSQLContext(sparkSession: SparkSession) {
-    def debug(): Unit = {
-      sparkSession.conf.set(SQLConf.DATAFRAME_EAGER_ANALYSIS.key, false)
+  def codegenString(query: StreamingQuery): String = {
+    val w = asStreamExecution(query)
+    if (w.lastExecution != null) {
+      codegenString(w.lastExecution.executedPlan)
+    } else {
+      "No physical plan. Waiting for data."
     }
+  }
+
+  /**
+   * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+   *
+   * @param query the streaming query for codegen
+   * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+   */
+  def codegenStringSeq(query: StreamingQuery): Seq[(String, String)] = {
+    val w = asStreamExecution(query)
+    if (w.lastExecution != null) {
+      codegenStringSeq(w.lastExecution.executedPlan)
+    } else {
+      Seq.empty
+    }
+  }
+
+  private def asStreamExecution(query: StreamingQuery): StreamExecution = query match {
+    case wrapper: StreamingQueryWrapper => wrapper.streamingQuery
+    case q: StreamExecution => q
+    case _ => throw new IllegalArgumentException("Parameter should be an instance of " +
+      "StreamExecution!")
   }
 
   /**
@@ -82,9 +151,8 @@ package object debug {
    */
   implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
-      val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
-      val debugPlan = plan transform {
+      val debugPlan = query.queryExecution.executedPlan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
           DebugExec(s)
@@ -105,29 +173,38 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+  implicit class DebugStreamQuery(query: StreamingQuery) extends Logging {
+    def debugCodegen(): Unit = {
+      debugPrint(codegenString(query))
+    }
+  }
+
+  case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
-    implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
-      def zero(initialValue: HashSet[String]): HashSet[String] = {
-        initialValue.clear()
-        initialValue
+    class SetAccumulator[T] extends AccumulatorV2[T, java.util.Set[T]] {
+      private val _set = Collections.synchronizedSet(new java.util.HashSet[T]())
+      override def isZero: Boolean = _set.isEmpty
+      override def copy(): AccumulatorV2[T, java.util.Set[T]] = {
+        val newAcc = new SetAccumulator[T]()
+        newAcc._set.addAll(_set)
+        newAcc
       }
-
-      def addInPlace(v1: HashSet[String], v2: HashSet[String]): HashSet[String] = {
-        v1 ++= v2
-        v1
+      override def reset(): Unit = _set.clear()
+      override def add(v: T): Unit = _set.add(v)
+      override def merge(other: AccumulatorV2[T, java.util.Set[T]]): Unit = {
+        _set.addAll(other.value)
       }
+      override def value: java.util.Set[T] = _set
     }
 
     /**
      * A collection of metrics for each column of output.
-     *
-     * @param elementTypes the actual runtime types for the output. Useful when there are bugs
-     *                     causing the wrong data to be projected.
      */
-    case class ColumnMetrics(
-      elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
+    case class ColumnMetrics() {
+      val elementTypes = new SetAccumulator[String]
+      sparkContext.register(elementTypes)
+    }
 
     val tupleCount: LongAccumulator = sparkContext.longAccumulator
 
@@ -135,10 +212,12 @@ package object debug {
     val columnStats: Array[ColumnMetrics] = Array.fill(child.output.size)(new ColumnMetrics())
 
     def dumpStats(): Unit = {
-      debugPrint(s"== ${child.simpleString} ==")
+      debugPrint(s"== ${child.simpleString(SQLConf.get.maxToStringFields)} ==")
       debugPrint(s"Tuples output: ${tupleCount.value}")
       child.output.zip(columnStats).foreach { case (attr, metric) =>
-        val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
+        // This is called on driver. All accumulator updates have a fixed value. So it's safe to use
+        // `asScala` which accesses the internal values using `java.util.Iterator`.
+        val actualDataTypes = metric.elementTypes.value.asScala.mkString("{", ",", "}")
         debugPrint(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
     }
@@ -155,7 +234,7 @@ package object debug {
             while (i < numColumns) {
               val value = currentRow.get(i, output(i).dataType)
               if (value != null) {
-                columnStats(i).elementTypes += HashSet(value.getClass.getName)
+                columnStats(i).elementTypes.add(value.getClass.getName)
               }
               i += 1
             }
@@ -164,6 +243,8 @@ package object debug {
         }
       }
     }
+
+    override def outputPartitioning: Partitioning = child.outputPartitioning
 
     override def inputRDDs(): Seq[RDD[InternalRow]] = {
       child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -176,5 +257,15 @@ package object debug {
     override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
       consume(ctx, input)
     }
+
+    override def doExecuteBroadcast[T](): Broadcast[T] = {
+      child.executeBroadcast()
+    }
+
+    override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+      child.executeColumnar()
+    }
+
+    override def supportsColumnar: Boolean = child.supportsColumnar
   }
 }

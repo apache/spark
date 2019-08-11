@@ -28,6 +28,7 @@ import org.apache.zookeeper.CreateMode
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkCuratorUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Deploy._
 import org.apache.spark.serializer.Serializer
 
 
@@ -35,22 +36,22 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   extends PersistenceEngine
   with Logging {
 
-  private val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
+  private val workingDir = conf.get(ZOOKEEPER_DIRECTORY).getOrElse("/spark") + "/master_status"
   private val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
 
-  SparkCuratorUtil.mkdir(zk, WORKING_DIR)
+  SparkCuratorUtil.mkdir(zk, workingDir)
 
 
   override def persist(name: String, obj: Object): Unit = {
-    serializeIntoFile(WORKING_DIR + "/" + name, obj)
+    serializeIntoFile(workingDir + "/" + name, obj)
   }
 
   override def unpersist(name: String): Unit = {
-    zk.delete().forPath(WORKING_DIR + "/" + name)
+    zk.delete().forPath(workingDir + "/" + name)
   }
 
   override def read[T: ClassTag](prefix: String): Seq[T] = {
-    zk.getChildren.forPath(WORKING_DIR).asScala
+    zk.getChildren.forPath(workingDir).asScala
       .filter(_.startsWith(prefix)).flatMap(deserializeFromFile[T])
   }
 
@@ -66,13 +67,13 @@ private[master] class ZooKeeperPersistenceEngine(conf: SparkConf, val serializer
   }
 
   private def deserializeFromFile[T](filename: String)(implicit m: ClassTag[T]): Option[T] = {
-    val fileData = zk.getData().forPath(WORKING_DIR + "/" + filename)
+    val fileData = zk.getData().forPath(workingDir + "/" + filename)
     try {
       Some(serializer.newInstance().deserialize[T](ByteBuffer.wrap(fileData)))
     } catch {
       case e: Exception =>
         logWarning("Exception while reading persisted file, deleting", e)
-        zk.delete().forPath(WORKING_DIR + "/" + filename)
+        zk.delete().forPath(workingDir + "/" + filename)
         None
     }
   }

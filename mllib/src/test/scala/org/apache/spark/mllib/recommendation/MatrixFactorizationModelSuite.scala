@@ -72,6 +72,27 @@ class MatrixFactorizationModelSuite extends SparkFunSuite with MLlibTestSparkCon
     }
   }
 
+  test("invalid user and product") {
+    val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
+
+    intercept[IllegalArgumentException] {
+      // invalid user
+      model.predict(5, 2)
+    }
+    intercept[IllegalArgumentException] {
+      // invalid product
+      model.predict(0, 5)
+    }
+    intercept[IllegalArgumentException] {
+      // invalid user
+      model.recommendProducts(5, 2)
+    }
+    intercept[IllegalArgumentException] {
+      // invalid product
+      model.recommendUsers(5, 2)
+    }
+  }
+
   test("batch predict API recommendProductsForUsers") {
     val model = new MatrixFactorizationModel(rank, userFeatures, prodFeatures)
     val topK = 10

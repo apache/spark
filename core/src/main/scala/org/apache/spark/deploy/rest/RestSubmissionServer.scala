@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -22,9 +22,9 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import org.eclipse.jetty.server.{Server, ServerConnector}
+import org.eclipse.jetty.server.{HttpConnectionFactory, Server, ServerConnector}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
-import org.eclipse.jetty.util.thread.QueuedThreadPool
+import org.eclipse.jetty.util.thread.{QueuedThreadPool, ScheduledExecutorScheduler}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
@@ -51,6 +51,7 @@ private[spark] abstract class RestSubmissionServer(
     val host: String,
     val requestedPort: Int,
     val masterConf: SparkConf) extends Logging {
+
   protected val submitRequestServlet: SubmitRequestServlet
   protected val killRequestServlet: KillRequestServlet
   protected val statusRequestServlet: StatusRequestServlet
@@ -83,9 +84,18 @@ private[spark] abstract class RestSubmissionServer(
     threadPool.setDaemon(true)
     val server = new Server(threadPool)
 
-    val connector = new ServerConnector(server)
+    val connector = new ServerConnector(
+      server,
+      null,
+      // Call this full constructor to set this, which forces daemon threads:
+      new ScheduledExecutorScheduler("RestSubmissionServer-JettyScheduler", true),
+      null,
+      -1,
+      -1,
+      new HttpConnectionFactory())
     connector.setHost(host)
     connector.setPort(startPort)
+    connector.setReuseAddress(!Utils.isWindows)
     server.addConnector(connector)
 
     val mainHandler = new ServletContextHandler

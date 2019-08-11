@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming
 
-import java.io.{IOException, ObjectInputStream}
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.io.{File, IOException, ObjectInputStream}
+import java.util.concurrent.{ConcurrentLinkedQueue, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -359,14 +359,20 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
    * output data has been collected or timeout (set by `maxWaitTimeMillis`) is reached.
    *
    * Returns a sequence of items for each RDD.
+   *
+   * @param ssc The StreamingContext
+   * @param numBatches The number of batches should be run
+   * @param numExpectedOutput The number of expected output
+   * @param preStop The function to run before stopping StreamingContext
    */
   def runStreams[V: ClassTag](
       ssc: StreamingContext,
       numBatches: Int,
-      numExpectedOutput: Int
+      numExpectedOutput: Int,
+      preStop: () => Unit = () => {}
     ): Seq[Seq[V]] = {
     // Flatten each RDD into a single Seq
-    runStreamsWithPartitions(ssc, numBatches, numExpectedOutput).map(_.flatten.toSeq)
+    runStreamsWithPartitions(ssc, numBatches, numExpectedOutput, preStop).map(_.flatten.toSeq)
   }
 
   /**
@@ -376,11 +382,17 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
    *
    * Returns a sequence of RDD's. Each RDD is represented as several sequences of items, each
    * representing one partition.
+   *
+   * @param ssc The StreamingContext
+   * @param numBatches The number of batches should be run
+   * @param numExpectedOutput The number of expected output
+   * @param preStop The function to run before stopping StreamingContext
    */
   def runStreamsWithPartitions[V: ClassTag](
       ssc: StreamingContext,
       numBatches: Int,
-      numExpectedOutput: Int
+      numExpectedOutput: Int,
+      preStop: () => Unit = () => {}
     ): Seq[Seq[Seq[V]]] = {
     assert(numBatches > 0, "Number of batches to run stream computation is zero")
     assert(numExpectedOutput > 0, "Number of expected outputs after " + numBatches + " is zero")
@@ -411,19 +423,20 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
       // Wait until expected number of output items have been generated
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       while (output.size < numExpectedOutput &&
-        System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
+        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs) < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
         ssc.awaitTerminationOrTimeout(50)
       }
-      val timeTaken = System.currentTimeMillis() - startTime
+      val timeTaken = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
       logInfo("Output generated in " + timeTaken + " milliseconds")
       output.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
       Thread.sleep(100) // Give some time for the forgetting old RDDs to complete
+      preStop()
     } finally {
       ssc.stop(stopSparkContext = true)
     }

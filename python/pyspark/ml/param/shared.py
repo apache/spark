@@ -256,6 +256,29 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
+class HasOutputCols(Params):
+    """
+    Mixin for param outputCols: output column names.
+    """
+
+    outputCols = Param(Params._dummy(), "outputCols", "output column names.", typeConverter=TypeConverters.toListString)
+
+    def __init__(self):
+        super(HasOutputCols, self).__init__()
+
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def getOutputCols(self):
+        """
+        Gets the value of outputCols or its default value.
+        """
+        return self.getOrDefault(self.outputCols)
+
+
 class HasNumFeatures(Params):
     """
     Mixin for param numFeatures: number of features.
@@ -281,10 +304,10 @@ class HasNumFeatures(Params):
 
 class HasCheckpointInterval(Params):
     """
-    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
     """
 
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", typeConverter=TypeConverters.toInt)
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -469,10 +492,10 @@ class HasStandardization(Params):
 
 class HasThresholds(Params):
     """
-    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
+    Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
     """
 
-    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", typeConverter=TypeConverters.toListFloat)
+    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0, excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.", typeConverter=TypeConverters.toListFloat)
 
     def __init__(self):
         super(HasThresholds, self).__init__()
@@ -488,6 +511,30 @@ class HasThresholds(Params):
         Gets the value of thresholds or its default value.
         """
         return self.getOrDefault(self.thresholds)
+
+
+class HasThreshold(Params):
+    """
+    Mixin for param threshold: threshold in binary classification prediction, in range [0, 1]
+    """
+
+    threshold = Param(Params._dummy(), "threshold", "threshold in binary classification prediction, in range [0, 1]", typeConverter=TypeConverters.toFloat)
+
+    def __init__(self):
+        super(HasThreshold, self).__init__()
+        self._setDefault(threshold=0.5)
+
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
+
+    def getThreshold(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.threshold)
 
 
 class HasWeightCol(Params):
@@ -560,6 +607,148 @@ class HasVarianceCol(Params):
         return self.getOrDefault(self.varianceCol)
 
 
+class HasAggregationDepth(Params):
+    """
+    Mixin for param aggregationDepth: suggested depth for treeAggregate (>= 2).
+    """
+
+    aggregationDepth = Param(Params._dummy(), "aggregationDepth", "suggested depth for treeAggregate (>= 2).", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasAggregationDepth, self).__init__()
+        self._setDefault(aggregationDepth=2)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    def getAggregationDepth(self):
+        """
+        Gets the value of aggregationDepth or its default value.
+        """
+        return self.getOrDefault(self.aggregationDepth)
+
+
+class HasParallelism(Params):
+    """
+    Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
+    """
+
+    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms (>= 1).", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasParallelism, self).__init__()
+        self._setDefault(parallelism=1)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def getParallelism(self):
+        """
+        Gets the value of parallelism or its default value.
+        """
+        return self.getOrDefault(self.parallelism)
+
+
+class HasCollectSubModels(Params):
+    """
+    Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
+    """
+
+    collectSubModels = Param(Params._dummy(), "collectSubModels", "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.", typeConverter=TypeConverters.toBoolean)
+
+    def __init__(self):
+        super(HasCollectSubModels, self).__init__()
+        self._setDefault(collectSubModels=False)
+
+    def setCollectSubModels(self, value):
+        """
+        Sets the value of :py:attr:`collectSubModels`.
+        """
+        return self._set(collectSubModels=value)
+
+    def getCollectSubModels(self):
+        """
+        Gets the value of collectSubModels or its default value.
+        """
+        return self.getOrDefault(self.collectSubModels)
+
+
+class HasLoss(Params):
+    """
+    Mixin for param loss: the loss function to be optimized.
+    """
+
+    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasLoss, self).__init__()
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    def getLoss(self):
+        """
+        Gets the value of loss or its default value.
+        """
+        return self.getOrDefault(self.loss)
+
+
+class HasDistanceMeasure(Params):
+    """
+    Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
+    """
+
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasDistanceMeasure, self).__init__()
+        self._setDefault(distanceMeasure='euclidean')
+
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    def getDistanceMeasure(self):
+        """
+        Gets the value of distanceMeasure or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
+
+class HasValidationIndicatorCol(Params):
+    """
+    Mixin for param validationIndicatorCol: name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.
+    """
+
+    validationIndicatorCol = Param(Params._dummy(), "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasValidationIndicatorCol, self).__init__()
+
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
+
+    def getValidationIndicatorCol(self):
+        """
+        Gets the value of validationIndicatorCol or its default value.
+        """
+        return self.getOrDefault(self.validationIndicatorCol)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.
@@ -576,23 +765,11 @@ class DecisionTreeParams(Params):
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
 
-    def setMaxDepth(self, value):
-        """
-        Sets the value of :py:attr:`maxDepth`.
-        """
-        return self._set(maxDepth=value)
-
     def getMaxDepth(self):
         """
         Gets the value of maxDepth or its default value.
         """
         return self.getOrDefault(self.maxDepth)
-
-    def setMaxBins(self, value):
-        """
-        Sets the value of :py:attr:`maxBins`.
-        """
-        return self._set(maxBins=value)
 
     def getMaxBins(self):
         """
@@ -600,23 +777,11 @@ class DecisionTreeParams(Params):
         """
         return self.getOrDefault(self.maxBins)
 
-    def setMinInstancesPerNode(self, value):
-        """
-        Sets the value of :py:attr:`minInstancesPerNode`.
-        """
-        return self._set(minInstancesPerNode=value)
-
     def getMinInstancesPerNode(self):
         """
         Gets the value of minInstancesPerNode or its default value.
         """
         return self.getOrDefault(self.minInstancesPerNode)
-
-    def setMinInfoGain(self, value):
-        """
-        Sets the value of :py:attr:`minInfoGain`.
-        """
-        return self._set(minInfoGain=value)
 
     def getMinInfoGain(self):
         """
@@ -624,23 +789,11 @@ class DecisionTreeParams(Params):
         """
         return self.getOrDefault(self.minInfoGain)
 
-    def setMaxMemoryInMB(self, value):
-        """
-        Sets the value of :py:attr:`maxMemoryInMB`.
-        """
-        return self._set(maxMemoryInMB=value)
-
     def getMaxMemoryInMB(self):
         """
         Gets the value of maxMemoryInMB or its default value.
         """
         return self.getOrDefault(self.maxMemoryInMB)
-
-    def setCacheNodeIds(self, value):
-        """
-        Sets the value of :py:attr:`cacheNodeIds`.
-        """
-        return self._set(cacheNodeIds=value)
 
     def getCacheNodeIds(self):
         """

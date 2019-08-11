@@ -1,7 +1,22 @@
 ---
 layout: global
-title: Data Types - MLlib
-displayTitle: Data Types - MLlib
+title: Data Types - RDD-based API
+displayTitle: Data Types - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -104,7 +119,7 @@ dv2 = [1.0, 0.0, 3.0]
 # Create a SparseVector.
 sv1 = Vectors.sparse(3, [0, 2], [1.0, 3.0])
 # Use a single-column SciPy csc_matrix as a sparse vector.
-sv2 = sps.csc_matrix((np.array([1.0, 3.0]), np.array([0, 2]), np.array([0, 2])), shape = (3, 1))
+sv2 = sps.csc_matrix((np.array([1.0, 3.0]), np.array([0, 2]), np.array([0, 2])), shape=(3, 1))
 {% endhighlight %}
 
 </div>
@@ -317,7 +332,7 @@ Refer to the [`Matrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.
 from pyspark.mllib.linalg import Matrix, Matrices
 
 # Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
-dm2 = Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])
+dm2 = Matrices.dense(3, 2, [1, 3, 5, 2, 4, 6])
 
 # Create a sparse matrix ((9.0, 0.0), (0.0, 8.0), (0.0, 6.0))
 sm = Matrices.sparse(3, 2, [0, 1, 3], [0, 2, 1], [9, 6, 8])
@@ -350,7 +365,7 @@ which is a tuple of `(Int, Int, Matrix)`.
 ***Note***
 
 The underlying RDDs of a distributed matrix must be deterministic, because we cache the matrix size.
-In general the use of non-deterministic RDDs can lead to errors.
+In general, the use of non-deterministic RDDs can lead to errors.
 
 ### RowMatrix
 
@@ -517,12 +532,12 @@ from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
 
 # Create an RDD of indexed rows.
 #   - This can be done explicitly with the IndexedRow class:
-indexedRows = sc.parallelize([IndexedRow(0, [1, 2, 3]), 
-                              IndexedRow(1, [4, 5, 6]), 
-                              IndexedRow(2, [7, 8, 9]), 
+indexedRows = sc.parallelize([IndexedRow(0, [1, 2, 3]),
+                              IndexedRow(1, [4, 5, 6]),
+                              IndexedRow(2, [7, 8, 9]),
                               IndexedRow(3, [10, 11, 12])])
 #   - or by using (long, vector) tuples:
-indexedRows = sc.parallelize([(0, [1, 2, 3]), (1, [4, 5, 6]), 
+indexedRows = sc.parallelize([(0, [1, 2, 3]), (1, [4, 5, 6]),
                               (2, [7, 8, 9]), (3, [10, 11, 12])])
 
 # Create an IndexedRowMatrix from an RDD of IndexedRows.
@@ -624,7 +639,7 @@ from pyspark.mllib.linalg.distributed import CoordinateMatrix, MatrixEntry
 
 # Create an RDD of coordinate entries.
 #   - This can be done explicitly with the MatrixEntry class:
-entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(6, 1, 3.7)])
+entries = sc.parallelize([MatrixEntry(0, 0, 1.2), MatrixEntry(1, 0, 2.1), MatrixEntry(2, 1, 3.7)])
 #   - or using (long, long, float) tuples:
 entries = sc.parallelize([(0, 0, 1.2), (1, 0, 2.1), (2, 1, 3.7)])
 
@@ -731,15 +746,15 @@ from pyspark.mllib.linalg import Matrices
 from pyspark.mllib.linalg.distributed import BlockMatrix
 
 # Create an RDD of sub-matrix blocks.
-blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])), 
+blocks = sc.parallelize([((0, 0), Matrices.dense(3, 2, [1, 2, 3, 4, 5, 6])),
                          ((1, 0), Matrices.dense(3, 2, [7, 8, 9, 10, 11, 12]))])
 
 # Create a BlockMatrix from an RDD of sub-matrix blocks.
 mat = BlockMatrix(blocks, 3, 2)
 
 # Get its size.
-m = mat.numRows() # 6
-n = mat.numCols() # 2
+m = mat.numRows()  # 6
+n = mat.numCols()  # 2
 
 # Get the blocks as an RDD of sub-matrix blocks.
 blocksRDD = mat.blocks

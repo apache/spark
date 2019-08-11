@@ -18,8 +18,8 @@
 package org.apache.spark.streaming
 
 import java.io._
-import java.util.concurrent.Executors
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.{ArrayBlockingQueue, RejectedExecutionException,
+  ThreadPoolExecutor, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
 import org.apache.spark.util.Utils
@@ -51,15 +52,25 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
       "spark.yarn.app.id",
       "spark.yarn.app.attemptId",
       "spark.driver.host",
+      "spark.driver.bindAddress",
       "spark.driver.port",
       "spark.master",
+      "spark.kubernetes.driver.pod.name",
+      "spark.kubernetes.executor.podNamePrefix",
+      "spark.yarn.jars",
       "spark.yarn.keytab",
       "spark.yarn.principal",
-      "spark.ui.filters")
+      "spark.kerberos.keytab",
+      "spark.kerberos.principal",
+      UI_FILTERS.key,
+      "spark.mesos.driver.frameworkId")
 
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
+      .remove("spark.driver.bindAddress")
       .remove("spark.driver.port")
+      .remove("spark.kubernetes.driver.pod.name")
+      .remove("spark.kubernetes.executor.podNamePrefix")
     val newReloadConf = new SparkConf(loadDefaults = true)
     propertiesToReload.foreach { prop =>
       newReloadConf.getOption(prop).foreach { value =>
@@ -117,7 +128,7 @@ object Checkpoint extends Logging {
 
     val path = new Path(checkpointDir)
     val fs = fsOption.getOrElse(path.getFileSystem(SparkHadoopUtil.get.conf))
-    if (fs.exists(path)) {
+    try {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
         val paths = statuses.map(_.getPath)
@@ -127,9 +138,10 @@ object Checkpoint extends Logging {
         logWarning(s"Listing $path returned null")
         Seq.empty
       }
-    } else {
-      logWarning(s"Checkpoint directory $path does not exist")
-      Seq.empty
+    } catch {
+      case _: FileNotFoundException =>
+        logWarning(s"Checkpoint directory $path does not exist")
+        Seq.empty
     }
   }
 
@@ -184,7 +196,14 @@ class CheckpointWriter(
     hadoopConf: Configuration
   ) extends Logging {
   val MAX_ATTEMPTS = 3
-  val executor = Executors.newFixedThreadPool(1)
+
+  // Single-thread executor which rejects executions when a large amount have queued up.
+  // This fails fast since this typically means the checkpoint store will never keep up, and
+  // will otherwise lead to filling memory with waiting payloads of byte[] to write.
+  val executor = new ThreadPoolExecutor(
+    1, 1,
+    0L, TimeUnit.MILLISECONDS,
+    new ArrayBlockingQueue[Runnable](1000))
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
   @volatile private[this] var fs: FileSystem = null
@@ -198,11 +217,8 @@ class CheckpointWriter(
       if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
         latestCheckpointTime = checkpointTime
       }
-      if (fs == null) {
-        fs = new Path(checkpointDir).getFileSystem(hadoopConf)
-      }
       var attempts = 0
-      val startTime = System.currentTimeMillis()
+      val startTimeNs = System.nanoTime()
       val tempFile = new Path(checkpointDir, "temp")
       // We will do checkpoint when generating a batch and completing a batch. When the processing
       // time of a batch is greater than the batch interval, checkpointing for completing an old
@@ -220,11 +236,11 @@ class CheckpointWriter(
         attempts += 1
         try {
           logInfo(s"Saving checkpoint for time $checkpointTime to file '$checkpointFile'")
-
-          // Write checkpoint to temp file
-          if (fs.exists(tempFile)) {
-            fs.delete(tempFile, true)   // just in case it exists
+          if (fs == null) {
+            fs = new Path(checkpointDir).getFileSystem(hadoopConf)
           }
+          // Write checkpoint to temp file
+          fs.delete(tempFile, true) // just in case it exists
           val fos = fs.create(tempFile)
           Utils.tryWithSafeFinally {
             fos.write(bytes)
@@ -235,9 +251,7 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            if (fs.exists(backupFile)) {
-              fs.delete(backupFile, true) // just in case it exists
-            }
+            fs.delete(backupFile, true) // just in case it exists
             if (!fs.rename(checkpointFile, backupFile)) {
               logWarning(s"Could not rename $checkpointFile to $backupFile")
             }
@@ -258,9 +272,9 @@ class CheckpointWriter(
           }
 
           // All done, print success
-          val finishTime = System.currentTimeMillis()
           logInfo(s"Checkpoint for time $checkpointTime saved to file '$checkpointFile'" +
-            s", took ${bytes.length} bytes and ${finishTime - startTime} ms")
+            s", took ${bytes.length} bytes and " +
+            s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
           jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
@@ -290,14 +304,13 @@ class CheckpointWriter(
     if (stopped) return
 
     executor.shutdown()
-    val startTime = System.currentTimeMillis()
+    val startTimeNs = System.nanoTime()
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
     if (!terminated) {
       executor.shutdownNow()
     }
-    val endTime = System.currentTimeMillis()
     logInfo(s"CheckpointWriter executor terminated? $terminated," +
-      s" waited for ${endTime - startTime} ms.")
+      s" waited for ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms.")
     stopped = true
   }
 }

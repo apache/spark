@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
@@ -30,24 +30,22 @@ import org.apache.spark.sql.types._
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
-  override val dataSourceName: String = classOf[OrcFileFormat].getCanonicalName
+  override protected val enableAutoThreadAudit = false
+  override val dataSourceName: String =
+    classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
 
-  // ORC does not play well with NullType and UDT.
+  // ORC does not play well with NullType.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: NullType => false
     case _: CalendarIntervalType => false
-    case _: UserDefinedType[_] => false
     case _ => true
   }
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
@@ -93,9 +91,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB.
-      val conf = spark.sessionState.newHadoopConf()
-      val fs = FileSystem.getLocal(conf)
-      val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
+      val maybeOrcFile = new File(path).listFiles().find { f =>
+        !f.getName.startsWith("_") && f.getName.endsWith(".zlib.orc")
+      }
       assert(maybeOrcFile.isDefined)
       val orcFilePath = maybeOrcFile.get.toPath.toString
       val expectedCompressionKind =
@@ -118,4 +116,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       assert("SNAPPY" === expectedCompressionKind.name())
     }
   }
+}
+
+class HiveOrcHadoopFsRelationSuite extends OrcHadoopFsRelationSuite {
+  override val dataSourceName: String =
+    classOf[org.apache.spark.sql.hive.orc.OrcFileFormat].getCanonicalName
 }

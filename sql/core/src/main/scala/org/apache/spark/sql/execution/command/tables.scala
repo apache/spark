@@ -18,75 +18,83 @@
 package org.apache.spark.sql.execution.command
 
 import java.io.File
-import java.net.URI
-import java.util.Date
+import java.net.{URI, URISyntaxException}
+import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 import scala.util.Try
+import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier}
+import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.csv.CSVDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.json.JsonDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
-
-case class CreateHiveTableAsSelectLogicalPlan(
-    tableDesc: CatalogTable,
-    child: LogicalPlan,
-    allowExisting: Boolean) extends UnaryNode with Command {
-
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
-
-  override lazy val resolved: Boolean =
-    tableDesc.identifier.database.isDefined &&
-      tableDesc.schema.nonEmpty &&
-      tableDesc.storage.serde.isDefined &&
-      tableDesc.storage.inputFormat.isDefined &&
-      tableDesc.storage.outputFormat.isDefined &&
-      childrenResolved
-}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A command to create a table with the same definition of the given existing table.
+ * In the target table definition, the table comment is always empty but the column comments
+ * are identical to the ones defined in the source table.
+ *
+ * The CatalogTable attributes copied from the source table are storage(inputFormat, outputFormat,
+ * serde, compressed, properties), schema, provider, partitionColumnNames, bucketSpec.
  *
  * The syntax of using this command in SQL is:
  * {{{
  *   CREATE TABLE [IF NOT EXISTS] [db_name.]table_name
- *   LIKE [other_db_name.]existing_table_name
+ *   LIKE [other_db_name.]existing_table_name [locationSpec]
  * }}}
  */
 case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
+    location: Option[String],
     ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE does not exist: '$sourceTable'")
-    }
-    if (catalog.isTemporaryTable(sourceTable)) {
-      throw new AnalysisException(
-        s"Source table in CREATE TABLE LIKE cannot be temporary: '$sourceTable'")
+    val sourceTableDesc = catalog.getTempViewOrPermanentTableMetadata(sourceTable)
+
+    val newProvider = if (sourceTableDesc.tableType == CatalogTableType.VIEW) {
+      Some(sparkSession.sessionState.conf.defaultDataSourceName)
+    } else {
+      sourceTableDesc.provider
     }
 
-    val tableToCreate = catalog.getTableMetadata(sourceTable).copy(
-      identifier = targetTable,
-      tableType = CatalogTableType.MANAGED,
-      createTime = System.currentTimeMillis,
-      lastAccessTime = -1).withNewStorage(locationUri = None)
+    // If the location is specified, we create an external table internally.
+    // Otherwise create a managed table.
+    val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
 
-    catalog.createTable(tableToCreate, ifNotExists)
+    val newTableDesc =
+      CatalogTable(
+        identifier = targetTable,
+        tableType = tblType,
+        storage = sourceTableDesc.storage.copy(
+          locationUri = location.map(CatalogUtils.stringToURI(_))),
+        schema = sourceTableDesc.schema,
+        provider = newProvider,
+        partitionColumnNames = sourceTableDesc.partitionColumnNames,
+        bucketSpec = sourceTableDesc.bucketSpec)
+
+    catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
   }
 }
@@ -116,15 +124,14 @@ case class CreateTableLikeCommand(
  *   [AS select_statement];
  * }}}
  */
-case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
+case class CreateTableCommand(
+    table: CatalogTable,
+    ignoreIfExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
-    DDLUtils.verifyTableProperties(table.storage.serdeProperties.keys.toSeq, "CREATE TABLE")
-    sparkSession.sessionState.catalog.createTable(table, ifNotExists)
+    sparkSession.sessionState.catalog.createTable(table, ignoreIfExists)
     Seq.empty[Row]
   }
-
 }
 
 
@@ -145,13 +152,13 @@ case class AlterTableRenameCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    DDLUtils.verifyAlterTableType(catalog, oldName, isView)
     // If this is a temp view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
-    val isTemporary = catalog.isTemporaryTable(oldName)
-    if (isTemporary) {
+    if (catalog.isTemporaryTable(oldName)) {
       catalog.renameTable(oldName, newName)
     } else {
+      val table = catalog.getTableMetadata(oldName)
+      DDLUtils.verifyAlterTableType(catalog, table, isView)
       // If an exception is thrown here we can just assume the table is uncached;
       // this can happen with Hive tables when the underlying catalog is in-memory.
       val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
@@ -162,17 +169,9 @@ case class AlterTableRenameCommand(
           case NonFatal(e) => log.warn(e.toString, e)
         }
       }
-      // For datasource tables, we also need to update the "path" serde property
-      val table = catalog.getTableMetadata(oldName)
-      if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
-        val newPath = catalog.defaultTablePath(newName)
-        val newTable = table.withNewStorage(
-          serdeProperties = table.storage.serdeProperties ++ Map("path" -> newPath))
-        catalog.alterTable(newTable)
-      }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
-      catalog.invalidateTable(oldName)
+      catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
       if (wasCached) {
         sparkSession.catalog.cacheTable(newName.unquotedString)
@@ -182,6 +181,82 @@ case class AlterTableRenameCommand(
   }
 
 }
+
+/**
+ * A command that add columns to a table
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   ALTER TABLE table_identifier
+ *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
+ * }}}
+*/
+case class AlterTableAddColumnsCommand(
+    table: TableIdentifier,
+    colsToAdd: Seq[StructField]) extends RunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
+
+    try {
+      sparkSession.catalog.uncacheTable(table.quotedString)
+    } catch {
+      case NonFatal(e) =>
+        log.warn(s"Exception when attempting to uncache table ${table.quotedString}", e)
+    }
+    catalog.refreshTable(table)
+
+    SchemaUtils.checkColumnNameDuplication(
+      (colsToAdd ++ catalogTable.schema).map(_.name),
+      "in the table definition of " + table.identifier,
+      conf.caseSensitiveAnalysis)
+    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
+
+    catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
+    Seq.empty[Row]
+  }
+
+  /**
+   * ALTER TABLE ADD COLUMNS command does not support temporary view/table,
+   * view, or datasource table with text, orc formats or external provider.
+   * For datasource table, it currently only supports parquet, json, csv, orc.
+   */
+  private def verifyAlterTableAddColumn(
+      conf: SQLConf,
+      catalog: SessionCatalog,
+      table: TableIdentifier): CatalogTable = {
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+
+    if (catalogTable.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"""
+          |ALTER ADD COLUMNS does not support views.
+          |You must drop and re-create the views for adding the new columns. Views: $table
+         """.stripMargin)
+    }
+
+    if (DDLUtils.isDatasourceTable(catalogTable)) {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).
+        getConstructor().newInstance() match {
+        // For datasource table, this command can only support the following File format.
+        // TextFileFormat only default to one column "value"
+        // Hive type is already considered as hive serde table, so the logic will not
+        // come in here.
+        case _: CSVFileFormat | _: JsonFileFormat | _: ParquetFileFormat =>
+        case _: JsonDataSourceV2 | _: CSVDataSourceV2 |
+             _: OrcDataSourceV2 | _: ParquetDataSourceV2 =>
+        case s if s.getClass.getCanonicalName.endsWith("OrcFileFormat") =>
+        case s =>
+          throw new AnalysisException(
+            s"""
+              |ALTER ADD COLUMNS does not support datasource table with type $s.
+              |You must drop and re-create the table for adding the new columns. Tables: $table
+             """.stripMargin)
+      }
+    }
+    catalogTable
+  }
+}
+
 
 /**
  * A command that loads data into a Hive table.
@@ -201,108 +276,133 @@ case class LoadDataCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (!catalog.tableExists(table)) {
-      throw new AnalysisException(s"Target table in LOAD DATA does not exist: '$table'")
-    }
-    val targetTable = catalog.getTableMetadataOption(table).getOrElse {
-      throw new AnalysisException(s"Target table in LOAD DATA cannot be temporary: '$table'")
+    val targetTable = catalog.getTableMetadata(table)
+    val tableIdentwithDB = targetTable.identifier.quotedString
+
+    if (targetTable.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(s"Target table in LOAD DATA cannot be a view: $tableIdentwithDB")
     }
     if (DDLUtils.isDatasourceTable(targetTable)) {
-      throw new AnalysisException(s"LOAD DATA is not supported for datasource tables: '$table'")
+      throw new AnalysisException(
+        s"LOAD DATA is not supported for datasource tables: $tableIdentwithDB")
     }
     if (targetTable.partitionColumnNames.nonEmpty) {
       if (partition.isEmpty) {
-        throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+        throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but no partition spec is provided")
       }
       if (targetTable.partitionColumnNames.size != partition.get.size) {
-        throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+        throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
           s"but number of columns in provided partition spec (${partition.get.size}) " +
           s"do not match number of partitioned columns in table " +
-          s"(s${targetTable.partitionColumnNames.size})")
+          s"(${targetTable.partitionColumnNames.size})")
       }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+          throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is partitioned, " +
             s"but the specified partition spec refers to a column that is not partitioned: " +
             s"'$colName'")
         }
       }
     } else {
       if (partition.nonEmpty) {
-        throw new AnalysisException(s"LOAD DATA target table '$table' is not partitioned, " +
-          s"but a partition spec was provided.")
+        throw new AnalysisException(s"LOAD DATA target table $tableIdentwithDB is not " +
+          s"partitioned, but a partition spec was provided.")
       }
     }
-
-    val loadPath =
+    val loadPath = {
       if (isLocal) {
-        val uri = Utils.resolveURI(path)
-        if (!new File(uri.getPath()).exists()) {
-          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
-        }
-        uri
+        val localFS = FileContext.getLocalFSFileContext()
+        LoadDataCommand.makeQualified(FsConstants.LOCAL_FS_URI, localFS.getWorkingDirectory(),
+          new Path(path))
       } else {
-        val uri = new URI(path)
-        if (uri.getScheme() != null && uri.getAuthority() != null) {
-          uri
-        } else {
-          // Follow Hive's behavior:
-          // If no schema or authority is provided with non-local inpath,
-          // we will use hadoop configuration "fs.default.name".
-          val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.default.name")
-          val defaultFS = if (defaultFSConf == null) {
-            new URI("")
-          } else {
-            new URI(defaultFSConf)
-          }
-
-          val scheme = if (uri.getScheme() != null) {
-            uri.getScheme()
-          } else {
-            defaultFS.getScheme()
-          }
-          val authority = if (uri.getAuthority() != null) {
-            uri.getAuthority()
-          } else {
-            defaultFS.getAuthority()
-          }
-
-          if (scheme == null) {
-            throw new AnalysisException(
-              s"LOAD DATA: URI scheme is required for non-local input paths: '$path'")
-          }
-
-          // Follow Hive's behavior:
-          // If LOCAL is not specified, and the path is relative,
-          // then the path is interpreted relative to "/user/<username>"
-          val uriPath = uri.getPath()
-          val absolutePath = if (uriPath != null && uriPath.startsWith("/")) {
-            uriPath
-          } else {
-            s"/user/${System.getProperty("user.name")}/$uriPath"
-          }
-          new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
-        }
+        val loadPath = new Path(path)
+        // Follow Hive's behavior:
+        // If no schema or authority is provided with non-local inpath,
+        // we will use hadoop configuration "fs.defaultFS".
+        val defaultFSConf = sparkSession.sessionState.newHadoopConf().get("fs.defaultFS")
+        val defaultFS = if (defaultFSConf == null) new URI("") else new URI(defaultFSConf)
+        // Follow Hive's behavior:
+        // If LOCAL is not specified, and the path is relative,
+        // then the path is interpreted relative to "/user/<username>"
+        val uriPath = new Path(s"/user/${System.getProperty("user.name")}/")
+        // makeQualified() will ignore the query parameter part while creating a path, so the
+        // entire  string will be considered while making a Path instance,this is mainly done
+        // by considering the wild card scenario in mind.as per old logic query param  is
+        // been considered while creating URI instance and if path contains wild card char '?'
+        // the remaining charecters after '?' will be removed while forming URI instance
+        LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
-
+    }
+    val fs = loadPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    // This handling is because while resolving the invalid URLs starting with file:///
+    // system throws IllegalArgumentException from globStatus API,so in order to handle
+    // such scenarios this code is added in try catch block and after catching the
+    // runtime exception a generic error will be displayed to the user.
+    try {
+      val fileStatus = fs.globStatus(loadPath)
+      if (fileStatus == null || fileStatus.isEmpty) {
+        throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+      }
+    } catch {
+      case e: IllegalArgumentException =>
+        log.warn(s"Exception while validating the load path $path ", e)
+        throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+    }
     if (partition.nonEmpty) {
       catalog.loadPartition(
         targetTable.identifier,
         loadPath.toString,
         partition.get,
         isOverwrite,
-        holdDDLTime = false,
         inheritTableSpecs = true,
-        isSkewedStoreAsSubdir = false)
+        isSrcLocal = isLocal)
     } else {
       catalog.loadTable(
         targetTable.identifier,
         loadPath.toString,
         isOverwrite,
-        holdDDLTime = false)
+        isSrcLocal = isLocal)
     }
+
+    // Refresh the metadata cache to ensure the data visible to the users
+    catalog.refreshTable(targetTable.identifier)
+
+    CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
+  }
+}
+
+object LoadDataCommand {
+  /**
+   * Returns a qualified path object. Method ported from org.apache.hadoop.fs.Path class.
+   *
+   * @param defaultUri default uri corresponding to the filesystem provided.
+   * @param workingDir the working directory for the particular child path wd-relative names.
+   * @param path       Path instance based on the path string specified by the user.
+   * @return qualified path object
+   */
+  private[sql] def makeQualified(defaultUri: URI, workingDir: Path, path: Path): Path = {
+    val newPath = new Path(workingDir, path)
+    val pathUri = if (path.isAbsolute()) path.toUri() else newPath.toUri()
+    if (pathUri.getScheme == null || pathUri.getAuthority == null &&
+        defaultUri.getAuthority != null) {
+      val scheme = if (pathUri.getScheme == null) defaultUri.getScheme else pathUri.getScheme
+      val authority = if (pathUri.getAuthority == null) {
+        if (defaultUri.getAuthority == null) "" else defaultUri.getAuthority
+      } else {
+        pathUri.getAuthority
+      }
+      try {
+        val newUri = new URI(scheme, authority, pathUri.getPath, null, pathUri.getFragment)
+        new Path(newUri)
+      } catch {
+        case e: URISyntaxException =>
+          throw new IllegalArgumentException(e)
+      }
+    } else {
+      newPath
+    }
   }
 }
 
@@ -320,38 +420,48 @@ case class TruncateTableCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(s"Table '$tableName' in TRUNCATE TABLE does not exist.")
-    }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on temporary tables: '$tableName'")
-    }
     val table = catalog.getTableMetadata(tableName)
+    val tableIdentWithDB = table.identifier.quotedString
+
     if (table.tableType == CatalogTableType.EXTERNAL) {
       throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on external tables: '$tableName'")
+        s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
     }
     if (table.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE on views: '$tableName'")
-    }
-    val isDatasourceTable = DDLUtils.isDatasourceTable(table)
-    if (isDatasourceTable && partitionSpec.isDefined) {
-      throw new AnalysisException(
-        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
-        s"for tables created using the data sources API: '$tableName'")
+        s"Operation not allowed: TRUNCATE TABLE on views: $tableIdentWithDB")
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
-        s"for tables that are not partitioned: '$tableName'")
+        s"for tables that are not partitioned: $tableIdentWithDB")
     }
+    if (partitionSpec.isDefined) {
+      DDLUtils.verifyPartitionProviderIsHive(spark, table, "TRUNCATE TABLE ... PARTITION")
+    }
+
+    val partCols = table.partitionColumnNames
     val locations =
-      if (isDatasourceTable || table.partitionColumnNames.isEmpty) {
+      if (partCols.isEmpty) {
         Seq(table.storage.locationUri)
       } else {
-        catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
+        val normalizedSpec = partitionSpec.map { spec =>
+          PartitioningUtils.normalizePartitionSpec(
+            spec,
+            partCols,
+            table.identifier.quotedString,
+            spark.sessionState.conf.resolver)
+        }
+        val partLocations =
+          catalog.listPartitions(table.identifier, normalizedSpec).map(_.storage.locationUri)
+
+        // Fail if the partition spec is fully specified (not partial) and the partition does not
+        // exist.
+        for (spec <- partitionSpec if partLocations.isEmpty && spec.size == partCols.length) {
+          throw new NoSuchPartitionException(table.database, table.identifier.table, spec)
+        }
+
+        partLocations
       }
     val hadoopConf = spark.sessionState.newHadoopConf()
     locations.foreach { location =>
@@ -364,180 +474,265 @@ case class TruncateTableCommand(
         } catch {
           case NonFatal(e) =>
             throw new AnalysisException(
-              s"Failed to truncate table '$tableName' when removing data of the path: $path " +
+              s"Failed to truncate table $tableIdentWithDB when removing data of the path: $path " +
                 s"because of ${e.toString}")
         }
       }
     }
     // After deleting the data, invalidate the table to make sure we don't keep around a stale
     // file relation in the metastore cache.
-    spark.sessionState.invalidateTable(tableName.unquotedString)
+    spark.sessionState.refreshTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
-      spark.sharedState.cacheManager.tryUncacheQuery(spark.table(tableName.quotedString))
+      spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier), cascade = true)
     } catch {
       case NonFatal(e) =>
-        log.warn(s"Exception when attempting to uncache table '$tableName'", e)
+        log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
+    }
+
+    if (table.stats.nonEmpty) {
+      // empty table after truncation
+      val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
+      catalog.alterTableStats(tableName, Some(newStats))
     }
     Seq.empty[Row]
   }
 }
 
+abstract class DescribeCommandBase extends RunnableCommand {
+  override val output = DescribeTableSchema.describeTableAttributes()
+
+  protected def describeSchema(
+      schema: StructType,
+      buffer: ArrayBuffer[Row],
+      header: Boolean): Unit = {
+    if (header) {
+      append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+    }
+    schema.foreach { column =>
+      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
+    }
+  }
+
+  protected def append(
+    buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
+    buffer += Row(column, dataType, comment)
+  }
+}
 /**
  * Command that looks like
  * {{{
- *   DESCRIBE [EXTENDED|FORMATTED] table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name partitionSpec?;
  * }}}
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isFormatted: Boolean)
-  extends RunnableCommand {
-
-  override val output: Seq[Attribute] = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
-  )
+case class DescribeTableCommand(
+    table: TableIdentifier,
+    partitionSpec: TablePartitionSpec,
+    isExtended: Boolean)
+  extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
     if (catalog.isTemporaryTable(table)) {
-      describeSchema(catalog.lookupRelation(table).schema, result)
+      if (partitionSpec.nonEmpty) {
+        throw new AnalysisException(
+          s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
+      }
+      describeSchema(catalog.lookupRelation(table).schema, result, header = false)
     } else {
       val metadata = catalog.getTableMetadata(table)
-
-      if (isExtended) {
-        describeExtended(metadata, result)
-      } else if (isFormatted) {
-        describeFormatted(metadata, result)
+      if (metadata.schema.isEmpty) {
+        // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
+        // inferred at runtime. We should still support it.
+        describeSchema(sparkSession.table(metadata.identifier).schema, result, header = false)
       } else {
-        describe(metadata, result)
+        describeSchema(metadata.schema, result, header = false)
+      }
+
+      describePartitionInfo(metadata, result)
+
+      if (partitionSpec.nonEmpty) {
+        // Outputs the partition-specific info for the DDL command:
+        // "DESCRIBE [EXTENDED|FORMATTED] table_name PARTITION (partitionVal*)"
+        describeDetailedPartitionInfo(sparkSession, catalog, metadata, result)
+      } else if (isExtended) {
+        describeFormattedTableInfo(metadata, result)
       }
     }
 
     result
   }
 
-  // Shows data columns and partitioned columns (if any)
-  private def describe(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    if (DDLUtils.isDatasourceTable(table)) {
-      val schema = DDLUtils.getSchemaFromTableProperties(table)
-
-      if (schema.isEmpty) {
-        append(buffer, "# Schema of this table is inferred at runtime", "", "")
-      } else {
-        schema.foreach(describeSchema(_, buffer))
-      }
-
-      val partCols = DDLUtils.getPartitionColumnsFromTableProperties(table)
-      if (partCols.nonEmpty) {
-        append(buffer, "# Partition Information", "", "")
-        append(buffer, s"# ${output.head.name}", "", "")
-        partCols.foreach(col => append(buffer, col, "", ""))
-      }
-    } else {
-      describeSchema(table.schema, buffer)
-
-      if (table.partitionColumns.nonEmpty) {
-        append(buffer, "# Partition Information", "", "")
-        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
-        describeSchema(table.partitionColumns, buffer)
-      }
+  private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    if (table.partitionColumnNames.nonEmpty) {
+      append(buffer, "# Partition Information", "", "")
+      describeSchema(table.partitionSchema, buffer, header = true)
     }
   }
 
-  private def describeExtended(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describe(table, buffer)
-
-    append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", table.toString, "")
-  }
-
-  private def describeFormatted(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describe(table, buffer)
-
+  private def describeFormattedTableInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    // The following information has been already shown in the previous outputs
+    val excludedTableInfo = Seq(
+      "Partition Columns",
+      "Schema"
+    )
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
-    append(buffer, "Database:", table.database, "")
-    append(buffer, "Owner:", table.owner, "")
-    append(buffer, "Create Time:", new Date(table.createTime).toString, "")
-    append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
-    append(buffer, "Table Type:", table.tableType.name, "")
-
-    append(buffer, "Table Parameters:", "", "")
-    table.properties.filterNot {
-      // Hides schema properties that hold user-defined schema, partition columns, and bucketing
-      // information since they are already extracted and shown in other parts.
-      case (key, _) => key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA)
-    }.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
+    table.toLinkedHashMap.filterKeys(!excludedTableInfo.contains(_)).foreach {
+      s => append(buffer, s._1, s._2, "")
     }
-
-    describeStorageInfo(table, buffer)
   }
 
-  private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+  private def describeDetailedPartitionInfo(
+      spark: SparkSession,
+      catalog: SessionCatalog,
+      metadata: CatalogTable,
+      result: ArrayBuffer[Row]): Unit = {
+    if (metadata.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"DESC PARTITION is not allowed on a view: ${table.identifier}")
+    }
+    DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
+    val partition = catalog.getPartition(table, partitionSpec)
+    if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
+  }
+
+  private def describeFormattedDetailedPartitionInfo(
+      tableIdentifier: TableIdentifier,
+      table: CatalogTable,
+      partition: CatalogTablePartition,
+      buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Partition Information", "", "")
+    append(buffer, "Database", table.database, "")
+    append(buffer, "Table", tableIdentifier.table, "")
+    partition.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
     append(buffer, "", "", "")
     append(buffer, "# Storage Information", "", "")
-    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
-    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
-    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
-    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
-    describeBucketingInfo(metadata, buffer)
-
-    append(buffer, "Storage Desc Parameters:", "", "")
-    metadata.storage.serdeProperties.foreach { case (key, value) =>
-      append(buffer, s"  $key", value, "")
+    table.bucketSpec match {
+      case Some(spec) =>
+        spec.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
+      case _ =>
     }
-  }
-
-  private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    def appendBucketInfo(numBuckets: Int, bucketColumns: Seq[String], sortColumns: Seq[String]) = {
-      append(buffer, "Num Buckets:", numBuckets.toString, "")
-      append(buffer, "Bucket Columns:", bucketColumns.mkString("[", ", ", "]"), "")
-      append(buffer, "Sort Columns:", sortColumns.mkString("[", ", ", "]"), "")
-    }
-
-    DDLUtils.getBucketSpecFromTableProperties(metadata) match {
-      case Some(bucketSpec) =>
-        appendBucketInfo(
-          bucketSpec.numBuckets,
-          bucketSpec.bucketColumnNames,
-          bucketSpec.sortColumnNames)
-      case None =>
-        appendBucketInfo(
-          metadata.numBuckets,
-          metadata.bucketColumnNames,
-          metadata.sortColumnNames)
-    }
-  }
-
-  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
-    schema.foreach { column =>
-      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
-    }
-  }
-
-  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
-    schema.foreach { column =>
-      val comment =
-        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
-      append(buffer, column.name, column.dataType.simpleString, comment)
-    }
-  }
-
-  private def append(
-      buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
-    buffer += Row(column, dataType, comment)
+    table.storage.toLinkedHashMap.foreach(s => append(buffer, s._1, s._2, ""))
   }
 }
 
+/**
+ * Command that looks like
+ * {{{
+ *   DESCRIBE [QUERY] statement
+ * }}}
+ *
+ * Parameter 'statement' can be one of the following types :
+ * 1. SELECT statements
+ * 2. SELECT statements inside set operators (UNION, INTERSECT etc)
+ * 3. VALUES statement.
+ * 4. TABLE statement. Example : TABLE table_name
+ * 5. statements of the form 'FROM table SELECT *'
+ * 6. Multi select statements of the following form:
+ *    select * from (from a select * select *)
+ * 7. Common table expressions (CTEs)
+ */
+case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
+  extends DescribeCommandBase {
+
+  override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val result = new ArrayBuffer[Row]
+    val queryExecution = sparkSession.sessionState.executePlan(plan)
+    describeSchema(queryExecution.analyzed.schema, result, header = false)
+    result
+  }
+}
+
+/**
+ * A command to list the info for a column, including name, data type, comment and column stats.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name column_name;
+ * }}}
+ */
+case class DescribeColumnCommand(
+    table: TableIdentifier,
+    colNameParts: Seq[String],
+    isExtended: Boolean)
+  extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    Seq(
+      AttributeReference("info_name", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "name of the column info").build())(),
+      AttributeReference("info_value", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "value of the column info").build())()
+    )
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val resolver = sparkSession.sessionState.conf.resolver
+    val relation = sparkSession.table(table).queryExecution.analyzed
+
+    val colName = UnresolvedAttribute(colNameParts).name
+    val field = {
+      relation.resolve(colNameParts, resolver).getOrElse {
+        throw new AnalysisException(s"Column $colName does not exist")
+      }
+    }
+    if (!field.isInstanceOf[Attribute]) {
+      // If the field is not an attribute after `resolve`, then it's a nested field.
+      throw new AnalysisException(
+        s"DESC TABLE COLUMN command does not support nested data types: $colName")
+    }
+
+    val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
+    val colStats = catalogTable.stats.map(_.colStats).getOrElse(Map.empty)
+    val cs = colStats.get(field.name)
+
+    val comment = if (field.metadata.contains("comment")) {
+      Option(field.metadata.getString("comment"))
+    } else {
+      None
+    }
+
+    val buffer = ArrayBuffer[Row](
+      Row("col_name", field.name),
+      Row("data_type", field.dataType.catalogString),
+      Row("comment", comment.getOrElse("NULL"))
+    )
+    if (isExtended) {
+      // Show column stats when EXTENDED or FORMATTED is specified.
+      buffer += Row("min", cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("max", cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("num_nulls", cs.flatMap(_.nullCount.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("distinct_count",
+        cs.flatMap(_.distinctCount.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("avg_col_len", cs.flatMap(_.avgLen.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("max_col_len", cs.flatMap(_.maxLen.map(_.toString)).getOrElse("NULL"))
+      val histDesc = for {
+        c <- cs
+        hist <- c.histogram
+      } yield histogramDescription(hist)
+      buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
+    }
+    buffer
+  }
+
+  private def histogramDescription(histogram: Histogram): Seq[Row] = {
+    val header = Row("histogram",
+      s"height: ${histogram.height}, num_of_bins: ${histogram.bins.length}")
+    val bins = histogram.bins.zipWithIndex.map {
+      case (bin, index) =>
+        Row(s"bin_$index",
+          s"lower_bound: ${bin.lo}, upper_bound: ${bin.hi}, distinct_count: ${bin.ndv}")
+    }
+    header +: bins
+  }
+}
 
 /**
  * A command for users to get tables in the given database.
@@ -545,16 +740,27 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
+ *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
+ *   [PARTITION(partition_spec)];
  * }}}
  */
 case class ShowTablesCommand(
     databaseName: Option[String],
-    tableIdentifierPattern: Option[String]) extends RunnableCommand {
+    tableIdentifierPattern: Option[String],
+    isExtended: Boolean = false,
+    partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
 
-  // The result of SHOW TABLES has two columns, tableName and isTemporary.
+  // The result of SHOW TABLES/SHOW TABLE has three basic columns: database, tableName and
+  // isTemporary. If `isExtended` is true, append column `information` to the output columns.
   override val output: Seq[Attribute] = {
-    AttributeReference("tableName", StringType, nullable = false)() ::
-      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+    val tableExtendedInfo = if (isExtended) {
+      AttributeReference("information", StringType, nullable = false)() :: Nil
+    } else {
+      Nil
+    }
+    AttributeReference("database", StringType, nullable = false)() ::
+      AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: tableExtendedInfo
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -562,18 +768,41 @@ case class ShowTablesCommand(
     // instead of calling tables in sparkSession.
     val catalog = sparkSession.sessionState.catalog
     val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    val tables =
-      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-    tables.map { t =>
-      val isTemp = t.database.isEmpty
-      Row(t.table, isTemp)
+    if (partitionSpec.isEmpty) {
+      // Show the information of tables.
+      val tables =
+        tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
+      tables.map { tableIdent =>
+        val database = tableIdent.database.getOrElse("")
+        val tableName = tableIdent.table
+        val isTemp = catalog.isTemporaryTable(tableIdent)
+        if (isExtended) {
+          val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
+          Row(database, tableName, isTemp, s"$information\n")
+        } else {
+          Row(database, tableName, isTemp)
+        }
+      }
+    } else {
+      // Show the information of partitions.
+      //
+      // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
+      // should have been thrown by the sql parser.
+      val tableIdent = TableIdentifier(tableIdentifierPattern.get, Some(db))
+      val table = catalog.getTableMetadata(tableIdent).identifier
+      val partition = catalog.getPartition(tableIdent, partitionSpec.get)
+      val database = table.database.getOrElse("")
+      val tableName = table.table
+      val isTemp = catalog.isTemporaryTable(table)
+      val information = partition.simpleString
+      Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
   }
 }
 
 
 /**
- * A command for users to list the properties for a table If propertyKey is specified, the value
+ * A command for users to list the properties for a table. If propertyKey is specified, the value
  * for the propertyKey is returned. If propertyKey is not specified, all the keys and their
  * corresponding values are returned.
  * The syntax of using this command in SQL is:
@@ -614,22 +843,32 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
 }
 
 /**
- * A command to list the column names for a table. This function creates a
- * [[ShowColumnsCommand]] logical plan.
+ * A command to list the column names for a table.
  *
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW COLUMNS (FROM | IN) table_identifier [(FROM | IN) database];
  * }}}
  */
-case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
-  // The result of SHOW COLUMNS has one column called 'result'
+case class ShowColumnsCommand(
+    databaseName: Option[String],
+    tableName: TableIdentifier) extends RunnableCommand {
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("col_name", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.catalog.getTableMetadata(table).schema.map { c =>
+    val catalog = sparkSession.sessionState.catalog
+    val resolver = sparkSession.sessionState.conf.resolver
+    val lookupTable = databaseName match {
+      case None => tableName
+      case Some(db) if tableName.database.exists(!resolver(_, db)) =>
+        throw new AnalysisException(
+          s"SHOW COLUMNS with conflicting databases: '$db' != '${tableName.database.get}'")
+      case Some(db) => TableIdentifier(tableName.identifier, Some(db))
+    }
+    val table = catalog.getTempViewOrPermanentTableMetadata(lookupTable)
+    table.schema.map { c =>
       Row(c.name)
     }
   }
@@ -643,58 +882,39 @@ case class ShowColumnsCommand(table: TableIdentifier) extends RunnableCommand {
  * 1. If the command is called for a non partitioned table.
  * 2. If the partition spec refers to the columns that are not defined as partitioning columns.
  *
- * This function creates a [[ShowPartitionsCommand]] logical plan
- *
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW PARTITIONS [db_name.]table_name [PARTITION(partition_spec)]
  * }}}
  */
 case class ShowPartitionsCommand(
-    table: TableIdentifier,
+    tableName: TableIdentifier,
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
-  // The result of SHOW PARTITIONS has one column called 'result'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
-  }
-
-  private def getPartName(spec: TablePartitionSpec, partColNames: Seq[String]): String = {
-    partColNames.map { name =>
-      PartitioningUtils.escapePathName(name) + "=" + PartitioningUtils.escapePathName(spec(name))
-    }.mkString(File.separator)
+    AttributeReference("partition", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-
-    if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a temporary table: ${table.unquotedString}")
-    }
-
-    val tab = catalog.getTableMetadata(table)
+    val table = catalog.getTableMetadata(tableName)
+    val tableIdentWithDB = table.identifier.quotedString
 
     /**
      * Validate and throws an [[AnalysisException]] exception under the following conditions:
      * 1. If the table is not partitioned.
      * 2. If it is a datasource table.
-     * 3. If it is a view or index table.
+     * 3. If it is a view.
      */
-    if (tab.tableType == VIEW ||
-      tab.tableType == INDEX) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a view or index table: ${tab.qualifiedName}")
+    if (table.tableType == VIEW) {
+      throw new AnalysisException(s"SHOW PARTITIONS is not allowed on a view: $tableIdentWithDB")
     }
 
-    if (!DDLUtils.isTablePartitioned(tab)) {
+    if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${tab.qualifiedName}")
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
     }
 
-    if (DDLUtils.isDatasourceTable(tab)) {
-      throw new AnalysisException(
-        s"SHOW PARTITIONS is not allowed on a datasource table: ${tab.qualifiedName}")
-    }
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
 
     /**
      * Validate the partitioning spec by making sure all the referenced columns are
@@ -702,7 +922,7 @@ case class ShowPartitionsCommand(
      * thrown if the partitioning spec is invalid.
      */
     if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(tab.partitionColumns.map(_.name).contains)
+      val badColumns = spec.get.keySet.filterNot(table.partitionColumnNames.contains)
       if (badColumns.nonEmpty) {
         val badCols = badColumns.mkString("[", ", ", "]")
         throw new AnalysisException(
@@ -710,10 +930,7 @@ case class ShowPartitionsCommand(
       }
     }
 
-    val partNames = catalog.listPartitions(table, spec).map { p =>
-      getPartName(p.spec, tab.partitionColumnNames)
-    }
-
+    val partNames = catalog.listPartitionNames(tableName, spec)
     partNames.map(Row(_))
   }
 }
@@ -725,18 +942,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-
-    if (catalog.isTemporaryTable(table)) {
-      throw new AnalysisException(
-        s"SHOW CREATE TABLE cannot be applied to temporary table")
-    }
-
-    if (!catalog.tableExists(table)) {
-      throw new AnalysisException(s"Table $table doesn't exist")
-    }
-
     val tableMetadata = catalog.getTableMetadata(table)
 
+    // TODO: unify this after we unify the CREATE TABLE syntax for hive serde and data source table.
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       showCreateDataSourceTable(tableMetadata)
     } else {
@@ -749,7 +957,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showCreateHiveTable(metadata: CatalogTable): String = {
     def reportUnsupportedError(features: Seq[String]): Unit = {
       throw new AnalysisException(
-        s"Failed to execute SHOW CREATE TABLE against table ${metadata.identifier.quotedString}, " +
+        s"Failed to execute SHOW CREATE TABLE against table/view ${metadata.identifier}, " +
           "which is created by Hive and uses the following unsupported feature(s)\n" +
           features.map(" - " + _).mkString("\n")
       )
@@ -765,7 +973,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       case EXTERNAL => " EXTERNAL TABLE"
       case VIEW => " VIEW"
       case MANAGED => " TABLE"
-      case INDEX => reportUnsupportedError(Seq("index table"))
+      case t =>
+        throw new IllegalArgumentException(
+          s"Unknown table type is found at showCreateHiveTable: $t")
     }
 
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"
@@ -777,9 +987,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       builder ++= metadata.viewText.mkString(" AS\n", "", "\n")
     } else {
       showHiveTableHeader(metadata, builder)
+      showTableComment(metadata, builder)
       showHiveTableNonDataColumns(metadata, builder)
       showHiveTableStorageInfo(metadata, builder)
-      showHiveTableProperties(metadata, builder)
+      showTableLocation(metadata, builder)
+      showTableProperties(metadata, builder)
     }
 
     builder.toString()
@@ -788,32 +1000,27 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.filterNot { column =>
       metadata.partitionColumnNames.contains(column.name)
-    }.map(columnToDDLFragment)
+    }.map(_.toDDL)
 
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")
     }
-
-    metadata
-      .comment
-      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
-      .foreach(builder.append)
-  }
-
-  private def columnToDDLFragment(column: CatalogColumn): String = {
-    val comment = column.comment.map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
-    s"${quoteIdentifier(column.name)} ${column.dataType}${comment.getOrElse("")}"
   }
 
   private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.partitionColumns.nonEmpty) {
-      val partCols = metadata.partitionColumns.map(columnToDDLFragment)
+    if (metadata.partitionColumnNames.nonEmpty) {
+      val partCols = metadata.partitionSchema.map(_.toDDL)
       builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
     }
 
-    if (metadata.bucketColumnNames.nonEmpty) {
-      throw new UnsupportedOperationException(
-        "Creating Hive table with bucket spec is not supported yet.")
+    if (metadata.bucketSpec.isDefined) {
+      val bucketSpec = metadata.bucketSpec.get
+      builder ++= s"CLUSTERED BY (${bucketSpec.bucketColumnNames.mkString(",")})\n"
+
+      if (bucketSpec.sortColumnNames.nonEmpty) {
+        builder ++= s"SORTED BY (${bucketSpec.sortColumnNames.map(_ + " ASC").mkString(", ")})\n"
+      }
+      builder ++= s"INTO ${bucketSpec.numBuckets} BUCKETS\n"
     }
   }
 
@@ -823,12 +1030,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     storage.serde.foreach { serde =>
       builder ++= s"ROW FORMAT SERDE '$serde'\n"
 
-      val serdeProps = metadata.storage.serdeProperties.map {
+      val serdeProps = metadata.storage.properties.map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (", ",\n  ", "\n)\n")
+      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (\n  ", ",\n  ", "\n)\n")
     }
 
     if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
@@ -842,28 +1049,30 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
+  }
 
+  private def showTableLocation(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.tableType == EXTERNAL) {
-      storage.locationUri.foreach { uri =>
-        builder ++= s"LOCATION '$uri'\n"
+      metadata.storage.locationUri.foreach { location =>
+        builder ++= s"LOCATION '${escapeSingleQuotedString(CatalogUtils.URIToString(location))}'\n"
       }
     }
   }
 
-  private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    if (metadata.properties.nonEmpty) {
-      val filteredProps = metadata.properties.filterNot {
-        // Skips "EXTERNAL" property for external tables
-        case (key, _) => key == "EXTERNAL" && metadata.tableType == EXTERNAL
-      }
+  private def showTableComment(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    metadata
+      .comment
+      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
+  }
 
-      val props = filteredProps.map { case (key, value) =>
+  private def showTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.properties.nonEmpty) {
+      val props = metadata.properties.map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      if (props.nonEmpty) {
-        builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
-      }
+      builder ++= props.mkString("TBLPROPERTIES (\n  ", ",\n  ", "\n)\n")
     }
   }
 
@@ -874,31 +1083,23 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     showDataSourceTableDataColumns(metadata, builder)
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
+    showTableComment(metadata, builder)
+    showTableLocation(metadata, builder)
+    showTableProperties(metadata, builder)
 
     builder.toString()
   }
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    DDLUtils.getSchemaFromTableProperties(metadata).foreach { schema =>
-      val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
-      builder ++= columns.mkString("(", ", ", ")")
-    }
-
-    builder ++= "\n"
+    val columns = metadata.schema.fields.map(_.toDDL)
+    builder ++= columns.mkString("(", ", ", ")\n")
   }
 
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val props = metadata.properties
+    builder ++= s"USING ${metadata.provider.get}\n"
 
-    builder ++= s"USING ${props(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)}\n"
-
-    val dataSourceOptions = metadata.storage.serdeProperties.filterNot {
-      case (key, value) =>
-        // If it's a managed table, omit PATH option. Spark SQL always creates external table
-        // when the table creation DDL contains the PATH option.
-        key.toLowerCase == "path" && metadata.tableType == MANAGED
-    }.map {
+    val dataSourceOptions = SQLConf.get.redactOptions(metadata.storage.properties).map {
       case (key, value) => s"${quoteIdentifier(key)} '${escapeSingleQuotedString(value)}'"
     }
 
@@ -911,12 +1112,12 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableNonDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val partCols = DDLUtils.getPartitionColumnsFromTableProperties(metadata)
+    val partCols = metadata.partitionColumnNames
     if (partCols.nonEmpty) {
       builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
     }
 
-    DDLUtils.getBucketSpecFromTableProperties(metadata).foreach { spec =>
+    metadata.bucketSpec.foreach { spec =>
       if (spec.bucketColumnNames.nonEmpty) {
         builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
 
@@ -927,16 +1128,5 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
         builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
       }
     }
-  }
-
-  private def escapeSingleQuotedString(str: String): String = {
-    val builder = StringBuilder.newBuilder
-
-    str.foreach {
-      case '\'' => builder ++= s"\\\'"
-      case ch => builder += ch
-    }
-
-    builder.toString()
   }
 }

@@ -30,7 +30,8 @@ import org.apache.spark.sql.Dataset
 abstract class Evaluator extends Params {
 
   /**
-   * Evaluates model output and returns a scalar metric (larger is better).
+   * Evaluates model output and returns a scalar metric.
+   * The value of [[isLargerBetter]] specifies whether larger values are better.
    *
    * @param dataset a dataset that contains labels/observations and predictions.
    * @param paramMap parameter map that specifies the input columns and output metrics
@@ -42,7 +43,9 @@ abstract class Evaluator extends Params {
   }
 
   /**
-   * Evaluates the output.
+   * Evaluates model output and returns a scalar metric.
+   * The value of [[isLargerBetter]] specifies whether larger values are better.
+   *
    * @param dataset a dataset that contains labels/observations and predictions.
    * @return metric
    */
@@ -50,7 +53,7 @@ abstract class Evaluator extends Params {
   def evaluate(dataset: Dataset[_]): Double
 
   /**
-   * Indicates whether the metric returned by [[evaluate()]] should be maximized (true, default)
+   * Indicates whether the metric returned by `evaluate` should be maximized (true, default)
    * or minimized (false).
    * A given evaluator may support multiple metrics which may be maximized or minimized.
    */

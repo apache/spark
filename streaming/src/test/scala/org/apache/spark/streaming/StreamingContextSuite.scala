@@ -18,6 +18,8 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
+import java.util.Locale
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,8 +27,8 @@ import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
@@ -40,7 +42,10 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
 
-class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
+class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val signaler: Signaler = ThreadSignaler
 
   val master = "local[2]"
   val appName = this.getClass.getSimpleName
@@ -206,8 +211,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // Local props set after start should be ignored
     ssc.sc.setLocalProperty("customPropKey", "value2")
 
-    eventually(timeout(10 seconds), interval(10 milliseconds)) {
-      assert(allFound === true)
+    eventually(timeout(10.seconds), interval(10.milliseconds)) {
+      assert(allFound)
     }
 
     // Verify streaming jobs have expected thread-local properties
@@ -337,7 +342,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     input.foreachRDD(_ => {})
     ssc.start()
     // Call `ssc.stop` at once so that it's possible that the receiver will miss "StopReceiver"
-    failAfter(30000 millis) {
+    failAfter(30.seconds) {
       ssc.stop(stopSparkContext = true, stopGracefully = true)
     }
   }
@@ -393,18 +398,18 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     inputStream.map(x => x).register()
 
     // test whether start() blocks indefinitely or not
-    failAfter(2000 millis) {
+    failAfter(2.seconds) {
       ssc.start()
     }
 
     // test whether awaitTermination() exits after give amount of time
-    failAfter(1000 millis) {
+    failAfter(1.second) {
       ssc.awaitTerminationOrTimeout(500)
     }
 
     // test whether awaitTermination() does not exit if not time is given
     val exception = intercept[Exception] {
-      failAfter(1000 millis) {
+      failAfter(1.second) {
         ssc.awaitTermination()
         throw new Exception("Did not wait for stop")
       }
@@ -413,7 +418,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     var t: Thread = null
     // test whether wait exits if context is stopped
-    failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
+    failAfter(10.seconds) { // 10 seconds because spark takes a long time to shutdown
       t = new Thread() {
         override def run() {
           Thread.sleep(500)
@@ -434,7 +439,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     val inputStream = addInputStream(ssc)
     inputStream.map(x => x).register()
 
-    failAfter(10000 millis) {
+    failAfter(10.seconds) {
       ssc.start()
       ssc.stop()
       ssc.awaitTermination()
@@ -474,13 +479,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.start()
 
     // test whether awaitTerminationOrTimeout() return false after give amount of time
-    failAfter(1000 millis) {
+    failAfter(1.second) {
       assert(ssc.awaitTerminationOrTimeout(500) === false)
     }
 
     var t: Thread = null
     // test whether awaitTerminationOrTimeout() return true if context is stopped
-    failAfter(10000 millis) { // 10 seconds because spark takes a long time to shutdown
+    failAfter(10.seconds) { // 10 seconds because spark takes a long time to shutdown
       t = new Thread() {
         override def run() {
           Thread.sleep(500)
@@ -488,7 +493,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         }
       }
       t.start()
-      assert(ssc.awaitTerminationOrTimeout(10000) === true)
+      assert(ssc.awaitTerminationOrTimeout(10000))
     }
     // SparkContext.stop will set SparkEnv.env to null. We need to make sure SparkContext is stopped
     // before running the next test. Otherwise, it's possible that we set SparkEnv.env to null after
@@ -523,7 +528,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // getOrCreate should create new context with empty path
     testGetOrCreate {
-      ssc = StreamingContext.getOrCreate(emptyPath, creatingFunction _)
+      ssc = StreamingContext.getOrCreate(emptyPath, () => creatingFunction())
       assert(ssc != null, "no context created")
       assert(newContextCreated, "new context not created")
     }
@@ -532,19 +537,19 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // getOrCreate should throw exception with fake checkpoint file and createOnError = false
     intercept[Exception] {
-      ssc = StreamingContext.getOrCreate(corruptedCheckpointPath, creatingFunction _)
+      ssc = StreamingContext.getOrCreate(corruptedCheckpointPath, () => creatingFunction())
     }
 
     // getOrCreate should throw exception with fake checkpoint file
     intercept[Exception] {
       ssc = StreamingContext.getOrCreate(
-        corruptedCheckpointPath, creatingFunction _, createOnError = false)
+        corruptedCheckpointPath, () => creatingFunction(), createOnError = false)
     }
 
     // getOrCreate should create new context with fake checkpoint file and createOnError = true
     testGetOrCreate {
       ssc = StreamingContext.getOrCreate(
-        corruptedCheckpointPath, creatingFunction _, createOnError = true)
+        corruptedCheckpointPath, () => creatingFunction(), createOnError = true)
       assert(ssc != null, "no context created")
       assert(newContextCreated, "new context not created")
     }
@@ -553,7 +558,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // getOrCreate should recover context with checkpoint path, and recover old configuration
     testGetOrCreate {
-      ssc = StreamingContext.getOrCreate(checkpointPath, creatingFunction _)
+      ssc = StreamingContext.getOrCreate(checkpointPath, () => creatingFunction())
       assert(ssc != null, "no context created")
       assert(!newContextCreated, "old context not recovered")
       assert(ssc.conf.get("someKey") === "someValue", "checkpointed config not recovered")
@@ -562,7 +567,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // getOrCreate should recover StreamingContext with existing SparkContext
     testGetOrCreate {
       sc = new SparkContext(conf)
-      ssc = StreamingContext.getOrCreate(checkpointPath, creatingFunction _)
+      ssc = StreamingContext.getOrCreate(checkpointPath, () => creatingFunction())
       assert(ssc != null, "no context created")
       assert(!newContextCreated, "old context not recovered")
       assert(!ssc.conf.contains("someKey"), "checkpointed config unexpectedly recovered")
@@ -571,8 +576,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("getActive and getActiveOrCreate") {
     require(StreamingContext.getActive().isEmpty, "context exists from before")
-    sc = new SparkContext(conf)
-
     var newContextCreated = false
 
     def creatingFunc(): StreamingContext = {
@@ -599,9 +602,10 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // getActiveOrCreate should create new context and getActive should return it only
     // after starting the context
     testGetActiveOrCreate {
+      sc = new SparkContext(conf)
       ssc = StreamingContext.getActiveOrCreate(creatingFunc _)
       assert(ssc != null, "no context created")
-      assert(newContextCreated === true, "new context not created")
+      assert(newContextCreated, "new context not created")
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
       ssc.start()
@@ -618,6 +622,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // getActiveOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
+      sc = new SparkContext(conf)
       ssc = creatingFunc()  // Create
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")
@@ -664,41 +669,41 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         conf.clone.set("spark.streaming.clock", "org.apache.spark.util.ManualClock"), batchDuration)
       addInputStream(ssc).register()
       ssc.start()
-      val returnedSsc = StreamingContext.getActiveOrCreate(checkpointPath, creatingFunction _)
+      val returnedSsc = StreamingContext.getActiveOrCreate(checkpointPath, () => creatingFunction())
       assert(!newContextCreated, "new context created instead of returning")
       assert(returnedSsc.eq(ssc), "returned context is not the activated context")
     }
 
     // getActiveOrCreate should create new context with empty path
     testGetActiveOrCreate {
-      ssc = StreamingContext.getActiveOrCreate(emptyPath, creatingFunction _)
+      ssc = StreamingContext.getActiveOrCreate(emptyPath, () => creatingFunction())
       assert(ssc != null, "no context created")
       assert(newContextCreated, "new context not created")
     }
 
     // getActiveOrCreate should throw exception with fake checkpoint file and createOnError = false
     intercept[Exception] {
-      ssc = StreamingContext.getOrCreate(corruptedCheckpointPath, creatingFunction _)
+      ssc = StreamingContext.getOrCreate(corruptedCheckpointPath, () => creatingFunction())
     }
 
     // getActiveOrCreate should throw exception with fake checkpoint file
     intercept[Exception] {
       ssc = StreamingContext.getActiveOrCreate(
-        corruptedCheckpointPath, creatingFunction _, createOnError = false)
+        corruptedCheckpointPath, () => creatingFunction(), createOnError = false)
     }
 
     // getActiveOrCreate should create new context with fake
     // checkpoint file and createOnError = true
     testGetActiveOrCreate {
       ssc = StreamingContext.getActiveOrCreate(
-        corruptedCheckpointPath, creatingFunction _, createOnError = true)
+        corruptedCheckpointPath, () => creatingFunction(), createOnError = true)
       assert(ssc != null, "no context created")
       assert(newContextCreated, "new context not created")
     }
 
     // getActiveOrCreate should recover context with checkpoint path, and recover old configuration
     testGetActiveOrCreate {
-      ssc = StreamingContext.getActiveOrCreate(checkpointPath, creatingFunction _)
+      ssc = StreamingContext.getActiveOrCreate(checkpointPath, () => creatingFunction())
       assert(ssc != null, "no context created")
       assert(!newContextCreated, "old context not recovered")
       assert(ssc.conf.get("someKey") === "someValue")
@@ -744,7 +749,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         val ex = intercept[IllegalStateException] {
           body
         }
-        assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(expectedErrorMsg))
       }
     }
 
@@ -776,14 +781,14 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
       _ssc.queueStream[Int](Queue(rdd)).register()
       _ssc
     }
-    ssc = StreamingContext.getOrCreate(checkpointDirectory, creatingFunction _)
+    ssc = StreamingContext.getOrCreate(checkpointDirectory, () => creatingFunction())
     ssc.start()
-    eventually(timeout(10000 millis)) {
+    eventually(timeout(10.seconds)) {
       assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
     }
     ssc.stop()
     val e = intercept[SparkException] {
-      ssc = StreamingContext.getOrCreate(checkpointDirectory, creatingFunction _)
+      ssc = StreamingContext.getOrCreate(checkpointDirectory, () => creatingFunction())
     }
     // StreamingContext.validate changes the message, so use "contains" here
     assert(e.getCause.getMessage.contains("queueStream doesn't support checkpointing. " +
@@ -806,6 +811,36 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.stop()
   }
 
+  test("SPARK-18560 Receiver data should be deserialized properly.") {
+    // Start a two nodes cluster, so receiver will use one node, and Spark jobs will use the
+    // other one. Then Spark jobs need to fetch remote blocks and it will trigger SPARK-18560.
+    val conf = new SparkConf().setMaster("local-cluster[2,1,1024]").setAppName(appName)
+    ssc = new StreamingContext(conf, Milliseconds(100))
+    val input = ssc.receiverStream(new TestReceiver)
+    val latch = new CountDownLatch(1)
+    @volatile var stopping = false
+    input.count().foreachRDD { rdd =>
+      // Make sure we can read from BlockRDD
+      if (rdd.collect().headOption.getOrElse(0L) > 0 && !stopping) {
+        // Stop StreamingContext to unblock "awaitTerminationOrTimeout"
+        stopping = true
+        new Thread() {
+          setDaemon(true)
+          override def run(): Unit = {
+            ssc.stop(stopSparkContext = true, stopGracefully = false)
+            latch.countDown()
+          }
+        }.start()
+      }
+    }
+    ssc.start()
+    ssc.awaitTerminationOrTimeout(60000)
+    // Wait until `ssc.top` returns. Otherwise, we may finish this test too fast and leak an active
+    // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
+    // is running.
+    assert(latch.await(60, TimeUnit.SECONDS))
+  }
+
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => 1 to i)
     val inputStream = new TestInputStream(s, input, 1)
@@ -819,10 +854,13 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     ssc.checkpoint(checkpointDirectory)
     ssc.textFileStream(testDirectory).foreachRDD { rdd => rdd.count() }
     ssc.start()
-    eventually(timeout(10000 millis)) {
-      assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+    try {
+      eventually(timeout(30.seconds)) {
+        assert(Checkpoint.getCheckpointFiles(checkpointDirectory).size > 1)
+      }
+    } finally {
+      ssc.stop()
     }
-    ssc.stop()
     checkpointDirectory
   }
 
@@ -929,7 +967,7 @@ package object testPackage extends Assertions {
       }
       ssc.start()
 
-      eventually(timeout(10000 millis), interval(10 millis)) {
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
         assert(rddGenerated && rddCreationSiteCorrect, "RDD creation site was not correct")
         assert(rddGenerated && foreachCallSiteCorrect, "Call site in foreachRDD was not correct")
       }

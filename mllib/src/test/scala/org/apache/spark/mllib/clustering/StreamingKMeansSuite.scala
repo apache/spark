@@ -77,6 +77,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     val k = 2
     val d = 5
     val r = 0.1
+    val seed = 987654321
 
     // create model with two clusters
     val kMeans = new StreamingKMeans()
@@ -88,7 +89,7 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
         Array(5.0, 5.0))
 
     // generate random data for k-means
-    val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, 42)
+    val (input, centers) = StreamingKMeansDataGenerator(numPoints, numBatches, k, d, r, seed)
 
     // setup and run the model training
     ssc = setupStreams(input, (inputDStream: DStream[Vector]) => {

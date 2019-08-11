@@ -18,7 +18,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -30,6 +29,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import scala.Option;
 
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
 import static org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER;
@@ -59,7 +60,11 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.Types;
+import org.apache.spark.TaskContext;
+import org.apache.spark.TaskContext$;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.types.StructType$;
+import org.apache.spark.util.AccumulatorV2;
 
 /**
  * Base class for custom RecordReaders for Parquet that directly materialize to `T`.
@@ -136,10 +141,28 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
-    this.sparkSchema = new CatalystSchemaConverter(configuration).convert(requestedSchema);
-    this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    String sparkRequestedSchemaString =
+        configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
+    this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
+    this.reader = new ParquetFileReader(
+        configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
+    }
+
+    // For test purpose.
+    // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
+    // will be updated to the accumulator. So we can check if the row groups are filtered or not
+    // in test case.
+    TaskContext taskContext = TaskContext$.MODULE$.get();
+    if (taskContext != null) {
+      Option<AccumulatorV2<?, ?>> accu = taskContext.taskMetrics().externalAccums().lastOption();
+      if (accu.isDefined() && accu.get().getClass().getSimpleName().equals("NumRowGroupsAcc")) {
+        @SuppressWarnings("unchecked")
+        AccumulatorV2<Integer, Integer> intAccum = (AccumulatorV2<Integer, Integer>) accu.get();
+        intAccum.add(blocks.size());
+      }
     }
   }
 
@@ -147,7 +170,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * Returns the list of files at 'path' recursively. This skips files that are ignored normally
    * by MapReduce.
    */
-  public static List<String> listDirectory(File path) throws IOException {
+  public static List<String> listDirectory(File path) {
     List<String> result = new ArrayList<>();
     if (path.isDirectory()) {
       for (File f: path.listFiles()) {
@@ -174,7 +197,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     Configuration config = new Configuration();
     config.set("spark.sql.parquet.binaryAsString", "false");
     config.set("spark.sql.parquet.int96AsTimestamp", "false");
-    config.set("spark.sql.parquet.writeLegacyFormat", "false");
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
@@ -195,20 +217,22 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
           }
           builder.addFields(fileSchema.getType(s));
         }
-        this.requestedSchema = builder.named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
+        this.requestedSchema = builder.named(ParquetSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
       } else {
-        this.requestedSchema = CatalystSchemaConverter.EMPTY_MESSAGE();
+        this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
-    this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
-    this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
+    this.reader = new ParquetFileReader(
+        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
   }
 
   @Override
-  public Void getCurrentKey() throws IOException, InterruptedException {
+  public Void getCurrentKey() {
     return null;
   }
 
@@ -236,7 +260,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     }
 
     @Override
-    int nextInt() throws IOException {
+    int nextInt() {
       return delegate.readInteger();
     }
   }
@@ -256,21 +280,21 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected static final class NullIntIterator extends IntIterator {
     @Override
-    int nextInt() throws IOException { return 0; }
+    int nextInt() { return 0; }
   }
 
   /**
    * Creates a reader for definition and repetition levels, returning an optimized one if
    * the levels are not needed.
    */
-  protected static IntIterator createRLEIterator(int maxLevel, BytesInput bytes,
-                                              ColumnDescriptor descriptor) throws IOException {
+  protected static IntIterator createRLEIterator(
+      int maxLevel, BytesInput bytes, ColumnDescriptor descriptor) throws IOException {
     try {
       if (maxLevel == 0) return new NullIntIterator();
       return new RLEIntIterator(
           new RunLengthBitPackingHybridDecoder(
               BytesUtils.getWidthFromMaxInt(maxLevel),
-              new ByteArrayInputStream(bytes.toByteArray())));
+              bytes.toInputStream()));
     } catch (IOException e) {
       throw new IOException("could not read levels in page for col " + descriptor, e);
     }

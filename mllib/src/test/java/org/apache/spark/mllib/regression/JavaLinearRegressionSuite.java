@@ -24,13 +24,13 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.util.LinearDataGenerator;
 
 public class JavaLinearRegressionSuite extends SharedSparkSession {
 
-  int validatePrediction(List<LabeledPoint> validationData, LinearRegressionModel model) {
+  private static int validatePrediction(
+      List<LabeledPoint> validationData, LinearRegressionModel model) {
     int numAccurate = 0;
     for (LabeledPoint point : validationData) {
       Double prediction = model.predict(point.features());
@@ -87,12 +87,7 @@ public class JavaLinearRegressionSuite extends SharedSparkSession {
       LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
     LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
     LinearRegressionModel model = linSGDImpl.run(testRDD.rdd());
-    JavaRDD<Vector> vectors = testRDD.map(new Function<LabeledPoint, Vector>() {
-      @Override
-      public Vector call(LabeledPoint v) throws Exception {
-        return v.features();
-      }
-    });
+    JavaRDD<Vector> vectors = testRDD.map(LabeledPoint::features);
     JavaRDD<Double> predictions = model.predict(vectors);
     // Should be able to get the first prediction.
     predictions.first();

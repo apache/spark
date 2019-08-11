@@ -17,15 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
  * Implements the transformations which are defined by SQL statement.
  * Currently we only support SQL syntax like 'SELECT ... FROM __THIS__ ...'
  * where '__THIS__' represents the underlying table of the input dataset.
@@ -33,13 +32,14 @@ import org.apache.spark.sql.types.StructType
  * the output, it can be any select clause that Spark SQL supports. Users can also
  * use Spark SQL built-in function and UDFs to operate on these selected columns.
  * For example, [[SQLTransformer]] supports statements like:
- *  - SELECT a, a + b AS a_b FROM __THIS__
- *  - SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
- *  - SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
+ * {{{
+ *  SELECT a, a + b AS a_b FROM __THIS__
+ *  SELECT a, SQRT(b) AS b_sqrt FROM __THIS__ where a > 5
+ *  SELECT a, b, SUM(c) AS c_sum FROM __THIS__ GROUP BY a, b
+ * }}}
  */
-@Experimental
 @Since("1.6.0")
-class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transformer
+class SQLTransformer @Since("1.6.0") (@Since("1.6.0") override val uid: String) extends Transformer
   with DefaultParamsWritable {
 
   @Since("1.6.0")
@@ -65,10 +65,14 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val tableName = Identifiable.randomUID(uid)
     dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    dataset.sparkSession.sql(realStatement)
+    val result = dataset.sparkSession.sql(realStatement)
+    // Call SessionCatalog.dropTempView to avoid unpersisting the possibly cached dataset.
+    dataset.sparkSession.sessionState.catalog.dropTempView(tableName)
+    result
   }
 
   @Since("1.6.0")

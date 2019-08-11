@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
@@ -40,7 +41,7 @@ class EquivalentExpressions {
   }
 
   // For each expression, the set of equivalent expressions.
-  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.MutableList[Expression]]
+  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
@@ -55,7 +56,7 @@ class EquivalentExpressions {
         f.get += expr
         true
       } else {
-        equivalenceMap.put(e, mutable.MutableList(expr))
+        equivalenceMap.put(e, mutable.ArrayBuffer(expr))
         false
       }
     } else {
@@ -66,25 +67,33 @@ class EquivalentExpressions {
   /**
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
-   * If ignoreLeaf is true, leaf nodes are ignored.
    */
-  def addExprTree(
-      root: Expression,
-      ignoreLeaf: Boolean = true,
-      skipReferenceToExpressions: Boolean = true): Unit = {
-    val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
-    // There are some special expressions that we should not recurse into children.
+  def addExprTree(expr: Expression): Unit = {
+    val skip = expr.isInstanceOf[LeafExpression] ||
+      // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
+      // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
+      expr.find(_.isInstanceOf[LambdaVariable]).isDefined
+
+    // There are some special expressions that we should not recurse into all of its children.
     //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-    //   2. ReferenceToExpressions: it's kind of an explicit sub-expression elimination.
-    val shouldRecurse = root match {
-      // TODO: some expressions implements `CodegenFallback` but can still do codegen,
-      // e.g. `CaseWhen`, we should support them.
-      case _: CodegenFallback => false
-      case _: ReferenceToExpressions if skipReferenceToExpressions => false
-      case _ => true
+    //   2. If: common subexpressions will always be evaluated at the beginning, but the true and
+    //          false expressions in `If` may not get accessed, according to the predicate
+    //          expression. We should only recurse into the predicate expression.
+    //   3. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
+    //                condition. We should only recurse into the first condition expression as it
+    //                will always get accessed.
+    //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
+    //                children, because others may not get accessed.
+    def childrenToRecurse: Seq[Expression] = expr match {
+      case _: CodegenFallback => Nil
+      case i: If => i.predicate :: Nil
+      case c: CaseWhen => c.children.head :: Nil
+      case c: Coalesce => c.children.head :: Nil
+      case other => other.children
     }
-    if (!skip && !addExpr(root) && shouldRecurse) {
-      root.children.foreach(addExprTree(_, ignoreLeaf))
+
+    if (!skip && !addExpr(expr)) {
+      childrenToRecurse.foreach(addExprTree)
     }
   }
 
@@ -93,7 +102,7 @@ class EquivalentExpressions {
    * an empty collection if there are none.
    */
   def getEquivalentExprs(e: Expression): Seq[Expression] = {
-    equivalenceMap.getOrElse(Expr(e), mutable.MutableList())
+    equivalenceMap.getOrElse(Expr(e), Seq.empty)
   }
 
   /**

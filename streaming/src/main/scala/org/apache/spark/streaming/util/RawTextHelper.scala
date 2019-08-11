@@ -63,7 +63,6 @@ object RawTextHelper {
 
     var i = 0
     var len = 0
-    var done = false
     var value: (String, Long) = null
     var swap: (String, Long) = null
     var count = 0

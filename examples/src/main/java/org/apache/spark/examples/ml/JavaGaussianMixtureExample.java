@@ -54,8 +54,8 @@ public class JavaGaussianMixtureExample {
 
     // Output the parameters of the mixture model
     for (int i = 0; i < model.getK(); i++) {
-      System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
-              model.weights()[i], model.gaussians()[i].mean(), model.gaussians()[i].cov());
+      System.out.printf("Gaussian %d:\nweight=%f\nmu=%s\nsigma=\n%s\n\n",
+              i, model.weights()[i], model.gaussians()[i].mean(), model.gaussians()[i].cov());
     }
     // $example off$
 

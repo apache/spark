@@ -20,11 +20,13 @@ package org.apache.spark.util
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
+import java.util.zip.GZIPInputStream
 
 import scala.collection.mutable.HashSet
 import scala.reflect._
 
 import com.google.common.io.Files
+import org.apache.commons.io.IOUtils
 import org.apache.log4j.{Appender, Level, Logger}
 import org.apache.log4j.spi.LoggingEvent
 import org.mockito.ArgumentCaptor
@@ -32,7 +34,7 @@ import org.mockito.Mockito.{atLeast, mock, verify}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
@@ -50,10 +52,13 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   test("basic file appender") {
     val testString = (1 to 1000).mkString(", ")
     val inputStream = new ByteArrayInputStream(testString.getBytes(StandardCharsets.UTF_8))
+    // The `header` should not be covered
+    val header = "Add header"
+    Files.write(header, testFile, StandardCharsets.UTF_8)
     val appender = new FileAppender(inputStream, testFile)
     inputStream.close()
     appender.awaitTermination()
-    assert(Files.toString(testFile, StandardCharsets.UTF_8) === testString)
+    assert(Files.toString(testFile, StandardCharsets.UTF_8) === header + testString)
   }
 
   test("rolling file appender - time-based rolling") {
@@ -70,6 +75,25 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       new SparkConf(), 10)
 
     testRolling(appender, testOutputStream, textToAppend, rolloverIntervalMillis)
+  }
+
+  test("rolling file appender - time-based rolling (compressed)") {
+    // setup input stream and appender
+    val testOutputStream = new PipedOutputStream()
+    val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
+    val rolloverIntervalMillis = 100
+    val durationMillis = 1000
+    val numRollovers = durationMillis / rolloverIntervalMillis
+    val textToAppend = (1 to numRollovers).map( _.toString * 10 )
+
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.executor.logs.rolling.enableCompression", "true")
+    val appender = new RollingFileAppender(testInputStream, testFile,
+      new TimeBasedRollingPolicy(rolloverIntervalMillis, s"--HH-mm-ss-SSSS", false),
+      sparkConf, 10)
+
+    testRolling(
+      appender, testOutputStream, textToAppend, rolloverIntervalMillis, isCompressed = true)
   }
 
   test("rolling file appender - size-based rolling") {
@@ -89,11 +113,30 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     }
   }
 
+  test("rolling file appender - size-based rolling (compressed)") {
+    // setup input stream and appender
+    val testOutputStream = new PipedOutputStream()
+    val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
+    val rolloverSize = 1000
+    val textToAppend = (1 to 3).map( _.toString * 1000 )
+
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.executor.logs.rolling.enableCompression", "true")
+    val appender = new RollingFileAppender(testInputStream, testFile,
+      new SizeBasedRollingPolicy(rolloverSize, false), sparkConf, 99)
+
+    val files = testRolling(appender, testOutputStream, textToAppend, 0, isCompressed = true)
+    files.foreach { file =>
+      logInfo(file.toString + ": " + file.length + " bytes")
+      assert(file.length <= rolloverSize)
+    }
+  }
+
   test("rolling file appender - cleaning") {
     // setup input stream and appender
     val testOutputStream = new PipedOutputStream()
     val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
-    val conf = new SparkConf().set(RollingFileAppender.RETAINED_FILES_PROPERTY, "10")
+    val conf = new SparkConf().set(config.EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES, 10)
     val appender = new RollingFileAppender(testInputStream, testFile,
       new SizeBasedRollingPolicy(1000, false), conf, 10)
 
@@ -157,13 +200,12 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       appender.awaitTermination()
     }
 
-    import RollingFileAppender._
-
     def rollingStrategy(strategy: String): Seq[(String, String)] =
-      Seq(STRATEGY_PROPERTY -> strategy)
-    def rollingSize(size: String): Seq[(String, String)] = Seq(SIZE_PROPERTY -> size)
+      Seq(config.EXECUTOR_LOGS_ROLLING_STRATEGY.key -> strategy)
+    def rollingSize(size: String): Seq[(String, String)] =
+      Seq(config.EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> size)
     def rollingInterval(interval: String): Seq[(String, String)] =
-      Seq(INTERVAL_PROPERTY -> interval)
+      Seq(config.EXECUTOR_LOGS_ROLLING_TIME_INTERVAL.key -> interval)
 
     val msInDay = 24 * 60 * 60 * 1000L
     val msInHour = 60 * 60 * 1000L
@@ -273,7 +315,8 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       appender: FileAppender,
       outputStream: OutputStream,
       textToAppend: Seq[String],
-      sleepTimeBetweenTexts: Long
+      sleepTimeBetweenTexts: Long,
+      isCompressed: Boolean = false
     ): Seq[File] = {
     // send data to appender through the input stream, and wait for the data to be written
     val expectedText = textToAppend.mkString("")
@@ -290,16 +333,29 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     // verify whether all the data written to rolled over files is same as expected
     val generatedFiles = RollingFileAppender.getSortedRolledOverFiles(
       testFile.getParentFile.toString, testFile.getName)
-    logInfo("Filtered files: \n" + generatedFiles.mkString("\n"))
+    logInfo("Generate files: \n" + generatedFiles.mkString("\n"))
     assert(generatedFiles.size > 1)
+    if (isCompressed) {
+      assert(
+        generatedFiles.filter(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)).size > 0)
+    }
     val allText = generatedFiles.map { file =>
-      Files.toString(file, StandardCharsets.UTF_8)
+      if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
+        val inputStream = new GZIPInputStream(new FileInputStream(file))
+        try {
+          IOUtils.toString(inputStream, StandardCharsets.UTF_8)
+        } finally {
+          IOUtils.closeQuietly(inputStream)
+        }
+      } else {
+        Files.toString(file, StandardCharsets.UTF_8)
+      }
     }.mkString("")
     assert(allText === expectedText)
     generatedFiles
   }
 
-  /** Delete all the generated rolledover files */
+  /** Delete all the generated rolled over files */
   def cleanup() {
     testFile.getParentFile.listFiles.filter { file =>
       file.getName.startsWith(testFile.getName)

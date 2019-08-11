@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+A simple example demonstrating Gaussian Mixture Model (GMM).
+Run with:
+  bin/spark-submit examples/src/main/python/ml/gaussian_mixture_example.py
+"""
 from __future__ import print_function
 
 # $example on$
@@ -22,27 +27,21 @@ from pyspark.ml.clustering import GaussianMixture
 # $example off$
 from pyspark.sql import SparkSession
 
-"""
-A simple example demonstrating Gaussian Mixture Model (GMM).
-Run with:
-  bin/spark-submit examples/src/main/python/ml/gaussian_mixture_example.py
-"""
-
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("PythonGuassianMixtureExample")\
+        .appName("GaussianMixtureExample")\
         .getOrCreate()
 
     # $example on$
     # loads data
     dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    gmm = GaussianMixture().setK(2)
+    gmm = GaussianMixture().setK(2).setSeed(538009335)
     model = gmm.fit(dataset)
 
-    print("Gaussians: ")
-    model.gaussiansDF.show()
+    print("Gaussians shown as a DataFrame: ")
+    model.gaussiansDF.show(truncate=False)
     # $example off$
 
     spark.stop()

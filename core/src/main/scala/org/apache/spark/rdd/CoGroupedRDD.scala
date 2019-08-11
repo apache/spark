@@ -20,14 +20,13 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 
 /**
  * The references to rdd and splitIndex are transient because redundant information is stored
@@ -66,14 +65,14 @@ private[spark] class CoGroupPartition(
 
 /**
  * :: DeveloperApi ::
- * A RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
+ * An RDD that cogroups its parents. For each key k in parent RDDs, the resulting RDD contains a
  * tuple with the list of values for that key.
- *
- * Note: This is an internal API. We recommend users use RDD.cogroup(...) instead of
- * instantiating this directly.
  *
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output
+ *
+ * @note This is an internal API. We recommend users use RDD.cogroup(...) instead of
+ * instantiating this directly.
  */
 @DeveloperApi
 class CoGroupedRDD[K: ClassTag](
@@ -143,8 +142,10 @@ class CoGroupedRDD[K: ClassTag](
 
       case shuffleDependency: ShuffleDependency[_, _, _] =>
         // Read map outputs of shuffle
+        val metrics = context.taskMetrics().createTempShuffleReadMetrics()
         val it = SparkEnv.get.shuffleManager
-          .getReader(shuffleDependency.shuffleHandle, split.index, split.index + 1, context)
+          .getReader(
+            shuffleDependency.shuffleHandle, split.index, split.index + 1, context, metrics)
           .read()
         rddIterators += ((it, depNum))
     }

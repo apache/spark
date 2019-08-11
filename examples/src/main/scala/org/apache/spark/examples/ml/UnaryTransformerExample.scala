@@ -22,10 +22,8 @@ package org.apache.spark.examples.ml
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
-import org.apache.spark.sql.functions.col
-// $example off$
 import org.apache.spark.sql.SparkSession
-// $example on$
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{DataType, DataTypes}
 import org.apache.spark.util.Utils
 // $example off$
@@ -100,6 +98,7 @@ object UnaryTransformerExample {
     val data = spark.range(0, 5).toDF("input")
       .select(col("input").cast("double").as("input"))
     val result = myTransformer.transform(data)
+    println("Transformed by adding constant value")
     result.show()
 
     // Save and load the Transformer.
@@ -109,6 +108,7 @@ object UnaryTransformerExample {
     val sameTransformer = MyTransformer.load(dirName)
 
     // Transform the data to show the results are identical.
+    println("Same transform applied from loaded model")
     val sameResult = sameTransformer.transform(data)
     sameResult.show()
 

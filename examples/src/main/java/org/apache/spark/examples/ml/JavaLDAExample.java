@@ -52,7 +52,7 @@ public class JavaLDAExample {
     double ll = model.logLikelihood(dataset);
     double lp = model.logPerplexity(dataset);
     System.out.println("The lower bound on the log likelihood of the entire corpus: " + ll);
-    System.out.println("The upper bound bound on perplexity: " + lp);
+    System.out.println("The upper bound on perplexity: " + lp);
 
     // Describe topics.
     Dataset<Row> topics = model.describeTopics(3);

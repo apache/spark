@@ -24,11 +24,14 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConverters._
 import scala.language.existentials
 
+import py4j.Py4JException
+
 import org.apache.spark.SparkException
 import org.apache.spark.api.java._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Duration, Interval, Time}
+import org.apache.spark.streaming.{Duration, Interval, StreamingContext, Time}
 import org.apache.spark.streaming.api.java._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.util.Utils
@@ -157,7 +160,7 @@ private[python] object PythonTransformFunctionSerializer {
 /**
  * Helper functions, which are called from Python via Py4J.
  */
-private[python] object PythonDStream {
+private[streaming] object PythonDStream {
 
   /**
    * can not access PythonTransformFunctionSerializer.register() via Py4j
@@ -183,6 +186,32 @@ private[python] object PythonDStream {
     val queue = new java.util.LinkedList[JavaRDD[Array[Byte]]]
     rdds.asScala.foreach(queue.add)
     queue
+  }
+
+  /**
+   * Stop [[StreamingContext]] if the Python process crashes (E.g., OOM) in case the user cannot
+   * stop it in the Python side.
+   */
+  def stopStreamingContextIfPythonProcessIsDead(e: Throwable): Unit = {
+    // These two special messages are from:
+    // scalastyle:off
+    // https://github.com/bartdag/py4j/blob/5cbb15a21f857e8cf334ce5f675f5543472f72eb/py4j-java/src/main/java/py4j/CallbackClient.java#L218
+    // https://github.com/bartdag/py4j/blob/5cbb15a21f857e8cf334ce5f675f5543472f72eb/py4j-java/src/main/java/py4j/CallbackClient.java#L340
+    // scalastyle:on
+    if (e.isInstanceOf[Py4JException] &&
+      ("Cannot obtain a new communication channel" == e.getMessage ||
+        "Error while obtaining a new communication channel" == e.getMessage)) {
+      // Start a new thread to stop StreamingContext to avoid deadlock.
+      new Thread("Stop-StreamingContext") with Logging {
+        setDaemon(true)
+
+        override def run(): Unit = {
+          logError(
+            "Cannot connect to Python process. It's probably dead. Stopping StreamingContext.", e)
+          StreamingContext.getActive().foreach(_.stop(stopSparkContext = false))
+        }
+      }.start()
+    }
   }
 }
 

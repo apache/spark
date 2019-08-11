@@ -21,29 +21,93 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.SparkConf
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.ui._
+import org.apache.spark.util.Utils
 
-private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") {
-  private val listener = parent.listener
+private[ui] class EnvironmentPage(
+    parent: EnvironmentTab,
+    conf: SparkConf,
+    store: AppStatusStore) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    val appEnv = store.environmentInfo()
+    val jvmInformation = Map(
+      "Java Version" -> appEnv.runtime.javaVersion,
+      "Java Home" -> appEnv.runtime.javaHome,
+      "Scala Version" -> appEnv.runtime.scalaVersion)
+
     val runtimeInformationTable = UIUtils.listingTable(
-      propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
-    val sparkPropertiesTable = UIUtils.listingTable(
-      propertyHeader, propertyRow, listener.sparkProperties, fixedWidth = true)
-    val systemPropertiesTable = UIUtils.listingTable(
-      propertyHeader, propertyRow, listener.systemProperties, fixedWidth = true)
+      propertyHeader, jvmRow, jvmInformation.toSeq.sorted, fixedWidth = true)
+    val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.sparkProperties.sorted), fixedWidth = true)
+    val hadoopPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.hadoopProperties.sorted), fixedWidth = true)
+    val systemPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.systemProperties.sorted), fixedWidth = true)
     val classpathEntriesTable = UIUtils.listingTable(
-      classPathHeaders, classPathRow, listener.classpathEntries, fixedWidth = true)
+      classPathHeaders, classPathRow, appEnv.classpathEntries.sorted, fixedWidth = true)
     val content =
       <span>
-        <h4>Runtime Information</h4> {runtimeInformationTable}
-        <h4>Spark Properties</h4> {sparkPropertiesTable}
-        <h4>System Properties</h4> {systemPropertiesTable}
-        <h4>Classpath Entries</h4> {classpathEntriesTable}
+        <span class="collapse-aggregated-runtimeInformation collapse-table"
+            onClick="collapseTable('collapse-aggregated-runtimeInformation',
+            'aggregated-runtimeInformation')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Runtime Information</a>
+          </h4>
+        </span>
+        <div class="aggregated-runtimeInformation collapsible-table">
+          {runtimeInformationTable}
+        </div>
+        <span class="collapse-aggregated-sparkProperties collapse-table"
+            onClick="collapseTable('collapse-aggregated-sparkProperties',
+            'aggregated-sparkProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Spark Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-sparkProperties collapsible-table">
+          {sparkPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-hadoopProperties collapse-table"
+              onClick="collapseTable('collapse-aggregated-hadoopProperties',
+            'aggregated-hadoopProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>Hadoop Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-hadoopProperties collapsible-table collapsed">
+          {hadoopPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-systemProperties collapse-table"
+            onClick="collapseTable('collapse-aggregated-systemProperties',
+            'aggregated-systemProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>System Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-systemProperties collapsible-table collapsed">
+          {systemPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-classpathEntries collapse-table"
+            onClick="collapseTable('collapse-aggregated-classpathEntries',
+            'aggregated-classpathEntries')">
+          <h4>
+            <span class="collapse-table-arrow arrow-closed"></span>
+            <a>Classpath Entries</a>
+          </h4>
+        </span>
+        <div class="aggregated-classpathEntries collapsible-table collapsed">
+          {classpathEntriesTable}
+        </div>
       </span>
 
-    UIUtils.headerSparkPage("Environment", content, parent)
+    UIUtils.headerSparkPage(request, "Environment", content, parent)
   }
 
   private def propertyHeader = Seq("Name", "Value")
@@ -51,4 +115,10 @@ private[ui] class EnvironmentPage(parent: EnvironmentTab) extends WebUIPage("") 
   private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
+}
+
+private[ui] class EnvironmentTab(
+    parent: SparkUI,
+    store: AppStatusStore) extends SparkUITab(parent, "environment") {
+  attachPage(new EnvironmentPage(this, parent.conf, store))
 }

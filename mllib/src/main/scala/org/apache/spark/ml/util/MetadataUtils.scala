@@ -48,7 +48,7 @@ private[spark] object MetadataUtils {
    *                        If a feature does not have metadata, it is assumed to be continuous.
    *                        If a feature is Nominal, then it must have the number of values
    *                        specified.
-   * @return  Map: feature index --> number of categories.
+   * @return  Map: feature index to number of categories.
    *          The map's set of keys will be the set of categorical feature indices.
    */
   def getCategoricalFeatures(featuresSchema: StructField): Map[Int, Int] = {

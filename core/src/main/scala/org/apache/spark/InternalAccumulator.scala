@@ -31,7 +31,9 @@ private[spark] object InternalAccumulator {
 
   // Names of internal task level metrics
   val EXECUTOR_DESERIALIZE_TIME = METRICS_PREFIX + "executorDeserializeTime"
+  val EXECUTOR_DESERIALIZE_CPU_TIME = METRICS_PREFIX + "executorDeserializeCpuTime"
   val EXECUTOR_RUN_TIME = METRICS_PREFIX + "executorRunTime"
+  val EXECUTOR_CPU_TIME = METRICS_PREFIX + "executorCpuTime"
   val RESULT_SIZE = METRICS_PREFIX + "resultSize"
   val JVM_GC_TIME = METRICS_PREFIX + "jvmGCTime"
   val RESULT_SERIALIZATION_TIME = METRICS_PREFIX + "resultSerializationTime"
@@ -48,6 +50,7 @@ private[spark] object InternalAccumulator {
     val REMOTE_BLOCKS_FETCHED = SHUFFLE_READ_METRICS_PREFIX + "remoteBlocksFetched"
     val LOCAL_BLOCKS_FETCHED = SHUFFLE_READ_METRICS_PREFIX + "localBlocksFetched"
     val REMOTE_BYTES_READ = SHUFFLE_READ_METRICS_PREFIX + "remoteBytesRead"
+    val REMOTE_BYTES_READ_TO_DISK = SHUFFLE_READ_METRICS_PREFIX + "remoteBytesReadToDisk"
     val LOCAL_BYTES_READ = SHUFFLE_READ_METRICS_PREFIX + "localBytesRead"
     val FETCH_WAIT_TIME = SHUFFLE_READ_METRICS_PREFIX + "fetchWaitTime"
     val RECORDS_READ = SHUFFLE_READ_METRICS_PREFIX + "recordsRead"

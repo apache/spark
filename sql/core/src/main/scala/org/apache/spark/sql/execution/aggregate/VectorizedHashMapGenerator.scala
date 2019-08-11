@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator}
+import org.apache.spark.sql.execution.vectorized.{MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * This is a helper class to generate an append-only vectorized hash map that can act as a 'cache'
@@ -44,95 +47,38 @@ class VectorizedHashMapGenerator(
     aggregateExpressions: Seq[AggregateExpression],
     generatedClassName: String,
     groupingKeySchema: StructType,
-    bufferSchema: StructType) {
-  case class Buffer(dataType: DataType, name: String)
-  val groupingKeys = groupingKeySchema.map(k => Buffer(k.dataType, ctx.freshName("key")))
-  val bufferValues = bufferSchema.map(k => Buffer(k.dataType, ctx.freshName("value")))
-  val groupingKeySignature =
-    groupingKeys.map(key => s"${ctx.javaType(key.dataType)} ${key.name}").mkString(", ")
-  val buffVars: Seq[ExprCode] = {
-    val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
-    val initExpr = functions.flatMap(f => f.initialValues)
-    initExpr.map { e =>
-      val isNull = ctx.freshName("bufIsNull")
-      val value = ctx.freshName("bufValue")
-      ctx.addMutableState("boolean", isNull, "")
-      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
-      val ev = e.genCode(ctx)
-      val initVars =
-        s"""
-           | $isNull = ${ev.isNull};
-           | $value = ${ev.value};
-       """.stripMargin
-      ExprCode(ev.code + initVars, isNull, value)
-    }
-  }
+    bufferSchema: StructType,
+    bitMaxCapacity: Int)
+  extends HashMapGenerator (ctx, aggregateExpressions, generatedClassName,
+    groupingKeySchema, bufferSchema) {
 
-  def generate(): String = {
-    s"""
-       |public class $generatedClassName {
-       |${initializeAggregateHashMap()}
-       |
-       |${generateFindOrInsert()}
-       |
-       |${generateEquals()}
-       |
-       |${generateHashFunction()}
-       |
-       |${generateRowIterator()}
-       |
-       |${generateClose()}
-       |}
-     """.stripMargin
-  }
-
-  private def initializeAggregateHashMap(): String = {
-    val generatedSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        (groupingKeySchema ++ bufferSchema).map { key =>
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
-
-    val generatedAggBufferSchema: String =
-      s"new org.apache.spark.sql.types.StructType()" +
-        bufferSchema.map { key =>
-          key.dataType match {
-            case d: DecimalType =>
-              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.createDecimalType(
-                  |${d.precision}, ${d.scale}))""".stripMargin
-            case _ =>
-              s""".add("${key.name}", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
-          }
-        }.mkString("\n").concat(";")
+  override protected def initializeAggregateHashMap(): String = {
+    val schemaStructType = new StructType((groupingKeySchema ++ bufferSchema).toArray)
+    val schema = ctx.addReferenceObj("schemaTerm", schemaStructType)
+    val aggBufferSchemaFieldsLength = bufferSchema.fields.length
 
     s"""
-       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch batch;
-       |  private org.apache.spark.sql.execution.vectorized.ColumnarBatch aggregateBufferBatch;
+       |  private ${classOf[OnHeapColumnVector].getName}[] vectors;
+       |  private ${classOf[ColumnarBatch].getName} batch;
+       |  private ${classOf[MutableColumnarRow].getName} aggBufferRow;
        |  private int[] buckets;
-       |  private int capacity = 1 << 16;
+       |  private int capacity = 1 << $bitMaxCapacity;
        |  private double loadFactor = 0.5;
        |  private int numBuckets = (int) (capacity / loadFactor);
        |  private int maxSteps = 2;
        |  private int numRows = 0;
-       |  private org.apache.spark.sql.types.StructType schema = $generatedSchema
-       |  private org.apache.spark.sql.types.StructType aggregateBufferSchema =
-       |    $generatedAggBufferSchema
        |
        |  public $generatedClassName() {
-       |    batch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(schema,
-       |      org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
-       |    // TODO: Possibly generate this projection in HashAggregate directly
-       |    aggregateBufferBatch = org.apache.spark.sql.execution.vectorized.ColumnarBatch.allocate(
-       |      aggregateBufferSchema, org.apache.spark.memory.MemoryMode.ON_HEAP, capacity);
-       |    for (int i = 0 ; i < aggregateBufferBatch.numCols(); i++) {
-       |       aggregateBufferBatch.setColumn(i, batch.column(i+${groupingKeys.length}));
+       |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, $schema);
+       |    batch = new ${classOf[ColumnarBatch].getName}(vectors);
+       |
+       |    // Generates a projection to return the aggregate buffer only.
+       |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
+       |      new ${classOf[OnHeapColumnVector].getName}[$aggBufferSchemaFieldsLength];
+       |    for (int i = 0; i < $aggBufferSchemaFieldsLength; i++) {
+       |      aggBufferVectors[i] = vectors[i + ${groupingKeys.length}];
        |    }
+       |    aggBufferRow = new ${classOf[MutableColumnarRow].getName}(aggBufferVectors);
        |
        |    buckets = new int[numBuckets];
        |    java.util.Arrays.fill(buckets, -1);
@@ -140,56 +86,26 @@ class VectorizedHashMapGenerator(
      """.stripMargin
   }
 
-  /**
-   * Generates a method that computes a hash by currently xor-ing all individual group-by keys. For
-   * instance, if we have 2 long group-by keys, the generated function would be of the form:
-   *
-   * {{{
-   * private long hash(long agg_key, long agg_key1) {
-   *   return agg_key ^ agg_key1;
-   *   }
-   * }}}
-   */
-  private def generateHashFunction(): String = {
-    val hash = ctx.freshName("hash")
-
-    def genHashForKeys(groupingKeys: Seq[Buffer]): String = {
-      groupingKeys.map { key =>
-        val result = ctx.freshName("result")
-        s"""
-           |${genComputeHash(ctx, key.name, key.dataType, result)}
-           |$hash = ($hash ^ (0x9e3779b9)) + $result + ($hash << 6) + ($hash >>> 2);
-          """.stripMargin
-      }.mkString("\n")
-    }
-
-    s"""
-       |private long hash($groupingKeySignature) {
-       |  long $hash = 0;
-       |  ${genHashForKeys(groupingKeys)}
-       |  return $hash;
-       |}
-     """.stripMargin
-  }
 
   /**
    * Generates a method that returns true if the group-by keys exist at a given index in the
-   * associated [[org.apache.spark.sql.execution.vectorized.ColumnarBatch]]. For instance, if we
-   * have 2 long group-by keys, the generated function would be of the form:
+   * associated [[org.apache.spark.sql.execution.vectorized.OnHeapColumnVector]]. For instance,
+   * if we have 2 long group-by keys, the generated function would be of the form:
    *
    * {{{
    * private boolean equals(int idx, long agg_key, long agg_key1) {
-   *   return batch.column(0).getLong(buckets[idx]) == agg_key &&
-   *     batch.column(1).getLong(buckets[idx]) == agg_key1;
+   *   return vectors[0].getLong(buckets[idx]) == agg_key &&
+   *     vectors[1].getLong(buckets[idx]) == agg_key1;
    * }
    * }}}
    */
-  private def generateEquals(): String = {
+  protected def generateEquals(): String = {
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, ctx.getValue("batch", "buckets[idx]",
-          key.dataType, ordinal), key.name)})"""
+        val value = CodeGenerator.getValueFromVector(s"vectors[$ordinal]", key.dataType,
+          "buckets[idx]")
+        s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }
 
@@ -201,29 +117,35 @@ class VectorizedHashMapGenerator(
   }
 
   /**
-   * Generates a method that returns a mutable
-   * [[org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row]] which keeps track of the
+   * Generates a method that returns a
+   * [[org.apache.spark.sql.execution.vectorized.MutableColumnarRow]] which keeps track of the
    * aggregate value(s) for a given set of keys. If the corresponding row doesn't exist, the
    * generated method adds the corresponding row in the associated
-   * [[org.apache.spark.sql.execution.vectorized.ColumnarBatch]]. For instance, if we
+   * [[org.apache.spark.sql.execution.vectorized.OnHeapColumnVector]]. For instance, if we
    * have 2 long group-by keys, the generated function would be of the form:
    *
    * {{{
-   * public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(
-   *     long agg_key, long agg_key1) {
+   * public MutableColumnarRow findOrInsert(long agg_key, long agg_key1) {
    *   long h = hash(agg_key, agg_key1);
    *   int step = 0;
    *   int idx = (int) h & (numBuckets - 1);
    *   while (step < maxSteps) {
    *     // Return bucket index if it's either an empty slot or already contains the key
    *     if (buckets[idx] == -1) {
-   *       batch.column(0).putLong(numRows, agg_key);
-   *       batch.column(1).putLong(numRows, agg_key1);
-   *       batch.column(2).putLong(numRows, 0);
-   *       buckets[idx] = numRows++;
-   *       return batch.getRow(buckets[idx]);
+   *       if (numRows < capacity) {
+   *         vectors[0].putLong(numRows, agg_key);
+   *         vectors[1].putLong(numRows, agg_key1);
+   *         vectors[2].putLong(numRows, 0);
+   *         buckets[idx] = numRows++;
+   *         aggBufferRow.rowId = numRows;
+   *         return aggBufferRow;
+   *       } else {
+   *         // No more space
+   *         return null;
+   *       }
    *     } else if (equals(idx, agg_key, agg_key1)) {
-   *       return batch.getRow(buckets[idx]);
+   *       aggBufferRow.rowId = buckets[idx];
+   *       return aggBufferRow;
    *     }
    *     idx = (idx + 1) & (numBuckets - 1);
    *     step++;
@@ -233,24 +155,23 @@ class VectorizedHashMapGenerator(
    * }
    * }}}
    */
-  private def generateFindOrInsert(): String = {
+  protected def generateFindOrInsert(): String = {
 
     def genCodeToSetKeys(groupingKeys: Seq[Buffer]): Seq[String] = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        ctx.setValue("batch", "numRows", key.dataType, ordinal, key.name)
+        CodeGenerator.setValue(s"vectors[$ordinal]", "numRows", key.dataType, key.name)
       }
     }
 
     def genCodeToSetAggBuffers(bufferValues: Seq[Buffer]): Seq[String] = {
       bufferValues.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        ctx.updateColumn("batch", "numRows", key.dataType, groupingKeys.length + ordinal,
-          buffVars(ordinal), nullable = true)
+        CodeGenerator.updateColumn(s"vectors[${groupingKeys.length + ordinal}]", "numRows",
+          key.dataType, buffVars(ordinal), nullable = true)
       }
     }
 
     s"""
-       |public org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row findOrInsert(${
-            groupingKeySignature}) {
+       |public ${classOf[MutableColumnarRow].getName} findOrInsert($groupingKeySignature) {
        |  long h = hash(${groupingKeys.map(_.name).mkString(", ")});
        |  int step = 0;
        |  int idx = (int) h & (numBuckets - 1);
@@ -268,15 +189,15 @@ class VectorizedHashMapGenerator(
        |        ${genCodeToSetAggBuffers(bufferValues).mkString("\n")}
        |
        |        buckets[idx] = numRows++;
-       |        batch.setNumRows(numRows);
-       |        aggregateBufferBatch.setNumRows(numRows);
-       |        return aggregateBufferBatch.getRow(buckets[idx]);
+       |        aggBufferRow.rowId = buckets[idx];
+       |        return aggBufferRow;
        |      } else {
        |        // No more space
        |        return null;
        |      }
        |    } else if (equals(idx, ${groupingKeys.map(_.name).mkString(", ")})) {
-       |      return aggregateBufferBatch.getRow(buckets[idx]);
+       |      aggBufferRow.rowId = buckets[idx];
+       |      return aggBufferRow;
        |    }
        |    idx = (idx + 1) & (numBuckets - 1);
        |    step++;
@@ -287,58 +208,12 @@ class VectorizedHashMapGenerator(
      """.stripMargin
   }
 
-  private def generateRowIterator(): String = {
+  protected def generateRowIterator(): String = {
     s"""
-       |public java.util.Iterator<org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row>
-       |    rowIterator() {
+       |public java.util.Iterator<${classOf[InternalRow].getName}> rowIterator() {
+       |  batch.setNumRows(numRows);
        |  return batch.rowIterator();
        |}
      """.stripMargin
-  }
-
-  private def generateClose(): String = {
-    s"""
-       |public void close() {
-       |  batch.close();
-       |}
-     """.stripMargin
-  }
-
-  private def genComputeHash(
-      ctx: CodegenContext,
-      input: String,
-      dataType: DataType,
-      result: String): String = {
-    def hashInt(i: String): String = s"int $result = $i;"
-    def hashLong(l: String): String = s"long $result = $l;"
-    def hashBytes(b: String): String = {
-      val hash = ctx.freshName("hash")
-      s"""
-         |int $result = 0;
-         |for (int i = 0; i < $b.length; i++) {
-         |  ${genComputeHash(ctx, s"$b[i]", ByteType, hash)}
-         |  $result = ($result ^ (0x9e3779b9)) + $hash + ($result << 6) + ($result >>> 2);
-         |}
-       """.stripMargin
-    }
-
-    dataType match {
-      case BooleanType => hashInt(s"$input ? 1 : 0")
-      case ByteType | ShortType | IntegerType | DateType => hashInt(input)
-      case LongType | TimestampType => hashLong(input)
-      case FloatType => hashInt(s"Float.floatToIntBits($input)")
-      case DoubleType => hashLong(s"Double.doubleToLongBits($input)")
-      case d: DecimalType =>
-        if (d.precision <= Decimal.MAX_LONG_DIGITS) {
-          hashLong(s"$input.toUnscaledLong()")
-        } else {
-          val bytes = ctx.freshName("bytes")
-          s"""
-            final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
-            ${hashBytes(bytes)}
-          """
-        }
-      case StringType => hashBytes(s"$input.getBytes()")
-    }
   }
 }

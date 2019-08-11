@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+An example demonstrating aft survival regression.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/aft_survival_regression.py
+"""
 from __future__ import print_function
 
 # $example on$
@@ -23,16 +28,10 @@ from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
-"""
-An example demonstrating aft survival regression.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/aft_survival_regression.py
-"""
-
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
-        .appName("PythonAFTSurvivalRegressionExample") \
+        .appName("AFTSurvivalRegressionExample") \
         .getOrCreate()
 
     # $example on$

@@ -1,0 +1,59 @@
+================================================================================================
+Benchmark to measure CSV read/write performance
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Parsing quoted values:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+One quoted string                                 36998          37134         120          0.0      739953.1       1.0X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Wide rows with 1000 columns:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Select 1000 columns                              140620         141162         737          0.0      140620.5       1.0X
+Select 100 columns                                35170          35287         183          0.0       35170.0       4.0X
+Select one column                                 27711          27927         187          0.0       27710.9       5.1X
+count()                                            7707           7804          84          0.1        7707.4      18.2X
+Select 100 columns, one bad input field           41762          41851         117          0.0       41761.8       3.4X
+Select 100 columns, corrupt record field          48717          48761          44          0.0       48717.4       2.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Count a dataset with 10 columns:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Select 10 columns + count()                       16001          16053          53          0.6        1600.1       1.0X
+Select 1 column + count()                         11571          11614          58          0.9        1157.1       1.4X
+count()                                            4752           4766          18          2.1         475.2       3.4X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Write dates and timestamps:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Create a dataset of timestamps                     1070           1072           2          9.3         107.0       1.0X
+to_csv(timestamp)                                 10446          10746         344          1.0        1044.6       0.1X
+write timestamps to files                          9573           9659         101          1.0         957.3       0.1X
+Create a dataset of dates                          1245           1260          17          8.0         124.5       0.9X
+to_csv(date)                                       7157           7167          11          1.4         715.7       0.1X
+write dates to files                               5415           5450          57          1.8         541.5       0.2X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.4
+Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
+Read dates and timestamps:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+read timestamp text from files                     1880           1887           8          5.3         188.0       1.0X
+read timestamps from files                        27135          27180          43          0.4        2713.5       0.1X
+infer timestamps from files                       51426          51534          97          0.2        5142.6       0.0X
+read date text from files                          1618           1622           4          6.2         161.8       1.2X
+read date from files                              20207          20218          13          0.5        2020.7       0.1X
+infer date from files                             19418          19479          94          0.5        1941.8       0.1X
+timestamp strings                                  2289           2300          13          4.4         228.9       0.8X
+parse timestamps from Dataset[String]             29367          29391          24          0.3        2936.7       0.1X
+infer timestamps from Dataset[String]             54782          54902         126          0.2        5478.2       0.0X
+date strings                                       2508           2524          16          4.0         250.8       0.7X
+parse dates from Dataset[String]                  21884          21902          19          0.5        2188.4       0.1X
+from_csv(timestamp)                               27188          27723         477          0.4        2718.8       0.1X
+from_csv(date)                                    21137          21191          84          0.5        2113.7       0.1X
+
+

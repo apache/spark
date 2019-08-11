@@ -43,6 +43,8 @@ private[r] class KMeansWrapper private (
 
   lazy val cluster: DataFrame = kMeansModel.summary.cluster
 
+  lazy val clusterSize: Int = kMeansModel.clusterCenters.size
+
   def fitted(method: String): DataFrame = {
     if (method == "centers") {
       kMeansModel.summary.predictions.drop(kMeansModel.getFeaturesCol)
@@ -68,12 +70,16 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
       formula: String,
       k: Int,
       maxIter: Int,
-      initMode: String): KMeansWrapper = {
+      initMode: String,
+      seed: String,
+      initSteps: Int,
+      tol: Double): KMeansWrapper = {
 
-    val rFormulaModel = new RFormula()
+    val rFormula = new RFormula()
       .setFormula(formula)
       .setFeaturesCol("features")
-      .fit(data)
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
 
     // get feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -85,6 +91,11 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
       .setK(k)
       .setMaxIter(maxIter)
       .setInitMode(initMode)
+      .setFeaturesCol(rFormula.getFeaturesCol)
+      .setInitSteps(initSteps)
+      .setTol(tol)
+
+    if (seed != null && seed.length > 0) kMeans.setSeed(seed.toInt)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, kMeans))

@@ -24,6 +24,7 @@ import java.io.Serializable;
  *
  * Spark will invoke the call function on each element in the input Dataset.
  */
+@FunctionalInterface
 public interface ForeachFunction<T> extends Serializable {
   void call(T t) throws Exception;
 }

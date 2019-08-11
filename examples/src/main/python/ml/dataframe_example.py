@@ -17,7 +17,7 @@
 
 """
 An example of how to use DataFrame for ML. Run with::
-    bin/spark-submit examples/src/main/python/ml/dataframe_example.py <input>
+    bin/spark-submit examples/src/main/python/ml/dataframe_example.py <input_path>
 """
 from __future__ import print_function
 
@@ -28,23 +28,25 @@ import shutil
 
 from pyspark.sql import SparkSession
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:
         print("Usage: dataframe_example.py <libsvm file>", file=sys.stderr)
-        exit(-1)
-    spark = SparkSession\
-        .builder\
-        .appName("DataFrameExample")\
-        .getOrCreate()
-    if len(sys.argv) == 2:
-        input = sys.argv[1]
+        sys.exit(-1)
+    elif len(sys.argv) == 2:
+        input_path = sys.argv[1]
     else:
-        input = "data/mllib/sample_libsvm_data.txt"
+        input_path = "data/mllib/sample_libsvm_data.txt"
 
-    # Load input data
-    print("Loading LIBSVM file with UDT from " + input + ".")
-    df = spark.read.format("libsvm").load(input).cache()
+    spark = SparkSession \
+        .builder \
+        .appName("DataFrameExample") \
+        .getOrCreate()
+
+    # Load an input file
+    print("Loading LIBSVM file with UDT from " + input_path + ".")
+    df = spark.read.format("libsvm").load(input_path).cache()
     print("Schema from LIBSVM:")
     df.printSchema()
     print("Loaded training data as a DataFrame with " +
@@ -55,7 +57,8 @@ if __name__ == "__main__":
     labelSummary.show()
 
     # Convert features column to an RDD of vectors.
-    features = df.select("features").rdd.map(lambda r: r.features)
+    features = MLUtils.convertVectorColumnsFromML(df, "features") \
+        .select("features").rdd.map(lambda r: r.features)
     summary = Statistics.colStats(features)
     print("Selected features column with average values:\n" +
           str(summary.mean()))

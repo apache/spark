@@ -17,7 +17,7 @@
 
 <!DOCTYPE suppressions PUBLIC
 "-//Puppy Crawl//DTD Suppressions 1.1//EN"
-"http://www.puppycrawl.com/dtds/suppressions_1_1.dtd">
+"https://checkstyle.org/dtds/suppressions_1_1.dtd">
 
 <!--
 
@@ -40,8 +40,10 @@
               files="src/main/java/org/apache/hive/service/*"/>
     <suppress checks="MethodName"
               files="src/main/java/org/apache/hive/service/auth/PasswdAuthenticationProvider.java"/>
-    <suppress checks="NoFinalizer"
-              files="src/main/java/org/apache/hive/service/server/ThreadWithGarbageCleanup.java"/>
     <suppress checks="MethodName"
               files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
+    <suppress checks="MethodName"
+              files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
 </suppressions>

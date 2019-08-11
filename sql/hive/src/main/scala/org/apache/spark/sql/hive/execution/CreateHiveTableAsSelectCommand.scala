@@ -17,86 +17,160 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
-import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.hive.MetastoreRelation
+import scala.util.control.NonFatal
 
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
+import org.apache.spark.sql.hive.HiveSessionCatalog
+import org.apache.spark.util.Utils
 
-/**
- * Create table and insert the query result into it.
- *
- * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
- * @param query the query whose result will be insert into the new relation
- * @param ignoreIfExists allow continue working if it's already exists, otherwise
- *                      raise exception
- */
-private[hive]
-case class CreateHiveTableAsSelectCommand(
-    tableDesc: CatalogTable,
-    query: LogicalPlan,
-    ignoreIfExists: Boolean)
-  extends RunnableCommand {
+trait CreateHiveTableAsSelectBase extends DataWritingCommand {
+  val tableDesc: CatalogTable
+  val query: LogicalPlan
+  val outputColumnNames: Seq[String]
+  val mode: SaveMode
 
-  private val tableIdentifier = tableDesc.identifier
+  protected val tableIdentifier = tableDesc.identifier
 
-  override def children: Seq[LogicalPlan] = Seq(query)
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val tableExists = catalog.tableExists(tableIdentifier)
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    lazy val metastoreRelation: MetastoreRelation = {
-      import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-      import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-      import org.apache.hadoop.io.Text
-      import org.apache.hadoop.mapred.TextInputFormat
+    if (tableExists) {
+      assert(mode != SaveMode.Overwrite,
+        s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
 
-      val withFormat =
-        tableDesc.withNewStorage(
-          inputFormat =
-            tableDesc.storage.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
-          outputFormat =
-            tableDesc.storage.outputFormat
-              .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
-          serde = tableDesc.storage.serde.orElse(Some(classOf[LazySimpleSerDe].getName)),
-          compressed = tableDesc.storage.compressed)
-
-      val withSchema = if (withFormat.schema.isEmpty) {
-        // Hive doesn't support specifying the column list for target table in CTAS
-        // However we don't think SparkSQL should follow that.
-        tableDesc.copy(schema = query.output.map { c =>
-          CatalogColumn(c.name, c.dataType.catalogString)
-        })
-      } else {
-        withFormat
-      }
-
-      sparkSession.sessionState.catalog.createTable(withSchema, ignoreIfExists = false)
-
-      // Get the Metastore Relation
-      sparkSession.sessionState.catalog.lookupRelation(tableIdentifier) match {
-        case r: MetastoreRelation => r
-      }
-    }
-    // TODO ideally, we should get the output data ready first and then
-    // add the relation into catalog, just in case of failure occurs while data
-    // processing.
-    if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
-      if (ignoreIfExists) {
-        // table already exists, will do nothing, to keep consistent with Hive
-      } else {
+      if (mode == SaveMode.ErrorIfExists) {
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
+      if (mode == SaveMode.Ignore) {
+        // Since the table already exists and the save mode is Ignore, we will just return.
+        return Seq.empty
+      }
+
+      val command = getWritingCommand(catalog, tableDesc, tableExists = true)
+      command.run(sparkSession, child)
     } else {
-      sparkSession.sessionState.executePlan(InsertIntoTable(
-        metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
+      // TODO ideally, we should get the output data ready first and then
+      // add the relation into catalog, just in case of failure occurs while data
+      // processing.
+      assert(tableDesc.schema.isEmpty)
+      catalog.createTable(
+        tableDesc.copy(schema = outputColumns.toStructType), ignoreIfExists = false)
+
+      try {
+        // Read back the metadata of the table which was created just now.
+        val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
+        val command = getWritingCommand(catalog, createdTableMeta, tableExists = false)
+        command.run(sparkSession, child)
+      } catch {
+        case NonFatal(e) =>
+          // drop the created table.
+          catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
+          throw e
+      }
     }
 
     Seq.empty[Row]
   }
 
-  override def argString: String = {
-    s"[Database:${tableDesc.database}}, " +
+  // Returns `DataWritingCommand` which actually writes data into the table.
+  def getWritingCommand(
+    catalog: SessionCatalog,
+    tableDesc: CatalogTable,
+    tableExists: Boolean): DataWritingCommand
+
+  // A subclass should override this with the Class name of the concrete type expected to be
+  // returned from `getWritingCommand`.
+  def writingCommandClassName: String
+
+  override def argString(maxFields: Int): String = {
+    s"[Database: ${tableDesc.database}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
-    s"InsertIntoHiveTable]"
+    s"${writingCommandClassName}]"
   }
+}
+
+/**
+ * Create table and insert the query result into it.
+ *
+ * @param tableDesc the table description, which may contain serde, storage handler etc.
+ * @param query the query whose result will be insert into the new relation
+ * @param mode SaveMode
+ */
+case class CreateHiveTableAsSelectCommand(
+    tableDesc: CatalogTable,
+    query: LogicalPlan,
+    outputColumnNames: Seq[String],
+    mode: SaveMode)
+  extends CreateHiveTableAsSelectBase {
+
+  override def getWritingCommand(
+      catalog: SessionCatalog,
+      tableDesc: CatalogTable,
+      tableExists: Boolean): DataWritingCommand = {
+    // For CTAS, there is no static partition values to insert.
+    val partition = tableDesc.partitionColumnNames.map(_ -> None).toMap
+    InsertIntoHiveTable(
+      tableDesc,
+      partition,
+      query,
+      overwrite = if (tableExists) false else true,
+      ifPartitionNotExists = false,
+      outputColumnNames = outputColumnNames)
+  }
+
+  override def writingCommandClassName: String =
+    Utils.getSimpleName(classOf[InsertIntoHiveTable])
+}
+
+/**
+ * Create table and insert the query result into it. This creates Hive table but inserts
+ * the query result into it by using data source.
+ *
+ * @param tableDesc the table description, which may contain serde, storage handler etc.
+ * @param query the query whose result will be insert into the new relation
+ * @param mode SaveMode
+ */
+case class OptimizedCreateHiveTableAsSelectCommand(
+    tableDesc: CatalogTable,
+    query: LogicalPlan,
+    outputColumnNames: Seq[String],
+    mode: SaveMode)
+  extends CreateHiveTableAsSelectBase {
+
+  override def getWritingCommand(
+      catalog: SessionCatalog,
+      tableDesc: CatalogTable,
+      tableExists: Boolean): DataWritingCommand = {
+    val metastoreCatalog = catalog.asInstanceOf[HiveSessionCatalog].metastoreCatalog
+    val hiveTable = DDLUtils.readHiveTable(tableDesc)
+
+    val hadoopRelation = metastoreCatalog.convert(hiveTable) match {
+      case LogicalRelation(t: HadoopFsRelation, _, _, _) => t
+      case _ => throw new AnalysisException(s"$tableIdentifier should be converted to " +
+        "HadoopFsRelation.")
+    }
+
+    InsertIntoHadoopFsRelationCommand(
+      hadoopRelation.location.rootPaths.head,
+      Map.empty, // We don't support to convert partitioned table.
+      false,
+      Seq.empty, // We don't support to convert partitioned table.
+      hadoopRelation.bucketSpec,
+      hadoopRelation.fileFormat,
+      hadoopRelation.options,
+      query,
+      if (tableExists) mode else SaveMode.Overwrite,
+      Some(tableDesc),
+      Some(hadoopRelation.location),
+      query.output.map(_.name))
+  }
+
+  override def writingCommandClassName: String =
+    Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand])
 }

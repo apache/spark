@@ -27,7 +27,7 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
 
   test("time window is unevaluable") {
     intercept[UnsupportedOperationException] {
-      evaluate(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
+      evaluateWithoutCodegen(TimeWindow(Literal(10L), "1 second", "1 second", "0 second"))
     }
   }
 
@@ -77,6 +77,19 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
     }
   }
 
+  test("SPARK-21590: Start time works with negative values and return microseconds") {
+    val validDuration = "10 minutes"
+    for ((text, seconds) <- Seq(
+      ("-10 seconds", -10000000), // -1e7
+      ("-1 minute", -60000000),
+      ("-1 hour", -3600000000L))) { // -6e7
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, "interval " + text).startTime
+        === seconds)
+      assert(TimeWindow(Literal(10L), validDuration, validDuration, text).startTime
+        === seconds)
+    }
+  }
+
   private val parseExpression = PrivateMethod[Long]('parseExpression)
 
   test("parse sql expression for duration in microseconds - string") {
@@ -92,9 +105,9 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
   }
 
   test("parse sql expression for duration in microseconds - long") {
-    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2 << 52, LongType)))
+    val dur = TimeWindow.invokePrivate(parseExpression(Literal.create(2L << 52, LongType)))
     assert(dur.isInstanceOf[Long])
-    assert(dur === (2 << 52))
+    assert(dur === (2L << 52))
   }
 
   test("parse sql expression for duration in microseconds - invalid interval") {
@@ -106,6 +119,18 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
   test("parse sql expression for duration in microseconds - invalid expression") {
     intercept[AnalysisException] {
       TimeWindow.invokePrivate(parseExpression(Rand(123)))
+    }
+  }
+
+  test("SPARK-16837: TimeWindow.apply equivalent to TimeWindow constructor") {
+    val slideLength = "1 second"
+    for (windowLength <- Seq("10 second", "1 minute", "2 hours")) {
+      val applyValue = TimeWindow(Literal(10L), windowLength, slideLength, "0 seconds")
+      val constructed = new TimeWindow(Literal(10L),
+        Literal(windowLength),
+        Literal(slideLength),
+        Literal("0 seconds"))
+      assert(applyValue == constructed)
     }
   }
 }

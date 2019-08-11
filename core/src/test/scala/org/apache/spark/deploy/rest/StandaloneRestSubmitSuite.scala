@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -83,6 +83,26 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(submitResponse.success)
   }
 
+  test("create submission with multiple masters") {
+    val submittedDriverId = "your-driver-id"
+    val submitMessage = "my driver is submitted"
+    val masterUrl = startDummyServer(submitId = submittedDriverId, submitMessage = submitMessage)
+    val conf = new SparkConf(loadDefaults = false)
+    val RANDOM_PORT = 9000
+    val allMasters = s"$masterUrl,${Utils.localHostName()}:$RANDOM_PORT"
+    conf.set("spark.master", allMasters)
+    conf.set("spark.app.name", "dreamer")
+    val appArgs = Array("one", "two", "six")
+    // main method calls this
+    val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
+    val submitResponse = getSubmitResponse(response)
+    assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
+    assert(submitResponse.serverSparkVersion === SPARK_VERSION)
+    assert(submitResponse.message === submitMessage)
+    assert(submitResponse.submissionId === submittedDriverId)
+    assert(submitResponse.success)
+  }
+
   test("create submission from main method") {
     val submittedDriverId = "your-driver-id"
     val submitMessage = "my driver is submitted"
@@ -92,7 +112,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     conf.set("spark.app.name", "dreamer")
     val appArgs = Array("one", "two", "six")
     // main method calls this
-    val response = RestSubmissionClient.run("app-resource", "main-class", appArgs, conf)
+    val response = new RestSubmissionClientApp().run("app-resource", "main-class", appArgs, conf)
     val submitResponse = getSubmitResponse(response)
     assert(submitResponse.action === Utils.getFormattedClassName(submitResponse))
     assert(submitResponse.serverSparkVersion === SPARK_VERSION)
@@ -376,6 +396,18 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
+  test("client does not send 'SPARK_HOME' env var by default") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_HOME" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("client does not send 'SPARK_CONF_DIR' env var by default") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_CONF_DIR" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
   test("client includes mesos env vars") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1", "OTHER_VAR" -> "1")
     val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
@@ -445,9 +477,9 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
       "--class", mainClass,
       mainJar) ++ appArgs
     val args = new SparkSubmitArguments(commandLineArgs)
-    val (_, _, sparkProperties, _) = SparkSubmit.prepareSubmitEnvironment(args)
+    val (_, _, sparkConf, _) = new SparkSubmit().prepareSubmitEnvironment(args)
     new RestSubmissionClient("spark://host:port").constructSubmitRequest(
-      mainJar, mainClass, appArgs, sparkProperties.toMap, Map.empty)
+      mainJar, mainClass, appArgs, sparkConf.getAll.toMap, Map.empty)
   }
 
   /** Return the response as a submit response, or fail with error otherwise. */

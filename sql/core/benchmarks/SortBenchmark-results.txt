@@ -1,0 +1,17 @@
+================================================================================================
+radix sort
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_162-b12 on Mac OS X 10.13.6
+Intel(R) Core(TM) i7-7820HQ CPU @ 2.90GHz
+
+radix sort 25000000:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+reference TimSort key prefix array          11770 / 11960          2.1         470.8       1.0X
+reference Arrays.sort                         2106 / 2128         11.9          84.3       5.6X
+radix sort one byte                             93 /  100        269.7           3.7     126.9X
+radix sort two bytes                           171 /  179        146.0           6.9      68.7X
+radix sort eight bytes                         659 /  664         37.9          26.4      17.9X
+radix sort key prefix array                   1024 / 1053         24.4          41.0      11.5X
+
+

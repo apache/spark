@@ -31,7 +31,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, SQLContext}
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.util.collection.OpenHashMap
 
 /**
@@ -95,11 +95,6 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Trees in this ensemble. Warning: These have null parent Estimators. */
   def trees: Array[M]
 
-  /**
-   * Number of trees in ensemble
-   */
-  val getNumTrees: Int = trees.length
-
   /** Weights for each tree, zippable with [[trees]] */
   def treeWeights: Array[Double]
 
@@ -140,7 +135,7 @@ private[ml] object TreeEnsembleModel {
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree to sum to 1.
+   *     - Normalize importances for tree to sum to 1 (only if `perTreeNormalization` is `true`).
    *  - Normalize feature importance vector to sum to 1.
    *
    *  References:
@@ -150,9 +145,15 @@ private[ml] object TreeEnsembleModel {
    * @param numFeatures  Number of features in model (even if not all are explicitly used by
    *                     the model).
    *                     If -1, then numFeatures is set based on the max feature index in all trees.
+   * @param perTreeNormalization By default this is set to `true` and it means that the importances
+   *                             of each tree are normalized before being summed. If set to `false`,
+   *                             the normalization is skipped.
    * @return  Feature importance values, of length numFeatures.
    */
-  def featureImportances[M <: DecisionTreeModel](trees: Array[M], numFeatures: Int): Vector = {
+  def featureImportances[M <: DecisionTreeModel](
+      trees: Array[M],
+      numFeatures: Int,
+      perTreeNormalization: Boolean = true): Vector = {
     val totalImportances = new OpenHashMap[Int, Double]()
     trees.foreach { tree =>
       // Aggregate feature importance vector for this tree
@@ -160,10 +161,19 @@ private[ml] object TreeEnsembleModel {
       computeFeatureImportance(tree.rootNode, importances)
       // Normalize importance vector for this tree, and add it to total.
       // TODO: In the future, also support normalizing by tree.rootNode.impurityStats.count?
-      val treeNorm = importances.map(_._2).sum
+      val treeNorm = if (perTreeNormalization) {
+        importances.map(_._2).sum
+      } else {
+        // We won't use it
+        Double.NaN
+      }
       if (treeNorm != 0) {
         importances.foreach { case (idx, impt) =>
-          val normImpt = impt / treeNorm
+          val normImpt = if (perTreeNormalization) {
+            impt / treeNorm
+          } else {
+            impt
+          }
           totalImportances.changeValue(idx, normImpt, _ + normImpt)
         }
       }
@@ -287,6 +297,7 @@ private[ml] object DecisionTreeModelReadWrite {
    *
    * @param id  Index used for tree reconstruction.  Indices follow a pre-order traversal.
    * @param impurityStats  Stats array.  Impurity type is stored in metadata.
+   * @param rawCount  The unweighted number of samples falling in this node.
    * @param gain  Gain, or arbitrary value if leaf node.
    * @param leftChild  Left child index, or arbitrary value if leaf node.
    * @param rightChild  Right child index, or arbitrary value if leaf node.
@@ -297,6 +308,7 @@ private[ml] object DecisionTreeModelReadWrite {
     prediction: Double,
     impurity: Double,
     impurityStats: Array[Double],
+    rawCount: Long,
     gain: Double,
     leftChild: Int,
     rightChild: Int,
@@ -316,11 +328,12 @@ private[ml] object DecisionTreeModelReadWrite {
         val (leftNodeData, leftIdx) = build(n.leftChild, id + 1)
         val (rightNodeData, rightIdx) = build(n.rightChild, leftIdx + 1)
         val thisNodeData = NodeData(id, n.prediction, n.impurity, n.impurityStats.stats,
-          n.gain, leftNodeData.head.id, rightNodeData.head.id, SplitData(n.split))
+          n.impurityStats.rawCount, n.gain, leftNodeData.head.id, rightNodeData.head.id,
+          SplitData(n.split))
         (thisNodeData +: (leftNodeData ++ rightNodeData), rightIdx)
       case _: LeafNode =>
         (Seq(NodeData(id, node.prediction, node.impurity, node.impurityStats.stats,
-          -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
+          node.impurityStats.rawCount, -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
           id)
     }
   }
@@ -332,8 +345,8 @@ private[ml] object DecisionTreeModelReadWrite {
   def loadTreeNodes(
       path: String,
       metadata: DefaultParamsReader.Metadata,
-      sqlContext: SQLContext): Node = {
-    import sqlContext.implicits._
+      sparkSession: SparkSession): Node = {
+    import sparkSession.implicits._
     implicit val format = DefaultFormats
 
     // Get impurity to construct ImpurityCalculator for each node
@@ -343,7 +356,7 @@ private[ml] object DecisionTreeModelReadWrite {
     }
 
     val dataPath = new Path(path, "data").toString
-    val data = sqlContext.read.parquet(dataPath).as[NodeData]
+    val data = sparkSession.read.parquet(dataPath).as[NodeData]
     buildTreeFromNodes(data.collect(), impurityType)
   }
 
@@ -365,7 +378,8 @@ private[ml] object DecisionTreeModelReadWrite {
     // traversal, this guarantees that child nodes will be built before parent nodes.
     val finalNodes = new Array[Node](nodes.length)
     nodes.reverseIterator.foreach { case n: NodeData =>
-      val impurityStats = ImpurityCalculator.getCalculator(impurityType, n.impurityStats)
+      val impurityStats =
+        ImpurityCalculator.getCalculator(impurityType, n.impurityStats, n.rawCount)
       val node = if (n.leftChild != -1) {
         val leftChild = finalNodes(n.leftChild)
         val rightChild = finalNodes(n.rightChild)
@@ -393,7 +407,7 @@ private[ml] object EnsembleModelReadWrite {
   def saveImpl[M <: Params with TreeEnsembleModel[_ <: DecisionTreeModel]](
       instance: M,
       path: String,
-      sql: SQLContext,
+      sql: SparkSession,
       extraMetadata: JObject): Unit = {
     DefaultParamsWriter.saveMetadata(instance, path, sql.sparkContext, Some(extraMetadata))
     val treesMetadataWeights: Array[(Int, String, Double)] = instance.trees.zipWithIndex.map {
@@ -415,16 +429,16 @@ private[ml] object EnsembleModelReadWrite {
   /**
    * Helper method for loading a tree ensemble from disk.
    * This reconstructs all trees, returning the root nodes.
-   * @param path  Path given to [[saveImpl()]]
+   * @param path  Path given to `saveImpl`
    * @param className  Class name for ensemble model type
    * @param treeClassName  Class name for tree model type in the ensemble
    * @return  (ensemble metadata, array over trees of (tree metadata, root node)),
    *          where the root node is linked with all descendents
-   * @see [[saveImpl()]] for how the model was saved
+   * @see `saveImpl` for how the model was saved
    */
   def loadImpl(
       path: String,
-      sql: SQLContext,
+      sql: SparkSession,
       className: String,
       treeClassName: String): (Metadata, Array[(Metadata, Node)], Array[Double]) = {
     import sql.implicits._
@@ -441,7 +455,7 @@ private[ml] object EnsembleModelReadWrite {
     val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
       .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
       case (treeID: Int, json: String, weights: Double) =>
-        treeID -> (DefaultParamsReader.parseMetadata(json, treeClassName), weights)
+        treeID -> ((DefaultParamsReader.parseMetadata(json, treeClassName), weights))
     }
 
     val treesMetadataWeights = treesMetadataRDD.sortByKey().values.collect()

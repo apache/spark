@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.mutable
+
 
 protected class AttributeEquals(val a: Attribute) {
   override def hashCode(): Int = a match {
@@ -39,10 +41,13 @@ object AttributeSet {
 
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
   def apply(baseSet: Iterable[Expression]): AttributeSet = {
-    new AttributeSet(
-      baseSet
-        .flatMap(_.references)
-        .map(new AttributeEquals(_)).toSet)
+    fromAttributeSets(baseSet.map(_.references))
+  }
+
+  /** Constructs a new [[AttributeSet]] given a sequence of [[AttributeSet]]s. */
+  def fromAttributeSets(sets: Iterable[AttributeSet]): AttributeSet = {
+    val baseSet = sets.foldLeft(new mutable.LinkedHashSet[AttributeEquals]())( _ ++= _.baseSet)
+    new AttributeSet(baseSet.toSet)
   }
 }
 
@@ -58,7 +63,7 @@ object AttributeSet {
  * when the transformation was a no-op).
  */
 class AttributeSet private (val baseSet: Set[AttributeEquals])
-  extends Traversable[Attribute] with Serializable {
+  extends Iterable[Attribute] with Serializable {
 
   override def hashCode: Int = baseSet.hashCode()
 
@@ -94,8 +99,14 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
    * Returns a new [[AttributeSet]] that does not contain any of the [[Attribute Attributes]] found
    * in `other`.
    */
-  def --(other: Traversable[NamedExpression]): AttributeSet =
-    new AttributeSet(baseSet -- other.map(a => new AttributeEquals(a.toAttribute)))
+  def --(other: Iterable[NamedExpression]): AttributeSet = {
+    other match {
+      case otherSet: AttributeSet =>
+        new AttributeSet(baseSet -- otherSet.baseSet)
+      case _ =>
+        new AttributeSet(baseSet -- other.map(a => new AttributeEquals(a.toAttribute)))
+    }
+  }
 
   /**
    * Returns a new [[AttributeSet]] that contains all of the [[Attribute Attributes]] found
@@ -121,7 +132,12 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
 
   // We must force toSeq to not be strict otherwise we end up with a [[Stream]] that captures all
   // sorts of things in its closure.
-  override def toSeq: Seq[Attribute] = baseSet.map(_.a).toArray.toSeq
+  override def toSeq: Seq[Attribute] = {
+    // We need to keep a deterministic output order for `baseSet` because this affects a variable
+    // order in generated code (e.g., `GenerateColumnAccessor`).
+    // See SPARK-18394 for details.
+    baseSet.map(_.a).toSeq.sortBy { a => (a.name, a.exprId.id) }
+  }
 
   override def toString: String = "{" + baseSet.map(_.a).mkString(", ") + "}"
 

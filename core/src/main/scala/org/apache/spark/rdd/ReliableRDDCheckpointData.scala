@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS
 
 /**
  * An implementation of checkpointing that writes the RDD data to reliable storage.
@@ -58,7 +59,7 @@ private[spark] class ReliableRDDCheckpointData[T: ClassTag](@transient private v
     val newRDD = ReliableCheckpointRDD.writeRDDToCheckpointDirectory(rdd, cpDir)
 
     // Optionally clean our checkpoint files if the reference is out of scope
-    if (rdd.conf.getBoolean("spark.cleaner.referenceTracking.cleanCheckpoints", false)) {
+    if (rdd.conf.get(CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS)) {
       rdd.context.cleaner.foreach { cleaner =>
         cleaner.registerRDDCheckpointDataForCleanup(newRDD, rdd.id)
       }
@@ -80,12 +81,7 @@ private[spark] object ReliableRDDCheckpointData extends Logging {
   /** Clean up the files associated with the checkpoint data for this RDD. */
   def cleanCheckpoint(sc: SparkContext, rddId: Int): Unit = {
     checkpointPath(sc, rddId).foreach { path =>
-      val fs = path.getFileSystem(sc.hadoopConfiguration)
-      if (fs.exists(path)) {
-        if (!fs.delete(path, true)) {
-          logWarning(s"Error deleting ${path.toString()}")
-        }
-      }
+      path.getFileSystem(sc.hadoopConfiguration).delete(path, true)
     }
   }
 }

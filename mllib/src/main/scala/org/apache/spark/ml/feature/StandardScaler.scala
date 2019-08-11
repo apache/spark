@@ -19,16 +19,16 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.feature.{StandardScaler => OldStandardScaler}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -40,8 +40,7 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /**
    * Whether to center the data with mean before scaling.
-   * It will build a dense output, so this does not work on sparse input
-   * and will raise an exception.
+   * It will build a dense output, so take care when applying to sparse input.
    * Default: false
    * @group param
    */
@@ -75,48 +74,56 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 }
 
 /**
- * :: Experimental ::
  * Standardizes features by removing the mean and scaling to unit variance using column summary
  * statistics on the samples in the training set.
  *
  * The "unit std" is computed using the
- * [[https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation
- *   corrected sample standard deviation]],
+ * <a href="https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation">
+ * corrected sample standard deviation</a>,
  * which is computed as the square root of the unbiased sample variance.
  */
-@Experimental
-class StandardScaler(override val uid: String) extends Estimator[StandardScalerModel]
-  with StandardScalerParams with DefaultParamsWritable {
+@Since("1.2.0")
+class StandardScaler @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
+  extends Estimator[StandardScalerModel] with StandardScalerParams with DefaultParamsWritable {
 
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("stdScal"))
 
   /** @group setParam */
+  @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setWithMean(value: Boolean): this.type = set(withMean, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setWithStd(value: Boolean): this.type = set(withStd, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+    val input = dataset.select($(inputCol)).rdd.map {
       case Row(v: Vector) => OldVectors.fromML(v)
     }
-    val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
+    val scaler = new OldStandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
+    copyValues(new StandardScalerModel(uid, scalerModel.std.compressed,
+      scalerModel.mean.compressed).setParent(this))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
 }
 
@@ -128,43 +135,48 @@ object StandardScaler extends DefaultParamsReadable[StandardScaler] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[StandardScaler]].
  *
  * @param std Standard deviation of the StandardScalerModel
  * @param mean Mean of the StandardScalerModel
  */
-@Experimental
+@Since("1.2.0")
 class StandardScalerModel private[ml] (
-    override val uid: String,
-    val std: Vector,
-    val mean: Vector)
+    @Since("1.4.0") override val uid: String,
+    @Since("2.0.0") val std: Vector,
+    @Since("2.0.0") val mean: Vector)
   extends Model[StandardScalerModel] with StandardScalerParams with MLWritable {
 
   import StandardScalerModel._
 
   /** @group setParam */
+  @Since("1.2.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.2.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
+    val shift = if ($(withMean)) mean.toArray else Array.emptyDoubleArray
+    val scale = if ($(withStd)) {
+      std.toArray.map { v => if (v == 0) 0.0 else 1.0 / v }
+    } else Array.emptyDoubleArray
 
-    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    val transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML
+    val func = getTransformFunc(shift, scale, $(withMean), $(withStd))
+    val transformer = udf(func)
 
-    val scale = udf(transformer)
-    dataset.withColumn($(outputCol), scale(col($(inputCol))))
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))))
   }
 
+  @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
 
+  @Since("1.4.1")
   override def copy(extra: ParamMap): StandardScalerModel = {
     val copied = new StandardScalerModel(uid, std, mean)
     copyValues(copied, extra).setParent(parent)
@@ -186,7 +198,7 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val data = Data(instance.std, instance.mean)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -197,11 +209,12 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
     override def load(path: String): StandardScalerModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(std: Vector, mean: Vector) = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
+      val Row(std: Vector, mean: Vector) = MLUtils.convertVectorColumnsToML(data, "std", "mean")
         .select("std", "mean")
         .head()
       val model = new StandardScalerModel(metadata.uid, std, mean)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
@@ -211,4 +224,90 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
 
   @Since("1.6.0")
   override def load(path: String): StandardScalerModel = super.load(path)
+
+  private[spark] def transformWithBoth(
+      shift: Array[Double],
+      scale: Array[Double],
+      values: Array[Double]): Array[Double] = {
+    var i = 0
+    while (i < values.length) {
+      values(i) = (values(i) - shift(i)) * scale(i)
+      i += 1
+    }
+    values
+  }
+
+  private[spark] def transformWithShift(
+      shift: Array[Double],
+      values: Array[Double]): Array[Double] = {
+    var i = 0
+    while (i < values.length) {
+      values(i) -= shift(i)
+      i += 1
+    }
+    values
+  }
+
+  private[spark] def transformDenseWithScale(
+      scale: Array[Double],
+      values: Array[Double]): Array[Double] = {
+    var i = 0
+    while (i < values.length) {
+      values(i) *= scale(i)
+      i += 1
+    }
+    values
+  }
+
+  private[spark] def transformSparseWithScale(
+      scale: Array[Double],
+      indices: Array[Int],
+      values: Array[Double]): Array[Double] = {
+    var i = 0
+    while (i < values.length) {
+      values(i) *= scale(indices(i))
+      i += 1
+    }
+    values
+  }
+
+  private[ml] def getTransformFunc(
+      shift: Array[Double],
+      scale: Array[Double],
+      withShift: Boolean,
+      withScale: Boolean): Vector => Vector = {
+    (withShift, withScale) match {
+      case (true, true) =>
+        vector: Vector =>
+          val values = vector match {
+            case d: DenseVector => d.values.clone()
+            case v: Vector => v.toArray
+          }
+          val newValues = transformWithBoth(shift, scale, values)
+          Vectors.dense(newValues)
+
+      case (true, false) =>
+        vector: Vector =>
+          val values = vector match {
+            case d: DenseVector => d.values.clone()
+            case v: Vector => v.toArray
+          }
+          val newValues = transformWithShift(shift, values)
+          Vectors.dense(newValues)
+
+      case (false, true) =>
+        vector: Vector =>
+          vector match {
+            case DenseVector(values) =>
+              val newValues = transformDenseWithScale(scale, values.clone())
+              Vectors.dense(newValues)
+            case SparseVector(size, indices, values) =>
+              val newValues = transformSparseWithScale(scale, indices, values.clone())
+              Vectors.sparse(size, indices, newValues)
+          }
+
+      case (false, false) =>
+        vector: Vector => vector
+    }
+  }
 }

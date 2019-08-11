@@ -1,0 +1,137 @@
+================================================================================================
+Compression Scheme Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+BOOLEAN Encode:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                               4 /    4      17998.9           0.1       1.0X
+RunLengthEncoding(2.501)                       680 /  680         98.7          10.1       0.0X
+BooleanBitSet(0.125)                           365 /  365        183.9           5.4       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+BOOLEAN Decode:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                    144 /  144        466.5           2.1       1.0X
+RunLengthEncoding                              679 /  679         98.9          10.1       0.2X
+BooleanBitSet                                 1425 / 1431         47.1          21.2       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+SHORT Encode (Lower Skew):               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                               7 /    7      10115.0           0.1       1.0X
+RunLengthEncoding(1.494)                      1671 / 1672         40.2          24.9       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+SHORT Decode (Lower Skew):               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   1128 / 1128         59.5          16.8       1.0X
+RunLengthEncoding                             1630 / 1633         41.2          24.3       0.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+SHORT Encode (Higher Skew):              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                               7 /    7      10164.2           0.1       1.0X
+RunLengthEncoding(1.989)                      1562 / 1563         43.0          23.3       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+SHORT Decode (Higher Skew):              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   1127 / 1127         59.6          16.8       1.0X
+RunLengthEncoding                             1629 / 1631         41.2          24.3       0.7X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+INT Encode (Lower Skew):                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                              22 /   23       2983.2           0.3       1.0X
+RunLengthEncoding(1.003)                      2426 / 2427         27.7          36.1       0.0X
+DictionaryEncoding(0.500)                      958 /  958         70.1          14.3       0.0X
+IntDelta(0.250)                                286 /  286        235.0           4.3       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+INT Decode (Lower Skew):                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   1268 / 1269         52.9          18.9       1.0X
+RunLengthEncoding                             1906 / 1911         35.2          28.4       0.7X
+DictionaryEncoding                             981 /  982         68.4          14.6       1.3X
+IntDelta                                       812 /  817         82.6          12.1       1.6X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+INT Encode (Higher Skew):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                              23 /   23       2926.9           0.3       1.0X
+RunLengthEncoding(1.326)                      2614 / 2614         25.7          38.9       0.0X
+DictionaryEncoding(0.501)                     1024 / 1024         65.5          15.3       0.0X
+IntDelta(0.250)                                286 /  286        234.7           4.3       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+INT Decode (Higher Skew):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   1433 / 1433         46.8          21.4       1.0X
+RunLengthEncoding                             1923 / 1926         34.9          28.6       0.7X
+DictionaryEncoding                            1285 / 1285         52.2          19.2       1.1X
+IntDelta                                      1129 / 1137         59.4          16.8       1.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+LONG Encode (Lower Skew):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                              45 /   45       1495.6           0.7       1.0X
+RunLengthEncoding(0.738)                      2662 / 2663         25.2          39.7       0.0X
+DictionaryEncoding(0.250)                     1269 / 1269         52.9          18.9       0.0X
+LongDelta(0.125)                               450 /  450        149.1           6.7       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+LONG Decode (Lower Skew):                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   1483 / 1483         45.3          22.1       1.0X
+RunLengthEncoding                             1875 / 1875         35.8          27.9       0.8X
+DictionaryEncoding                            1213 / 1214         55.3          18.1       1.2X
+LongDelta                                      816 /  817         82.2          12.2       1.8X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+LONG Encode (Higher Skew):               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                              45 /   45       1489.3           0.7       1.0X
+RunLengthEncoding(1.003)                      2906 / 2906         23.1          43.3       0.0X
+DictionaryEncoding(0.251)                     1610 / 1610         41.7          24.0       0.0X
+LongDelta(0.125)                               451 /  451        148.7           6.7       0.1X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+LONG Decode (Higher Skew):               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   1485 / 1485         45.2          22.1       1.0X
+RunLengthEncoding                             1889 / 1890         35.5          28.2       0.8X
+DictionaryEncoding                            1215 / 1216         55.2          18.1       1.2X
+LongDelta                                     1107 / 1110         60.6          16.5       1.3X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+STRING Encode:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough(1.000)                              67 /   68        994.5           1.0       1.0X
+RunLengthEncoding(0.894)                      5877 / 5882         11.4          87.6       0.0X
+DictionaryEncoding(0.167)                     3597 / 3602         18.7          53.6       0.0X
+
+OpenJDK 64-Bit Server VM 1.8.0_181-b13 on Linux 3.10.0-862.3.2.el7.x86_64
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+STRING Decode:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+PassThrough                                   3243 / 3244         20.7          48.3       1.0X
+RunLengthEncoding                             3598 / 3601         18.7          53.6       0.9X
+DictionaryEncoding                            3182 / 3182         21.1          47.4       1.0X
+
+

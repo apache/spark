@@ -20,9 +20,9 @@ package org.apache.spark.mllib.random
 import org.apache.commons.math3.special.Gamma
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.StatCounter
 
-// TODO update tests to use TestingUtils for floating point comparison after PR 1367 is merged
 class RandomDataGeneratorSuite extends SparkFunSuite {
 
   def apiChecks(gen: RandomDataGenerator[Double]) {
@@ -61,8 +61,8 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
       gen.setSeed(seed.toLong)
       val sample = (0 until 100000).map { _ => gen.nextValue()}
       val stats = new StatCounter(sample)
-      assert(math.abs(stats.mean - mean) < epsilon)
-      assert(math.abs(stats.stdev - stddev) < epsilon)
+      assert(stats.mean ~== mean absTol epsilon)
+      assert(stats.stdev ~== stddev absTol epsilon)
     }
   }
 
@@ -80,7 +80,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   }
 
   test("LogNormalGenerator") {
-    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).map {
+    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).foreach {
       case (mean: Double, vari: Double) =>
         val normal = new LogNormalGenerator(mean, math.sqrt(vari))
         apiChecks(normal)
@@ -89,7 +89,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
         val expectedMean = math.exp(mean + 0.5 * vari)
 
         // variance of log normal = (e^var - 1) * e^(2 * mean + var)
-        val expectedStd = math.sqrt((math.exp(vari) - 1.0) * math.exp(2.0 * mean + vari))
+        val expectedStd = math.sqrt(math.expm1(vari) * math.exp(2.0 * mean + vari))
 
         // since sampling error increases with variance, let's set
         // the absolute tolerance as a percentage
@@ -125,7 +125,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
 
   test("GammaGenerator") {
     // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
-    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).map {
+    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).foreach {
       case (shape: Double, scale: Double) =>
         val gamma = new GammaGenerator(shape, scale)
         apiChecks(gamma)
@@ -138,7 +138,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
   }
 
   test("WeibullGenerator") {
-    List((1.0, 2.0), (2.0, 3.0), (2.5, 3.5), (10.4, 2.222)).map {
+    List((1.0, 2.0), (2.0, 3.0), (2.5, 3.5), (10.4, 2.222)).foreach {
       case (alpha: Double, beta: Double) =>
         val weibull = new WeibullGenerator(alpha, beta)
         apiChecks(weibull)

@@ -19,7 +19,7 @@ from __future__ import print_function
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.feature import StandardScaler, StandardScalerModel
+from pyspark.mllib.feature import StandardScaler
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
 # $example off$
@@ -38,8 +38,6 @@ if __name__ == "__main__":
     # data1 will be unit variance.
     data1 = label.zip(scaler1.transform(features))
 
-    # Without converting the features into dense vectors, transformation with zero mean will raise
-    # exception on sparse vector.
     # data2 will be unit variance and zero mean.
     data2 = label.zip(scaler2.transform(features.map(lambda x: Vectors.dense(x.toArray()))))
     # $example off$

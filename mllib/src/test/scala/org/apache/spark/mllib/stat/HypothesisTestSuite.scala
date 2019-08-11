@@ -145,14 +145,17 @@ class HypothesisTestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(chi(1000) != null) // SPARK-3087
 
     // Detect continuous features or labels
+    val tooManyCategories: Int = 100000
+    assert(tooManyCategories > ChiSqTest.maxCategories, "This unit test requires that " +
+      "tooManyCategories be large enough to cause ChiSqTest to throw an exception.")
     val random = new Random(11L)
-    val continuousLabel =
-      Seq.fill(100000)(LabeledPoint(random.nextDouble(), Vectors.dense(random.nextInt(2))))
+    val continuousLabel = Seq.fill(tooManyCategories)(
+      LabeledPoint(random.nextDouble(), Vectors.dense(random.nextInt(2))))
     intercept[SparkException] {
       Statistics.chiSqTest(sc.parallelize(continuousLabel, 2))
     }
-    val continuousFeature =
-      Seq.fill(100000)(LabeledPoint(random.nextInt(2), Vectors.dense(random.nextDouble())))
+    val continuousFeature = Seq.fill(tooManyCategories)(
+      LabeledPoint(random.nextInt(2), Vectors.dense(random.nextDouble())))
     intercept[SparkException] {
       Statistics.chiSqTest(sc.parallelize(continuousFeature, 2))
     }

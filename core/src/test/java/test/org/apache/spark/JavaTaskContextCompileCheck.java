@@ -38,7 +38,12 @@ public class JavaTaskContextCompileCheck {
     tc.attemptNumber();
     tc.partitionId();
     tc.stageId();
+    tc.stageAttemptNumber();
     tc.taskAttemptId();
+    tc.resources();
+    tc.taskMetrics();
+    tc.taskMemoryManager();
+    tc.getLocalProperties();
   }
 
   /**
@@ -51,6 +56,7 @@ public class JavaTaskContextCompileCheck {
       context.isCompleted();
       context.isInterrupted();
       context.stageId();
+      context.stageAttemptNumber();
       context.partitionId();
       context.addTaskCompletionListener(this);
     }

@@ -36,7 +36,7 @@ function toggleThreadStackTrace(threadId, forceAdd) {
     if (stackTrace.length == 0) {
         var stackTraceText = $('#' + threadId + "_td_stacktrace").html()
         var threadCell = $("#thread_" + threadId + "_tr")
-        threadCell.after("<tr id=\"" + threadId +"_stacktrace\" class=\"accordion-body\"><td colspan=\"3\"><pre>" +
+        threadCell.after("<tr id=\"" + threadId +"_stacktrace\" class=\"accordion-body\"><td colspan=\"4\"><pre>" +
             stackTraceText +  "</pre></td></tr>")
     } else {
         if (!forceAdd) {
@@ -73,6 +73,7 @@ function onMouseOverAndOut(threadId) {
     $("#" + threadId + "_td_id").toggleClass("threaddump-td-mouseover");
     $("#" + threadId + "_td_name").toggleClass("threaddump-td-mouseover");
     $("#" + threadId + "_td_state").toggleClass("threaddump-td-mouseover");
+    $("#" + threadId + "_td_locking").toggleClass("threaddump-td-mouseover");
 }
 
 function onSearchStringChange() {
@@ -88,7 +89,7 @@ function onSearchStringChange() {
             if($(this).attr('id') && $(this).attr('id').match(/thread_[0-9]+_tr/) ) {
                 var children = $(this).children()
                 var found = false
-                for (i = 0; i < children.length; i++) {
+                for (var i = 0; i < children.length; i++) {
                     if (children.eq(i).text().toLowerCase().indexOf(searchString) >= 0) {
                         found = true
                     }

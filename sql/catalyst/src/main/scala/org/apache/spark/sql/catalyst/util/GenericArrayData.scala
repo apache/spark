@@ -23,6 +23,16 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
+private object GenericArrayData {
+
+  // SPARK-16634: Workaround for JVM bug present in some 1.7 versions.
+  def anyToSeq(seqOrArray: Any): Seq[Any] = seqOrArray match {
+    case seq: Seq[Any] => seq
+    case array: Array[_] => array.toSeq
+  }
+
+}
+
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
   def this(seq: Seq[Any]) = this(seq.toArray)
@@ -37,12 +47,17 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   def this(primitiveArray: Array[Byte]) = this(primitiveArray.toSeq)
   def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
 
-  def this(seqOrArray: Any) = this(seqOrArray match {
-    case seq: Seq[Any] => seq
-    case array: Array[_] => array.toSeq
-  })
+  def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
 
-  override def copy(): ArrayData = new GenericArrayData(array.clone())
+  override def copy(): ArrayData = {
+    val newValues = new Array[Any](array.length)
+    var i = 0
+    while (i < array.length) {
+      newValues(i) = InternalRow.copyValue(array(i))
+      i += 1
+    }
+    new GenericArrayData(newValues)
+  }
 
   override def numElements(): Int = array.length
 
@@ -63,6 +78,10 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
+
+  override def setNullAt(ordinal: Int): Unit = array(ordinal) = null
+
+  override def update(ordinal: Int, value: Any): Unit = array(ordinal) = value
 
   override def toString(): String = array.mkString("[", ",", "]")
 
@@ -103,7 +122,7 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
             if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
-          case _ => if (o1 != o2) {
+          case _ => if (!o1.equals(o2)) {
             return false
           }
         }

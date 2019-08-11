@@ -17,19 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.DataSourceScanExec.{INPUT_PATHS, PUSHED_FILTERS}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -54,10 +50,95 @@ import org.apache.spark.sql.execution.SparkPlan
  *     is under the threshold with the addition of the next file, add it.  If not, open a new bucket
  *     and add it.  Proceed to the next file.
  */
-private[sql] object FileSourceStrategy extends Strategy with Logging {
+object FileSourceStrategy extends Strategy with Logging {
+
+  // should prune buckets iff num buckets is greater than 1 and there is only one bucket column
+  private def shouldPruneBuckets(bucketSpec: Option[BucketSpec]): Boolean = {
+    bucketSpec match {
+      case Some(spec) => spec.bucketColumnNames.length == 1 && spec.numBuckets > 1
+      case None => false
+    }
+  }
+
+  private def getExpressionBuckets(
+      expr: Expression,
+      bucketColumnName: String,
+      numBuckets: Int): BitSet = {
+
+    def getBucketNumber(attr: Attribute, v: Any): Int = {
+      BucketingUtils.getBucketIdFromValue(attr, numBuckets, v)
+    }
+
+    def getBucketSetFromIterable(attr: Attribute, iter: Iterable[Any]): BitSet = {
+      val matchedBuckets = new BitSet(numBuckets)
+      iter
+        .map(v => getBucketNumber(attr, v))
+        .foreach(bucketNum => matchedBuckets.set(bucketNum))
+      matchedBuckets
+    }
+
+    def getBucketSetFromValue(attr: Attribute, v: Any): BitSet = {
+      val matchedBuckets = new BitSet(numBuckets)
+      matchedBuckets.set(getBucketNumber(attr, v))
+      matchedBuckets
+    }
+
+    expr match {
+      case expressions.Equality(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        getBucketSetFromValue(a, v)
+      case expressions.In(a: Attribute, list)
+        if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
+        getBucketSetFromIterable(a, list.map(e => e.eval(EmptyRow)))
+      case expressions.InSet(a: Attribute, hset)
+        if hset.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
+        getBucketSetFromIterable(a, hset.map(e => expressions.Literal(e).eval(EmptyRow)))
+      case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
+        getBucketSetFromValue(a, null)
+      case expressions.And(left, right) =>
+        getExpressionBuckets(left, bucketColumnName, numBuckets) &
+          getExpressionBuckets(right, bucketColumnName, numBuckets)
+      case expressions.Or(left, right) =>
+        getExpressionBuckets(left, bucketColumnName, numBuckets) |
+        getExpressionBuckets(right, bucketColumnName, numBuckets)
+      case _ =>
+        val matchedBuckets = new BitSet(numBuckets)
+        matchedBuckets.setUntil(numBuckets)
+        matchedBuckets
+    }
+  }
+
+  private def genBucketSet(
+      normalizedFilters: Seq[Expression],
+      bucketSpec: BucketSpec): Option[BitSet] = {
+    if (normalizedFilters.isEmpty) {
+      return None
+    }
+
+    val bucketColumnName = bucketSpec.bucketColumnNames.head
+    val numBuckets = bucketSpec.numBuckets
+
+    val normalizedFiltersAndExpr = normalizedFilters
+      .reduce(expressions.And)
+    val matchedBuckets = getExpressionBuckets(normalizedFiltersAndExpr, bucketColumnName,
+      numBuckets)
+
+    val numBucketsSelected = matchedBuckets.cardinality()
+
+    logInfo {
+      s"Pruned ${numBuckets - numBucketsSelected} out of $numBuckets buckets."
+    }
+
+    // None means all the buckets need to be scanned
+    if (numBucketsSelected == numBuckets) {
+      None
+    } else {
+      Some(matchedBuckets)
+    }
+  }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
-      l @ LogicalRelation(files: HadoopFsRelation, _, table)) =>
+      l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -66,34 +147,40 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       //  - filters that need to be evaluated again after the scan
       val filterSet = ExpressionSet(filters)
 
-      // The attribute name of predicate could be different than the one in schema in case of
-      // case insensitive, we should change them to match the one in schema, so we donot need to
-      // worry about case sensitivity anymore.
-      val normalizedFilters = filters.map { e =>
-        e transform {
-          case a: AttributeReference =>
-            a.withName(l.output.find(_.semanticEquals(a)).get.name)
-        }
-      }
+      val normalizedFilters = DataSourceStrategy.normalizeFilters(filters, l.output)
 
       val partitionColumns =
-        l.resolve(files.partitionSchema, files.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(
+          fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
       val partitionKeyFilters =
-        ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
+        ExpressionSet(normalizedFilters
+          .filter(_.references.subsetOf(partitionSet)))
+
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
+      // subquery expressions are filtered out because they can't be used to prune buckets or pushed
+      // down as data filters, yet they would be executed
+      val normalizedFiltersWithoutSubqueries =
+        normalizedFilters.filterNot(SubqueryExpression.hasSubquery)
+
+      val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
+      val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
+        genBucketSet(normalizedFiltersWithoutSubqueries, bucketSpec.get)
+      } else {
+        None
+      }
+
       val dataColumns =
-        l.resolve(files.dataSchema, files.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
+      val dataFilters =
+        normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
 
       // Predicates with both partition keys and attributes need to be evaluated after the scan.
-      val afterScanFilters = filterSet -- partitionKeyFilters
+      val afterScanFilters = filterSet -- partitionKeyFilters.filter(_.references.nonEmpty)
       logInfo(s"Post-Scan Filters: ${afterScanFilters.mkString(",")}")
-
-      val selectedPartitions = files.location.listFiles(partitionKeyFilters.toSeq)
 
       val filterAttributes = AttributeSet(afterScanFilters)
       val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
@@ -103,121 +190,20 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
         dataColumns
           .filter(requiredAttributes.contains)
           .filterNot(partitionColumns.contains)
-      val prunedDataSchema = readDataColumns.toStructType
-      logInfo(s"Pruned Data Schema: ${prunedDataSchema.simpleString(5)}")
+      val outputSchema = readDataColumns.toStructType
+      logInfo(s"Output Data Schema: ${outputSchema.simpleString(5)}")
 
-      val pushedDownFilters = dataFilters.flatMap(DataSourceStrategy.translateFilter)
-      logInfo(s"Pushed Filters: ${pushedDownFilters.mkString(",")}")
-
-      val readFile = files.fileFormat.buildReaderWithPartitionValues(
-        sparkSession = files.sparkSession,
-        dataSchema = files.dataSchema,
-        partitionSchema = files.partitionSchema,
-        requiredSchema = prunedDataSchema,
-        filters = pushedDownFilters,
-        options = files.options,
-        hadoopConf = files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))
-
-      val plannedPartitions = files.bucketSpec match {
-        case Some(bucketing) if files.sparkSession.sessionState.conf.bucketingEnabled =>
-          logInfo(s"Planning with ${bucketing.numBuckets} buckets")
-          val bucketed =
-            selectedPartitions.flatMap { p =>
-              p.files.map { f =>
-                val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
-                PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
-              }
-            }.groupBy { f =>
-              BucketingUtils
-                .getBucketId(new Path(f.filePath).getName)
-                .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
-            }
-
-          (0 until bucketing.numBuckets).map { bucketId =>
-            FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
-          }
-
-        case _ =>
-          val defaultMaxSplitBytes = files.sparkSession.sessionState.conf.filesMaxPartitionBytes
-          val openCostInBytes = files.sparkSession.sessionState.conf.filesOpenCostInBytes
-          val defaultParallelism = files.sparkSession.sparkContext.defaultParallelism
-          val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
-          val bytesPerCore = totalBytes / defaultParallelism
-          val maxSplitBytes = Math.min(defaultMaxSplitBytes,
-            Math.max(openCostInBytes, bytesPerCore))
-          logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
-            s"open cost is considered as scanning $openCostInBytes bytes.")
-
-          val splitFiles = selectedPartitions.flatMap { partition =>
-            partition.files.flatMap { file =>
-              val blockLocations = getBlockLocations(file)
-              if (files.fileFormat.isSplitable(files.sparkSession, files.options, file.getPath)) {
-                (0L until file.getLen by maxSplitBytes).map { offset =>
-                  val remaining = file.getLen - offset
-                  val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                  val hosts = getBlockHosts(blockLocations, offset, size)
-                  PartitionedFile(
-                    partition.values, file.getPath.toUri.toString, offset, size, hosts)
-                }
-              } else {
-                val hosts = getBlockHosts(blockLocations, 0, file.getLen)
-                Seq(PartitionedFile(
-                  partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
-              }
-            }
-          }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
-
-          val partitions = new ArrayBuffer[FilePartition]
-          val currentFiles = new ArrayBuffer[PartitionedFile]
-          var currentSize = 0L
-
-          /** Add the given file to the current partition. */
-          def addFile(file: PartitionedFile): Unit = {
-            currentSize += file.length + openCostInBytes
-            currentFiles.append(file)
-          }
-
-          /** Close the current partition and move to the next. */
-          def closePartition(): Unit = {
-            if (currentFiles.nonEmpty) {
-              val newPartition =
-                FilePartition(
-                  partitions.size,
-                  currentFiles.toArray.toSeq) // Copy to a new Array.
-              partitions.append(newPartition)
-            }
-            currentFiles.clear()
-            currentSize = 0
-          }
-
-          // Assign files to partitions using "First Fit Decreasing" (FFD)
-          // TODO: consider adding a slop factor here?
-          splitFiles.foreach { file =>
-            if (currentSize + file.length > maxSplitBytes) {
-              closePartition()
-            }
-            addFile(file)
-          }
-          closePartition()
-          partitions
-      }
-
-      val meta = Map(
-        "Format" -> files.fileFormat.toString,
-        "ReadSchema" -> prunedDataSchema.simpleString,
-        PUSHED_FILTERS -> pushedDownFilters.mkString("[", ", ", "]"),
-        INPUT_PATHS -> files.location.paths.mkString(", "))
+      val outputAttributes = readDataColumns ++ partitionColumns
 
       val scan =
-        DataSourceScanExec.create(
-          readDataColumns ++ partitionColumns,
-          new FileScanRDD(
-            files.sparkSession,
-            readFile,
-            plannedPartitions),
-          files,
-          meta,
-          table)
+        FileSourceScanExec(
+          fsRelation,
+          outputAttributes,
+          outputSchema,
+          partitionKeyFilters.toSeq,
+          bucketSet,
+          dataFilters,
+          table.map(_.identifier))
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
@@ -230,44 +216,5 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       withProjections :: Nil
 
     case _ => Nil
-  }
-
-  private def getBlockLocations(file: FileStatus): Array[BlockLocation] = file match {
-    case f: LocatedFileStatus => f.getBlockLocations
-    case f => Array.empty[BlockLocation]
-  }
-
-  // Given locations of all blocks of a single file, `blockLocations`, and an `(offset, length)`
-  // pair that represents a segment of the same file, find out the block that contains the largest
-  // fraction the segment, and returns location hosts of that block. If no such block can be found,
-  // returns an empty array.
-  private def getBlockHosts(
-      blockLocations: Array[BlockLocation], offset: Long, length: Long): Array[String] = {
-    val candidates = blockLocations.map {
-      // The fragment starts from a position within this block
-      case b if b.getOffset <= offset && offset < b.getOffset + b.getLength =>
-        b.getHosts -> (b.getOffset + b.getLength - offset).min(length)
-
-      // The fragment ends at a position within this block
-      case b if offset <= b.getOffset && offset + length < b.getLength =>
-        b.getHosts -> (offset + length - b.getOffset).min(length)
-
-      // The fragment fully contains this block
-      case b if offset <= b.getOffset && b.getOffset + b.getLength <= offset + length =>
-        b.getHosts -> b.getLength
-
-      // The fragment doesn't intersect with this block
-      case b =>
-        b.getHosts -> 0L
-    }.filter { case (hosts, size) =>
-      size > 0L
-    }
-
-    if (candidates.isEmpty) {
-      Array.empty[String]
-    } else {
-      val (hosts, _) = candidates.maxBy { case (_, size) => size }
-      hosts
-    }
   }
 }

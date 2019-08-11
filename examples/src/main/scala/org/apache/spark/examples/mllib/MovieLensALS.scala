@@ -89,14 +89,13 @@ object MovieLensALS {
         """.stripMargin)
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    } getOrElse {
-      System.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     if (params.kryo) {
       conf.registerKryoClasses(Array(classOf[mutable.BitSet], classOf[Rating]))
@@ -156,7 +155,7 @@ object MovieLensALS {
     val numTest = test.count()
     println(s"Training: $numTraining, test: $numTest.")
 
-    ratings.unpersist(blocking = false)
+    ratings.unpersist()
 
     val model = new ALS()
       .setRank(params.rank)

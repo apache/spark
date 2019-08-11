@@ -18,28 +18,23 @@
 Binary Classification Metrics Example.
 """
 from __future__ import print_function
-from pyspark.sql import SparkSession
+from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS
 from pyspark.mllib.evaluation import BinaryClassificationMetrics
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("BinaryClassificationMetricsExample")\
-        .getOrCreate()
+    sc = SparkContext(appName="BinaryClassificationMetricsExample")
 
     # $example on$
     # Several of the methods available in scala are currently missing from pyspark
     # Load training data in LIBSVM format
-    data = spark\
-        .read.format("libsvm").load("data/mllib/sample_binary_classification_data.txt")\
-        .rdd.map(lambda row: LabeledPoint(row[0], row[1]))
+    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
 
     # Split data into training (60%) and test (40%)
-    training, test = data.randomSplit([0.6, 0.4], seed=11L)
+    training, test = data.randomSplit([0.6, 0.4], seed=11)
     training.cache()
 
     # Run training algorithm to build the model
@@ -58,4 +53,4 @@ if __name__ == "__main__":
     print("Area under ROC = %s" % metrics.areaUnderROC)
     # $example off$
 
-    spark.stop()
+    sc.stop()

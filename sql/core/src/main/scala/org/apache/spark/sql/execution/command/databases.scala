@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.StringType
 
 /**
  * A command for users to list the databases/schemas.
- * If a databasePattern is supplied then the databases that only matches the
+ * If a databasePattern is supplied then the databases that only match the
  * pattern would be listed.
  * The syntax of using this command in SQL is:
  * {{{
@@ -33,9 +33,9 @@ import org.apache.spark.sql.types.StringType
  */
 case class ShowDatabasesCommand(databasePattern: Option[String]) extends RunnableCommand {
 
-  // The result of SHOW DATABASES has one column called 'result'
+  // The result of SHOW DATABASES has one column called 'databaseName'
   override val output: Seq[Attribute] = {
-    AttributeReference("result", StringType, nullable = false)() :: Nil
+    AttributeReference("databaseName", StringType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -59,6 +59,4 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
     sparkSession.sessionState.catalog.setCurrentDatabase(databaseName)
     Seq.empty[Row]
   }
-
-  override val output: Seq[Attribute] = Seq.empty
 }

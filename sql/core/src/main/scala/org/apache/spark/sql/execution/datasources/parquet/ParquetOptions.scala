@@ -17,28 +17,44 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
+import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Parquet data source.
  */
-private[sql] class ParquetOptions(
-    @transient private val parameters: Map[String, String],
+class ParquetOptions(
+    @transient private val parameters: CaseInsensitiveMap[String],
     @transient private val sqlConf: SQLConf)
   extends Serializable {
 
   import ParquetOptions._
 
+  def this(parameters: Map[String, String], sqlConf: SQLConf) =
+    this(CaseInsensitiveMap(parameters), sqlConf)
+
   /**
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
-  val compressionCodec: String = {
-    val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
+  val compressionCodecClassName: String = {
+    // `compression`, `parquet.compression`(i.e., ParquetOutputFormat.COMPRESSION), and
+    // `spark.sql.parquet.compression.codec`
+    // are in order of precedence from highest to lowest.
+    val parquetCompressionConf = parameters.get(ParquetOutputFormat.COMPRESSION)
+    val codecName = parameters
+      .get("compression")
+      .orElse(parquetCompressionConf)
+      .getOrElse(sqlConf.parquetCompressionCodec)
+      .toLowerCase(Locale.ROOT)
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
-      val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+      val availableCodecs =
+        shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
       throw new IllegalArgumentException(s"Codec [$codecName] " +
         s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
     }
@@ -52,12 +68,12 @@ private[sql] class ParquetOptions(
   val mergeSchema: Boolean = parameters
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
-    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+    .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
 }
 
 
-private[sql] object ParquetOptions {
-  private[sql] val MERGE_SCHEMA = "mergeSchema"
+object ParquetOptions {
+  val MERGE_SCHEMA = "mergeSchema"
 
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
@@ -65,5 +81,12 @@ private[sql] object ParquetOptions {
     "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
     "snappy" -> CompressionCodecName.SNAPPY,
     "gzip" -> CompressionCodecName.GZIP,
-    "lzo" -> CompressionCodecName.LZO)
+    "lzo" -> CompressionCodecName.LZO,
+    "lz4" -> CompressionCodecName.LZ4,
+    "brotli" -> CompressionCodecName.BROTLI,
+    "zstd" -> CompressionCodecName.ZSTD)
+
+  def getParquetCompressionCodecName(name: String): String = {
+    shortParquetCompressionCodecNames(name).name()
+  }
 }

@@ -15,6 +15,12 @@
 # limitations under the License.
 #
 
+"""
+An example of Multiclass to Binary Reduction with One Vs Rest,
+using Logistic Regression as the base classifier.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
+"""
 from __future__ import print_function
 
 # $example on$
@@ -23,18 +29,10 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
 from pyspark.sql import SparkSession
 
-"""
-An example of Multiclass to Binary Reduction with One Vs Rest,
-using Logistic Regression as the base classifier.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
-"""
-
-
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
-        .appName("PythonOneVsRestExample") \
+        .appName("OneVsRestExample") \
         .getOrCreate()
 
     # $example on$
@@ -62,7 +60,7 @@ if __name__ == "__main__":
 
     # compute the classification error on test data.
     accuracy = evaluator.evaluate(predictions)
-    print("Test Error : " + str(1 - accuracy))
+    print("Test Error = %g" % (1.0 - accuracy))
     # $example off$
 
     spark.stop()

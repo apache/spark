@@ -30,7 +30,7 @@ private[spark]
 class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[BlockId])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
+  @transient lazy val _locations = BlockManager.blockIdsToLocations(blockIds, SparkEnv.get)
   @volatile private var _isValid = true
 
   override def getPartitions: Array[Partition] = {
@@ -44,10 +44,10 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
     assertValid()
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
-    blockManager.get(blockId) match {
+    blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
-        throw new Exception("Could not compute split, block " + blockId + " not found")
+        throw new Exception(s"Could not compute split, block $blockId of RDD $id not found")
     }
   }
 

@@ -4,7 +4,7 @@ set hive.enforce.sorting = true;
 set hive.exec.reducers.max = 1;
 set hive.merge.mapfiles = true;
 set hive.merge.mapredfiles = true;
-set mapred.reduce.tasks = 2;
+set mapreduce.job.reduces = 2;
 
 -- Tests that when a multi insert inserts into a bucketed table and a table which is not bucketed
 -- the bucketed table is not merged and the table which is not bucketed is

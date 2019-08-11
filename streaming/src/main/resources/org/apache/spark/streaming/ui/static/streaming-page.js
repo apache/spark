@@ -129,7 +129,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     svg.append("g")
         .attr("class", "x axis")
         .attr("transform", "translate(0," + height + ")")
-        .call(xAxis)
+        .call(xAxis);
 
     svg.append("g")
         .attr("class", "y axis")
@@ -169,7 +169,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
             .style("cursor", "pointer")
             .attr("cx", function(d) { return x(d.x); })
             .attr("cy", function(d) { return y(d.y); })
-            .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "0";})
+            .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "3";})
             .on('mouseover', function(d) {
                 var tip = formatYValue(d.y) + " " + unitY + " at " + timeFormat[d.x];
                 showBootstrapTooltip(d3.select(this).node(), tip);
@@ -187,7 +187,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
                     .attr("fill", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
                     .attr("opacity", function(d) { return isFailedBatch(d.x) ? "1" : "0";})
-                    .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "0";});
+                    .attr("r", function(d) { return isFailedBatch(d.x) ? "2" : "3";});
             })
             .on("click", function(d) {
                 if (lastTimeout != null) {
@@ -198,7 +198,7 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
                     lastClickedBatch = null;
                 }
                 lastClickedBatch = d.x;
-                highlightBatchRow(lastClickedBatch)
+                highlightBatchRow(lastClickedBatch);
                 lastTimeout = window.setTimeout(function () {
                     lastTimeout = null;
                     if (lastClickedBatch != null) {
@@ -261,9 +261,9 @@ function drawHistogram(id, values, minY, maxY, unitY, batchInterval) {
 
     svg.append("g")
         .attr("class", "y axis")
-        .call(yAxis)
+        .call(yAxis);
 
-    var bar = svg.selectAll(".bar")
+    svg.selectAll(".bar")
         .data(data)
         .enter()
         .append("g")

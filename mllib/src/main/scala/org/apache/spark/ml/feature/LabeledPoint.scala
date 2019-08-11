@@ -17,22 +17,33 @@
 
 package org.apache.spark.ml.feature
 
-import scala.beans.BeanInfo
-
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
 
 /**
- * Class that represents the features and labels of a data point.
+ *
+ * Class that represents the features and label of a data point.
  *
  * @param label Label for this data point.
  * @param features List of features for this data point.
  */
 @Since("2.0.0")
-@Experimental
-@BeanInfo
 case class LabeledPoint(@Since("2.0.0") label: Double, @Since("2.0.0") features: Vector) {
+
+  def getLabel: Double = label
+
+  def getFeatures: Vector = features
+
   override def toString: String = {
     s"($label,$features)"
   }
+
+  private[spark] def toInstance(weight: Double): Instance = {
+    Instance(label, weight, features)
+  }
+
+  private[spark] def toInstance: Instance = {
+    Instance(label, 1.0, features)
+  }
+
 }

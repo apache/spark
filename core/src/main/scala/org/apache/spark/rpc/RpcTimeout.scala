@@ -19,15 +19,14 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * An exception thrown if RpcTimeout modifies a [[TimeoutException]].
+ * An exception thrown if RpcTimeout modifies a `TimeoutException`.
  */
 private[rpc] class RpcTimeoutException(message: String, cause: TimeoutException)
   extends TimeoutException(message) { initCause(cause) }
@@ -53,7 +52,7 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
    *
    * @note This can be used in the recover callback of a Future to add to a TimeoutException
    * Example:
-   *    val timeout = new RpcTimeout(5 millis, "short timeout")
+   *    val timeout = new RpcTimeout(5.milliseconds, "short timeout")
    *    Future(throw new TimeoutException).recover(timeout.addMessageIfTimeout)
    */
   def addMessageIfTimeout[T]: PartialFunction[Throwable, T] = {
@@ -72,15 +71,9 @@ private[spark] class RpcTimeout(val duration: FiniteDuration, val timeoutProp: S
    *         is still not ready
    */
   def awaitResult[T](future: Future[T]): T = {
-    val wrapAndRethrow: PartialFunction[Throwable, T] = {
-      case NonFatal(t) =>
-        throw new SparkException("Exception thrown in awaitResult", t)
-    }
     try {
-      // scalastyle:off awaitresult
-      Await.result(future, duration)
-      // scalastyle:on awaitresult
-    } catch addMessageIfTimeout.orElse(wrapAndRethrow)
+      ThreadUtils.awaitResult(future, duration)
+    } catch addMessageIfTimeout
   }
 }
 
@@ -132,9 +125,9 @@ private[spark] object RpcTimeout {
     var foundProp: Option[(String, String)] = None
     while (itr.hasNext && foundProp.isEmpty) {
       val propKey = itr.next()
-      conf.getOption(propKey).foreach { prop => foundProp = Some(propKey, prop) }
+      conf.getOption(propKey).foreach { prop => foundProp = Some((propKey, prop)) }
     }
-    val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
+    val finalProp = foundProp.getOrElse((timeoutPropList.head, defaultValue))
     val timeout = { Utils.timeStringAsSeconds(finalProp._2).seconds }
     new RpcTimeout(timeout, finalProp._1)
   }

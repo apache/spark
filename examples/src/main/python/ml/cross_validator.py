@@ -15,6 +15,13 @@
 # limitations under the License.
 #
 
+"""
+A simple example demonstrating model selection using CrossValidator.
+This example also demonstrates how Pipelines are Estimators.
+Run with:
+
+  bin/spark-submit examples/src/main/python/ml/cross_validator.py
+"""
 from __future__ import print_function
 
 # $example on$
@@ -24,21 +31,14 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 # $example off$
-from pyspark.sql import Row, SparkSession
-
-"""
-A simple example demonstrating model selection using CrossValidator.
-This example also demonstrates how Pipelines are Estimators.
-Run with:
-
-  bin/spark-submit examples/src/main/python/ml/cross_validator.py
-"""
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
         .appName("CrossValidatorExample")\
         .getOrCreate()
+
     # $example on$
     # Prepare training documents, which are labeled.
     training = spark.createDataFrame([
@@ -83,10 +83,10 @@ if __name__ == "__main__":
 
     # Prepare test documents, which are unlabeled.
     test = spark.createDataFrame([
-        (4L, "spark i j k"),
-        (5L, "l m n"),
-        (6L, "mapreduce spark"),
-        (7L, "apache hadoop")
+        (4, "spark i j k"),
+        (5, "l m n"),
+        (6, "mapreduce spark"),
+        (7, "apache hadoop")
     ], ["id", "text"])
 
     # Make predictions on test documents. cvModel uses the best model found (lrModel).

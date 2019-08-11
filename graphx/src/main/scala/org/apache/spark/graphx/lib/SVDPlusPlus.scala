@@ -42,7 +42,8 @@ object SVDPlusPlus {
   /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
-   * available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].
+   * available at <a href="http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf">
+   * here</a>.
    *
    * The prediction rule is rui = u + bu + bi + qi*(pu + |N(u)|^^-0.5^^*sum(y)),
    * see the details on page 6.
@@ -71,7 +72,7 @@ object SVDPlusPlus {
 
     // calculate global rating mean
     edges.cache()
-    val (rs, rc) = edges.map(e => (e.attr, 1L)).reduce((a, b) => (a._1 + b._1, a._2 + b._2))
+    val (rs, rc) = edges.map(e => (e.attr, 1L)).fold((0, 0))((a, b) => (a._1 + b._1, a._2 + b._2))
     val u = rs / rc
 
     // construct graph

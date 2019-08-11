@@ -17,17 +17,19 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.util.Failure
 
-import org.apache.commons.lang.SerializationUtils
+import org.apache.commons.lang3.SerializationUtils
 
+import org.apache.spark.ExecutorAllocationClient
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{PairRDDFunctions, RDD}
+import org.apache.spark.internal.io.SparkHadoopWriterUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.{EventLoop, ThreadUtils}
 
@@ -84,8 +86,14 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
+
+    val executorAllocClient: ExecutorAllocationClient = ssc.sparkContext.schedulerBackend match {
+      case b: ExecutorAllocationClient => b.asInstanceOf[ExecutorAllocationClient]
+      case _ => null
+    }
+
     executorAllocationManager = ExecutorAllocationManager.createIfEnabled(
-      ssc.sparkContext,
+      executorAllocClient,
       receiverTracker,
       ssc.conf,
       ssc.graph.batchDuration.milliseconds,
@@ -193,24 +201,27 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
-      jobSets.remove(jobSet.time)
-      jobGenerator.onBatchCompletion(jobSet.time)
-      logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
-        jobSet.totalDelay / 1000.0, jobSet.time.toString,
-        jobSet.processingDelay / 1000.0
-      ))
       listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
     }
     job.result match {
       case Failure(e) =>
         reportError("Error running job " + job, e)
       case _ =>
+        if (jobSet.hasCompleted) {
+          jobSets.remove(jobSet.time)
+          jobGenerator.onBatchCompletion(jobSet.time)
+          logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
+            jobSet.totalDelay / 1000.0, jobSet.time.toString,
+            jobSet.processingDelay / 1000.0
+          ))
+        }
     }
   }
 
   private def handleError(msg: String, e: Throwable) {
     logError(msg, e)
     ssc.waiter.notifyError(e)
+    PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
   }
 
   private class JobHandler(job: Job) extends Runnable with Logging {
@@ -219,8 +230,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     def run() {
       val oldProps = ssc.sparkContext.getLocalProperties
       try {
-        ssc.sparkContext.setLocalProperties(
-          SerializationUtils.clone(ssc.savedProperties.get()).asInstanceOf[Properties])
+        ssc.sparkContext.setLocalProperties(SerializationUtils.clone(ssc.savedProperties.get()))
         val formattedTime = UIUtils.formatBatchTime(
           job.time.milliseconds, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
         val batchUrl = s"/streaming/batch/?id=${job.time.milliseconds}"
@@ -243,7 +253,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           // Disable checks for existing output directories in jobs launched by the streaming
           // scheduler, since we may need to write output to an existing directory during checkpoint
           // recovery; see SPARK-4835 for more details.
-          PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          SparkHadoopWriterUtils.disableOutputSpecValidation.withValue(true) {
             job.run()
           }
           _eventLoop = eventLoop

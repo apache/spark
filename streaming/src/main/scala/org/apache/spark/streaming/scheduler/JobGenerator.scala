@@ -17,11 +17,14 @@
 
 package org.apache.spark.streaming.scheduler
 
+import java.util.concurrent.TimeUnit
+
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.api.python.PythonDStream
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
 
@@ -48,11 +51,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.util.SystemClock")
     try {
-      Utils.classForName(clockClass).newInstance().asInstanceOf[Clock]
+      Utils.classForName[Clock](clockClass).getConstructor().newInstance()
     } catch {
       case e: ClassNotFoundException if clockClass.startsWith("org.apache.spark.streaming") =>
         val newClockClass = clockClass.replace("org.apache.spark.streaming", "org.apache.spark")
-        Utils.classForName(newClockClass).newInstance().asInstanceOf[Clock]
+        Utils.classForName[Clock](newClockClass).getConstructor().newInstance()
     }
   }
 
@@ -110,14 +113,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
-      val timeWhenStopStarted = System.currentTimeMillis()
+      val timeWhenStopStarted = System.nanoTime()
       val stopTimeoutMs = conf.getTimeAsMs(
         "spark.streaming.gracefulStopTimeout", s"${10 * ssc.graph.batchDuration.milliseconds}ms")
       val pollTime = 100
 
       // To prevent graceful stop to get stuck permanently
       def hasTimedOut: Boolean = {
-        val timedOut = (System.currentTimeMillis() - timeWhenStopStarted) > stopTimeoutMs
+        val diff = TimeUnit.NANOSECONDS.toMillis((System.nanoTime() - timeWhenStopStarted))
+        val timedOut = diff > stopTimeoutMs
         if (timedOut) {
           logWarning("Timed out while stopping the job generator (timeout = " + stopTimeoutMs + ")")
         }
@@ -252,6 +256,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         jobScheduler.submitJobSet(JobSet(time, jobs, streamIdToInputInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
+        PythonDStream.stopStreamingContextIfPythonProcessIsDead(e)
     }
     eventLoop.post(DoCheckpoint(time, clearCheckpointDataLater = false))
   }
@@ -287,12 +292,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     markBatchFullyProcessed(time)
   }
 
-  /** Perform checkpoint for the give `time`. */
+  /** Perform checkpoint for the given `time`. */
   private def doCheckpoint(time: Time, clearCheckpointDataLater: Boolean) {
     if (shouldCheckpoint && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time), clearCheckpointDataLater)
+    } else if (clearCheckpointDataLater) {
+      markBatchFullyProcessed(time)
     }
   }
 

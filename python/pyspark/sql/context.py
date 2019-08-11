@@ -22,15 +22,17 @@ import warnings
 if sys.version >= '3':
     basestring = unicode = str
 
-from pyspark import since
+from pyspark import since, _NoValue
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
-from pyspark.sql.types import Row, StringType
+from pyspark.sql.streaming import DataStreamReader
+from pyspark.sql.types import IntegerType, Row, StringType
+from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.utils import install_exception_handler
 
-__all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
+__all__ = ["SQLContext", "HiveContext"]
 
 
 class SQLContext(object):
@@ -72,7 +74,7 @@ class SQLContext(object):
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         if sparkSession is None:
-            sparkSession = SparkSession(sparkContext)
+            sparkSession = SparkSession.builder.getOrCreate()
         if jsqlContext is None:
             jsqlContext = sparkSession._jwrapped
         self.sparkSession = sparkSession
@@ -90,6 +92,11 @@ class SQLContext(object):
         JVM Contexts.
         """
         return self._jsqlContext
+
+    @property
+    def _conf(self):
+        """Accessor for the JVM SQL-specific configurations"""
+        return self.sparkSession._jsparkSession.sessionState().conf()
 
     @classmethod
     @since(1.6)
@@ -122,11 +129,11 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def getConf(self, key, defaultValue=None):
+    def getConf(self, key, defaultValue=_NoValue):
         """Returns the value of Spark SQL configuration property for the given key.
 
-        If the key is not set and defaultValue is not None, return
-        defaultValue. If the key is not set and defaultValue is None, return
+        If the key is not set and defaultValue is set, return
+        defaultValue. If the key is not set and defaultValue is not set, return
         the system default value.
 
         >>> sqlContext.getConf("spark.sql.shuffle.partitions")
@@ -146,14 +153,14 @@ class SQLContext(object):
 
         :return: :class:`UDFRegistration`
         """
-        return UDFRegistration(self)
+        return self.sparkSession.udf
 
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
         """
-        Create a :class:`DataFrame` with single LongType column named `id`,
-        containing elements in a range from `start` to `end` (exclusive) with
-        step value `step`.
+        Create a :class:`DataFrame` with single :class:`pyspark.sql.types.LongType` column named
+        ``id``, containing elements in a range from ``start`` to ``end`` (exclusive) with
+        step value ``step``.
 
         :param start: the start value
         :param end: the end value (exclusive)
@@ -171,35 +178,29 @@ class SQLContext(object):
         """
         return self.sparkSession.range(start, end, step, numPartitions)
 
-    @ignore_unicode_prefix
     @since(1.2)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
-        so it can be used in SQL statements.
+    def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
-
-        :param name: name of the UDF
-        :param f: python function
-        :param returnType: a :class:`DataType` object
-
-        >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
-        >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         """
-        self.sparkSession.catalog.registerFunction(name, f, returnType)
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.register instead.",
+            DeprecationWarning)
+        return self.sparkSession.udf.register(name, f, returnType)
+
+    @since(2.1)
+    def registerJavaFunction(self, name, javaClassName, returnType=None):
+        """An alias for :func:`spark.udf.registerJavaFunction`.
+        See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
+
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
+        """
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
+            DeprecationWarning)
+        return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -208,13 +209,13 @@ class SQLContext(object):
 
         :param rdd: an RDD of Row or tuple
         :param samplingRatio: sampling ratio, or no sampling (default)
-        :return: StructType
+        :return: :class:`pyspark.sql.types.StructType`
         """
         return self.sparkSession._inferSchema(rdd, samplingRatio)
 
     @since(1.3)
     @ignore_unicode_prefix
-    def createDataFrame(self, data, schema=None, samplingRatio=None):
+    def createDataFrame(self, data, schema=None, samplingRatio=None, verifySchema=True):
         """
         Creates a :class:`DataFrame` from an :class:`RDD`, a list or a :class:`pandas.DataFrame`.
 
@@ -225,28 +226,36 @@ class SQLContext(object):
         from ``data``, which should be an RDD of :class:`Row`,
         or :class:`namedtuple`, or :class:`dict`.
 
-        When ``schema`` is :class:`DataType` or datatype string, it must match the real data, or
-        exception will be thrown at runtime. If the given schema is not StructType, it will be
-        wrapped into a StructType as its only field, and the field name will be "value", each record
-        will also be wrapped into a tuple, which can be converted to row later.
+        When ``schema`` is :class:`pyspark.sql.types.DataType` or a datatype string it must match
+        the real data, or an exception will be thrown at runtime. If the given schema is not
+        :class:`pyspark.sql.types.StructType`, it will be wrapped into a
+        :class:`pyspark.sql.types.StructType` as its only field, and the field name will be "value",
+        each record will also be wrapped into a tuple, which can be converted to row later.
 
         If schema inference is needed, ``samplingRatio`` is used to determined the ratio of
         rows used for schema inference. The first row will be used if ``samplingRatio`` is ``None``.
 
-        :param data: an RDD of any kind of SQL data representation(e.g. row, tuple, int, boolean,
-            etc.), or :class:`list`, or :class:`pandas.DataFrame`.
-        :param schema: a :class:`DataType` or a datatype string or a list of column names, default
-            is None.  The data type string format equals to `DataType.simpleString`, except that
-            top level struct type can omit the `struct<>` and atomic types use `typeName()` as
-            their format, e.g. use `byte` instead of `tinyint` for ByteType. We can also use `int`
-            as a short name for IntegerType.
+        :param data: an RDD of any kind of SQL data representation(e.g. :class:`Row`,
+            :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
+            :class:`pandas.DataFrame`.
+        :param schema: a :class:`pyspark.sql.types.DataType` or a datatype string or a list of
+            column names, default is None.  The data type string format equals to
+            :class:`pyspark.sql.types.DataType.simpleString`, except that top level struct type can
+            omit the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use
+            ``byte`` instead of ``tinyint`` for :class:`pyspark.sql.types.ByteType`.
+            We can also use ``int`` as a short name for :class:`pyspark.sql.types.IntegerType`.
         :param samplingRatio: the sample ratio of rows used for inferring
+        :param verifySchema: verify data types of every row against schema.
         :return: :class:`DataFrame`
 
         .. versionchanged:: 2.0
-           The schema parameter can be a DataType or a datatype string after 2.0. If it's not a
-           StructType, it will be wrapped into a StructType and each record will also be wrapped
-           into a tuple.
+           The ``schema`` parameter can be a :class:`pyspark.sql.types.DataType` or a
+           datatype string after 2.0.
+           If it's not a :class:`pyspark.sql.types.StructType`, it will be wrapped into a
+           :class:`pyspark.sql.types.StructType` and each record will also be wrapped into a tuple.
+
+        .. versionchanged:: 2.1
+           Added verifySchema.
 
         >>> l = [('Alice', 1)]
         >>> sqlContext.createDataFrame(l).collect()
@@ -295,7 +304,7 @@ class SQLContext(object):
             ...
         Py4JJavaError: ...
         """
-        return self.sparkSession.createDataFrame(data, schema, samplingRatio)
+        return self.sparkSession.createDataFrame(data, schema, samplingRatio, verifySchema)
 
     @since(1.3)
     def registerDataFrameAsTable(self, df, tableName):
@@ -350,7 +359,7 @@ class SQLContext(object):
 
     @since(1.0)
     def table(self, tableName):
-        """Returns the specified table as a :class:`DataFrame`.
+        """Returns the specified table or view as a :class:`DataFrame`.
 
         :return: :class:`DataFrame`
 
@@ -377,7 +386,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> df2 = sqlContext.tables()
         >>> df2.filter("tableName = 'table1'").first()
-        Row(tableName=u'table1', isTemporary=True)
+        Row(database=u'', tableName=u'table1', isTemporary=True)
         """
         if dbName is None:
             return DataFrame(self._ssql_ctx.tables(), self)
@@ -430,14 +439,31 @@ class SQLContext(object):
 
     @property
     @since(2.0)
-    def streams(self):
-        """Returns a :class:`ContinuousQueryManager` that allows managing all the
-        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
-
-        .. note:: Experimental.
+    def readStream(self):
         """
-        from pyspark.sql.streaming import ContinuousQueryManager
-        return ContinuousQueryManager(self._ssql_ctx.streams())
+        Returns a :class:`DataStreamReader` that can be used to read data streams
+        as a streaming :class:`DataFrame`.
+
+        .. note:: Evolving.
+
+        :return: :class:`DataStreamReader`
+
+        >>> text_sdf = sqlContext.readStream.text(tempfile.mkdtemp())
+        >>> text_sdf.isStreaming
+        True
+        """
+        return DataStreamReader(self)
+
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`StreamingQueryManager` that allows managing all the
+        :class:`StreamingQuery` StreamingQueries active on `this` context.
+
+        .. note:: Evolving.
+        """
+        from pyspark.sql.streaming import StreamingQueryManager
+        return StreamingQueryManager(self._ssql_ctx.streams())
 
 
 class HiveContext(SQLContext):
@@ -453,14 +479,14 @@ class HiveContext(SQLContext):
     .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
     """
 
-    warnings.warn(
-        "HiveContext is deprecated in Spark 2.0.0. Please use " +
-        "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-        DeprecationWarning)
-
     def __init__(self, sparkContext, jhiveContext=None):
+        warnings.warn(
+            "HiveContext is deprecated in Spark 2.0.0. Please use " +
+            "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+            DeprecationWarning)
         if jhiveContext is None:
-            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
+            sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
+            sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)
@@ -474,7 +500,7 @@ class HiveContext(SQLContext):
         confusing error messages.
         """
         jsc = sparkContext._jsc.sc()
-        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc)
+        jtestHive = sparkContext._jvm.org.apache.spark.sql.hive.test.TestHiveContext(jsc, False)
         return cls(sparkContext, jtestHive)
 
     def refreshTable(self, tableName):
@@ -487,21 +513,10 @@ class HiveContext(SQLContext):
         self._ssql_ctx.refreshTable(tableName)
 
 
-class UDFRegistration(object):
-    """Wrapper for user-defined function registration."""
-
-    def __init__(self, sqlContext):
-        self.sqlContext = sqlContext
-
-    def register(self, name, f, returnType=StringType()):
-        return self.sqlContext.registerFunction(name, f, returnType)
-
-    register.__doc__ = SQLContext.registerFunction.__doc__
-
-
 def _test():
     import os
     import doctest
+    import tempfile
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     import pyspark.sql.context
@@ -510,6 +525,8 @@ def _test():
 
     globs = pyspark.sql.context.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    globs['tempfile'] = tempfile
+    globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
     globs['rdd'] = rdd = sc.parallelize(
@@ -520,10 +537,8 @@ def _test():
     globs['df'] = rdd.toDF()
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
-        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'
-        '"field6":[{"field7": "row2"}]}',
-        '{"field1" : null, "field2": "row3", '
-        '"field3":{"field4":33, "field5": []}}'
+        '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},"field6":[{"field7": "row2"}]}',
+        '{"field1" : null, "field2": "row3", "field3":{"field4":33, "field5": []}}'
     ]
     globs['jsonStrings'] = jsonStrings
     globs['json'] = sc.parallelize(jsonStrings)
@@ -532,7 +547,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

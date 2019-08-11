@@ -18,7 +18,10 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.Kryo._
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.util.Utils
 
 class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -68,6 +71,21 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(syms(1)._1 == "japan")
   }
 
+  test("findSynonyms doesn't reject similar word vectors when called with a vector") {
+    val num = 2
+    val word2VecMap = Map(
+      ("china", Array(0.50f, 0.50f, 0.50f, 0.50f)),
+      ("japan", Array(0.40f, 0.50f, 0.50f, 0.50f)),
+      ("taiwan", Array(0.60f, 0.50f, 0.50f, 0.50f)),
+      ("korea", Array(0.45f, 0.60f, 0.60f, 0.60f))
+    )
+    val model = new Word2VecModel(word2VecMap)
+    val syms = model.findSynonyms(Vectors.dense(Array(0.52, 0.5, 0.5, 0.5)), num)
+    assert(syms.length == num)
+    assert(syms(0)._1 == "china")
+    assert(syms(1)._1 == "taiwan")
+  }
+
   test("model load / save") {
 
     val word2VecMap = Map(
@@ -91,11 +109,27 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   }
 
-  ignore("big model load / save") {
-    // create a model bigger than 32MB since 9000 * 1000 * 4 > 2^25
-    val word2VecMap = Map((0 to 9000).map(i => s"$i" -> Array.fill(1000)(0.1f)): _*)
+  test("big model load / save") {
+    // backupping old values
+    val oldBufferConfValue = spark.conf.get(KRYO_SERIALIZER_BUFFER_SIZE.key, "64m")
+    val oldBufferMaxConfValue = spark.conf.get(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, "64k")
+    val oldSetCommandRejectsSparkCoreConfs = spark.conf.get(
+      SET_COMMAND_REJECTS_SPARK_CORE_CONFS.key, "true")
+
+    // setting test values to trigger partitioning
+
+    // this is needed to set configurations which are also defined to SparkConf
+    spark.conf.set(SET_COMMAND_REJECTS_SPARK_CORE_CONFS.key, "false")
+    spark.conf.set(KRYO_SERIALIZER_BUFFER_SIZE.key, "50b")
+
+    // create a model bigger than 50 Bytes
+    val word2VecMap = Map((0 to 10).map(i => s"$i" -> Array.fill(10)(0.1f)): _*)
     val model = new Word2VecModel(word2VecMap)
 
+    // est. size of this model, given the formula:
+    // (floatSize * vectorSize + 15) * numWords
+    // (4 * 10 + 15) * 10 = 550
+    // therefore it should generate multiple partitions
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
@@ -103,9 +137,17 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext {
       model.save(sc, path)
       val sameModel = Word2VecModel.load(sc, path)
       assert(sameModel.getVectors.mapValues(_.toSeq) === model.getVectors.mapValues(_.toSeq))
+    }
+    catch {
+      case t: Throwable => fail("exception thrown persisting a model " +
+        "that spans over multiple partitions", t)
     } finally {
       Utils.deleteRecursively(tempDir)
+      spark.conf.set(KRYO_SERIALIZER_BUFFER_SIZE.key, oldBufferConfValue)
+      spark.conf.set(KRYO_SERIALIZER_MAX_BUFFER_SIZE.key, oldBufferMaxConfValue)
+      spark.conf.set(SET_COMMAND_REJECTS_SPARK_CORE_CONFS.key, oldSetCommandRejectsSparkCoreConfs)
     }
+
   }
 
   test("test similarity for word vectors with large values is not Infinity or NaN") {

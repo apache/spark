@@ -19,7 +19,9 @@ package org.apache.spark.network
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.TaskContext
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.storage.{BlockId, StorageLevel}
 
 private[spark]
@@ -44,7 +46,18 @@ trait BlockDataManager {
       classTag: ClassTag[_]): Boolean
 
   /**
+   * Put the given block that will be received as a stream.
+   *
+   * When this method is called, the block data itself is not available -- it will be passed to the
+   * returned StreamCallbackWithID.
+   */
+  def putBlockDataAsStream(
+      blockId: BlockId,
+      level: StorageLevel,
+      classTag: ClassTag[_]): StreamCallbackWithID
+
+  /**
    * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
    */
-  def releaseLock(blockId: BlockId): Unit
+  def releaseLock(blockId: BlockId, taskContext: Option[TaskContext]): Unit
 }

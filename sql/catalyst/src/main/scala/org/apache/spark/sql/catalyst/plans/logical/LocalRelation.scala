@@ -18,8 +18,10 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{analysis, CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.analysis
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -42,7 +44,17 @@ object LocalRelation {
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+/**
+ * Logical plan node for scanning data from a local collection.
+ *
+ * @param data The local collection holding the data. It doesn't need to be sent to executors
+ *             and then doesn't need to be serializable.
+ */
+case class LocalRelation(
+    output: Seq[Attribute],
+    data: Seq[InternalRow] = Nil,
+    // Indicates whether this relation has data from a streaming source.
+    override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
@@ -54,7 +66,7 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
    * query.
    */
   override final def newInstance(): this.type = {
-    LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
+    LocalRelation(output.map(_.newInstance()), data, isStreaming).asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = {
@@ -65,12 +77,18 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     }
   }
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LocalRelation(otherOutput, otherData) =>
-      otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
-    case _ => false
-  }
+  override def computeStats(): Statistics =
+    Statistics(sizeInBytes = EstimationUtils.getSizePerRow(output) * data.length)
 
-  override lazy val statistics =
-    Statistics(sizeInBytes = output.map(_.dataType.defaultSize).sum * data.length)
+  def toSQL(inlineTableName: String): String = {
+    require(data.nonEmpty)
+    val types = output.map(_.dataType)
+    val rows = data.map { row =>
+      val cells = row.toSeq(types).zip(types).map { case (v, tpe) => Literal(v, tpe).sql }
+      cells.mkString("(", ", ", ")")
+    }
+    "VALUES " + rows.mkString(", ") +
+      " AS " + inlineTableName +
+      output.map(_.name).mkString("(", ", ", ")")
+  }
 }
