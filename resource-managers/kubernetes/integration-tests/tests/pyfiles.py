@@ -37,8 +37,8 @@ if __name__ == "__main__":
     version_check(sys.argv[1], 2 if sys.argv[1] == "python" else 3)
 
     # Check python executable at executors
-    spark.catalog.registerFunction("getSysVer", \
-        lambda: "%d.%d" % sys.version_info[:2], StringType())
+    spark.catalog.registerFunction("getSysVer",
+                                   lambda: "%d.%d" % sys.version_info[:2], StringType())
     [row] = spark.sql("SELECT getSysVer()").collect()
     driverVersion = "%d.%d" % sys.version_info[:2]
     print("Python runtime version check for executor is: " + str(row[0] == driverVersion))
