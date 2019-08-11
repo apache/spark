@@ -55,7 +55,7 @@ def run_cmd(cmd, return_output=False):
         cmd = cmd.split()
     try:
         if return_output:
-            return subprocess_check_output(cmd)
+            return subprocess_check_output(cmd).decode(sys.getdefaultencoding())
         else:
             return subprocess_check_call(cmd)
     except subprocess.CalledProcessError as e:
