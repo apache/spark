@@ -84,7 +84,7 @@ public class TransportClientFactorySuite {
     try (TransportContext context = new TransportContext(conf, rpcHandler)) {
       TransportClientFactory factory = context.createClientFactory();
       Set<TransportClient> clients = Collections.synchronizedSet(
-          new HashSet<TransportClient>());
+              new HashSet<>());
 
       AtomicInteger failed = new AtomicInteger();
       Thread[] attempts = new Thread[maxConnections * 10];

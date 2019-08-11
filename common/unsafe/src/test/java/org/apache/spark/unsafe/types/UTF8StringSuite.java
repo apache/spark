@@ -467,7 +467,7 @@ public class UTF8StringSuite {
       )));
     assertEquals(
       fromString("translate"),
-      fromString("translate").translate(new HashMap<Character, Character>()));
+      fromString("translate").translate(new HashMap<>()));
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(ImmutableMap.of(
