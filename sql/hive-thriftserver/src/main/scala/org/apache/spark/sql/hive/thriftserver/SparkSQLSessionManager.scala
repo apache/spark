@@ -30,6 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 import org.apache.spark.sql.hive.thriftserver.util.{ThriftServerHadoopUtils, ThriftServerHDFSDelegationTokenProvider}
 
@@ -118,22 +119,26 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     }
     handleToSession.put(session.getSessionHandle, session)
 
-    val sqlContext = if (withImpersonation) {
+    val ctx = if (withImpersonation) {
       sparkSessionManager.getOrCreteSparkSession(
         session,
         sessionUGI,
         withImpersonation).sqlContext
     } else {
-      SparkSQLEnv.sqlContext.newSession()
+      if (sqlContext.conf.hiveThriftServerSingleSession) {
+        sqlContext
+      } else {
+        sqlContext.newSession()
+      }
     }
     val sessionHandle = session.getSessionHandle
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    sqlContext.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      sqlContext.sql(s"use ${sessionConf.get("use:database")}")
+      ctx.sql(s"use ${sessionConf.get("use:database")}")
     }
-    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, sqlContext)
+    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle
   }
 
