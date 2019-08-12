@@ -948,7 +948,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     } else {
       val tableMetadata = catalog.getTableMetadata(table)
 
-      // TODO: unify this after we unify the
+      // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
       val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
         showCreateDataSourceTable(tableMetadata)
