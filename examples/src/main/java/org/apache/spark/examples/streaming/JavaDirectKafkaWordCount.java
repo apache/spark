@@ -53,7 +53,8 @@ import org.apache.spark.streaming.Durations;
  *   kerberosOn: true
  *    $ bin/run-example --files ${path}/kafka_jaas.conf \
  *      --driver-java-options "-Djava.security.auth.login.config=${path}/kafka_jaas.conf" \
- *      --conf "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
+ *      --conf \
+ *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
  *      streaming.JavaDirectKafkaWordCount broker1-host:port,broker2-host:port \
  *      consumer-group topic1,topic2 true
  */
@@ -67,7 +68,8 @@ public final class JavaDirectKafkaWordCount {
                          "  <brokers> is a list of one or more Kafka brokers\n" +
                          "  <groupId> is a consumer group name to consume from topics\n" +
                          "  <topics> is a list of one or more kafka topics to consume from\n" +
-                         "  <kerberosOn> is a boolean indicate if kafka using kerberos authentication\n\n");
+                         "  <kerberosOn> is a boolean indicate " +
+                         "if kafka using kerberos authentication\n\n");
       System.exit(1);
     }
 
