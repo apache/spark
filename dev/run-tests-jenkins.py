@@ -168,7 +168,7 @@ def main():
     #     against master.
     ghprb_pull_id = os.environ["ghprbPullId"]
     ghprb_actual_commit = os.environ["ghprbActualCommit"]
-    ghprb_pull_title = os.environ["ghprbPullTitle"]
+    ghprb_pull_title = os.environ["ghprbPullTitle"].lower()
     sha1 = os.environ["sha1"]
 
     # Marks this build as a pull request build.
