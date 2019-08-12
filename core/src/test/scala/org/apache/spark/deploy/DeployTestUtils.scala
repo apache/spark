@@ -46,11 +46,11 @@ private[deploy] object DeployTestUtils {
   )
 
   def createDriverDesc(): DriverDescription =
-    new DriverDescription("hdfs://some-dir/some.jar", 100, 3, false, createDriverCommand(),
-      createResourceRequirement)
+    new DriverDescription("hdfs://some-dir/some.jar", 100, 3, false, createDriverCommand())
 
   def createDriverInfo(): DriverInfo = {
-    val dInfo = new DriverInfo(3, "driver-3", createDriverDesc(), JsonConstants.submitDate)
+    val dDesc = createDriverDesc().copy(resourceReqs = createResourceRequirement)
+    val dInfo = new DriverInfo(3, "driver-3", dDesc, JsonConstants.submitDate)
     dInfo.withResources(createResourceInformation)
     dInfo
   }
@@ -65,7 +65,12 @@ private[deploy] object DeployTestUtils {
     workerInfo
   }
 
-  def createExecutorRunner(execId: Int): ExecutorRunner = {
+  def createExecutorRunner(execId: Int, withResources: Boolean = false): ExecutorRunner = {
+    val resources = if (withResources) {
+      createResourceInformation
+    } else {
+      Map.empty[String, ResourceInformation]
+    }
     new ExecutorRunner(
       "appId",
       execId,
@@ -84,7 +89,7 @@ private[deploy] object DeployTestUtils {
       new SparkConf,
       Seq("localDir"),
       ExecutorState.RUNNING,
-      createResourceInformation)
+      resources)
   }
 
   def createDriverRunner(driverId: String): DriverRunner = {
