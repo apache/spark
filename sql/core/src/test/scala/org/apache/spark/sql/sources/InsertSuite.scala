@@ -434,7 +434,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
-  test("Insert overwrite directory using Hive serde without turning on Hive support") {
+  test("Insert overwrite directory in hive table without turning on Hive support") {
     withTempDir { dir =>
       val path = dir.toURI.getPath
       val e = intercept[AnalysisException] {

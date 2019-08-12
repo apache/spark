@@ -1401,12 +1401,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   private def extractFileFormat(serde: Option[String]): String = {
-    if (serde.toString.contains("parquet")) {
-      "parquet"
-    } else if (serde.toString.contains("orc")) {
-      "orc"
-    } else {
-      DDLUtils.HIVE_PROVIDER
-    }
+    serde.map({ x =>
+      val lowerCaseSerde = x.toLowerCase(Locale.ROOT)
+      if (lowerCaseSerde.contains("parquet")) "parquet"
+      else if (lowerCaseSerde.contains("orc")) "orc"
+      else  DDLUtils.HIVE_PROVIDER
+    }).getOrElse( DDLUtils.HIVE_PROVIDER)
   }
 }
