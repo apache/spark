@@ -80,7 +80,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitGenerate(p: Generate): Statistics = default(p)
 
   override def visitOffset(p: Offset): Statistics = {
-    val offset = p.offsetExpr.eval().asInstanceOf[BigInt]
+    val offset = BigInt(p.offsetExpr.eval().asInstanceOf[Int])
     val childStats = p.child.stats
     val rowCount: BigInt = childStats.rowCount.map { x => (x - offset).max(0) }.get
     Statistics(
