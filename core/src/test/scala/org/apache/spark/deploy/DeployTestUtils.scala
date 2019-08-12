@@ -18,7 +18,6 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.util.Date
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
@@ -50,7 +49,8 @@ private[deploy] object DeployTestUtils {
     createDriverDesc(), JsonConstants.submitDate)
 
   def createWorkerInfo(): WorkerInfo = {
-    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, "http://publicAddress:80")
+    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null,
+      "http://publicAddress:80", Map.empty)
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }

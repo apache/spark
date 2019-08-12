@@ -206,4 +206,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select c1, c3 from queryOption").collect.toSet == expectedResult)
   }
+
+  test("write byte as smallint") {
+    sqlContext.createDataFrame(Seq((1.toByte, 2.toShort)))
+      .write.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "byte_to_smallint_test", new Properties)
+    val schema = df.schema
+    assert(schema.head.dataType == ShortType)
+    assert(schema(1).dataType == ShortType)
+    val rows = df.collect()
+    assert(rows.length === 1)
+    assert(rows(0).getShort(0) === 1)
+    assert(rows(0).getShort(1) === 2)
+  }
 }

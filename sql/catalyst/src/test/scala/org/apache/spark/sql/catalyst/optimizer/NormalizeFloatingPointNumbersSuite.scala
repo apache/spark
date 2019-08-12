@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.KnownFloatingPointNormalized
+import org.apache.spark.sql.catalyst.expressions.{And, IsNull, KnownFloatingPointNormalized}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -75,6 +75,19 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val joinCond = Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(a))
       === KnownFloatingPointNormalized(NormalizeNaNAndZero(b)))
     val correctAnswer = testRelation1.join(testRelation2, condition = joinCond)
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("normalize floating points in join keys (equal null safe) - idempotence") {
+    val query = testRelation1.join(testRelation2, condition = Some(a <=> b))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val joinCond = IsNull(a) === IsNull(b) &&
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(a, 0.0))) ===
+        KnownFloatingPointNormalized(NormalizeNaNAndZero(coalesce(b, 0.0)))
+    val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
     comparePlans(doubleOptimized, correctAnswer)
   }

@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
@@ -151,17 +152,37 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     val resultFile: String
   }
 
+  /**
+   * traits that indicate UDF or PgSQL to trigger the code path specific to each. For instance,
+   * PgSQL tests require to register some UDF functions.
+   */
+  private trait PgSQLTest
+
+  private trait UDFTest {
+    val udf: TestUDF
+  }
+
   /** A regular test case. */
   private case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase
 
   /** A PostgreSQL test case. */
   private case class PgSQLTestCase(
-      name: String, inputFile: String, resultFile: String) extends TestCase
+      name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest
 
   /** A UDF test case. */
   private case class UDFTestCase(
-      name: String, inputFile: String, resultFile: String, udf: TestUDF) extends TestCase
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest
+
+  /** A UDF PostgreSQL test case. */
+  private case class UDFPgSQLTestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
     if (blackList.exists(t =>
@@ -169,12 +190,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else testCase match {
-      case UDFTestCase(_, _, _, udf: TestPythonUDF) if !shouldTestPythonUDFs =>
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestPythonUDF] && !shouldTestPythonUDFs =>
         ignore(s"${testCase.name} is skipped because " +
           s"[$pythonExec] and/or pyspark were not available.") {
           /* Do nothing */
         }
-      case UDFTestCase(_, _, _, udf: TestScalarPandasUDF) if !shouldTestScalarPandasUDFs =>
+      case udfTestCase: UDFTest
+          if udfTestCase.udf.isInstanceOf[TestScalarPandasUDF] && !shouldTestScalarPandasUDFs =>
         ignore(s"${testCase.name} is skipped because pyspark," +
           s"pandas and/or pyarrow were not available in [$pythonExec].") {
           /* Do nothing */
@@ -202,11 +225,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   private def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
-    val (comments, code) = input.split("\n").partition(_.startsWith("--"))
+    val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
 
     // List of SQL queries to run
     // note: this is not a robust way to split queries using semicolon, but works for now.
     val queries = code.mkString("\n").split("(?<=[^\\\\]);").map(_.trim).filter(_ != "").toSeq
+      // Fix misplacement when comment is at the end of the query.
+      .map(_.split("\n").filterNot(_.startsWith("--")).mkString("\n")).map(_.trim).filter(_ != "")
 
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
@@ -254,12 +279,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
     loadTestData(localSparkSession)
+
     testCase match {
-      case udfTestCase: UDFTestCase =>
-        // vol used by udf-case.sql.
-        localSparkSession.udf.register("vol", (s: String) => s)
+      case udfTestCase: UDFTest =>
+        // In Python UDF tests, the number of shuffle partitions matters considerably in
+        // the testing time because it requires to fork and communicate between external
+        // processes.
+        localSparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, 4)
         registerTestUDF(udfTestCase.udf, localSparkSession)
-      case _: PgSQLTestCase =>
+      case _ =>
+    }
+
+    testCase match {
+      case _: PgSQLTest =>
         // booleq/boolne used by boolean.sql
         localSparkSession.udf.register("booleq", (b1: Boolean, b2: Boolean) => b1 == b2)
         localSparkSession.udf.register("boolne", (b1: Boolean, b2: Boolean) => b1 != b2)
@@ -268,7 +300,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         // PostgreSQL enabled cartesian product by default.
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
-      case _ => // Don't add UDFs in Regular tests.
+        localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
+      case _ =>
     }
 
     if (configSet.isDefined) {
@@ -284,7 +317,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       QueryOutput(
         sql = sql,
         schema = schema.catalogString,
-        output = output.mkString("\n").trim)
+        output = output.mkString("\n").replaceAll("\\s+$", ""))
     }
 
     if (regenerateGoldenFiles) {
@@ -315,7 +348,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         QueryOutput(
           sql = segments(i * 3 + 1).trim,
           schema = segments(i * 3 + 2).trim,
-          output = segments(i * 3 + 3).trim
+          output = segments(i * 3 + 3).replaceAll("\\s+$", "")
         )
       }
     }
@@ -344,7 +377,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // Returns true if the plan is supposed to be sorted.
     def isSorted(plan: LogicalPlan): Boolean = plan match {
       case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeCommandBase | _: DescribeColumnCommand => true
+      case _: DescribeCommandBase
+          | _: DescribeColumnCommand
+          | _: DescribeTableStatement
+          | _: DescribeColumnStatement => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }
@@ -388,13 +424,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
-      if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
+      if (file.getAbsolutePath.startsWith(
+        s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
+        Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
+          UDFPgSQLTestCase(
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
+        }
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
         Seq(TestScalaUDF("udf"), TestPythonUDF("udf"), TestScalarPandasUDF("udf")).map { udf =>
           UDFTestCase(
-            s"$testCaseName - ${udf.prettyName}",
-            absPath,
-            resultFile,
-            udf)
+            s"$testCaseName - ${udf.prettyName}", absPath, resultFile, udf)
         }
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil

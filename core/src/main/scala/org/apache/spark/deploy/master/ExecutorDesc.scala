@@ -18,13 +18,17 @@
 package org.apache.spark.deploy.master
 
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
+import org.apache.spark.resource.ResourceInformation
 
 private[master] class ExecutorDesc(
     val id: Int,
     val application: ApplicationInfo,
     val worker: WorkerInfo,
     val cores: Int,
-    val memory: Int) {
+    val memory: Int,
+    // resources(e.f. gpu/fpga) allocated to this executor
+    // map from resource name to ResourceInformation
+    val resources: Map[String, ResourceInformation]) {
 
   var state = ExecutorState.LAUNCHING
 

@@ -194,6 +194,25 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.coordinate.enable</code></td>
+  <td>true</td>
+  <td>
+    Whether to coordinate resources automatically among workers/drivers(client only) 
+    in Standalone. If false, the user is responsible for configuring different resources
+    for workers/drivers that run on the same host.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.resources.dir</code></td>
+  <td>SPARK_HOME</td>
+  <td>
+    Directory used to coordinate resources among workers/drivers(client only) in Standalone.
+    Default is SPARK_HOME. Make sure to use the same directory for worker and drivers in
+    client mode that run on the same host. Don't clean up this directory while workers/drivers
+    are still alive to avoid the most likely resources conflict. 
+  </td>
+</tr>
+<tr>
  <td><code>spark.driver.resource.{resourceName}.amount</code></td>
   <td>0</td>
   <td>
@@ -209,7 +228,9 @@ of the most common options to set are:
   <td>
     A script for the driver to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
-    name and an array of addresses.
+    name and an array of addresses. For a client-submitted driver in Standalone, discovery
+    script must assign different resource addresses to this driver comparing to workers' and
+    other dirvers' when <code>spark.resources.coordinate.enable</code> is off.
   </td>
 </tr>
 <tr>
@@ -696,7 +717,7 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
   </td>
 </tr>
  <tr>
@@ -1062,11 +1083,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.ui.showConsoleProgress</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Show the progress bar in the console. The progress bar shows the progress of stages
     that run for longer than 500ms. If multiple stages run at the same time, multiple
     progress bars will be displayed on the same line.
+    <br/>
+    <em>Note:</em> In shell environment, the default value of spark.ui.showConsoleProgress is true.
   </td>
 </tr>
 <tr>
@@ -2016,6 +2039,50 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+### Barrier Execution Mode
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.barrier.sync.timeout</code></td>
+  <td>365d</td>
+  <td>
+    The timeout in seconds for each <code>barrier()</code> call from a barrier task. If the
+    coordinator didn't receive all the sync messages from barrier tasks within the
+    configured time, throw a SparkException to fail all the tasks. The default value is set
+    to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.interval</code></td>
+  <td>15s</td>
+  <td>
+    Time in seconds to wait between a max concurrent tasks check failure and the next
+    check. A max concurrent tasks check ensures the cluster can launch more concurrent
+    tasks than required by a barrier stage on job submitted. The check can fail in case
+    a cluster has just started and not enough executors have registered, so we wait for a
+    little while and try to perform the check again. If the check fails more than a
+    configured max failure times for a job then fail current job submission. Note this
+    config only applies to jobs that contain one or more barrier stages, we won't perform
+    the check on non-barrier jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures</code></td>
+  <td>40</td>
+  <td>
+    Number of max concurrent tasks check failures allowed before fail a job submission.
+    A max concurrent tasks check ensures the cluster can launch more concurrent tasks than
+    required by a barrier stage on job submitted. The check can fail in case a cluster
+    has just started and not enough executors have registered, so we wait for a little
+    while and try to perform the check again. If the check fails more than a configured
+    max failure times for a job then fail current job submission. Note this config only
+    applies to jobs that contain one or more barrier stages, we won't perform the check on
+    non-barrier jobs.
+  </td>
+</tr>
+</table>
+
 ### Dynamic Allocation
 
 <table class="table">
@@ -2112,6 +2179,26 @@ Apart from these, the following properties are also available, and may be useful
     Same as <code>spark.dynamicAllocation.schedulerBacklogTimeout</code>, but used only for
     subsequent executor requests. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    without the need for an external shuffle service. This option will try to keep alive executors
+    that are storing shuffle data for active jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.shuffleTimeout</code></td>
+  <td><code>infinity</code></td>
+  <td>
+    When shuffle tracking is enabled, controls the timeout for executors that are holding shuffle
+    data. The default value means that Spark will rely on the shuffles being garbage collected to be
+    able to release executors. If for some reason garbage collection is not cleaning up shuffles
+    quickly enough, this option can be used to control when to time out executors even when they are
+    storing shuffle data.
   </td>
 </tr>
 </table>

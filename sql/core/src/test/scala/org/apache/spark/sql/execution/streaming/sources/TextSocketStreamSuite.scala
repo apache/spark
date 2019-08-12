@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import java.net.{InetSocketAddress, SocketException}
 import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit._
@@ -416,7 +417,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
         while (true) {
           val line = messageQueue.take() + "\n"
-          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes("UTF-8")))
+          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes(StandardCharsets.UTF_8)))
         }
       } catch {
         case e: InterruptedException =>

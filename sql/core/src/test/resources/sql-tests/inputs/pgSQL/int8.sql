@@ -85,7 +85,6 @@ SELECT 37 - q1 AS minus4 FROM INT8_TBL;
 SELECT '' AS five, 2 * q1 AS `twice int4` FROM INT8_TBL;
 SELECT '' AS five, q1 * 2 AS `twice int4` FROM INT8_TBL;
 
--- [SPARK-2659] HiveQL: Division operator should always perform fractional division
 -- int8 op int4
 SELECT q1 + int(42) AS `8plus4`, q1 - int(42) AS `8minus4`, q1 * int(42) AS `8mul4`, q1 / int(42) AS `8div4` FROM INT8_TBL;
 -- int4 op int8
