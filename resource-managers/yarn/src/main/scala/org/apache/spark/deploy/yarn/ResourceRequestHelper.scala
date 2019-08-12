@@ -143,11 +143,14 @@ private object ResourceRequestHelper extends Logging {
     require(resource != null, "Resource parameter should not be null!")
 
     logDebug(s"Custom resources requested: $resources")
-    if (!isYarnResourceTypesAvailable() || resources.isEmpty) {
-      if (resources.nonEmpty) {
-        logWarning("Ignoring custom resource requests because " +
-            "the version of YARN does not support it!")
-      }
+    if (resources.isEmpty) {
+      // no point in going forward, as we don't have anything to set
+      return
+    }
+
+    if (!isYarnResourceTypesAvailable()) {
+      logWarning("Ignoring custom resource requests because " +
+          "the version of YARN does not support it!")
       return
     }
 
@@ -157,10 +160,10 @@ private object ResourceRequestHelper extends Logging {
         resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
       } catch {
         case e: NoSuchMethodException =>
-          logError(s"""Cannot find $RESOURCE_INFO_CLASS.setResourceInformation.
-                    |This is likely due to a jar conflict between different yarn versions.
-                    |Unable to set resources.""".stripMargin.replace("\n", " "))
-          return
+          new SparkException(
+            s"""Cannot find $RESOURCE_INFO_CLASS.setResourceInformation.
+                |This is likely due to a jar conflict between different yarn versions."""
+                .stripMargin.replace("\n", " "), e)
       }
 
     resources.foreach { case (name, rawAmount) =>
