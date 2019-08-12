@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
@@ -29,7 +30,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -235,6 +236,46 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
+      }
+
+    case create: V2CreateTablePlan =>
+      val schema = create.tableSchema
+      val partitioning = create.partitioning
+      val identifier = create.tableName
+      val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      // Check that columns are not duplicated in the schema
+      val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
+      SchemaUtils.checkColumnNameDuplication(
+        flattenedSchema,
+        s"in the table definition of $identifier",
+        isCaseSensitive)
+
+      // Check that columns are not duplicated in the partitioning statement
+      SchemaUtils.checkTransformDuplication(
+        partitioning, "in the partitioning", isCaseSensitive)
+
+      if (schema.isEmpty) {
+        if (partitioning.nonEmpty) {
+          throw new AnalysisException("It is not allowed to specify partitioning when the " +
+            "table schema is not defined.")
+        }
+
+        create
+      } else {
+        // Resolve and normalize partition columns as necessary
+        val resolver = sparkSession.sessionState.conf.resolver
+        val normalizedPartitions = partitioning.map {
+          case transform: RewritableTransform =>
+            val rewritten = transform.references().map { ref =>
+              // Throws an exception if the reference cannot be resolved
+              val position = SchemaUtils.findColumnPosition(ref.fieldNames(), schema, resolver)
+              FieldReference(SchemaUtils.getColumnName(position, schema))
+            }
+            transform.withReferences(rewritten)
+          case other => other
+        }
+
+        create.withPartitioning(normalizedPartitions)
       }
   }
 

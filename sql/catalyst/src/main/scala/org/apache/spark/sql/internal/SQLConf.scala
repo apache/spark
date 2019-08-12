@@ -1140,6 +1140,15 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
+  val FILE_SOURCE_SCHEMA_FORCE_NULLABLE =
+    buildConf("spark.sql.streaming.fileSource.schema.forceNullable")
+      .internal()
+      .doc("When true, force the schema of streaming file source to be nullable (including all " +
+        "the fields). Otherwise, the schema might not be compatible with actual data, which " +
+        "leads to corruptions.")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SCHEMA_INFERENCE =
     buildConf("spark.sql.streaming.schemaInference")
       .internal()

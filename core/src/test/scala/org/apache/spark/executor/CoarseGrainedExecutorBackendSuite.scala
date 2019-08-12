@@ -157,7 +157,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
-      assert(error.contains("User is expecting to use resource: gpu but didn't specify a " +
+      assert(error.contains("User is expecting to use resource: gpu, but didn't specify a " +
         "discovery script!"))
     }
   }

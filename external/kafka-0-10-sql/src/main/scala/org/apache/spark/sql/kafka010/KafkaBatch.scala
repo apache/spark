@@ -22,12 +22,13 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReaderFactory}
 
 
 private[kafka010] class KafkaBatch(
     strategy: ConsumerStrategy,
-    sourceOptions: Map[String, String],
+    sourceOptions: CaseInsensitiveMap[String],
     specifiedKafkaParams: Map[String, String],
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
@@ -38,7 +39,7 @@ private[kafka010] class KafkaBatch(
   assert(endingOffsets != EarliestOffsetRangeLimit,
     "Ending offset not allowed to be set to earliest offsets.")
 
-  private val pollTimeoutMs = sourceOptions.getOrElse(
+  private[kafka010] val pollTimeoutMs = sourceOptions.getOrElse(
     KafkaSourceProvider.CONSUMER_POLL_TIMEOUT,
     (SparkEnv.get.conf.get(NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
