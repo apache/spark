@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -172,7 +173,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
 /**
  * An implementation of catalog v2 [[Table]] to expose v1 table metadata.
  */
-case class CatalogTableAsV2(v1Table: CatalogTable) extends Table {
+case class CatalogTableAsV2(v1Table: CatalogTable) extends UnresolvedTable {
   implicit class IdentifierHelper(identifier: TableIdentifier) {
     def quoted: String = {
       identifier.database match {

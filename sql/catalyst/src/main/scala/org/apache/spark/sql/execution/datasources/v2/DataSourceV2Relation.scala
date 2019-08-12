@@ -22,18 +22,11 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.sources.v2.reader.{Statistics => V2Statistics, _}
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-
-case class UnresolvedDataSourceV2Relation(table: Table) extends LeafNode with NamedRelation {
-  override lazy val resolved: Boolean = false
-
-  override def name: String = table.name()
-
-  override def output: Seq[Attribute] = Seq.empty
-}
 
 /**
  * A logical plan representing a data source v2 table.
@@ -49,6 +42,8 @@ case class DataSourceV2Relation(
   extends LeafNode with MultiInstanceRelation with NamedRelation {
 
   import DataSourceV2Implicits._
+
+  override lazy val resolved: Boolean = !table.isInstanceOf[UnresolvedTable]
 
   override def name: String = table.name()
 
@@ -108,15 +103,14 @@ case class StreamingDataSourceV2Relation(
 
 object DataSourceV2Relation {
   def create(table: Table, options: CaseInsensitiveStringMap): DataSourceV2Relation = {
-    val output = table.schema().toAttributes
+    val output = table match {
+      case _: UnresolvedTable => Nil
+      case _ => table.schema().toAttributes
+    }
     DataSourceV2Relation(table, output, options)
   }
 
   def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
-
-  def unresolved(table: Table): UnresolvedDataSourceV2Relation = {
-    UnresolvedDataSourceV2Relation(table)
-  }
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.
