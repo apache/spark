@@ -19,4 +19,10 @@ package org.apache.spark.sql.sources.v2.internal;
 
 import org.apache.spark.sql.sources.v2.Table;
 
+/**
+ * Internal interface used for table definitions, which we do not have complete information to
+ * resolve yet. This is primarily used by the `CatalogTableAsV2` wrapper returned by the
+ * V2SessionCatalog. When a `CatalogTableAsV2` is returned by the V2SessionCatalog, we defer
+ * planning to V1 data source code paths.
+ */
 public interface UnresolvedTable extends Table {}
