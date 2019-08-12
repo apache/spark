@@ -18,7 +18,7 @@
 package org.apache.spark.sql.sources.v2.writer
 
 import org.apache.spark.annotation.{Experimental, Unstable}
-import org.apache.spark.sql.sources.{CreatableRelationProvider, InsertableRelation}
+import org.apache.spark.sql.sources.InsertableRelation
 
 /**
  * A trait that should be implemented by V1 DataSources that would like to leverage the DataSource

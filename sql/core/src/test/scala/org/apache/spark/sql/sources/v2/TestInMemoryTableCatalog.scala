@@ -220,28 +220,9 @@ class InMemoryTable(
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys = dataMap.keys.filter { partValues =>
-        filters.flatMap(splitAnd).forall {
-          case EqualTo(attr, value) =>
-            partFieldNames.zipWithIndex.find(_._1 == attr) match {
-              case Some((_, partIndex)) =>
-                value == partValues(partIndex)
-              case _ =>
-                throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
-            }
-          case f =>
-            throw new IllegalArgumentException(s"Unsupported filter type: $f")
-        }
-      }
+      val deleteKeys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-    }
-
-    private def splitAnd(filter: Filter): Seq[Filter] = {
-      filter match {
-        case And(left, right) => splitAnd(left) ++ splitAnd(right)
-        case _ => filter :: Nil
-      }
     }
   }
 
@@ -249,6 +230,34 @@ class InMemoryTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
+}
+
+object InMemoryTable {
+  def filtersToKeys(
+      keys: Iterable[Seq[Any]],
+      partitionNames: Seq[String],
+      filters: Array[Filter]): Iterable[Seq[Any]] = {
+    keys.filter { partValues =>
+      filters.flatMap(splitAnd).forall {
+        case EqualTo(attr, value) =>
+          partitionNames.zipWithIndex.find(_._1 == attr) match {
+            case Some((_, partIndex)) =>
+              value == partValues(partIndex)
+            case _ =>
+              throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
+          }
+        case f =>
+          throw new IllegalArgumentException(s"Unsupported filter type: $f")
+      }
+    }
+  }
+
+  private def splitAnd(filter: Filter): Seq[Filter] = {
+    filter match {
+      case And(left, right) => splitAnd(left) ++ splitAnd(right)
+      case _ => filter :: Nil
     }
   }
 }
