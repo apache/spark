@@ -2251,13 +2251,13 @@ When the streaming query is started, Spark calls the function or the object’s 
 
 - The close() method (if it exists) is called if an open() method exists and returns successfully (irrespective of the return value), except if the JVM or Python process crashes in the middle.
 
-- **Note:** Spark doesn't guarantee same output for (partitionId, epochId) on failure, so deduplication
+- **Note:** Spark does not guarantee same output for (partitionId, epochId) on failure, so deduplication
   cannot be achieved with (partitionId, epochId). e.g. source provides different number of
-  partitions for some reason, Spark optimization changes number of partitions, etc.
-  Refer SPARK-28650 for more details. `epochId` can still be used for deduplication, but there's less
-  benefit to leverage this, as the chance for Spark to successfully write all partitions and fail to checkpoint
-  the batch is small. You also need to care about whether epoch is fully written, via ensuring all
-  partitions for the epochId are written successfully.
+  partitions for some reasons, Spark optimization changes number of partitions, etc.
+  See [SPARK-28650](https://issues.apache.org/jira/browse/SPARK-28650) for more details. `epochId` can still be used
+  for deduplication, but there's less benefit to leverage this, as the chance for Spark to successfully write all
+  partitions and fail to checkpoint the batch is small. You also need to care about whether epoch is fully written,
+  via ensuring all partitions for the epochId are written successfully.
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether
