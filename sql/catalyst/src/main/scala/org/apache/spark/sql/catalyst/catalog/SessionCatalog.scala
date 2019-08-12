@@ -214,7 +214,7 @@ class SessionCatalog(
     if (!externalCatalog.databaseExists(dbName) && fs.exists(dbPath)
       && fs.listStatus(dbPath).nonEmpty) {
       throw new AnalysisException(
-        s"Cannot create database at location $dbPath because the path is not empty.")
+        s"Cannot create database at location $dbPath as the path already exists.")
     }
     val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri)
     externalCatalog.createDatabase(

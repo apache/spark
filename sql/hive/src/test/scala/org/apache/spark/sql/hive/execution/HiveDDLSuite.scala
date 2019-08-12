@@ -2521,8 +2521,7 @@ class HiveDDLSuite
     val dbName = "dbwithcustomlocation"
     withTempDir { tmpDir =>
       val parentDir = tmpDir.getParent
-      val expectedMsg = s"Cannot create database at location $parentDir because the path is not " +
-        "empty."
+      val expectedMsg = s"Cannot create database at location $parentDir as the path already exists."
       val e = intercept[AnalysisException] {
         sql(s"CREATE DATABASE $dbName Location '$parentDir' ")
       }.getMessage
