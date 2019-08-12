@@ -1012,16 +1012,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
           Literal(0), Literal(0), Literal(10.123456789), Some(Literal(timezone)))
 
-      checkEvaluation(Milliseconds(timestamp), 10123)
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.456)))
       checkEvaluation(Microseconds(timestamp), 10123456)
 
-      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(0.0))), 0)
+      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(0.0))), Decimal(0, 8, 3))
       checkEvaluation(Microseconds(timestamp.copy(sec = Literal(0.0))), 0)
 
-      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(59.999))), 59999)
+      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(59.999999))),
+        Decimal(BigDecimal(59999.999), 8, 3))
       checkEvaluation(Microseconds(timestamp.copy(sec = Literal(59.999999))), 59999999)
 
-      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(60.0))), 0)
+      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(60.0))), Decimal(0, 8, 3))
       checkEvaluation(Microseconds(timestamp.copy(sec = Literal(60.0))), 0)
     }
   }

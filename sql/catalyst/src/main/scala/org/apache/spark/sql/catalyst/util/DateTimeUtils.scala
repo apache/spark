@@ -460,8 +460,9 @@ object DateTimeUtils {
    * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
    * is expressed in microseconds since the epoch.
    */
-  def getMilliseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Int = {
-    getMicroseconds(timestamp, timeZone) / MICROS_PER_MILLIS.toInt
+  def getMilliseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Decimal = {
+    val micros = Decimal(getMicroseconds(timestamp, timeZone))
+    (micros / Decimal(MICROS_PER_MILLIS)).toPrecision(8, 3)
   }
 
   /**

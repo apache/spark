@@ -117,9 +117,9 @@ struct<second(CAST(c AS TIMESTAMP)):int>
 -- !query 14
 select extract(milliseconds from c) from t
 -- !query 14 schema
-struct<milliseconds(CAST(c AS TIMESTAMP)):int>
+struct<milliseconds(CAST(c AS TIMESTAMP)):decimal(8,3)>
 -- !query 14 output
-9123
+9123.456
 
 
 -- !query 15

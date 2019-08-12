@@ -306,7 +306,11 @@ case class Milliseconds(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
-  override def dataType: DataType = IntegerType
+  // DecimalType is used here to not lose precision while converting microseconds to
+  // the fractional part of milliseconds. Scale 3 is taken to have all microseconds as
+  // the fraction. The precision 8 should cover 2 digits for seconds, 3 digits for
+  // milliseconds and 3 digits for microseconds.
+  override def dataType: DataType = DecimalType(8, 3)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
