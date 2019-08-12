@@ -633,12 +633,11 @@ private[kafka010] object KafkaSourceProvider extends Logging {
       .build()
   }
 
-  private def convertToSpecifiedParams(
-      caseInsensitiveParameters: Map[String, String]): Map[String, String] = {
-    caseInsensitiveParameters
+  private def convertToSpecifiedParams(parameters: Map[String, String]): Map[String, String] = {
+    parameters
       .keySet
       .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-      .map { k => k.drop(6).toString -> caseInsensitiveParameters(k) }
+      .map { k => k.drop(6).toString -> parameters(k) }
       .toMap
   }
 }
