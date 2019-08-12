@@ -57,29 +57,40 @@ class CatalogManager(conf: SQLConf) extends Logging {
     }
   }
 
-  private var _currentCatalog = conf.defaultV2Catalog
-
-  // Returns the name of current catalog. None means the current catalog is the builtin catalog.
-  def currentCatalog: Option[String] = _currentCatalog
-
-  def setCurrentCatalog(catalog: String): Unit = {
-    _currentCatalog = Some(catalog)
-  }
-
-  private var _currentNamespace = defaultCatalog.map {
+  private def getDefaultNamespace(c: CatalogPlugin) = c match {
     case c: SupportsNamespaces => c.defaultNamespace()
     case _ => Array.empty[String]
-  }.getOrElse(Array("default")) // The builtin catalog use "default" as the default database.
+  }
 
-  def currentNamespace: Array[String] = _currentNamespace
+  private var _currentNamespace = {
+    // The builtin catalog use "default" as the default database.
+    defaultCatalog.map(getDefaultNamespace).getOrElse(Array("default"))
+  }
 
-  def setCurrentNamespace(namespace: Array[String]): Unit = {
+  def currentNamespace: Array[String] = synchronized {
+    _currentNamespace
+  }
+
+  def setCurrentNamespace(namespace: Array[String]): Unit = synchronized {
     _currentNamespace = namespace
   }
 
+  private var _currentCatalog = conf.defaultV2Catalog
+
+  // Returns the name of current catalog. None means the current catalog is the builtin catalog.
+  def currentCatalog: Option[String] = synchronized {
+    _currentCatalog
+  }
+
+  def setCurrentCatalog(catalogName: String): Unit = synchronized {
+    _currentCatalog = Some(catalogName)
+    _currentNamespace = getDefaultNamespace(catalog(catalogName))
+  }
+
   // Clear all the registered catalogs. Only used in tests.
-  private[sql] def reset(): Unit = {
+  private[sql] def reset(): Unit = synchronized {
     catalogs.clear()
+    _currentNamespace = defaultCatalog.map(getDefaultNamespace).getOrElse(Array("default"))
     _currentCatalog = conf.defaultV2Catalog
   }
 }
