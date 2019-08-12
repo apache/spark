@@ -160,7 +160,7 @@ private object ResourceRequestHelper extends Logging {
         resource.getClass.getMethod("setResourceInformation", classOf[String], resInfoClass)
       } catch {
         case e: NoSuchMethodException =>
-          new SparkException(
+          throw new SparkException(
             s"""Cannot find $RESOURCE_INFO_CLASS.setResourceInformation.
                 |This is likely due to a jar conflict between different yarn versions."""
                 .stripMargin.replace("\n", " "), e)
