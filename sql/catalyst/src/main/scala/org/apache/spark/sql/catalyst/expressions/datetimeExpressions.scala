@@ -1742,7 +1742,7 @@ case class MakeTimestamp(
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
   // them to the fractional part of `sec`.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(20, 6)) ++
+    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
     timezone.map(_ => StringType)
   override def dataType: DataType = TimestampType
   override def nullable: Boolean = true
@@ -1760,7 +1760,7 @@ case class MakeTimestamp(
       zoneId: ZoneId): Any = {
     try {
       val secFloor = secAndNanos.floor
-      val nanosPerSec = Decimal(NANOS_PER_SECOND, 13, 0)
+      val nanosPerSec = Decimal(NANOS_PER_SECOND, 10, 0)
       val nanos = ((secAndNanos - secFloor) * nanosPerSec).toInt
       val seconds = secFloor.toInt
       val ldt = if (seconds == 60) {
@@ -1809,7 +1809,7 @@ case class MakeTimestamp(
       s"""
       try {
         org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
-        org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 13, 0);
+        org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
         int nanos = (($secAndNanos.sub(secFloor)).mul(nanosPerSec)).toInt();
         int seconds = secFloor.toInt();
         java.time.LocalDateTime ldt;
