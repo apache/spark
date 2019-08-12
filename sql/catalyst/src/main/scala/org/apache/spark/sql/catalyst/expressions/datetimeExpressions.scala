@@ -1877,6 +1877,26 @@ case class Decade(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp.",
+  arguments = """
+    Arguments:
+      * field - selects which part of the source should be extracted. Supported string values are:
+                ["MILLENNIUM", "CENTURY", "DECADE", "YEAR", "QUARTER", "MONTH",
+                 "WEEK", "DAY", "DAYOFWEEK", "DOW", "ISODOW", "DOY",
+                 "HOUR", "MINUTE", "SECOND"]
+      * source - a date (or timestamp) column from where `field` should be extracted
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('YEAR', TIMESTAMP '2019-08-12 01:00:00.123456');
+       2019
+      > SELECT _FUNC_('week', timestamp'2019-08-12 01:00:00.123456');
+       33
+      > SELECT _FUNC_('doy', DATE'2019-08-12');
+       224
+  """,
+  since = "3.0.0")
 case class DatePart(field: Expression, source: Expression, child: Expression)
   extends RuntimeReplaceable {
 
