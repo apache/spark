@@ -118,18 +118,22 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     }
     handleToSession.put(session.getSessionHandle, session)
 
-    val sparkSession = sparkSessionManager.getOrCreteSparkSession(
-      session,
-      sessionUGI,
-      withImpersonation)
+    val sqlContext = if(withImpersonation) {
+      sparkSessionManager.getOrCreteSparkSession(
+        session,
+        sessionUGI,
+        withImpersonation).sqlContext
+    } else {
+      SparkSQLEnv.sqlContext.newSession()
+    }
     val sessionHandle = session.getSessionHandle
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    sparkSession.sqlContext.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+    sqlContext.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      sparkSession.sql(s"use ${sessionConf.get("use:database")}")
+      sqlContext.sql(s"use ${sessionConf.get("use:database")}")
     }
-    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, sparkSession.sqlContext)
+    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, sqlContext)
     sessionHandle
   }
 
