@@ -69,7 +69,7 @@ class SparkSessionManager extends Logging {
 
   def obtainHiveToken(session: HiveSession,
                       sessionUgi: UserGroupInformation,
-                      withImpersonation: Boolean):Unit = {
+                      withImpersonation: Boolean): Unit = {
     sparkContext.conf.set("hive.metastore.token.signature", STS_TOKEN)
     try {
       if (withImpersonation) {

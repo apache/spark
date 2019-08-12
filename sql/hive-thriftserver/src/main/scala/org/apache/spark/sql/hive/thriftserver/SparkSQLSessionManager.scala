@@ -118,7 +118,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     }
     handleToSession.put(session.getSessionHandle, session)
 
-    val sparkSession = sparkSessionManager.getOrCreteSparkSession(session, sessionUGI, withImpersonation)
+    val sparkSession = sparkSessionManager.getOrCreteSparkSession(
+      session,
+      sessionUGI,
+      withImpersonation)
     val sessionHandle = session.getSessionHandle
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
