@@ -243,7 +243,7 @@ private[deploy] class Worker(
           System.exit(1)
         }
     }
-    resources.foreach { case (rName, _) =>
+    resources.keys.foreach { rName =>
       resourcesUsed(rName) = new ResourceInformation(rName, Array.empty[String])
     }
   }
