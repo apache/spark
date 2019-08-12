@@ -227,13 +227,14 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
         jsonFormatSchema,
         options = Map.empty),
       data.eval())
-    intercept[SparkException] {
+    val message = intercept[SparkException] {
       AvroDataToCatalyst(
         CatalystDataToAvro(
           data,
           None),
         jsonFormatSchema,
         options = Map.empty).eval()
-    }
+    }.getMessage
+    assert(message.contains("Malformed records are detected in record parsing."))
   }
 }
