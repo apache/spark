@@ -92,6 +92,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       .map { case (rName, rInfoArr) =>
       rName -> rInfoArr.map(_._2).reduce(_ + _)
     }
+    formatResourcesUsed(totalInfo, usedInfo)
   }
 
   /** Index view listing applications and executors */
