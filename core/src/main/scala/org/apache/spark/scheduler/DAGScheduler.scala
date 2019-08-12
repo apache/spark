@@ -1618,6 +1618,10 @@ private[spark] class DAGScheduler(
 
                   case _ =>
                 }
+
+                if (mapStage.findMissingPartitions().length < mapStage.numTasks) {
+                  abortStage(mapStage, generateErrorMessage(mapStage), None)
+                }
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
