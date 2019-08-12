@@ -1405,7 +1405,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       val lowerCaseSerde = x.toLowerCase(Locale.ROOT)
       if (lowerCaseSerde.contains("parquet")) "parquet"
       else if (lowerCaseSerde.contains("orc")) "orc"
-      else  DDLUtils.HIVE_PROVIDER
-    }).getOrElse( DDLUtils.HIVE_PROVIDER)
+      else DDLUtils.HIVE_PROVIDER
+    }).getOrElse(DDLUtils.HIVE_PROVIDER)
   }
 }
