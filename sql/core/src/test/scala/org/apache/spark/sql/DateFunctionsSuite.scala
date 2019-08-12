@@ -443,12 +443,16 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("trunc(t, 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
+
+    checkAnswer(
+      df.selectExpr("trunc(t, 'decade')"),
+      Seq(Row(Date.valueOf("2010-01-01")), Row(Date.valueOf("2010-01-01"))))
   }
 
   test("function date_trunc") {
     val df = Seq(
-      (1, Timestamp.valueOf("2015-07-22 10:01:40.523")),
-      (2, Timestamp.valueOf("2014-12-31 05:29:06.876"))).toDF("i", "t")
+      (1, Timestamp.valueOf("2015-07-22 10:01:40.123456")),
+      (2, Timestamp.valueOf("2014-12-31 05:29:06.123456"))).toDF("i", "t")
 
     checkAnswer(
       df.select(date_trunc("YY", col("t"))),
@@ -489,6 +493,23 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("date_trunc('QUARTER', t)"),
       Seq(Row(Timestamp.valueOf("2015-07-01 00:00:00")),
         Row(Timestamp.valueOf("2014-10-01 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('MILLISECOND', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:01:40.123")),
+        Row(Timestamp.valueOf("2014-12-31 05:29:06.123"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('DECADE', t)"),
+      Seq(Row(Timestamp.valueOf("2010-01-01 00:00:00")),
+        Row(Timestamp.valueOf("2010-01-01 00:00:00"))))
+
+    Seq("century", "millennium").foreach { level =>
+      checkAnswer(
+        df.selectExpr(s"date_trunc('$level', t)"),
+        Seq(Row(Timestamp.valueOf("2001-01-01 00:00:00")),
+          Row(Timestamp.valueOf("2001-01-01 00:00:00"))))
+    }
   }
 
   test("from_unixtime") {
