@@ -45,6 +45,8 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitGenerate(p: Generate): Statistics = fallback(p)
 
+  override def visitOffset(p: Offset): Statistics = fallback(p)
+
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
 
   override def visitIntersect(p: Intersect): Statistics = fallback(p)

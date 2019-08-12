@@ -29,6 +29,7 @@ trait LogicalPlanVisitor[T] {
     case p: Expand => visitExpand(p)
     case p: Filter => visitFilter(p)
     case p: Generate => visitGenerate(p)
+    case p: Offset => visitOffset(p)
     case p: GlobalLimit => visitGlobalLimit(p)
     case p: Intersect => visitIntersect(p)
     case p: Join => visitJoin(p)
@@ -57,6 +58,8 @@ trait LogicalPlanVisitor[T] {
   def visitFilter(p: Filter): T
 
   def visitGenerate(p: Generate): T
+
+  def visitOffset(p: Offset): T
 
   def visitGlobalLimit(p: GlobalLimit): T
 

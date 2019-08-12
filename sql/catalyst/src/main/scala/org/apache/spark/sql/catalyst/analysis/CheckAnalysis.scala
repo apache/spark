@@ -65,20 +65,19 @@ trait CheckAnalysis extends PredicateHelper {
     case _ => None
   }
 
-  private def checkLimitClause(limitExpr: Expression): Unit = {
-    limitExpr match {
+  private def checkLimitOrOffsetClause(expr: Expression, name: String): Unit = {
+    expr match {
       case e if !e.foldable => failAnalysis(
-        "The limit expression must evaluate to a constant value, but got " +
-          limitExpr.sql)
+        s"The $name expression must evaluate to a constant value, but got ${expr.sql}")
       case e if e.dataType != IntegerType => failAnalysis(
-        s"The limit expression must be integer type, but got " +
+        s"The $name expression must be integer type, but got " +
           e.dataType.catalogString)
       case e =>
         e.eval() match {
           case null => failAnalysis(
-            s"The evaluated limit expression must not be null, but got ${limitExpr.sql}")
+            s"The evaluated $name expression must not be null, but got ${expr.sql}")
           case v: Int if v < 0 => failAnalysis(
-            s"The limit expression must be equal to or greater than 0, but got $v")
+            s"The $name expression must be equal to or greater than 0, but got $v")
           case _ => // OK
         }
     }
@@ -264,9 +263,11 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case GlobalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case GlobalLimit(limitExpr, _) => checkLimitOrOffsetClause(limitExpr, "limit")
 
-          case LocalLimit(limitExpr, _) => checkLimitClause(limitExpr)
+          case LocalLimit(limitExpr, _) => checkLimitOrOffsetClause(limitExpr, "limit")
+
+          case Offset(offsetExpr, _) => checkLimitOrOffsetClause(offsetExpr, "offset")
 
           case _: Union | _: SetOperation if operator.children.length > 1 =>
             def dataTypes(plan: LogicalPlan): Seq[DataType] = plan.output.map(_.dataType)

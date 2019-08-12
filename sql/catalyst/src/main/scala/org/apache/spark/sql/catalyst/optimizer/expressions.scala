@@ -642,6 +642,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
     case _: Aggregate => true
     case _: Window => true
     case _: Sample => true
+    case _: Offset => true
     case _: GlobalLimit => true
     case _: LocalLimit => true
     case _: Generate => true

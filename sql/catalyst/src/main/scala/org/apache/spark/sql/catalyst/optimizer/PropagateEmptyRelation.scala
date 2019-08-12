@@ -85,6 +85,7 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper wit
       case _: Filter => empty(p)
       case _: Sample => empty(p)
       case _: Sort => empty(p)
+      case _: Offset => empty(p)
       case _: GlobalLimit => empty(p)
       case _: LocalLimit => empty(p)
       case _: Repartition => empty(p)

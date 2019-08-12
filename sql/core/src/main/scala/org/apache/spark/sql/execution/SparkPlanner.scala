@@ -42,6 +42,7 @@ class SparkPlanner(
       DataSourceV2Strategy ::
       FileSourceStrategy ::
       DataSourceStrategy(conf) ::
+      SpecialOffset ::
       SpecialLimits ::
       Aggregation ::
       Window ::

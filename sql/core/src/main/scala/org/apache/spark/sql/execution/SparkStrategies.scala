@@ -78,6 +78,22 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
+   * Plans special cases of offset operators.
+   */
+  object SpecialOffset extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ReturnAnswer(rootPlan) => rootPlan match {
+        case logical.Offset(IntegerLiteral(offset), child) =>
+          OffsetExec(offset, planLater(child)) :: Nil
+        case other => planLater(other) :: Nil
+      }
+      case logical.Offset(IntegerLiteral(offset), child) =>
+        OffsetExec(offset, planLater(child)) :: Nil
+      case _ => Nil
+    }
+  }
+
+  /**
    * Plans special cases of limit operators.
    */
   object SpecialLimits extends Strategy {
@@ -722,6 +738,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
+      case logical.Offset(IntegerLiteral(offset), child) =>
+        execution.OffsetExec(offset, planLater(child)) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
