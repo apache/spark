@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.File
+import java.util.UUID
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
+
 
 class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
 
@@ -67,5 +72,45 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
       StartStream(),
       CheckNewAnswer((25, 1), (30, 1))   // This should not throw the error reported in SPARK-24156
     )
+  }
+
+  test("SPARK-28597: Add config to retry spark streaming's meta log when it met") {
+    val s = MemoryStream[Int]
+    val df = s.toDF()
+    // Specified checkpointLocation manually to init metadata file
+    val tmp =
+      new File(System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getCanonicalPath
+    testStream(s.toDF())(
+      StartStream(checkpointLocation = tmp)
+    )
+
+    // fail with less retries
+    df.sparkSession.sessionState.conf.setConfString(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      classOf[FakeFileSystemBasedCheckpointFileManager].getName)
+    df.sparkSession.sessionState.conf.setConfString(
+      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key,
+      1.toString)
+    intercept[Throwable] {
+      testStream(s.toDF())(
+        StartStream(checkpointLocation = tmp),
+        AddData(s, 1),
+        CheckAnswer(1)
+      )
+    }
+
+    // ok with enough retries
+    df.sparkSession.sessionState.conf.setConfString(
+      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key,
+      SQLConf.STREAMING_META_DATA_NUM_RETRIES.defaultValue.get.toString)
+    testStream(s.toDF())(
+      StartStream(checkpointLocation = tmp),
+      AddData(s, 1),
+      CheckAnswer(1, 1)
+    )
+
+    // clear
+    df.sparkSession.sessionState.conf
+      .unsetConf(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key)
   }
 }

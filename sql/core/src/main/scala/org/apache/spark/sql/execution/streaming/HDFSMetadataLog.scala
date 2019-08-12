@@ -141,8 +141,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         case e: Throwable =>
           output.cancel()
           if (retryCount >= metaDataNumRetries) {
-            throw new IOException(
-              s"Failed to write meta data log after retry $metaDataNumRetries count", e)
+            logError( s"Failed to write meta data log after retry $metaDataNumRetries count")
+            throw e
           }
           logWarning(s"Error while ${e.getMessage} [attempt = ${retryCount + 1}]")
       }

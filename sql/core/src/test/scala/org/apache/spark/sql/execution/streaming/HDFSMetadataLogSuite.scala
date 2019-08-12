@@ -208,6 +208,10 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       val metadataLog2 = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog2.add(1, "batch1"))
       assert(metadataLog2.get(1) === Some("batch1"))
+
+      // clear
+      spark.sessionState.conf
+        .unsetConf(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key)
     }
   }
 }
