@@ -85,7 +85,7 @@ def to_avro(data, jsonFormatSchema=""):
     >>> df = spark.createDataFrame(data, "string")
     >>> df.select(to_avro(df.value).alias("suite")).collect()
     [Row(suite=bytearray(b'\x00\x0cSPADES'))]
-    >>> jsonFormatSchema='''["null", {"type": "enum", "name": "value",
+    >>> jsonFormatSchema = '''["null", {"type": "enum", "name": "value",
     ...     "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]}]'''
     >>> df.select(to_avro(df.value, jsonFormatSchema).alias("suite")).collect()
     [Row(suite=bytearray(b'\x02\x00'))]
