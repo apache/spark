@@ -348,7 +348,6 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourcesAddresses(resources: Map[String, ResourceInformation]): String = {
-    if (resources.isEmpty) return "None"
     resources.map { case (rName, rInfo) =>
       s"$rName: ${rInfo.addresses.mkString("[", ", ", "]")}"
     }.mkString(", ")
@@ -358,7 +357,6 @@ private[spark] object StandaloneResourceUtils extends Logging {
   def formatResourcesUsed(
       resources: Map[String, ResourceInformation],
       resourcesUsed: Map[String, ResourceInformation]): String = {
-    if (resources.isEmpty) return "None"
     resources.map { case (rName, rInfo) =>
       val used = resourcesUsed(rName).addresses.length
       val total = rInfo.addresses.length
@@ -368,7 +366,6 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourceRequirements(requirements: Seq[ResourceRequirement]): String = {
-    if (requirements.isEmpty) return "None"
     requirements.map { req => s"${req.amount} ${req.resourceName}"}.mkString(", ")
   }
 }

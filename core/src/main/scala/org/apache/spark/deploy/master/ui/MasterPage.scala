@@ -70,7 +70,6 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def formatWorkerResources(worker: WorkerInfo): String = {
-    if (worker.resources.isEmpty) return "None"
     val infoUsed = worker.resourcesInfoUsed
     val infoFree = worker.resourcesInfoFree
     infoUsed.map { case (rName, rInfo) =>
@@ -93,7 +92,6 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       .map { case (rName, rInfoArr) =>
       rName -> rInfoArr.map(_._2).reduce(_ + _)
     }
-    if (totalInfo.isEmpty) "None" else formatResourcesUsed(totalInfo, usedInfo)
   }
 
   /** Index view listing applications and executors */
