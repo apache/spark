@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand}
-import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
+import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation, UnresolvedDataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
@@ -172,6 +172,12 @@ case class DataSourceResolution(
         if newColumns.forall(_.name.size == 1) =>
       // only top-level adds are supported using AlterTableAddColumnsCommand
       AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
+
+    case UnresolvedDataSourceV2Relation(CatalogTableAsV2(catalogTable)) =>
+      UnresolvedCatalogRelation(catalogTable)
+
+    case UnresolvedDataSourceV2Relation(v2Table) =>
+      DataSourceV2Relation.create(v2Table)
 
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)

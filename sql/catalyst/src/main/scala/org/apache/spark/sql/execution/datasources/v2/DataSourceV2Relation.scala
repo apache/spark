@@ -27,6 +27,14 @@ import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
+case class UnresolvedDataSourceV2Relation(table: Table) extends LeafNode with NamedRelation {
+  override lazy val resolved: Boolean = false
+
+  override def name: String = table.name()
+
+  override def output: Seq[Attribute] = Seq.empty
+}
+
 /**
  * A logical plan representing a data source v2 table.
  *
@@ -105,6 +113,10 @@ object DataSourceV2Relation {
   }
 
   def create(table: Table): DataSourceV2Relation = create(table, CaseInsensitiveStringMap.empty)
+
+  def unresolved(table: Table): UnresolvedDataSourceV2Relation = {
+    UnresolvedDataSourceV2Relation(table)
+  }
 
   /**
    * This is used to transform data source v2 statistics to logical.Statistics.

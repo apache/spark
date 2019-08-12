@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStat
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, UnresolvedDataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.v2.Table
@@ -653,7 +653,7 @@ class Analyzer(
       case u @ UnresolvedRelation(CatalogObjectIdentifier(maybeCatalog, ident)) =>
         maybeCatalog.orElse(sessionCatalog)
           .flatMap(loadTable(_, ident))
-          .map(DataSourceV2Relation.create)
+          .map(DataSourceV2Relation.unresolved)
           .getOrElse(u)
     }
   }
