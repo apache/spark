@@ -1935,6 +1935,10 @@ case class Epoch(child: Expression, timeZoneId: Option[String] = None)
     extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  // DecimalType is used to not lose precision while converting microseconds to
+  // the fractional part of seconds. Scale 6 is taken to have all microseconds as
+  // the fraction. The precision 20 should cover whole valid range of years [1, 9999]
+  // plus negative years that can be used in some cases though are not officially supported.
   override def dataType: DataType = DecimalType(20, 6)
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
