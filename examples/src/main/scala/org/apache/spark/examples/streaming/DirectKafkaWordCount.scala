@@ -20,6 +20,7 @@ package org.apache.spark.examples.streaming
 
 import scala.util.Try
 
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.StringDeserializer
 
@@ -77,7 +78,7 @@ object DirectKafkaWordCount {
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer],
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer])
     if (kerberosOn) {
-      kafkaParams += ("security.protocol" -> "SASL_PLAINTEXT")
+      kafkaParams += (CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> "SASL_PLAINTEXT")
     }
     val messages = KafkaUtils.createDirectStream[String, String](
       ssc,
