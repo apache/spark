@@ -85,8 +85,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     val rowCount: BigInt = childStats.rowCount.map { x => (x - offset).max(0) }.get
     Statistics(
       sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
-      rowCount = Some(rowCount),
-      hints = childStats.hints)
+      rowCount = Some(rowCount))
   }
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = {
