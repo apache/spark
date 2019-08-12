@@ -118,7 +118,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     }
     handleToSession.put(session.getSessionHandle, session)
 
-    val sqlContext = if(withImpersonation) {
+    val sqlContext = if (withImpersonation) {
       sparkSessionManager.getOrCreteSparkSession(
         session,
         sessionUGI,
