@@ -2854,6 +2854,14 @@
           </execution>
         </executions>
       </plugin>
+      <!-- Couple of dependencies are coming in bundle format. If this removed build will fail. -->
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>4.2.0</version>
+        <inherited>true</inherited>
+        <extensions>true</extensions>
+      </plugin>
     </plugins>
   </build>
 

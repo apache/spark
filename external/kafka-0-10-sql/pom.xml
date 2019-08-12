@@ -92,6 +92,12 @@
         </exclusion>
       </exclusions>
     </dependency>
+    <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+    </dependency>
     <!-- Kafka embedded server uses Zookeeper 3.4.7 API -->
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
@@ -142,6 +148,14 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <inherited>true</inherited>
+        <extensions>true</extensions>
+      </plugin>
+    </plugins>
   </build>
 
 </project>
