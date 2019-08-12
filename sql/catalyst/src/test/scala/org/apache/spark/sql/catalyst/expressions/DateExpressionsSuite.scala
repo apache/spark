@@ -967,5 +967,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal(23), Literal(59), Literal(60.0))
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
     checkEvaluation(makeTimestampExpr.copy(sec = Literal(60.5)), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+      Literal(0), Literal(0), Literal(58.000001))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
   }
 }
