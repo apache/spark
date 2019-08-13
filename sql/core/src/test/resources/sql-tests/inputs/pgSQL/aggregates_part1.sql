@@ -59,16 +59,14 @@ select avg(CAST(null AS DOUBLE)) from range(1,4);
 select sum(CAST('NaN' AS DOUBLE)) from range(1,4);
 select avg(CAST('NaN' AS DOUBLE)) from range(1,4);
 
--- [SPARK-27768] verify correct results for infinite inputs
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES (CAST('1' AS DOUBLE)), (CAST('Infinity' AS DOUBLE))) v(x);
+FROM (VALUES (CAST('1' AS DOUBLE)), (CAST('infinity' AS DOUBLE))) v(x);
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES ('Infinity'), ('1')) v(x);
+FROM (VALUES ('infinity'), ('1')) v(x);
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES ('Infinity'), ('Infinity')) v(x);
+FROM (VALUES ('infinity'), ('infinity')) v(x);
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
-FROM (VALUES ('-Infinity'), ('Infinity')) v(x);
-
+FROM (VALUES ('-infinity'), ('infinity')) v(x);
 
 -- test accuracy with a large input offset
 SELECT avg(CAST(x AS DOUBLE)), var_pop(CAST(x AS DOUBLE))
