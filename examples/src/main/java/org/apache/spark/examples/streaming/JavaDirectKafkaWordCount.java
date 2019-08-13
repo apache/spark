@@ -26,7 +26,6 @@ import java.util.regex.Pattern;
 
 import scala.Tuple2;
 
-import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -44,19 +43,10 @@ import org.apache.spark.streaming.Durations;
  *   <brokers> is a list of one or more Kafka brokers
  *   <groupId> is a consumer group name to consume from topics
  *   <topics> is a list of one or more kafka topics to consume from
- *   <kerberosOn> is a boolean indicate if kafka using kerberos authentication
  *
  * Example:
- *   kerberosOn: false(default)
  *    $ bin/run-example streaming.JavaDirectKafkaWordCount broker1-host:port,broker2-host:port \
  *      consumer-group topic1,topic2
- *   kerberosOn: true
- *    $ bin/run-example --files ${path}/kafka_jaas.conf \
- *      --driver-java-options "-Djava.security.auth.login.config=${path}/kafka_jaas.conf" \
- *      --conf \
- *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
- *      streaming.JavaDirectKafkaWordCount broker1-host:port,broker2-host:port \
- *      consumer-group topic1,topic2 true
  */
 
 public final class JavaDirectKafkaWordCount {
@@ -67,9 +57,7 @@ public final class JavaDirectKafkaWordCount {
       System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <groupId> <topics>\n" +
                          "  <brokers> is a list of one or more Kafka brokers\n" +
                          "  <groupId> is a consumer group name to consume from topics\n" +
-                         "  <topics> is a list of one or more kafka topics to consume from\n" +
-                         "  <kerberosOn> is a boolean indicate " +
-                         "if kafka using kerberos authentication\n\n");
+                         "  <topics> is a list of one or more kafka topics to consume from\n\n");
       System.exit(1);
     }
 
@@ -78,10 +66,6 @@ public final class JavaDirectKafkaWordCount {
     String brokers = args[0];
     String groupId = args[1];
     String topics = args[2];
-    Boolean kerberosOn = false;
-    if (args.length > 3) {
-      kerberosOn = Boolean.parseBoolean(args[3]);
-    }
 
     // Create context with a 2 seconds batch interval
     SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKafkaWordCount");
@@ -93,9 +77,6 @@ public final class JavaDirectKafkaWordCount {
     kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
     kafkaParams.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
     kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-    if (kerberosOn){
-      kafkaParams.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_PLAINTEXT");
-    }
 
     // Create direct kafka stream with brokers and topics
     JavaInputDStream<ConsumerRecord<String, String>> messages = KafkaUtils.createDirectStream(
