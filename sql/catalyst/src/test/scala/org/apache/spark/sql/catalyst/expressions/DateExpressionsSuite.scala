@@ -939,8 +939,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("creating values of TimestampType via make_timestamp") {
     var makeTimestampExpr = MakeTimestamp(
-      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15), Literal(23.5),
-      Some(Literal(ZoneId.systemDefault().getId)))
+      Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
+      Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
     val expected = Timestamp.valueOf("2013-7-15 8:15:23.5")
     checkEvaluation(makeTimestampExpr, expected)
     checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
@@ -960,13 +960,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
     checkEvaluation(makeTimestampExpr.copy(min = Literal(65)), null)
 
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DoubleType)), null)
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(70.0)), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
 
     makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-      Literal(23), Literal(59), Literal(60.0))
+      Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-07-01 00:00:00"))
-    checkEvaluation(makeTimestampExpr.copy(sec = Literal(60.5)), null)
+    checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
+
+    makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+      Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+    checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
   }
 
   test("millennium") {
