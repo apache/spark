@@ -1799,15 +1799,18 @@ class Analyzer(
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       // Collect all Windowed Aggregate Expressions.
-      val windowedAggExprs = exprs.flatMap { expr =>
+      val windowedAggExprs: Set[Expression] = exprs.flatMap { expr =>
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
+          case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.collectFirst {
         case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
+        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
+          !windowedAggExprs.contains(e) => e
       }.isDefined)
     }
   }
