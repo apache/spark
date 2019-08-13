@@ -1428,9 +1428,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Minute(expression(ctx.source))
       case "SECOND" =>
         Second(expression(ctx.source))
-      case "MILLISECONDS" =>
+      case "MILLISECONDS" | "MSEC" =>
         Milliseconds(expression(ctx.source))
-      case "MICROSECONDS" =>
+      case "MICROSECONDS" | "USEC" =>
         Microseconds(expression(ctx.source))
       case "EPOCH" =>
         Epoch(expression(ctx.source))

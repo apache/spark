@@ -27,8 +27,10 @@ select extract(minute from c) from t;
 select extract(second from c) from t;
 
 select extract(milliseconds from c) from t;
+select extract(msec from c) from t;
 
 select extract(microseconds from c) from t;
+select extract(usec from c) from t;
 
 select extract(epoch from c) from t;
 
