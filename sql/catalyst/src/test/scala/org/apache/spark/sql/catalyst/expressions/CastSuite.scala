@@ -974,7 +974,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     }
 
-    import DataTypeTestUtils.numericTypes
+    import DataTypeTestUtils._
     numericTypes.foreach { from =>
       val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
 
@@ -1009,7 +1009,9 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
 
-    assert(Cast.canUpCast(NullType, StringType))
+    atomicTypes.foreach { atomicType =>
+      assert(Cast.canUpCast(NullType, atomicType))
+    }
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
