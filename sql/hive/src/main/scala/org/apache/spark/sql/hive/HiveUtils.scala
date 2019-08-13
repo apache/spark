@@ -340,7 +340,7 @@ private[spark] object HiveUtils extends Logging {
       val classLoader = Utils.getContextOrSparkClassLoader
       val jars: Array[URL] = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
         // Do nothing. The system classloader is no longer a URLClassLoader in Java 9,
-        // so it won't match the case in allJars above. It no longer exposes URLs of
+        // so it won't match the case in allJars. It no longer exposes URLs of
         // the system classpath
         Array.empty[URL]
       } else {
