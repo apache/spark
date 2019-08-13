@@ -117,7 +117,7 @@ trait PredicateHelper {
       e.children.isEmpty
     case a: AttributeReference => true
     // PythonUDF will be executed by dedicated physical operator later.
-    // For PythonUDFs that can't be evaluated in join condition, `PullOutPythonUDFInJoinCondition`
+    // For PythonUDFs that can't be evaluated in join condition, `ExtractPythonUDFFromJoinCondition`
     // will pull them out later.
     case _: PythonUDF => true
     case e: Unevaluable => false

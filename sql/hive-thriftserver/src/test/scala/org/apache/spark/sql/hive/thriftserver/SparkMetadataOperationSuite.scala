@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.ResultSet
+import java.sql.{DatabaseMetaData, ResultSet}
 
 class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
 
@@ -180,6 +180,47 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
     withJdbcStatement() { statement =>
       val metaData = statement.getConnection.getMetaData
       checkResult(metaData.getTableTypes, Seq("TABLE", "VIEW"))
+    }
+  }
+
+  test("Spark's own GetFunctionsOperation(SparkGetFunctionsOperation)") {
+    def checkResult(rs: ResultSet, functionName: Seq[String]): Unit = {
+      for (i <- functionName.indices) {
+        assert(rs.next())
+        assert(rs.getString("FUNCTION_SCHEM") === "default")
+        assert(rs.getString("FUNCTION_NAME") === functionName(i))
+        assert(rs.getString("REMARKS").startsWith(s"${functionName(i)}("))
+        assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+        assert(rs.getString("SPECIFIC_NAME").startsWith("org.apache.spark.sql.catalyst"))
+      }
+      // Make sure there are no more elements
+      assert(!rs.next())
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      // Hive does not have an overlay function, we use overlay to test.
+      checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
+      checkResult(metaData.getFunctions(null, "default", "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "default", "shift*"),
+        Seq("shiftleft", "shiftright", "shiftrightunsigned"))
+    }
+
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getFunctions(null, "default", "upPer")
+      assert(rs.next())
+      assert(rs.getString("FUNCTION_SCHEM") === "default")
+      assert(rs.getString("FUNCTION_NAME") === "upper")
+      assert(rs.getString("REMARKS") ===
+        "upper(str) - Returns `str` with all characters changed to uppercase.")
+      assert(rs.getInt("FUNCTION_TYPE") === DatabaseMetaData.functionResultUnknown)
+      assert(rs.getString("SPECIFIC_NAME") === "org.apache.spark.sql.catalyst.expressions.Upper")
+      // Make sure there are no more elements
+      assert(!rs.next())
     }
   }
 }

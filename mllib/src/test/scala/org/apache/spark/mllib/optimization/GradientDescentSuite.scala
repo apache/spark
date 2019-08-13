@@ -50,7 +50,7 @@ object GradientDescentSuite {
     val unifRand = new Random(45)
     val rLogis = (0 until nPoints).map { i =>
       val u = unifRand.nextDouble()
-      math.log(u) - math.log(1.0-u)
+      math.log(u) - math.log1p(-u)
     }
 
     val y: Seq[Int] = (0 until nPoints).map { i =>

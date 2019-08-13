@@ -23,7 +23,7 @@ There are several ways to monitor Spark applications: web UIs, metrics, and exte
 
 # Web Interfaces
 
-Every SparkContext launches a web UI, by default on port 4040, that
+Every SparkContext launches a [Web UI](web-ui.html), by default on port 4040, that
 displays useful information about the application. This includes:
 
 * A list of scheduler stages and tasks
@@ -876,6 +876,7 @@ This example shows a list of Spark configuration parameters for a Graphite sink:
 "spark.metrics.conf.*.sink.graphite.period"=10
 "spark.metrics.conf.*.sink.graphite.unit"=seconds
 "spark.metrics.conf.*.sink.graphite.prefix"="optional_prefix"
+"spark.metrics.conf.*.sink.graphite.regex"="optional_regex_to_send_matching_metrics"
 ```
 
 Default values of the Spark metrics configuration are as follows:

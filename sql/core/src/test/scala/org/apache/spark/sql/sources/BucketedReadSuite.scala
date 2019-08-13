@@ -49,6 +49,16 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.sessionState.conf.unsetConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING)
+    super.afterAll()
+  }
+
   private val maxI = 5
   private val maxJ = 13
   private lazy val df = (0 until 50).map(i => (i % maxI, i % maxJ, i.toString)).toDF("i", "j", "k")

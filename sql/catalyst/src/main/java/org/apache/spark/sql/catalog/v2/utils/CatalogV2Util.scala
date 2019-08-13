@@ -22,7 +22,7 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, NamespaceChange, TableChange}
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.sources.v2.Table
@@ -30,6 +30,37 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 
 object CatalogV2Util {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+
+  /**
+   * Apply properties changes to a map and return the result.
+   */
+  def applyNamespaceChanges(
+      properties: Map[String, String],
+      changes: Seq[NamespaceChange]): Map[String, String] = {
+    applyNamespaceChanges(properties.asJava, changes).asScala.toMap
+  }
+
+  /**
+   * Apply properties changes to a Java map and return the result.
+   */
+  def applyNamespaceChanges(
+      properties: util.Map[String, String],
+      changes: Seq[NamespaceChange]): util.Map[String, String] = {
+    val newProperties = new util.HashMap[String, String](properties)
+
+    changes.foreach {
+      case set: NamespaceChange.SetProperty =>
+        newProperties.put(set.property, set.value)
+
+      case unset: NamespaceChange.RemoveProperty =>
+        newProperties.remove(unset.property)
+
+      case _ =>
+      // ignore non-property changes
+    }
+
+    Collections.unmodifiableMap(newProperties)
+  }
 
   /**
    * Apply properties changes to a map and return the result.

@@ -22,8 +22,11 @@ import java.util.Collections;
 
 import com.codahale.metrics.MetricSet;
 
-/** Provides an interface for reading shuffle files, either from an Executor or external service. */
-public abstract class ShuffleClient implements Closeable {
+/**
+ * Provides an interface for reading both shuffle files and RDD blocks, either from an Executor
+ * or external service.
+ */
+public abstract class BlockStoreClient implements Closeable {
 
   /**
    * Fetch a sequence of blocks from a remote node asynchronously,
@@ -51,7 +54,7 @@ public abstract class ShuffleClient implements Closeable {
       DownloadFileManager downloadFileManager);
 
   /**
-   * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to
+   * Get the shuffle MetricsSet from BlockStoreClient, this will be used in MetricsSystem to
    * get the Shuffle related metrics.
    */
   public MetricSet shuffleMetrics() {

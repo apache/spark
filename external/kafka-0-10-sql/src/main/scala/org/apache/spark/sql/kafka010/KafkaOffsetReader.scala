@@ -32,6 +32,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 
@@ -49,7 +50,7 @@ import org.apache.spark.util.{ThreadUtils, UninterruptibleThread}
 private[kafka010] class KafkaOffsetReader(
     consumerStrategy: ConsumerStrategy,
     val driverKafkaParams: ju.Map[String, Object],
-    readerOptions: Map[String, String],
+    readerOptions: CaseInsensitiveMap[String],
     driverGroupIdPrefix: String) extends Logging {
   /**
    * Used to ensure execute fetch operations execute in an UninterruptibleThread
@@ -90,10 +91,10 @@ private[kafka010] class KafkaOffsetReader(
     _consumer
   }
 
-  private val maxOffsetFetchAttempts =
+  private[kafka010] val maxOffsetFetchAttempts =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_NUM_RETRY, "3").toInt
 
-  private val offsetFetchAttemptIntervalMs =
+  private[kafka010] val offsetFetchAttemptIntervalMs =
     readerOptions.getOrElse(KafkaSourceProvider.FETCH_OFFSET_RETRY_INTERVAL_MS, "1000").toLong
 
   /**
