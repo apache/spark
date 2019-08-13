@@ -18,9 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import scala.util.Try
-
-import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.StringDeserializer
 
@@ -34,18 +31,10 @@ import org.apache.spark.streaming.kafka010._
  *   <brokers> is a list of one or more Kafka brokers
  *   <groupId> is a consumer group name to consume from topics
  *   <topics> is a list of one or more kafka topics to consume from
- *   <kerberosOn> is a boolean indicate if kafka using kerberos authentication
  *
  * Example:
- *  kerberosOn: false(default)
  *    $ bin/run-example streaming.DirectKafkaWordCount broker1-host:port,broker2-host:port \
  *    consumer-group topic1,topic2
- *  kerberosOn: true
- *    $ bin/run-example --files ${path}/kafka_jaas.conf \
- *    --driver-java-options "-Djava.security.auth.login.config=${path}/kafka_jaas.conf" \
- *    --conf "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
- *    streaming.DirectKafkaWordCount broker1-host:port,broker2-host:port \
- *    consumer-group topic1,topic2 true
  */
 object DirectKafkaWordCount {
   def main(args: Array[String]) {
@@ -55,7 +44,6 @@ object DirectKafkaWordCount {
         |  <brokers> is a list of one or more Kafka brokers
         |  <groupId> is a consumer group name to consume from topics
         |  <topics> is a list of one or more kafka topics to consume from
-        |  <kerberosOn> is a boolean indicate if kafka using kerberos authentication
         |
         """.stripMargin)
       System.exit(1)
@@ -63,8 +51,7 @@ object DirectKafkaWordCount {
 
     StreamingExamples.setStreamingLogLevels()
 
-    val Array(brokers, groupId, topics) = args.take(3)
-    val kerberosOn = if (args.length > 3) Try(args(3).toBoolean).getOrElse(false) else false
+    val Array(brokers, groupId, topics) = args
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setAppName("DirectKafkaWordCount")
@@ -72,14 +59,11 @@ object DirectKafkaWordCount {
 
     // Create direct kafka stream with brokers and topics
     val topicsSet = topics.split(",").toSet
-    var kafkaParams = Map[String, Object](
+    val kafkaParams = Map[String, Object](
       ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> brokers,
       ConsumerConfig.GROUP_ID_CONFIG -> groupId,
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer],
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[StringDeserializer])
-    if (kerberosOn) {
-      kafkaParams += (CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> "SASL_PLAINTEXT")
-    }
     val messages = KafkaUtils.createDirectStream[String, String](
       ssc,
       LocationStrategies.PreferConsistent,
