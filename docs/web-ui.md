@@ -36,9 +36,9 @@ page, you see the details page for that job. The details page further shows the 
 DAG visualization, and all stages of the job.
 
 The information that is displayed in this section is
-* User: Current spark user
-* Total uptime: Time since spark application starts
-* Scheduling mode: (More information in [job scheduling](job-scheduling.html#configuring-pool-properties) page)
+* User: Current Spark user
+* Total uptime: Time since Spark application started
+* Scheduling mode: See [job scheduling](job-scheduling.html#configuring-pool-properties)
 * Number of jobs per status: Active, Completed, Failed
 
 <p style="text-align: center;">
@@ -51,7 +51,7 @@ The information that is displayed in this section is
   <img src="img/AllJobsPageDetail2.png" title="Event timeline" alt="Event timeline"/>
 </p>
 
-* Details of jobs grouped by status: Displays detailed information of the jobs including Job id, description (with a link to detailed job page), submitted time, duration, stages summary and tasks progress bar
+* Details of jobs grouped by status: Displays detailed information of the jobs including Job ID, description (with a link to detailed job page), submitted time, duration, stages summary and tasks progress bar
 
 <p style="text-align: center;">
   <img src="img/AllJobsPageDetail3.png" title="Details of jobs grouped by status" alt="Details of jobs grouped by status"/>
@@ -62,7 +62,7 @@ When you click on a specific job, you can see the detailed information of this j
 
 ### Jobs detail
 
-This page displays the details of a specific job identified by its job id. The information we could find is:
+This page displays the details of a specific job identified by its job ID. 
 * Job Status: (running, succeeded, failed)
 * Number of stages per status (active, pending, completed, skipped, failed)
 * Associated SQL Query: Link to the sql tab for this job
@@ -72,14 +72,14 @@ This page displays the details of a specific job identified by its job id. The i
   <img src="img/JobPageDetail1.png" title="Event timeline" alt="Event timeline"/>
 </p>
 
-* DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs and the edges represent an operation to be applied on RDD.
+* DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
 
 <p style="text-align: center;">
   <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
 </p>
 
 * List of stages (grouped by state active, pending, completed, skipped, and failed)
-	* Stage Id
+	* Stage ID
 	* Description of the stage
 	* Submitted timestamp
 	* Duration of the stage
