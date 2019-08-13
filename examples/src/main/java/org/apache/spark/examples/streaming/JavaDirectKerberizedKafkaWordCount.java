@@ -41,7 +41,7 @@ import org.apache.spark.streaming.Durations;
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: JavaDirectKafkaWordCount <brokers> <groupId> <topics>
+ * Usage: JavaDirectKerberizedKafkaWordCount <brokers> <groupId> <topics>
  *   <brokers> is a list of one or more Kafka brokers
  *   <groupId> is a consumer group name to consume from topics
  *   <topics> is a list of one or more kafka topics to consume from
@@ -60,7 +60,7 @@ public final class JavaDirectKerberizedKafkaWordCount {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 3) {
-            System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <groupId> <topics>\n" +
+            System.err.println("Usage: JavaDirectKerberizedKafkaWordCount <brokers> <groupId> <topics>\n" +
                     "  <brokers> is a list of one or more Kafka brokers\n" +
                     "  <groupId> is a consumer group name to consume from topics\n" +
                     "  <topics> is a list of one or more kafka topics to consume from\n\n");
@@ -74,7 +74,7 @@ public final class JavaDirectKerberizedKafkaWordCount {
         String topics = args[2];
 
         // Create context with a 2 seconds batch interval
-        SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKafkaWordCount");
+        SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKerberizedKafkaWordCount");
         JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
 
         Set<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
