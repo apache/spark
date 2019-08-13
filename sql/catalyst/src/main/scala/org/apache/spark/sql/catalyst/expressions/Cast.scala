@@ -134,6 +134,7 @@ object Cast {
     case (DateType, TimestampType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
+    case (NullType, _) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
     // `timestampToLong` for details.
