@@ -23,7 +23,6 @@ import java.sql.Date;
 import java.sql.Timestamp;
 
 import org.apache.hadoop.hive.common.type.HiveChar;
-import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
 import org.apache.hadoop.hive.common.type.HiveVarchar;
@@ -140,14 +139,6 @@ public class ColumnValue {
     return TColumnValue.stringVal(tStringValue);
   }
 
-  private static TColumnValue stringValue(HiveDecimal value) {
-    TStringValue tStrValue = new TStringValue();
-    if (value != null) {
-      tStrValue.setValue(value.toString());
-    }
-    return TColumnValue.stringVal(tStrValue);
-  }
-
   private static TColumnValue stringValue(HiveIntervalYearMonth value) {
     TStringValue tStrValue = new TStringValue();
     if (value != null) {
@@ -195,7 +186,7 @@ public class ColumnValue {
     case INTERVAL_DAY_TIME_TYPE:
       return stringValue((HiveIntervalDayTime) value);
     case DECIMAL_TYPE:
-      return stringValue(((HiveDecimal)value));
+      return stringValue(((BigDecimal)value).toPlainString());
     case BINARY_TYPE:
       String strVal = value == null ? null : UTF8String.fromBytes((byte[])value).toString();
       return stringValue(strVal);
