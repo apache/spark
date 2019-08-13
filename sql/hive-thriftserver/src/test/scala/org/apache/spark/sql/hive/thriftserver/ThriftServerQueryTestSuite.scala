@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
- * Directly re-run all the tests in SQLQueryTestSuite via Thrift Server
+ * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
  *
  * TODO:
  *   1. Support UDF testing.
@@ -45,7 +45,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   private var hiveServer2: HiveThriftServer2 = _
 
-  override def beforeEach(): Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     // Chooses a random port between 10000 and 19999
     var listeningPort = 10000 + Random.nextInt(10000)
 
@@ -62,9 +63,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     logInfo(s"HiveThriftServer2 started successfully")
   }
 
-  override def afterEach(): Unit = {
-    hiveServer2.stop()
-    hiveServer2 = null
+  override def afterAll(): Unit = {
+    try {
+      hiveServer2.stop()
+    } finally {
+      super.afterAll()
+    }
   }
 
   override val isTestWithConfigSets = false
@@ -253,8 +257,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   private def startThriftServer(port: Int, attempt: Int): Unit = {
     logInfo(s"Trying to start HiveThriftServer2: port=$port, attempt=$attempt")
-    val localSparkSession = spark.newSession()
-    val sqlContext = localSparkSession.sqlContext
+    val sqlContext = spark.newSession().sqlContext
     sqlContext.setConf(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname, port.toString)
     hiveServer2 = HiveThriftServer2.startWithContext(sqlContext)
   }
