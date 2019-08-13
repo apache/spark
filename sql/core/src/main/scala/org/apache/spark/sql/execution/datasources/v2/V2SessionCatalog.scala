@@ -154,10 +154,8 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
   }
 
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
-    try {
-      if (Option(loadTable(newIdent)).isDefined) throw new TableAlreadyExistsException(newIdent)
-    } catch {
-      case _: NoSuchTableException =>
+    if (tableExists(newIdent)) {
+      throw new TableAlreadyExistsException(newIdent)
     }
 
     // Load table to make sure the table exists
