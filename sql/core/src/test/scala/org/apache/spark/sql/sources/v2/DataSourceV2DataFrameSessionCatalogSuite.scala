@@ -24,9 +24,10 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalog.v2.Identifier
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -54,14 +55,48 @@ class DataSourceV2DataFrameSessionCatalogSuite
   private def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(spark.table(tableName), expected)
     checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
+    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
     checkAnswer(sql(s"TABLE $tableName"), expected)
   }
 
-  test("saveAsTable and v2 table - table doesn't exist") {
+  test("saveAsTable: v2 table - table doesn't exist and default mode (ErrorIfExists)") {
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     df.write.format(v2Format).saveAsTable(t1)
     verifyTable(t1, df)
+  }
+
+  test("saveAsTable: v2 table - table doesn't exist and append mode") {
+    val t1 = "tbl"
+    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+    df.write.format(v2Format).mode("append").saveAsTable(t1)
+    verifyTable(t1, df)
+  }
+
+  test("saveAsTable: Append mode should not fail if the table not exists " +
+    "but a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.format(v2Format).mode(SaveMode.Append).saveAsTable("same_name")
+        assert(
+          spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      }
+    }
+  }
+
+  test("saveAsTable: Append mode should not fail if the table already exists " +
+    "and a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        val format = spark.sessionState.conf.defaultDataSourceName
+        sql(s"CREATE TABLE same_name(id LONG) USING $format")
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.format(v2Format).mode(SaveMode.Append).saveAsTable("same_name")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
+      }
+    }
   }
 
   test("saveAsTable: v2 table - table exists") {
@@ -94,6 +129,32 @@ class DataSourceV2DataFrameSessionCatalogSuite
     verifyTable(t1, df)
   }
 
+  test("saveAsTable: Overwrite mode should not drop the temp view if the table not exists " +
+    "but a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.format(v2Format).mode(SaveMode.Overwrite).saveAsTable("same_name")
+        assert(spark.sessionState.catalog.getTempView("same_name").isDefined)
+        assert(
+          spark.sessionState.catalog.tableExists(TableIdentifier("same_name", Some("default"))))
+      }
+    }
+  }
+
+  test("saveAsTable with mode Overwrite should not fail if the table already exists " +
+    "and a same-name temp view exist") {
+    withTable("same_name") {
+      withTempView("same_name") {
+        sql(s"CREATE TABLE same_name(id LONG) USING $v2Format")
+        spark.range(10).createTempView("same_name")
+        spark.range(20).write.format(v2Format).mode(SaveMode.Overwrite).saveAsTable("same_name")
+        checkAnswer(spark.table("same_name"), spark.range(10).toDF())
+        checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
+      }
+    }
+  }
+
   test("saveAsTable: v2 table - ignore mode and table doesn't exist") {
     val t1 = "tbl"
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
@@ -116,20 +177,32 @@ class InMemoryTableProvider extends TableProvider {
   }
 }
 
+/** A second fake format to test behavior with format changes. */
+class InMemoryTableProvider2 extends InMemoryTableProvider
+
 /** A SessionCatalog that always loads an in memory Table, so we can test write code paths. */
 class TestV2SessionCatalog extends V2SessionCatalog {
 
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
 
+  private def fullIdentifier(ident: Identifier): Identifier = {
+    if (ident.namespace().isEmpty) {
+      Identifier.of(Array("default"), ident.name())
+    } else {
+      ident
+    }
+  }
+
   override def loadTable(ident: Identifier): Table = {
-    if (tables.containsKey(ident)) {
-      tables.get(ident)
+    val fullIdent = fullIdentifier(ident)
+    if (tables.containsKey(fullIdent)) {
+      tables.get(fullIdent)
     } else {
       // Table was created through the built-in catalog
-      val t = super.loadTable(ident)
+      val t = super.loadTable(fullIdent)
       val table = new InMemoryTable(t.name(), t.schema(), t.partitioning(), t.properties())
-      tables.put(ident, table)
+      tables.put(fullIdent, table)
       table
     }
   }
@@ -139,8 +212,10 @@ class TestV2SessionCatalog extends V2SessionCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val t = new InMemoryTable(ident.name(), schema, partitions, properties)
-    tables.put(ident, t)
+    val created = super.createTable(ident, schema, partitions, properties)
+    val t = new InMemoryTable(created.name(), schema, partitions, properties)
+    val fullIdent = fullIdentifier(ident)
+    tables.put(fullIdent, t)
     t
   }
 
