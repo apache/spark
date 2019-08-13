@@ -57,6 +57,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
     val plan = Project(Seq(func), testRelation)
     analyzer.execute(plan)
     verifyZeroInteractions(catalog)
+    catalog.dropTable("default", "t1", true, false)
   }
 
   test("check the existence of builtin functions don't call the external catalog") {
