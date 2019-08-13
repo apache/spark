@@ -32,6 +32,7 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.VersionUtils.majorMinorVersion
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -173,14 +174,12 @@ class StringIndexer @Since("1.4.0") (
   @Since("3.0.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  private def countByValue(
-      dataset: Dataset[_],
-      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
-
-    val aggregator = new StringIndexerAggregator(inputCols.length)
-    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
-
-    val selectedCols = inputCols.map { colName =>
+  /**
+   * Gets columns from dataset. If a column is not string type, we replace NaN values
+   * with null. Columns are casted to string type.
+   */
+  private def getSelectedCols(dataset: Dataset[_], inputCols: Seq[String]): Seq[Column] = {
+    inputCols.map { colName =>
       val col = dataset.col(colName)
       if (col.expr.dataType == StringType) {
         col
@@ -190,7 +189,16 @@ class StringIndexer @Since("1.4.0") (
         new Column(If(col.isNaN.expr, Literal(null), col.expr)).cast(StringType)
       }
     }
+  }
 
+  private def countByValue(
+      dataset: Dataset[_],
+      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
+
+    val aggregator = new StringIndexerAggregator(inputCols.length)
+    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
+
+    val selectedCols = getSelectedCols(dataset, inputCols)
     dataset.select(selectedCols: _*)
       .toDF
       .groupBy().agg(aggregator.toColumn)
@@ -213,32 +221,36 @@ class StringIndexer @Since("1.4.0") (
     val labelsArray = $(stringOrderType) match {
       case StringIndexer.frequencyDesc =>
         val sortFunc = StringIndexer.getSortFunc(ascending = false)
-        countByValue(dataset, inputCols).map { counts =>
+        val orgStrings = countByValue(dataset, inputCols).toSeq
+        ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
           counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-        }
+        }.toArray
       case StringIndexer.frequencyAsc =>
         val sortFunc = StringIndexer.getSortFunc(ascending = true)
-        countByValue(dataset, inputCols).map { counts =>
+        val orgStrings = countByValue(dataset, inputCols).toSeq
+        ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
           counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-        }
+        }.toArray
       case StringIndexer.alphabetDesc =>
-        import dataset.sparkSession.implicits._
         dataset.persist()
-        val labels = inputCols.map { inputCol =>
-          dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").desc)
-            .as[String].collect()
-        }
+        val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
+        val allLabels = dataset.select(selectedCols: _*)
+          .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
+        val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
+          labels.filter(_ != null).sorted.reverse.toArray
+        }.toArray
         if (needUnpersist) {
           dataset.unpersist()
         }
         labels
       case StringIndexer.alphabetAsc =>
-        import dataset.sparkSession.implicits._
         dataset.persist()
-        val labels = inputCols.map { inputCol =>
-          dataset.select(inputCol).na.drop().distinct().sort(dataset(s"$inputCol").asc)
-            .as[String].collect()
-        }
+        val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
+        val allLabels = dataset.select(selectedCols: _*)
+          .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
+        val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
+          labels.filter(_ != null).sorted.toArray
+        }.toArray
         if (needUnpersist) {
           dataset.unpersist()
         }
