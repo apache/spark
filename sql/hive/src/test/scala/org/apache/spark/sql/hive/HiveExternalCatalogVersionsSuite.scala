@@ -209,7 +209,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 
   test("backward compatibility") {
-    // TODO Test backward compatibility on JAVA_9 once we have a version supports JAVA_9
+    // TODO SPARK-28704 Test backward compatibility on JDK9+ once we have a version supports JDK9+
     assume(!isTestAtLeastJava9)
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
