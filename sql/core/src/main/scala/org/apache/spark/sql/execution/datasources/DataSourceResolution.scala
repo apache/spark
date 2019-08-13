@@ -173,22 +173,13 @@ case class DataSourceResolution(
       // only top-level adds are supported using AlterTableAddColumnsCommand
       AlterTableAddColumnsCommand(table, newColumns.map(convertToStructField))
 
-    case DeleteFromStatement(AsTableIdentifier(table), tableAlias, condition) =>
-      throw new AnalysisException(
-        s"Delete from tables is not supported using the legacy / v1 Spark external catalog" +
-            s" API. Identifier: $table.")
-
     case delete: DeleteFromStatement =>
-      val CatalogObjectIdentifier(maybeCatalog, identifier) = delete.tableName
-      val catalog = maybeCatalog.orElse(defaultCatalog)
-          .getOrElse(throw new AnalysisException(
-            s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
-          .asTableCatalog
-      convertDeleteFrom(catalog.asTableCatalog, identifier, delete)
+      val relation = UnresolvedRelation(delete.tableName)
+      val aliased = delete.tableAlias.map(SubqueryAlias(_, relation)).getOrElse(relation)
+      DeleteFromTable(aliased, delete.condition)
 
     case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
       UnresolvedCatalogRelation(catalogTable)
-
   }
 
   object V1WriteProvider {
@@ -320,15 +311,6 @@ case class DataSourceResolution(
       partitioning,
       properties,
       orCreate = replace.orCreate)
-  }
-
-  private def convertDeleteFrom(
-      catalog: TableCatalog,
-      identifier: Identifier,
-      delete: DeleteFromStatement): DeleteFromTable = {
-    val relation = UnresolvedRelation(delete.tableName)
-    val aliased = delete.tableAlias.map { SubqueryAlias(_, relation) }.getOrElse(relation)
-    DeleteFromTable(aliased, delete.condition)
   }
 
   private def convertTableProperties(

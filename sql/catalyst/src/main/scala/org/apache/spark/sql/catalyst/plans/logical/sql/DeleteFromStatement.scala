@@ -24,9 +24,4 @@ case class DeleteFromStatement(
     tableName: Seq[String],
     tableAlias: Option[String],
     condition: Expression)
-    extends ParsedStatement {
-
-  override def output: Seq[Attribute] = Seq.empty
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-}
+    extends ParsedStatement

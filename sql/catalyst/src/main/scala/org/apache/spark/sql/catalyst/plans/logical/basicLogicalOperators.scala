@@ -572,7 +572,6 @@ case class DeleteFromTable(
     condition: Expression) extends Command {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 /**

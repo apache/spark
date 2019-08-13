@@ -644,6 +644,7 @@ class Analyzer(
    */
   object ResolveTables extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
+    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(AsTemporaryViewIdentifier(ident))
@@ -652,6 +653,17 @@ class Analyzer(
 
       case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
         loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
+
+      case d @ DeleteFromTable(u @ UnresolvedRelation(
+          CatalogObjectIdentifier(None, ident)), condition) =>
+        // fallback to session catalog for DeleteFromTable if no catalog specified and no default
+        // catalog set.
+        val catalog = sessionCatalog
+            .getOrElse(throw new AnalysisException(
+              s"Cannot delete from ${ident.quoted} because no catalog specified" +
+                  s" and no session catalog provided."))
+            .asTableCatalog
+        d.copy(child = loadTable(catalog, ident).map(DataSourceV2Relation.create).getOrElse(u))
     }
   }
 
