@@ -1396,21 +1396,21 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
     ctx.field.getText.toUpperCase(Locale.ROOT) match {
-      case "MILLENNIUM" =>
+      case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" =>
         Millennium(expression(ctx.source))
-      case "CENTURY" =>
+      case "CENTURY" | "CENTURIES" | "C" | "CENT" =>
         Century(expression(ctx.source))
-      case "DECADE" =>
+      case "DECADE" | "DECADES" | "DEC" | "DECS" =>
         Decade(expression(ctx.source))
-      case "YEAR" =>
+      case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
         Year(expression(ctx.source))
-      case "QUARTER" =>
+      case "QUARTER" | "QTR" =>
         Quarter(expression(ctx.source))
-      case "MONTH" =>
+      case "MONTH" | "MON" | "MONS" | "MONTHS" =>
         Month(expression(ctx.source))
-      case "WEEK" =>
+      case "WEEK" | "W" | "WEEKS" =>
         WeekOfYear(expression(ctx.source))
-      case "DAY" =>
+      case "DAY" | "D" | "DAYS" =>
         DayOfMonth(expression(ctx.source))
       case "DAYOFWEEK" =>
         DayOfWeek(expression(ctx.source))
@@ -1420,11 +1420,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Add(WeekDay(expression(ctx.source)), Literal(1))
       case "DOY" =>
         DayOfYear(expression(ctx.source))
-      case "HOUR" =>
+      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" =>
         Hour(expression(ctx.source))
-      case "MINUTE" =>
+      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" =>
         Minute(expression(ctx.source))
-      case "SECOND" =>
+      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
         Second(expression(ctx.source))
       case other =>
         throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
