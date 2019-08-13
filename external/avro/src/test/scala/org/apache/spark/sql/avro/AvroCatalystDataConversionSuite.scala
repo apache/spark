@@ -210,7 +210,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     }
   }
 
-  test("user-specified schema") {
+  test("user-specified output schema") {
     val data = Literal("SPADES")
     val jsonFormatSchema =
       """
@@ -219,14 +219,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
         |  "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
         |}
       """.stripMargin
-    checkEvaluation(
-      AvroDataToCatalyst(
-        CatalystDataToAvro(
-          data,
-          Some(jsonFormatSchema)),
-        jsonFormatSchema,
-        options = Map.empty),
-      data.eval())
+
     val message = intercept[SparkException] {
       AvroDataToCatalyst(
         CatalystDataToAvro(
@@ -236,5 +229,21 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
         options = Map.empty).eval()
     }.getMessage
     assert(message.contains("Malformed records are detected in record parsing."))
+
+    checkEvaluation(
+      AvroDataToCatalyst(
+        CatalystDataToAvro(
+          data,
+          Some(jsonFormatSchema)),
+        jsonFormatSchema,
+        options = Map.empty),
+      data.eval())
+  }
+
+  test("invalid user-specified output schema") {
+    val message = intercept[IncompatibleSchemaException] {
+      CatalystDataToAvro(Literal("SPADES"), Some("\"long\"")).eval()
+    }.getMessage
+    assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
   }
 }
