@@ -1008,6 +1008,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(!Cast.canUpCast(complexType, StringType))
       }
     }
+
+    assert(Cast.canUpCast(NullType, StringType))
   }
 
   test("SPARK-27671: cast from nested null type in struct") {
