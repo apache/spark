@@ -99,6 +99,10 @@ while (( "$#" )); do
       R_IMAGE_NAME="$2"
       shift
       ;;
+    --java-version)
+      JAVA_VERSION="$2"
+      shift
+      ;;
     *)
       break
       ;;
@@ -107,6 +111,7 @@ while (( "$#" )); do
 done
 
 properties=(
+  -Djava.version=$JAVA_VERSION \
   -Dspark.kubernetes.test.sparkTgz=$SPARK_TGZ \
   -Dspark.kubernetes.test.imageTag=$IMAGE_TAG \
   -Dspark.kubernetes.test.imageRepo=$IMAGE_REPO \
