@@ -188,6 +188,22 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     })
   }
 
+  /**
+   * Returns a sequence containing the result of applying a partial function to all elements in this
+   * plan, also considering all the plans in its (nested) subqueries
+   */
+  def collectInPlanAndSubqueries[B](f: PartialFunction[PlanType, B]): Seq[B] =
+    (this +: subqueriesAll).flatMap(_.collect(f))
+
+  /**
+   * Returns a sequence containing the subqueries in this plan, also including the (nested)
+   * subquries in its children
+   */
+  def subqueriesAll: Seq[PlanType] = {
+    val subqueries = this.flatMap(_.subqueries)
+    subqueries ++ subqueries.flatMap(_.subqueriesAll)
+  }
+
   override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**

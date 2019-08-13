@@ -39,4 +39,45 @@ class QueryPlanSuite extends SparkFunSuite {
     assert(mappedOrigin == Origin.apply(Some(0), Some(0)))
   }
 
+  test("collectInPlanAndSubqueries") {
+    val a: NamedExpression = AttributeReference("a", IntegerType)()
+    val plan =
+      Union(
+        Seq(
+          Project(
+            Seq(a),
+            Filter(
+              ListQuery(Project(
+                Seq(a),
+                Filter(
+                  ListQuery(Project(
+                    Seq(a),
+                    UnresolvedRelation(TableIdentifier("t", None))
+                  )),
+                  UnresolvedRelation(TableIdentifier("t", None))
+                )
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          ),
+          Project(
+            Seq(a),
+            Filter(
+              ListQuery(Project(
+                Seq(a),
+                UnresolvedRelation(TableIdentifier("t", None))
+              )),
+              UnresolvedRelation(TableIdentifier("t", None))
+            )
+          )
+        )
+      )
+
+    val countRelationsInPlan = plan.collect({ case _: UnresolvedRelation => 1 }).sum
+    val countRelationsInPlanAndSubqueries =
+      plan.collectInPlanAndSubqueries({ case _: UnresolvedRelation => 1 }).sum
+
+    assert(countRelationsInPlan == 2)
+    assert(countRelationsInPlanAndSubqueries == 5)
+  }
 }
