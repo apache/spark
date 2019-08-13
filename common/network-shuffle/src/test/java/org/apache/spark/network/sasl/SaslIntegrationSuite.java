@@ -45,7 +45,7 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
 import org.apache.spark.network.shuffle.BlockFetchingListener;
-import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler;
+import org.apache.spark.network.shuffle.ExternalBlockHandler;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver;
 import org.apache.spark.network.shuffle.OneForOneBlockFetcher;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
@@ -173,7 +173,7 @@ public class SaslIntegrationSuite {
   public void testAppIsolation() throws Exception {
     // Start a new server with the correct RPC handler to serve block data.
     ExternalShuffleBlockResolver blockResolver = mock(ExternalShuffleBlockResolver.class);
-    ExternalShuffleBlockHandler blockHandler = new ExternalShuffleBlockHandler(
+    ExternalBlockHandler blockHandler = new ExternalBlockHandler(
       new OneForOneStreamManager(), blockResolver);
     TransportServerBootstrap bootstrap = new SaslServerBootstrap(conf, secretKeyHolder);
 

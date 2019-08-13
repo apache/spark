@@ -70,11 +70,12 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def close(): Unit = {
+  override def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
     sqlContext.sparkContext.clearJobGroup()
+    HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -113,7 +114,8 @@ private[hive] class SparkExecuteStatementOperation(
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
-    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet =
+      ThriftserverShimUtils.resultRowSet(getResultSetSchema, getProtocolVersion)
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {

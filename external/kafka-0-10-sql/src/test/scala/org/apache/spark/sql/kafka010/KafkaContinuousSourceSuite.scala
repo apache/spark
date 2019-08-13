@@ -21,7 +21,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.streaming.Trigger
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.

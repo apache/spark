@@ -25,22 +25,22 @@ test_that("createDataFrame/collect Arrow optimization", {
   skip_if_not_installed("arrow")
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "false")
   tryCatch({
     expected <- collect(createDataFrame(mtcars))
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     expect_equal(collect(createDataFrame(mtcars)), expected)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -48,15 +48,15 @@ test_that("createDataFrame/collect Arrow optimization - many partitions (partiti
   skip_if_not_installed("arrow")
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     expect_equal(collect(createDataFrame(mtcars, numPartitions = 32)),
                  collect(createDataFrame(mtcars, numPartitions = 1)))
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -70,23 +70,23 @@ test_that("createDataFrame/collect Arrow optimization - type specification", {
                               f = as.Date("1990-02-24"),
                               g = as.POSIXct("1990-02-24 12:34:56"))))
 
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
   conf <- callJMethod(sparkSession, "conf")
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "false")
   tryCatch({
     expected <- collect(createDataFrame(rdf))
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     expect_equal(collect(createDataFrame(rdf)), expected)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -95,9 +95,9 @@ test_that("dapply() Arrow optimization", {
   df <- createDataFrame(mtcars)
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "false")
   tryCatch({
     ret <- dapply(df,
     function(rdf) {
@@ -108,10 +108,10 @@ test_that("dapply() Arrow optimization", {
     expected <- collect(ret)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     ret <- dapply(df,
                   function(rdf) {
@@ -126,7 +126,7 @@ test_that("dapply() Arrow optimization", {
     expect_equal(count(ret), nrow(mtcars))
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -143,25 +143,25 @@ test_that("dapply() Arrow optimization - type specification", {
   df <- createDataFrame(rdf, numPartitions = 8)
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "false")
   tryCatch({
     ret <- dapply(df, function(rdf) { rdf }, schema(df))
     expected <- collect(ret)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     ret <- dapply(df, function(rdf) { rdf }, schema(df))
     actual <- collect(ret)
     expect_equal(actual, expected)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -172,15 +172,15 @@ test_that("dapply() Arrow optimization - type specification (date and timestamp)
   df <- createDataFrame(rdf)
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     ret <- dapply(df, function(rdf) { rdf }, schema(df))
     expect_equal(collect(ret), rdf)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -189,9 +189,9 @@ test_that("gapply() Arrow optimization", {
   df <- createDataFrame(mtcars)
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "false")
   tryCatch({
     ret <- gapply(df,
                  "gear",
@@ -206,10 +206,10 @@ test_that("gapply() Arrow optimization", {
     expected <- collect(ret)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     ret <- gapply(df,
                  "gear",
@@ -229,7 +229,7 @@ test_that("gapply() Arrow optimization", {
     expect_equal(count(ret), nrow(mtcars))
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -245,9 +245,9 @@ test_that("gapply() Arrow optimization - type specification", {
   df <- createDataFrame(rdf)
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "false")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "false")
   tryCatch({
     ret <- gapply(df,
                  "a",
@@ -255,11 +255,11 @@ test_that("gapply() Arrow optimization - type specification", {
     expected <- collect(ret)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     ret <- gapply(df,
                  "a",
@@ -268,7 +268,7 @@ test_that("gapply() Arrow optimization - type specification", {
     expect_equal(actual, expected)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -279,9 +279,9 @@ test_that("gapply() Arrow optimization - type specification (date and timestamp)
   df <- createDataFrame(rdf)
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
 
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     ret <- gapply(df,
                   "a",
@@ -289,7 +289,7 @@ test_that("gapply() Arrow optimization - type specification (date and timestamp)
     expect_equal(collect(ret), rdf)
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 
@@ -297,8 +297,8 @@ test_that("Arrow optimization - unsupported types", {
   skip_if_not_installed("arrow")
 
   conf <- callJMethod(sparkSession, "conf")
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]]
-  callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", "true")
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]]
+  callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", "true")
   tryCatch({
     expect_error(checkSchemaInArrow(structType("a FLOAT")), "not support float type")
     expect_error(checkSchemaInArrow(structType("a BINARY")), "not support binary type")
@@ -308,7 +308,7 @@ test_that("Arrow optimization - unsupported types", {
                  "not support nested struct type")
   },
   finally = {
-    callJMethod(conf, "set", "spark.sql.execution.arrow.enabled", arrowEnabled)
+    callJMethod(conf, "set", "spark.sql.execution.arrow.sparkr.enabled", arrowEnabled)
   })
 })
 

@@ -41,6 +41,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 private[spark] object KafkaTokenUtil extends Logging {
   val TOKEN_KIND = new Text("KAFKA_DELEGATION_TOKEN")
@@ -133,6 +134,16 @@ private[spark] object KafkaTokenUtil extends Logging {
       }
     }
 
+    logDebug("AdminClient params before specified params: " +
+      s"${KafkaRedactionUtil.redactParams(adminClientProperties.asScala.toSeq)}")
+
+    clusterConf.specifiedKafkaParams.foreach { param =>
+      adminClientProperties.setProperty(param._1, param._2)
+    }
+
+    logDebug("AdminClient params after specified params: " +
+      s"${KafkaRedactionUtil.redactParams(adminClientProperties.asScala.toSeq)}")
+
     adminClientProperties
   }
 
@@ -193,7 +204,7 @@ private[spark] object KafkaTokenUtil extends Logging {
       | debug=${isGlobalKrbDebugEnabled()}
       | useTicketCache=true
       | serviceName="${clusterConf.kerberosServiceName}";
-      """.stripMargin.replace("\n", "")
+      """.stripMargin.replace("\n", "").trim
     logDebug(s"Krb ticket cache JAAS params: $params")
     params
   }
@@ -226,7 +237,8 @@ private[spark] object KafkaTokenUtil extends Logging {
       logDebug("%-15s %-30s %-15s %-25s %-15s %-15s %-15s".format(
         "TOKENID", "HMAC", "OWNER", "RENEWERS", "ISSUEDATE", "EXPIRYDATE", "MAXDATE"))
       val tokenInfo = token.tokenInfo
-      logDebug("%-15s [hidden] %-15s %-25s %-15s %-15s %-15s".format(
+      logDebug("%-15s %-15s %-15s %-25s %-15s %-15s %-15s".format(
+        REDACTION_REPLACEMENT_TEXT,
         tokenInfo.tokenId,
         tokenInfo.owner,
         tokenInfo.renewersAsString,
@@ -268,8 +280,8 @@ private[spark] object KafkaTokenUtil extends Logging {
       | serviceName="${clusterConf.kerberosServiceName}"
       | username="$username"
       | password="$password";
-      """.stripMargin.replace("\n", "")
-    logDebug(s"Scram JAAS params: ${params.replaceAll("password=\".*\"", "password=\"[hidden]\"")}")
+      """.stripMargin.replace("\n", "").trim
+    logDebug(s"Scram JAAS params: ${KafkaRedactionUtil.redactJaasParam(params)}")
 
     params
   }

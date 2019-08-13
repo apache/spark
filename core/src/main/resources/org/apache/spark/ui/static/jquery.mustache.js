@@ -45,6 +45,19 @@
     return obj != null && typeof obj === 'object' && (propName in obj);
   }
 
+  /**
+   * Safe way of detecting whether or not the given thing is a primitive and
+   * whether it has the given property
+   */
+  function primitiveHasOwnProperty (primitive, propName) {
+    return (
+      primitive != null
+      && typeof primitive !== 'object'
+      && primitive.hasOwnProperty
+      && primitive.hasOwnProperty(propName)
+    );
+  }
+
   // Workaround for https://issues.apache.org/jira/browse/COUCHDB-577
   // See https://github.com/janl/mustache.js/issues/189
   var regExpTest = RegExp.prototype.test;
@@ -377,11 +390,11 @@
     if (cache.hasOwnProperty(name)) {
       value = cache[name];
     } else {
-      var context = this, names, index, lookupHit = false;
+      var context = this, intermediateValue, names, index, lookupHit = false;
 
       while (context) {
         if (name.indexOf('.') > 0) {
-          value = context.view;
+          intermediateValue = context.view;
           names = name.split('.');
           index = 0;
 
@@ -395,20 +408,51 @@
            *
            * This is specially necessary for when the value has been set to
            * `undefined` and we want to avoid looking up parent contexts.
+           *
+           * In the case where dot notation is used, we consider the lookup
+           * to be successful even if the last "object" in the path is
+           * not actually an object but a primitive (e.g., a string, or an
+           * integer), because it is sometimes useful to access a property
+           * of an autoboxed primitive, such as the length of a string.
            **/
-          while (value != null && index < names.length) {
+          while (intermediateValue != null && index < names.length) {
             if (index === names.length - 1)
-              lookupHit = hasProperty(value, names[index]);
+              lookupHit = (
+                hasProperty(intermediateValue, names[index])
+                || primitiveHasOwnProperty(intermediateValue, names[index])
+              );
 
-            value = value[names[index++]];
+            intermediateValue = intermediateValue[names[index++]];
           }
         } else {
-          value = context.view[name];
+          intermediateValue = context.view[name];
+
+          /**
+           * Only checking against `hasProperty`, which always returns `false` if
+           * `context.view` is not an object. Deliberately omitting the check
+           * against `primitiveHasOwnProperty` if dot notation is not used.
+           *
+           * Consider this example:
+           * ```
+           * Mustache.render("The length of a football field is {{#length}}{{length}}{{/length}}.", {length: "100 yards"})
+           * ```
+           *
+           * If we were to check also against `primitiveHasOwnProperty`, as we do
+           * in the dot notation case, then render call would return:
+           *
+           * "The length of a football field is 9."
+           *
+           * rather than the expected:
+           *
+           * "The length of a football field is 100 yards."
+           **/
           lookupHit = hasProperty(context.view, name);
         }
 
-        if (lookupHit)
+        if (lookupHit) {
+          value = intermediateValue;
           break;
+        }
 
         context = context.parent;
       }
@@ -439,15 +483,17 @@
   };
 
   /**
-   * Parses and caches the given `template` and returns the array of tokens
+   * Parses and caches the given `template` according to the given `tags` or
+   * `mustache.tags` if `tags` is omitted,  and returns the array of tokens
    * that is generated from the parse.
    */
   Writer.prototype.parse = function parse (template, tags) {
     var cache = this.cache;
-    var tokens = cache[template];
+    var cacheKey = template + ':' + (tags || mustache.tags).join(':');
+    var tokens = cache[cacheKey];
 
     if (tokens == null)
-      tokens = cache[template] = parseTemplate(template, tags);
+      tokens = cache[cacheKey] = parseTemplate(template, tags);
 
     return tokens;
   };
@@ -460,11 +506,15 @@
    * names and templates of partials that are used in the template. It may
    * also be a function that is used to load partial templates on the fly
    * that takes a single argument: the name of the partial.
+   *
+   * If the optional `tags` argument is given here it must be an array with two
+   * string values: the opening and closing tags used in the template (e.g.
+   * [ "<%", "%>" ]). The default is to mustache.tags.
    */
-  Writer.prototype.render = function render (template, view, partials) {
-    var tokens = this.parse(template);
+  Writer.prototype.render = function render (template, view, partials, tags) {
+    var tokens = this.parse(template, tags);
     var context = (view instanceof Context) ? view : new Context(view);
-    return this.renderTokens(tokens, context, partials, template);
+    return this.renderTokens(tokens, context, partials, template, tags);
   };
 
   /**
@@ -476,7 +526,7 @@
    * If the template doesn't use higher-order sections, this argument may
    * be omitted.
    */
-  Writer.prototype.renderTokens = function renderTokens (tokens, context, partials, originalTemplate) {
+  Writer.prototype.renderTokens = function renderTokens (tokens, context, partials, originalTemplate, tags) {
     var buffer = '';
 
     var token, symbol, value;
@@ -487,7 +537,7 @@
 
       if (symbol === '#') value = this.renderSection(token, context, partials, originalTemplate);
       else if (symbol === '^') value = this.renderInverted(token, context, partials, originalTemplate);
-      else if (symbol === '>') value = this.renderPartial(token, context, partials, originalTemplate);
+      else if (symbol === '>') value = this.renderPartial(token, context, partials, tags);
       else if (symbol === '&') value = this.unescapedValue(token, context);
       else if (symbol === 'name') value = this.escapedValue(token, context);
       else if (symbol === 'text') value = this.rawValue(token);
@@ -542,12 +592,12 @@
       return this.renderTokens(token[4], context, partials, originalTemplate);
   };
 
-  Writer.prototype.renderPartial = function renderPartial (token, context, partials) {
+  Writer.prototype.renderPartial = function renderPartial (token, context, partials, tags) {
     if (!partials) return;
 
     var value = isFunction(partials) ? partials(token[1]) : partials[token[1]];
     if (value != null)
-      return this.renderTokens(this.parse(value), context, partials, value);
+      return this.renderTokens(this.parse(value, tags), context, partials, value);
   };
 
   Writer.prototype.unescapedValue = function unescapedValue (token, context) {
@@ -567,7 +617,7 @@
   };
 
   mustache.name = 'mustache.js';
-  mustache.version = '2.3.2';
+  mustache.version = '3.0.1';
   mustache.tags = [ '{{', '}}' ];
 
   // All high-level mustache.* functions use this writer.
@@ -591,16 +641,18 @@
 
   /**
    * Renders the `template` with the given `view` and `partials` using the
-   * default writer.
+   * default writer. If the optional `tags` argument is given here it must be an
+   * array with two string values: the opening and closing tags used in the
+   * template (e.g. [ "<%", "%>" ]). The default is to mustache.tags.
    */
-  mustache.render = function render (template, view, partials) {
+  mustache.render = function render (template, view, partials, tags) {
     if (typeof template !== 'string') {
       throw new TypeError('Invalid template! Template should be a "string" ' +
                           'but "' + typeStr(template) + '" was given as the first ' +
                           'argument for mustache#render(template, view, partials)');
     }
 
-    return defaultWriter.render(template, view, partials);
+    return defaultWriter.render(template, view, partials, tags);
   };
 
   // This is here for backwards compatibility with 0.4.x.,

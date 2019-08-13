@@ -131,7 +131,7 @@ def require_minimum_pandas_version():
     """ Raise ImportError if minimum version of Pandas is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "0.19.2"
+    minimum_pandas_version = "0.23.2"
 
     from distutils.version import LooseVersion
     try:
@@ -207,3 +207,16 @@ class ForeachBatchFunction(object):
 
     class Java:
         implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']
+
+
+def to_str(value):
+    """
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    elif value is None:
+        return value
+    else:
+        return str(value)

@@ -18,20 +18,23 @@
 package org.apache.spark.sql.catalog.v2
 
 import java.util
-import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
+import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.sources.v2.{Table, TableCapability}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TestTableCatalog extends TableCatalog {
+class TestTableCatalog extends TableCatalog with SupportsNamespaces {
   import CatalogV2Implicits._
+
+  override val defaultNamespace: Array[String] = Array()
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
 
   private val tables: util.Map[Identifier, Table] = new ConcurrentHashMap[Identifier, Table]()
   private var _name: Option[String] = None
@@ -79,8 +82,8 @@ class TestTableCatalog extends TableCatalog {
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = loadTable(ident)
-    val properties = TestTableCatalog.applyPropertiesChanges(table.properties, changes)
-    val schema = TestTableCatalog.applySchemaChanges(table.schema, changes)
+    val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+    val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
     val newTable = InMemoryTable(table.name, schema, properties)
 
     tables.put(ident, newTable)
@@ -89,121 +92,67 @@ class TestTableCatalog extends TableCatalog {
   }
 
   override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
-}
 
-private object TestTableCatalog {
-  /**
-   * Apply properties changes to a map and return the result.
-   */
-  def applyPropertiesChanges(
-      properties: util.Map[String, String],
-      changes: Seq[TableChange]): util.Map[String, String] = {
-    val newProperties = new util.HashMap[String, String](properties)
+  private def allNamespaces: Seq[Seq[String]] = {
+    (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
+  }
 
-    changes.foreach {
-      case set: SetProperty =>
-        newProperties.put(set.property, set.value)
+  override def namespaceExists(namespace: Array[String]): Boolean = {
+    allNamespaces.exists(_.startsWith(namespace))
+  }
 
-      case unset: RemoveProperty =>
-        newProperties.remove(unset.property)
+  override def listNamespaces: Array[Array[String]] = {
+    allNamespaces.map(_.head).distinct.map(Array(_)).toArray
+  }
 
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    allNamespaces
+        .filter(_.size > namespace.length)
+        .filter(_.startsWith(namespace))
+        .map(_.take(namespace.length + 1))
+        .distinct
+        .map(_.toArray)
+        .toArray
+  }
+
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    Option(namespaces.get(namespace.toSeq)) match {
+      case Some(metadata) =>
+        metadata.asJava
+      case _ if namespaceExists(namespace) =>
+        util.Collections.emptyMap[String, String]
       case _ =>
-      // ignore non-property changes
-    }
-
-    Collections.unmodifiableMap(newProperties)
-  }
-
-  /**
-   * Apply schema changes to a schema and return the result.
-   */
-  def applySchemaChanges(schema: StructType, changes: Seq[TableChange]): StructType = {
-    changes.foldLeft(schema) { (schema, change) =>
-      change match {
-        case add: AddColumn =>
-          add.fieldNames match {
-            case Array(name) =>
-              val newField = StructField(name, add.dataType, nullable = add.isNullable)
-              Option(add.comment) match {
-                case Some(comment) =>
-                  schema.add(newField.withComment(comment))
-                case _ =>
-                  schema.add(newField)
-              }
-
-            case names =>
-              replace(schema, names.init, parent => parent.dataType match {
-                case parentType: StructType =>
-                  val field = StructField(names.last, add.dataType, nullable = add.isNullable)
-                  val newParentType = Option(add.comment) match {
-                    case Some(comment) =>
-                      parentType.add(field.withComment(comment))
-                    case None =>
-                      parentType.add(field)
-                  }
-
-                  Some(StructField(parent.name, newParentType, parent.nullable, parent.metadata))
-
-                case _ =>
-                  throw new IllegalArgumentException(s"Not a struct: ${names.init.last}")
-              })
-          }
-
-        case rename: RenameColumn =>
-          replace(schema, rename.fieldNames, field =>
-            Some(StructField(rename.newName, field.dataType, field.nullable, field.metadata)))
-
-        case update: UpdateColumnType =>
-          replace(schema, update.fieldNames, field => {
-            if (!update.isNullable && field.nullable) {
-              throw new IllegalArgumentException(
-                s"Cannot change optional column to required: $field.name")
-            }
-            Some(StructField(field.name, update.newDataType, update.isNullable, field.metadata))
-          })
-
-        case update: UpdateColumnComment =>
-          replace(schema, update.fieldNames, field =>
-            Some(field.withComment(update.newComment)))
-
-        case delete: DeleteColumn =>
-          replace(schema, delete.fieldNames, _ => None)
-
-        case _ =>
-          // ignore non-schema changes
-          schema
-      }
+        throw new NoSuchNamespaceException(namespace)
     }
   }
 
-  private def replace(
-      struct: StructType,
-      path: Seq[String],
-      update: StructField => Option[StructField]): StructType = {
-
-    val pos = struct.getFieldIndex(path.head)
-        .getOrElse(throw new IllegalArgumentException(s"Cannot find field: ${path.head}"))
-    val field = struct.fields(pos)
-    val replacement: Option[StructField] = if (path.tail.isEmpty) {
-      update(field)
-    } else {
-      field.dataType match {
-        case nestedStruct: StructType =>
-          val updatedType: StructType = replace(nestedStruct, path.tail, update)
-          Some(StructField(field.name, updatedType, field.nullable, field.metadata))
-        case _ =>
-          throw new IllegalArgumentException(s"Not a struct: ${path.head}")
-      }
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = {
+    if (namespaceExists(namespace)) {
+      throw new NamespaceAlreadyExistsException(namespace)
     }
 
-    val newFields = struct.fields.zipWithIndex.flatMap {
-      case (_, index) if pos == index =>
-        replacement
-      case (other, _) =>
-        Some(other)
+    Option(namespaces.putIfAbsent(namespace.toList, metadata.asScala.toMap)) match {
+      case Some(_) =>
+        throw new NamespaceAlreadyExistsException(namespace)
+      case _ =>
+        // created successfully
     }
+  }
 
-    new StructType(newFields)
+  override def alterNamespace(
+      namespace: Array[String],
+      changes: NamespaceChange*): Unit = {
+    val metadata = loadNamespaceMetadata(namespace).asScala.toMap
+    namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
+  }
+
+  override def dropNamespace(namespace: Array[String]): Boolean = {
+    if (listTables(namespace).nonEmpty) {
+      throw new IllegalStateException(s"Cannot delete non-empty namespace: ${namespace.quoted}")
+    }
+    Option(namespaces.remove(namespace.toList)).isDefined
   }
 }
 

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.io.{File, FileNotFoundException}
+import java.io.{File, FilenameFilter, FileNotFoundException}
+import java.nio.file.{Files, StandardOpenOption}
 import java.util.Locale
 
 import scala.collection.mutable
@@ -28,6 +29,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT, NullData, NullUDT}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -332,13 +334,13 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       // TODO: test file source V2 after write path is fixed.
       Seq(true).foreach { useV1 =>
         val useV1List = if (useV1) {
-          "csv,json,orc"
+          "csv,json,orc,parquet"
         } else {
           ""
         }
         def validateErrorMessage(msg: String): Unit = {
           val msg1 = "cannot save interval data type into external storage."
-          val msg2 = "data source does not support calendarinterval data type."
+          val msg2 = "data source does not support interval data type."
           assert(msg.toLowerCase(Locale.ROOT).contains(msg1) ||
             msg.toLowerCase(Locale.ROOT).contains(msg2))
         }
@@ -377,7 +379,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     // TODO: test file source V2 after write path is fixed.
     Seq(true).foreach { useV1 =>
       val useV1List = if (useV1) {
-        "csv,orc"
+        "csv,orc,parquet"
       } else {
         ""
       }
@@ -571,6 +573,75 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  test("Option recursiveFileLookup: recursive loading correctly") {
+
+    val expectedFileList = mutable.ListBuffer[String]()
+
+    def createFile(dir: File, fileName: String, format: String): Unit = {
+      val path = new File(dir, s"${fileName}.${format}")
+      Files.write(
+        path.toPath,
+        s"content of ${path.toString}".getBytes,
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE
+      )
+      val fsPath = new Path(path.getAbsoluteFile.toURI).toString
+      expectedFileList.append(fsPath)
+    }
+
+    def createDir(path: File, dirName: String, level: Int): Unit = {
+      val dir = new File(path, s"dir${dirName}-${level}")
+      dir.mkdir()
+      createFile(dir, s"file${level}", "bin")
+      createFile(dir, s"file${level}", "text")
+
+      if (level < 4) {
+        // create sub-dir
+        createDir(dir, "sub0", level + 1)
+        createDir(dir, "sub1", level + 1)
+      }
+    }
+
+    withTempPath { path =>
+      path.mkdir()
+      createDir(path, "root", 0)
+
+      val dataPath = new File(path, "dirroot-0").getAbsolutePath
+      val fileList = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList.toSet === expectedFileList.toSet)
+
+      val fileList2 = spark.read.format("binaryFile")
+        .option("recursiveFileLookup", true)
+        .option("pathGlobFilter", "*.bin")
+        .load(dataPath)
+        .select("path").collect().map(_.getString(0))
+
+      assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
+    }
+  }
+
+  test("Option recursiveFileLookup: disable partition inferring") {
+    val dataPath = Thread.currentThread().getContextClassLoader
+      .getResource("test-data/text-partitioned").toString
+
+    val df = spark.read.format("binaryFile")
+      .option("recursiveFileLookup", true)
+      .load(dataPath)
+
+    assert(!df.columns.contains("year"), "Expect partition inferring disabled")
+    val fileList = df.select("path").collect().map(_.getString(0))
+
+    val expectedFileList = Array(
+      dataPath + "/year=2014/data.txt",
+      dataPath + "/year=2015/data.txt"
+    ).map(path => new Path(path).toString)
+
+    assert(fileList.toSet === expectedFileList.toSet)
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
@@ -581,6 +652,58 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         val df = spark.read.format(format).load(path.getCanonicalPath)
           .select("CoL1", "Col2", "CoL5", "CoL3")
         checkAnswer(df, Row("a", 2, "e", "c"))
+      }
+    }
+  }
+
+  test("sizeInBytes should be the total size of all files") {
+    Seq("orc", "").foreach { useV1SourceReaderList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        withTempDir { dir =>
+          dir.delete()
+          spark.range(1000).write.orc(dir.toString)
+          val df = spark.read.orc(dir.toString)
+          assert(df.queryExecution.logical.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
+    Seq(1.0, 0.5).foreach { compressionFactor =>
+      withSQLConf(SQLConf.FILE_COMRESSION_FACTOR.key -> compressionFactor.toString,
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "250") {
+        withTempPath { workDir =>
+          // the file size is 486 bytes
+          val workDirPath = workDir.getAbsolutePath
+          val data1 = Seq(100, 200, 300, 400).toDF("count")
+          data1.write.orc(workDirPath + "/data1")
+          val df1FromFile = spark.read.orc(workDirPath + "/data1")
+          val data2 = Seq(100, 200, 300, 400).toDF("count")
+          data2.write.orc(workDirPath + "/data2")
+          val df2FromFile = spark.read.orc(workDirPath + "/data2")
+          val joinedDF = df1FromFile.join(df2FromFile, Seq("count"))
+          if (compressionFactor == 0.5) {
+            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case bJoin: BroadcastHashJoinExec => bJoin
+            }
+            assert(bJoinExec.nonEmpty)
+            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case smJoin: SortMergeJoinExec => smJoin
+            }
+            assert(smJoinExec.isEmpty)
+          } else {
+            // compressionFactor is 1.0
+            val bJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case bJoin: BroadcastHashJoinExec => bJoin
+            }
+            assert(bJoinExec.isEmpty)
+            val smJoinExec = joinedDF.queryExecution.executedPlan.collect {
+              case smJoin: SortMergeJoinExec => smJoin
+            }
+            assert(smJoinExec.nonEmpty)
+          }
+        }
       }
     }
   }

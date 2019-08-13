@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -204,11 +204,14 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
     }
 
     if (numColsOutput == 0) {
-      logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      logWarning(s"$uid: ClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
     }
     outputData.toDF
   }
+
+  final override def transformImpl(dataset: Dataset[_]): DataFrame =
+    throw new UnsupportedOperationException(s"transformImpl is not supported in $getClass")
 
   /**
    * Predict label for the given features.

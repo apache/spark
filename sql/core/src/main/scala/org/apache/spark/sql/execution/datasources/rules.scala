@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
@@ -29,7 +30,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -37,7 +38,7 @@ import org.apache.spark.sql.util.SchemaUtils
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
-    sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
+    sparkSession.sessionState.conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -45,8 +46,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       try {
         val dataSource = DataSource(
           sparkSession,
-          paths = u.tableIdentifier.table :: Nil,
-          className = u.tableIdentifier.database.get)
+          paths = u.multipartIdentifier.last :: Nil,
+          className = u.multipartIdentifier.head)
 
         // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
         // will catch it and return the original plan, so that the analyzer can report table not
@@ -55,7 +56,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         if (!isFileFormat ||
             dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
-            s"${u.tableIdentifier.database.get}")
+            s"${dataSource.className}")
         }
         LogicalRelation(dataSource.resolveRelation())
       } catch {
@@ -235,6 +236,46 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
+      }
+
+    case create: V2CreateTablePlan =>
+      val schema = create.tableSchema
+      val partitioning = create.partitioning
+      val identifier = create.tableName
+      val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      // Check that columns are not duplicated in the schema
+      val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
+      SchemaUtils.checkColumnNameDuplication(
+        flattenedSchema,
+        s"in the table definition of $identifier",
+        isCaseSensitive)
+
+      // Check that columns are not duplicated in the partitioning statement
+      SchemaUtils.checkTransformDuplication(
+        partitioning, "in the partitioning", isCaseSensitive)
+
+      if (schema.isEmpty) {
+        if (partitioning.nonEmpty) {
+          throw new AnalysisException("It is not allowed to specify partitioning when the " +
+            "table schema is not defined.")
+        }
+
+        create
+      } else {
+        // Resolve and normalize partition columns as necessary
+        val resolver = sparkSession.sessionState.conf.resolver
+        val normalizedPartitions = partitioning.map {
+          case transform: RewritableTransform =>
+            val rewritten = transform.references().map { ref =>
+              // Throws an exception if the reference cannot be resolved
+              val position = SchemaUtils.findColumnPosition(ref.fieldNames(), schema, resolver)
+              FieldReference(SchemaUtils.getColumnName(position, schema))
+            }
+            transform.withReferences(rewritten)
+          case other => other
+        }
+
+        create.withPartitioning(normalizedPartitions)
       }
   }
 

@@ -243,6 +243,37 @@ SPARK_MASTER_OPTS supports the following system properties:
     receives no heartbeats.
   </td>
 </tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.amount</code></td>
+  <td>(none)</td>
+  <td>
+    Amount of a particular resource to use on the worker.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.resource.{resourceName}.discoveryScript</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resource discovery script, which is used to find a particular resource while worker starting up.
+    And the output of the script should be formatted like the <code>ResourceInformation</code> class.
+    When <code>spark.resources.coordinate.enable</code> is off, the discovery script must assign different
+    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.worker.resourcesFile</code></td>
+  <td>(none)</td>
+  <td>
+    Path to resources file which is used to find various resources while worker starting up.
+    The content of resources file should be formatted like <code>
+    [[{"id":{"componentName": "spark.worker","resourceName":"gpu"},"addresses":["0","1","2"]}]]</code>.
+    When <code>spark.resources.coordinate.enable</code> is off, resources file must assign different
+    resources for workers and drivers in client mode that run on the same host to avoid resource conflict.
+    If a particular resource is not found in the resources file, the discovery script would be used to
+    find that resource. If the discovery script also does not find the resources, the worker will fail
+    to start up.
+  </td>
+</tr>
 </table>
 
 SPARK_WORKER_OPTS supports the following system properties:

@@ -1549,7 +1549,7 @@ NULL
 -- !query 193
 SELECT '1996-09-09' = date('1996-09-09') FROM t
 -- !query 193 schema
-struct<(1996-09-09 = CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(1996-09-09 AS DATE) = CAST(1996-09-09 AS DATE)):boolean>
 -- !query 193 output
 true
 
@@ -1557,7 +1557,7 @@ true
 -- !query 194
 SELECT '1996-9-10' > date('1996-09-09') FROM t
 -- !query 194 schema
-struct<(1996-9-10 > CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) > CAST(1996-09-09 AS DATE)):boolean>
 -- !query 194 output
 true
 
@@ -1565,7 +1565,7 @@ true
 -- !query 195
 SELECT '1996-9-10' >= date('1996-09-09') FROM t
 -- !query 195 schema
-struct<(1996-9-10 >= CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) >= CAST(1996-09-09 AS DATE)):boolean>
 -- !query 195 output
 true
 
@@ -1573,7 +1573,7 @@ true
 -- !query 196
 SELECT '1996-9-10' < date('1996-09-09') FROM t
 -- !query 196 schema
-struct<(1996-9-10 < CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) < CAST(1996-09-09 AS DATE)):boolean>
 -- !query 196 output
 false
 
@@ -1581,7 +1581,7 @@ false
 -- !query 197
 SELECT '1996-9-10' <= date('1996-09-09') FROM t
 -- !query 197 schema
-struct<(1996-9-10 <= CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) <= CAST(1996-09-09 AS DATE)):boolean>
 -- !query 197 output
 false
 
@@ -1589,7 +1589,7 @@ false
 -- !query 198
 SELECT '1996-9-10' <> date('1996-09-09') FROM t
 -- !query 198 schema
-struct<(NOT (1996-9-10 = CAST(CAST(1996-09-09 AS DATE) AS STRING))):boolean>
+struct<(NOT (CAST(1996-9-10 AS DATE) = CAST(1996-09-09 AS DATE))):boolean>
 -- !query 198 output
 true
 
@@ -1597,7 +1597,7 @@ true
 -- !query 199
 SELECT cast(null as string) = date('1996-09-09') FROM t
 -- !query 199 schema
-struct<(CAST(NULL AS STRING) = CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS DATE) = CAST(1996-09-09 AS DATE)):boolean>
 -- !query 199 output
 NULL
 
@@ -1605,7 +1605,7 @@ NULL
 -- !query 200
 SELECT cast(null as string)> date('1996-09-09') FROM t
 -- !query 200 schema
-struct<(CAST(NULL AS STRING) > CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS DATE) > CAST(1996-09-09 AS DATE)):boolean>
 -- !query 200 output
 NULL
 
@@ -1613,7 +1613,7 @@ NULL
 -- !query 201
 SELECT cast(null as string)>= date('1996-09-09') FROM t
 -- !query 201 schema
-struct<(CAST(NULL AS STRING) >= CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS DATE) >= CAST(1996-09-09 AS DATE)):boolean>
 -- !query 201 output
 NULL
 
@@ -1621,7 +1621,7 @@ NULL
 -- !query 202
 SELECT cast(null as string)< date('1996-09-09') FROM t
 -- !query 202 schema
-struct<(CAST(NULL AS STRING) < CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS DATE) < CAST(1996-09-09 AS DATE)):boolean>
 -- !query 202 output
 NULL
 
@@ -1629,7 +1629,7 @@ NULL
 -- !query 203
 SELECT cast(null as string)<= date('1996-09-09') FROM t
 -- !query 203 schema
-struct<(CAST(NULL AS STRING) <= CAST(CAST(1996-09-09 AS DATE) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS DATE) <= CAST(1996-09-09 AS DATE)):boolean>
 -- !query 203 output
 NULL
 
@@ -1637,7 +1637,7 @@ NULL
 -- !query 204
 SELECT cast(null as string)<> date('1996-09-09') FROM t
 -- !query 204 schema
-struct<(NOT (CAST(NULL AS STRING) = CAST(CAST(1996-09-09 AS DATE) AS STRING))):boolean>
+struct<(NOT (CAST(CAST(NULL AS STRING) AS DATE) = CAST(1996-09-09 AS DATE))):boolean>
 -- !query 204 output
 NULL
 
@@ -1645,7 +1645,7 @@ NULL
 -- !query 205
 SELECT date('1996-09-09') = '1996-09-09' FROM t
 -- !query 205 schema
-struct<(CAST(CAST(1996-09-09 AS DATE) AS STRING) = 1996-09-09):boolean>
+struct<(CAST(1996-09-09 AS DATE) = CAST(1996-09-09 AS DATE)):boolean>
 -- !query 205 output
 true
 
@@ -1653,7 +1653,7 @@ true
 -- !query 206
 SELECT date('1996-9-10') > '1996-09-09' FROM t
 -- !query 206 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) > 1996-09-09):boolean>
+struct<(CAST(1996-9-10 AS DATE) > CAST(1996-09-09 AS DATE)):boolean>
 -- !query 206 output
 true
 
@@ -1661,7 +1661,7 @@ true
 -- !query 207
 SELECT date('1996-9-10') >= '1996-09-09' FROM t
 -- !query 207 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) >= 1996-09-09):boolean>
+struct<(CAST(1996-9-10 AS DATE) >= CAST(1996-09-09 AS DATE)):boolean>
 -- !query 207 output
 true
 
@@ -1669,7 +1669,7 @@ true
 -- !query 208
 SELECT date('1996-9-10') < '1996-09-09' FROM t
 -- !query 208 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) < 1996-09-09):boolean>
+struct<(CAST(1996-9-10 AS DATE) < CAST(1996-09-09 AS DATE)):boolean>
 -- !query 208 output
 false
 
@@ -1677,7 +1677,7 @@ false
 -- !query 209
 SELECT date('1996-9-10') <= '1996-09-09' FROM t
 -- !query 209 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) <= 1996-09-09):boolean>
+struct<(CAST(1996-9-10 AS DATE) <= CAST(1996-09-09 AS DATE)):boolean>
 -- !query 209 output
 false
 
@@ -1685,7 +1685,7 @@ false
 -- !query 210
 SELECT date('1996-9-10') <> '1996-09-09' FROM t
 -- !query 210 schema
-struct<(NOT (CAST(CAST(1996-9-10 AS DATE) AS STRING) = 1996-09-09)):boolean>
+struct<(NOT (CAST(1996-9-10 AS DATE) = CAST(1996-09-09 AS DATE))):boolean>
 -- !query 210 output
 true
 
@@ -1693,7 +1693,7 @@ true
 -- !query 211
 SELECT date('1996-09-09') = cast(null as string) FROM t
 -- !query 211 schema
-struct<(CAST(CAST(1996-09-09 AS DATE) AS STRING) = CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-09-09 AS DATE) = CAST(CAST(NULL AS STRING) AS DATE)):boolean>
 -- !query 211 output
 NULL
 
@@ -1701,7 +1701,7 @@ NULL
 -- !query 212
 SELECT date('1996-9-10') > cast(null as string) FROM t
 -- !query 212 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) > CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) > CAST(CAST(NULL AS STRING) AS DATE)):boolean>
 -- !query 212 output
 NULL
 
@@ -1709,7 +1709,7 @@ NULL
 -- !query 213
 SELECT date('1996-9-10') >= cast(null as string) FROM t
 -- !query 213 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) >= CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) >= CAST(CAST(NULL AS STRING) AS DATE)):boolean>
 -- !query 213 output
 NULL
 
@@ -1717,7 +1717,7 @@ NULL
 -- !query 214
 SELECT date('1996-9-10') < cast(null as string) FROM t
 -- !query 214 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) < CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) < CAST(CAST(NULL AS STRING) AS DATE)):boolean>
 -- !query 214 output
 NULL
 
@@ -1725,7 +1725,7 @@ NULL
 -- !query 215
 SELECT date('1996-9-10') <= cast(null as string) FROM t
 -- !query 215 schema
-struct<(CAST(CAST(1996-9-10 AS DATE) AS STRING) <= CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-9-10 AS DATE) <= CAST(CAST(NULL AS STRING) AS DATE)):boolean>
 -- !query 215 output
 NULL
 
@@ -1733,7 +1733,7 @@ NULL
 -- !query 216
 SELECT date('1996-9-10') <> cast(null as string) FROM t
 -- !query 216 schema
-struct<(NOT (CAST(CAST(1996-9-10 AS DATE) AS STRING) = CAST(NULL AS STRING))):boolean>
+struct<(NOT (CAST(1996-9-10 AS DATE) = CAST(CAST(NULL AS STRING) AS DATE))):boolean>
 -- !query 216 output
 NULL
 
@@ -1749,7 +1749,7 @@ true
 -- !query 218
 SELECT '1996-09-09 12:12:12.5' > timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 218 schema
-struct<(1996-09-09 12:12:12.5 > CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) > CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 218 output
 true
 
@@ -1757,7 +1757,7 @@ true
 -- !query 219
 SELECT '1996-09-09 12:12:12.5' >= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 219 schema
-struct<(1996-09-09 12:12:12.5 >= CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) >= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 219 output
 true
 
@@ -1765,7 +1765,7 @@ true
 -- !query 220
 SELECT '1996-09-09 12:12:12.5' < timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 220 schema
-struct<(1996-09-09 12:12:12.5 < CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) < CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 220 output
 false
 
@@ -1773,7 +1773,7 @@ false
 -- !query 221
 SELECT '1996-09-09 12:12:12.5' <= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 221 schema
-struct<(1996-09-09 12:12:12.5 <= CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) <= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 221 output
 false
 
@@ -1797,7 +1797,7 @@ NULL
 -- !query 224
 SELECT cast(null as string) > timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 224 schema
-struct<(CAST(NULL AS STRING) > CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS TIMESTAMP) > CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 224 output
 NULL
 
@@ -1805,7 +1805,7 @@ NULL
 -- !query 225
 SELECT cast(null as string) >= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 225 schema
-struct<(CAST(NULL AS STRING) >= CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS TIMESTAMP) >= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 225 output
 NULL
 
@@ -1813,7 +1813,7 @@ NULL
 -- !query 226
 SELECT cast(null as string) < timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 226 schema
-struct<(CAST(NULL AS STRING) < CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS TIMESTAMP) < CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 226 output
 NULL
 
@@ -1821,7 +1821,7 @@ NULL
 -- !query 227
 SELECT cast(null as string) <= timestamp('1996-09-09 12:12:12.4') FROM t
 -- !query 227 schema
-struct<(CAST(NULL AS STRING) <= CAST(CAST(1996-09-09 12:12:12.4 AS TIMESTAMP) AS STRING)):boolean>
+struct<(CAST(CAST(NULL AS STRING) AS TIMESTAMP) <= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 227 output
 NULL
 
@@ -1845,7 +1845,7 @@ true
 -- !query 230
 SELECT timestamp('1996-09-09 12:12:12.5' )> '1996-09-09 12:12:12.4' FROM t
 -- !query 230 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) > 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) > CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 230 output
 true
 
@@ -1853,7 +1853,7 @@ true
 -- !query 231
 SELECT timestamp('1996-09-09 12:12:12.5' )>= '1996-09-09 12:12:12.4' FROM t
 -- !query 231 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) >= 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) >= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 231 output
 true
 
@@ -1861,7 +1861,7 @@ true
 -- !query 232
 SELECT timestamp('1996-09-09 12:12:12.5' )< '1996-09-09 12:12:12.4' FROM t
 -- !query 232 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) < 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) < CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 232 output
 false
 
@@ -1869,7 +1869,7 @@ false
 -- !query 233
 SELECT timestamp('1996-09-09 12:12:12.5' )<= '1996-09-09 12:12:12.4' FROM t
 -- !query 233 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) <= 1996-09-09 12:12:12.4):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) <= CAST(1996-09-09 12:12:12.4 AS TIMESTAMP)):boolean>
 -- !query 233 output
 false
 
@@ -1893,7 +1893,7 @@ NULL
 -- !query 236
 SELECT timestamp('1996-09-09 12:12:12.5' )> cast(null as string) FROM t
 -- !query 236 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) > CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) > CAST(CAST(NULL AS STRING) AS TIMESTAMP)):boolean>
 -- !query 236 output
 NULL
 
@@ -1901,7 +1901,7 @@ NULL
 -- !query 237
 SELECT timestamp('1996-09-09 12:12:12.5' )>= cast(null as string) FROM t
 -- !query 237 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) >= CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) >= CAST(CAST(NULL AS STRING) AS TIMESTAMP)):boolean>
 -- !query 237 output
 NULL
 
@@ -1909,7 +1909,7 @@ NULL
 -- !query 238
 SELECT timestamp('1996-09-09 12:12:12.5' )< cast(null as string) FROM t
 -- !query 238 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) < CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) < CAST(CAST(NULL AS STRING) AS TIMESTAMP)):boolean>
 -- !query 238 output
 NULL
 
@@ -1917,7 +1917,7 @@ NULL
 -- !query 239
 SELECT timestamp('1996-09-09 12:12:12.5' )<= cast(null as string) FROM t
 -- !query 239 schema
-struct<(CAST(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) AS STRING) <= CAST(NULL AS STRING)):boolean>
+struct<(CAST(1996-09-09 12:12:12.5 AS TIMESTAMP) <= CAST(CAST(NULL AS STRING) AS TIMESTAMP)):boolean>
 -- !query 239 output
 NULL
 

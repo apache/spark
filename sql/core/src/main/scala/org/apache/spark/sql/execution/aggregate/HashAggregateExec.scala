@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 import org.apache.spark.util.Utils
@@ -559,7 +560,7 @@ case class HashAggregateExec(
   private def enableTwoLevelHashMap(ctx: CodegenContext): Unit = {
     if (!checkIfFastHashMapSupported(ctx)) {
       if (modes.forall(mode => mode == Partial || mode == PartialMerge) && !Utils.isTesting) {
-        logInfo("spark.sql.codegen.aggregate.map.twolevel.enabled is set to true, but"
+        logInfo(s"${SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key} is set to true, but"
           + " current version of codegened fast hashmap does not support this aggregate.")
       }
     } else {
@@ -567,8 +568,7 @@ case class HashAggregateExec(
 
       // This is for testing/benchmarking only.
       // We enforce to first level to be a vectorized hashmap, instead of the default row-based one.
-      isVectorizedHashMapEnabled = sqlContext.getConf(
-        "spark.sql.codegen.aggregate.map.vectorized.enable", "false") == "true"
+      isVectorizedHashMapEnabled = sqlContext.conf.enableVectorizedHashMap
     }
   }
 
@@ -576,12 +576,8 @@ case class HashAggregateExec(
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
-    } else {
-      sqlContext.getConf("spark.sql.codegen.aggregate.map.vectorized.enable", null) match {
-        case "true" =>
-          logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
-        case _ =>
-      }
+    } else if (sqlContext.conf.enableVectorizedHashMap) {
+      logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
     }
     val bitMaxCapacity = sqlContext.conf.fastHashAggregateRowMaxCapacityBit
 

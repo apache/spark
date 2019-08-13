@@ -40,8 +40,6 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import RandomForestSuite.mapToVec
 
-  private val seed = 42
-
   /////////////////////////////////////////////////////////////////////////////
   // Tests for split calculation
   /////////////////////////////////////////////////////////////////////////////
@@ -350,7 +348,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map(0 -> Map(
       topNode.id -> new RandomForest.NodeIndexInfo(0, None)
     ))
-    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
@@ -392,7 +390,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val treeToNodeToIndexInfo = Map(0 -> Map(
       topNode.id -> new RandomForest.NodeIndexInfo(0, None)
     ))
-    val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
@@ -505,11 +503,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
           s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
-        val nodeStack = new mutable.ArrayStack[(Int, LearningNode)]
+        val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
         val topNodes: Array[LearningNode] = new Array[LearningNode](numTrees)
         Range(0, numTrees).foreach { treeIndex =>
           topNodes(treeIndex) = LearningNode.emptyNode(nodeIndex = 1)
-          nodeStack.push((treeIndex, topNodes(treeIndex)))
+          nodeStack.prepend((treeIndex, topNodes(treeIndex)))
         }
         val rng = new scala.util.Random(seed = seed)
         val (nodesForGroup: Map[Int, Array[LearningNode]],

@@ -30,8 +30,8 @@ import java.util.Set;
  * implementation can be a directory on the file system, a topic of Kafka, or a table in the
  * catalog, etc.
  * <p>
- * This interface can mixin the following interfaces to support different operations, like
- * {@code SupportsRead}.
+ * This interface can mixin {@code SupportsRead} and {@code SupportsWrite} to provide data reading
+ * and writing ability.
  * <p>
  * The default implementation of {@link #partitioning()} returns an empty array of partitions, and
  * the default implementation of {@link #properties()} returns an empty map. These should be

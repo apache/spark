@@ -16,7 +16,7 @@ select cast(1 as tinyint) + interval 2 day
 struct<>
 -- !query 1 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS TINYINT) + interval 2 days)' (tinyint and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS TINYINT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS TINYINT) + interval 2 days)' (tinyint and interval).; line 1 pos 7
 
 
 -- !query 2
@@ -25,7 +25,7 @@ select cast(1 as smallint) + interval 2 day
 struct<>
 -- !query 2 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS SMALLINT) + interval 2 days)' (smallint and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS SMALLINT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS SMALLINT) + interval 2 days)' (smallint and interval).; line 1 pos 7
 
 
 -- !query 3
@@ -34,7 +34,7 @@ select cast(1 as int) + interval 2 day
 struct<>
 -- !query 3 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS INT) + interval 2 days)' (int and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS INT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS INT) + interval 2 days)' (int and interval).; line 1 pos 7
 
 
 -- !query 4
@@ -43,7 +43,7 @@ select cast(1 as bigint) + interval 2 day
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BIGINT) + interval 2 days)' (bigint and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS BIGINT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BIGINT) + interval 2 days)' (bigint and interval).; line 1 pos 7
 
 
 -- !query 5
@@ -52,7 +52,7 @@ select cast(1 as float) + interval 2 day
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS FLOAT) + interval 2 days)' (float and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS FLOAT) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS FLOAT) + interval 2 days)' (float and interval).; line 1 pos 7
 
 
 -- !query 6
@@ -61,7 +61,7 @@ select cast(1 as double) + interval 2 day
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DOUBLE) + interval 2 days)' (double and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS DOUBLE) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DOUBLE) + interval 2 days)' (double and interval).; line 1 pos 7
 
 
 -- !query 7
@@ -70,7 +70,7 @@ select cast(1 as decimal(10, 0)) + interval 2 day
 struct<>
 -- !query 7 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(10,0)) + interval 2 days)' (decimal(10,0) and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(10,0)) + interval 2 days)' (decimal(10,0) and interval).; line 1 pos 7
 
 
 -- !query 8
@@ -95,7 +95,7 @@ select cast('1' as binary) + interval 2 day
 struct<>
 -- !query 10 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) + interval 2 days)' due to data type mismatch: differing types in '(CAST('1' AS BINARY) + interval 2 days)' (binary and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST('1' AS BINARY) + interval 2 days)' due to data type mismatch: differing types in '(CAST('1' AS BINARY) + interval 2 days)' (binary and interval).; line 1 pos 7
 
 
 -- !query 11
@@ -104,7 +104,7 @@ select cast(1 as boolean) + interval 2 day
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BOOLEAN) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BOOLEAN) + interval 2 days)' (boolean and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS BOOLEAN) + interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BOOLEAN) + interval 2 days)' (boolean and interval).; line 1 pos 7
 
 
 -- !query 12
@@ -129,7 +129,7 @@ select interval 2 day + cast(1 as tinyint)
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS TINYINT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS TINYINT))' (calendarinterval and tinyint).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS TINYINT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS TINYINT))' (interval and tinyint).; line 1 pos 7
 
 
 -- !query 15
@@ -138,7 +138,7 @@ select interval 2 day + cast(1 as smallint)
 struct<>
 -- !query 15 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS SMALLINT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS SMALLINT))' (calendarinterval and smallint).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS SMALLINT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS SMALLINT))' (interval and smallint).; line 1 pos 7
 
 
 -- !query 16
@@ -147,7 +147,7 @@ select interval 2 day + cast(1 as int)
 struct<>
 -- !query 16 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS INT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS INT))' (calendarinterval and int).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS INT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS INT))' (interval and int).; line 1 pos 7
 
 
 -- !query 17
@@ -156,7 +156,7 @@ select interval 2 day + cast(1 as bigint)
 struct<>
 -- !query 17 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS BIGINT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS BIGINT))' (calendarinterval and bigint).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS BIGINT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS BIGINT))' (interval and bigint).; line 1 pos 7
 
 
 -- !query 18
@@ -165,7 +165,7 @@ select interval 2 day + cast(1 as float)
 struct<>
 -- !query 18 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS FLOAT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS FLOAT))' (calendarinterval and float).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS FLOAT))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS FLOAT))' (interval and float).; line 1 pos 7
 
 
 -- !query 19
@@ -174,7 +174,7 @@ select interval 2 day + cast(1 as double)
 struct<>
 -- !query 19 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS DOUBLE))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS DOUBLE))' (calendarinterval and double).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS DOUBLE))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS DOUBLE))' (interval and double).; line 1 pos 7
 
 
 -- !query 20
@@ -183,7 +183,7 @@ select interval 2 day + cast(1 as decimal(10, 0))
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS DECIMAL(10,0)))' (calendarinterval and decimal(10,0)).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS DECIMAL(10,0)))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS DECIMAL(10,0)))' (interval and decimal(10,0)).; line 1 pos 7
 
 
 -- !query 21
@@ -208,7 +208,7 @@ select interval 2 day + cast('1' as binary)
 struct<>
 -- !query 23 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST('1' AS BINARY))' due to data type mismatch: differing types in '(interval 2 days + CAST('1' AS BINARY))' (calendarinterval and binary).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST('1' AS BINARY))' due to data type mismatch: differing types in '(interval 2 days + CAST('1' AS BINARY))' (interval and binary).; line 1 pos 7
 
 
 -- !query 24
@@ -217,7 +217,7 @@ select interval 2 day + cast(1 as boolean)
 struct<>
 -- !query 24 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(interval 2 days + CAST(1 AS BOOLEAN))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS BOOLEAN))' (calendarinterval and boolean).; line 1 pos 7
+cannot resolve '(interval 2 days + CAST(1 AS BOOLEAN))' due to data type mismatch: differing types in '(interval 2 days + CAST(1 AS BOOLEAN))' (interval and boolean).; line 1 pos 7
 
 
 -- !query 25
@@ -242,7 +242,7 @@ select cast(1 as tinyint) - interval 2 day
 struct<>
 -- !query 27 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS TINYINT) - interval 2 days)' (tinyint and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS TINYINT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS TINYINT) - interval 2 days)' (tinyint and interval).; line 1 pos 7
 
 
 -- !query 28
@@ -251,7 +251,7 @@ select cast(1 as smallint) - interval 2 day
 struct<>
 -- !query 28 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS SMALLINT) - interval 2 days)' (smallint and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS SMALLINT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS SMALLINT) - interval 2 days)' (smallint and interval).; line 1 pos 7
 
 
 -- !query 29
@@ -260,7 +260,7 @@ select cast(1 as int) - interval 2 day
 struct<>
 -- !query 29 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS INT) - interval 2 days)' (int and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS INT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS INT) - interval 2 days)' (int and interval).; line 1 pos 7
 
 
 -- !query 30
@@ -269,7 +269,7 @@ select cast(1 as bigint) - interval 2 day
 struct<>
 -- !query 30 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BIGINT) - interval 2 days)' (bigint and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS BIGINT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BIGINT) - interval 2 days)' (bigint and interval).; line 1 pos 7
 
 
 -- !query 31
@@ -278,7 +278,7 @@ select cast(1 as float) - interval 2 day
 struct<>
 -- !query 31 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS FLOAT) - interval 2 days)' (float and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS FLOAT) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS FLOAT) - interval 2 days)' (float and interval).; line 1 pos 7
 
 
 -- !query 32
@@ -287,7 +287,7 @@ select cast(1 as double) - interval 2 day
 struct<>
 -- !query 32 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DOUBLE) - interval 2 days)' (double and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS DOUBLE) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DOUBLE) - interval 2 days)' (double and interval).; line 1 pos 7
 
 
 -- !query 33
@@ -296,7 +296,7 @@ select cast(1 as decimal(10, 0)) - interval 2 day
 struct<>
 -- !query 33 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(10,0)) - interval 2 days)' (decimal(10,0) and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS DECIMAL(10,0)) - interval 2 days)' (decimal(10,0) and interval).; line 1 pos 7
 
 
 -- !query 34
@@ -321,7 +321,7 @@ select cast('1' as binary) - interval 2 day
 struct<>
 -- !query 36 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) - interval 2 days)' due to data type mismatch: differing types in '(CAST('1' AS BINARY) - interval 2 days)' (binary and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST('1' AS BINARY) - interval 2 days)' due to data type mismatch: differing types in '(CAST('1' AS BINARY) - interval 2 days)' (binary and interval).; line 1 pos 7
 
 
 -- !query 37
@@ -330,7 +330,7 @@ select cast(1 as boolean) - interval 2 day
 struct<>
 -- !query 37 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BOOLEAN) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BOOLEAN) - interval 2 days)' (boolean and calendarinterval).; line 1 pos 7
+cannot resolve '(CAST(1 AS BOOLEAN) - interval 2 days)' due to data type mismatch: differing types in '(CAST(1 AS BOOLEAN) - interval 2 days)' (boolean and interval).; line 1 pos 7
 
 
 -- !query 38

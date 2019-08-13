@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -32,6 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
  *
  *     -> OrcReadSchemaSuite
  *     -> VectorizedOrcReadSchemaSuite
+ *     -> MergedOrcReadSchemaSuite
  *
  *     -> ParquetReadSchemaSuite
  *     -> VectorizedParquetReadSchemaSuite
@@ -132,6 +134,25 @@ class VectorizedOrcReadSchemaSuite
     spark.conf.set(SQLConf.ORC_VECTORIZED_READER_ENABLED.key, originalConf)
     super.afterAll()
   }
+}
+
+class MergedOrcReadSchemaSuite
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with BooleanTypeTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
+
+  override val format: String = "orc"
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key, "true")
 }
 
 class ParquetReadSchemaSuite
