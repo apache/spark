@@ -402,14 +402,15 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("SPARK-27667 test cli prompt using spark.cli.print.current.db") {
-    runCliWithin(1.minute, Seq("--conf", "spark.cli.print.current.db=true"))(
+    runCliWithin(1.minute, Seq("--conf", "spark.sql.cli.show.current.db=true"))(
       "show tables;" -> "spark-sql (default)",
       "CREATE DATABASE hive_test_db;"
         -> "",
       "USE hive_test_db;"
-        -> "spark-sql (hive_test_db)")
+        -> "spark-sql (hive_test_db)"
+    )
     // test with false
-    runCliWithin(1.minute, Seq("--conf", "spark.cli.print.current.db=false"))(
+    runCliWithin(1.minute, Seq("--conf", "spark.sql.cli.show.current.db=false"))(
       "show tables;" -> "spark-sql> show tables",
       "CREATE DATABASE hive_test_db;"
         -> "spark-sql> CREATE DATABASE hive_test_db",

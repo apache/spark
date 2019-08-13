@@ -2072,6 +2072,11 @@ object SQLConf {
       .stringConf
       .createWithDefault(
         "https://maven-central.storage-download.googleapis.com/repos/central/data/")
+  
+  val SPARK_SQL_CLI_SHOW_CURRENT_DB = buildConf("spark.sql.cli.show.current.db")
+    .doc("when true, current DB name will be displayed in the cli prompt")
+    .booleanConf
+    .createWithDefault(false)
 }
 
 /**
@@ -2572,6 +2577,8 @@ class SQLConf extends Serializable with Logging {
   def castDatetimeToString: Boolean = getConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING)
 
   def ignoreDataLocality: Boolean = getConf(SQLConf.IGNORE_DATA_LOCALITY)
+
+  def shouldShowDBName: Boolean = getConf(SQLConf.SPARK_SQL_CLI_SHOW_CURRENT_DB)
 
   /** ********************** SQLConf functionality methods ************ */
 

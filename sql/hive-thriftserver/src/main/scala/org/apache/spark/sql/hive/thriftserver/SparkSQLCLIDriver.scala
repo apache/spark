@@ -258,7 +258,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     var ret = 0
     var prefix = ""
-    def currentDB = if (sparkConf.getBoolean("spark.cli.print.current.db", false)) {
+    def currentDB = if (SparkSQLEnv.sqlContext.conf.shouldShowDBName) {
       val currDB = SparkSQLEnv.sqlContext.sessionState.catalog.getCurrentDatabase
       s" ($currDB)"
     } else {
