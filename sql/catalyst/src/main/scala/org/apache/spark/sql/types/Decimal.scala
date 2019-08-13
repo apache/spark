@@ -388,12 +388,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       Decimal(toBigDecimal - that.toBigDecimal)
     }
   }
-  def sub(that: Decimal): Decimal = this - that
 
   // TypeCoercion will take care of the precision, scale of result
   def * (that: Decimal): Decimal =
     Decimal(toJavaBigDecimal.multiply(that.toJavaBigDecimal, MATH_CONTEXT))
-  def mul(that: Decimal): Decimal = this * that
 
   def / (that: Decimal): Decimal =
     if (that.isZero) null else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, MATH_CONTEXT))

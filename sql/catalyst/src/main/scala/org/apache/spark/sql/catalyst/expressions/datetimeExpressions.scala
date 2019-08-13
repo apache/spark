@@ -1810,7 +1810,7 @@ case class MakeTimestamp(
       try {
         org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
         org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-        int nanos = (($secAndNanos.sub(secFloor)).mul(nanosPerSec)).toInt();
+        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
         int seconds = secFloor.toInt();
         java.time.LocalDateTime ldt;
         if (seconds == 60) {
