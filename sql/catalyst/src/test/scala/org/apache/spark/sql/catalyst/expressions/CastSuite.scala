@@ -1047,32 +1047,28 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("Process Infinity, -Infinity, NaN in case insensitive manner") {
-    checkEvaluation(cast("inf", FloatType), Float.PositiveInfinity)
-    checkEvaluation(cast("+inf", FloatType), Float.PositiveInfinity)
-    checkEvaluation(cast("infinity", FloatType), Float.PositiveInfinity)
-    checkEvaluation(cast("+infiNity", FloatType), Float.PositiveInfinity)
-    checkEvaluation(cast(" infinity ", FloatType), Float.PositiveInfinity)
-    checkEvaluation(cast("-infinity", FloatType), Float.NegativeInfinity)
-    checkEvaluation(cast("-infiniTy", FloatType), Float.NegativeInfinity)
-    checkEvaluation(cast("  -infinity  ", FloatType), Float.NegativeInfinity)
-    checkEvaluation(cast("  -inf  ", FloatType), Float.NegativeInfinity)
+    Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.PositiveInfinity)
+    }
+    Seq("-infinity", "-infiniTy", "  -infinity  ", "  -inf  ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.NegativeInfinity)
+    }
+    Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.PositiveInfinity)
+    }
+    Seq("-infinity", "-infiniTy", "  -infinity  ", "  -inf  ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.NegativeInfinity)
+    }
+    Seq("nan", "nAn", " nan ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.NaN)
+    }
+    Seq("nan", "nAn", " nan ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.NaN)
+    }
 
-    checkEvaluation(cast("inf", DoubleType), Double.PositiveInfinity)
-    checkEvaluation(cast("+inf", DoubleType), Double.PositiveInfinity)
-    checkEvaluation(cast("infinity", DoubleType), Double.PositiveInfinity)
-    checkEvaluation(cast("+infiNity", DoubleType), Double.PositiveInfinity)
-    checkEvaluation(cast(" infinity ", DoubleType), Double.PositiveInfinity)
-    checkEvaluation(cast("-infinity", DoubleType), Double.NegativeInfinity)
-    checkEvaluation(cast("-infiniTy", DoubleType), Double.NegativeInfinity)
-    checkEvaluation(cast("  -infinity  ", DoubleType), Double.NegativeInfinity)
-    checkEvaluation(cast("-inf", DoubleType), Double.NegativeInfinity)
-
-    checkEvaluation(cast("nan", FloatType), Float.NaN)
-    checkEvaluation(cast("nAn", FloatType), Float.NaN)
-    checkEvaluation(cast(" nan ", FloatType), Float.NaN)
-
-    checkEvaluation(cast("nan", DoubleType), Double.NaN)
-    checkEvaluation(cast("nAn", DoubleType), Double.NaN)
-    checkEvaluation(cast(" nan ", DoubleType), Double.NaN)
+    // Invalid literals when casted to double and float results in null.
+    Seq(DoubleType, FloatType).foreach { dataType =>
+      checkEvaluation(cast("badvalue", dataType), null)
+    }
   }
 }

@@ -168,18 +168,18 @@ license: |
             <b>Operation</b>
           </th>
           <th>
-            <b>Result prior to spark 3.0</b>
+            <b>Result prior to Spark 3.0</b>
           </th>
           <th>
-            <b>Result starting spark 3.0</b>
+            <b>Result starting Spark 3.0</b>
           </th>
         </tr>
         <tr>
           <td>
-            CAST('infinity' TO DOUBLE)<br>
-            CAST('+infinity' TO DOUBLE)<br>
-            CAST('inf' TO DOUBLE)<br>
-            CAST('+inf' TO DOUBLE)<br>
+            CAST('infinity' AS DOUBLE)<br>
+            CAST('+infinity' AS DOUBLE)<br>
+            CAST('inf' AS DOUBLE)<br>
+            CAST('+inf' AS DOUBLE)<br>
           </td>
           <td>
             NULL
@@ -190,8 +190,8 @@ license: |
         </tr>
         <tr>
           <td>
-            CAST('-infinity' TO DOUBLE)<br>
-            CAST('-inf' TO DOUBLE)<br>
+            CAST('-infinity' AS DOUBLE)<br>
+            CAST('-inf' AS DOUBLE)<br>
           </td>
           <td>
             NULL
@@ -202,10 +202,10 @@ license: |
         </tr>
         <tr>
           <td>
-            CAST('infinity' TO FLOAT)<br>
-            CAST('+infinity' TO FLOAT)<br>
-            CAST('inf' TO FLOAT)<br>
-            CAST('+inf' TO FLOAT)<br>
+            CAST('infinity' AS FLOAT)<br>
+            CAST('+infinity' AS FLOAT)<br>
+            CAST('inf' AS FLOAT)<br>
+            CAST('+inf' AS FLOAT)<br>
           </td>
           <td>
             NULL
@@ -216,8 +216,8 @@ license: |
         </tr>
         <tr>
           <td>
-            CAST('-infinity' TO FLOAT)<br>
-            CAST('-inf' TO FLOAT)<br>
+            CAST('-infinity' AS FLOAT)<br>
+            CAST('-inf' AS FLOAT)<br>
           </td>
           <td>
             NULL
@@ -228,7 +228,7 @@ license: |
         </tr>
         <tr>
           <td>
-            CAST('nan' TO DOUBLE)
+            CAST('nan' AS DOUBLE)
           </td>
           <td>
             NULL
@@ -239,7 +239,7 @@ license: |
         </tr>
         <tr>
           <td>
-            CAST('nan' TO FLOAT)
+            CAST('nan' AS FLOAT)
           </td>
           <td>
             NULL

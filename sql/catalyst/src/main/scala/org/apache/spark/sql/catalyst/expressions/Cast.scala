@@ -196,7 +196,7 @@ object Cast {
 
   /**
    * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
-   * insensitive manner to be compatible with other database systems such as Postgres and DB2.
+   * insensitive manner to be compatible with other database systems such as PostgreSQL and DB2.
    */
   def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
     v.trim.toLowerCase(Locale.ROOT) match {
@@ -1294,7 +1294,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           try {
             $evPrim = Float.valueOf($floatStr);
           } catch (java.lang.NumberFormatException e) {
-            Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
+            final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
             if (f == null) {
               $evNull = true;
             } else {
@@ -1325,7 +1325,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           try {
             $evPrim = Double.valueOf($doubleStr);
           } catch (java.lang.NumberFormatException e) {
-            Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
+            final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
             if (d == null) {
               $evNull = true;
             } else {
