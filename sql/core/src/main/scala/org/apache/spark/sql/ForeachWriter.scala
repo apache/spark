@@ -55,11 +55,6 @@ import org.apache.spark.annotation.Evolving
  *     partitions for some reason, Spark optimization changes number of partitions, etc.
  *     Refer SPARK-28650 for more details.
  *
- *     `epochId` can still be used for deduplication, but there's less benefit to leverage this,
- *     as the chance for Spark to successfully write all partitions and fail to checkpoint the
- *     batch is small. You also need to care about whether epoch is fully written, via ensuring all
- *     partitions for the epochId are written successfully.
- *
  * <li>The `close()` method will be called if `open()` method returns successfully (irrespective
  *     of the return value), except if the JVM crashes in the middle.
  * </ul>
