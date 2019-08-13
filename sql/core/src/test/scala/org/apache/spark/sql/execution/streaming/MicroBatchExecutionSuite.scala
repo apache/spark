@@ -26,7 +26,6 @@ import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 
-
 class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
@@ -74,9 +73,8 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     )
   }
 
-  test("SPARK-28597: Add config to retry spark streaming's meta log when it met") {
+  test("Add config to retry spark streaming's meta log when it met") {
     val s = MemoryStream[Int]
-    val df = s.toDF()
     // Specified checkpointLocation manually to init metadata file
     val tmp =
       new File(System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getCanonicalPath
@@ -85,32 +83,32 @@ class MicroBatchExecutionSuite extends StreamTest with BeforeAndAfter {
     )
 
     // fail with less retries
-    df.sparkSession.sessionState.conf.setConfString(
-      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
-      classOf[FakeFileSystemBasedCheckpointFileManager].getName)
-    df.sparkSession.sessionState.conf.setConfString(
-      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key,
-      1.toString)
-    intercept[Throwable] {
-      testStream(s.toDF())(
-        StartStream(checkpointLocation = tmp),
-        AddData(s, 1),
-        CheckAnswer(1)
-      )
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FakeFileSystemBasedCheckpointFileManager].getName,
+      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key ->
+        1.toString) {
+      val e = intercept[Throwable] {
+        testStream(s.toDF())(
+          StartStream(checkpointLocation = tmp),
+          AddData(s, 1),
+          CheckAnswer(1)
+        )
+      }
+      assert(e.getMessage.contains("Failed to write meta data log after retry"))
     }
 
     // ok with enough retries
-    df.sparkSession.sessionState.conf.setConfString(
-      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key,
-      SQLConf.STREAMING_META_DATA_NUM_RETRIES.defaultValue.get.toString)
-    testStream(s.toDF())(
-      StartStream(checkpointLocation = tmp),
-      AddData(s, 1),
-      CheckAnswer(1, 1)
-    )
-
-    // clear
-    df.sparkSession.sessionState.conf
-      .unsetConf(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key)
+    withSQLConf(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
+        classOf[FakeFileSystemBasedCheckpointFileManager].getName,
+      SQLConf.STREAMING_META_DATA_NUM_RETRIES.key ->
+        SQLConf.STREAMING_META_DATA_NUM_RETRIES.defaultValue.get.toString) {
+      testStream(s.toDF())(
+        StartStream(checkpointLocation = tmp),
+        AddData(s, 1),
+        CheckAnswer(1, 1)
+      )
+    }
   }
 }

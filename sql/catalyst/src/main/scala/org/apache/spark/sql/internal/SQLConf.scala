@@ -312,13 +312,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val STREAMING_META_DATA_NUM_RETRIES = buildConf("spark.sql.streaming.metadata.num.retries")
-    .doc("The number of meta data log retries.")
-    .intConf
-    .checkValue(_ > 0, "The minimum number of metadata retries " +
-      "must be a positive integer.")
-    .createWithDefault(3)
-
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.reducePostShufflePartitions.enabled")
     .doc("When true and adaptive execution is enabled, this enables reducing the number of " +
@@ -1196,6 +1189,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_META_DATA_NUM_RETRIES = buildConf("spark.sql.streaming.metadata.num.retries")
+    .doc("The number of meta data log retries.")
+    .intConf
+    .checkValue(_ > 0, "The minimum number of metadata retries " +
+      "must be a positive integer.")
+    .createWithDefault(3)
+
   val PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION =
     buildConf("spark.sql.statistics.parallelFileListingInStatsComputation.enabled")
       .internal()
@@ -1966,6 +1966,8 @@ class SQLConf extends Serializable with Logging {
 
   def streamingProgressRetention: Int = getConf(STREAMING_PROGRESS_RETENTION)
 
+  def streamingMetaDataNumRetries: Int = getConf(STREAMING_META_DATA_NUM_RETRIES)
+
   def filesMaxPartitionBytes: Long = getConf(FILES_MAX_PARTITION_BYTES)
 
   def filesOpenCostInBytes: Long = getConf(FILES_OPEN_COST_IN_BYTES)
@@ -2000,8 +2002,6 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
-
-  def streamingMetaDataNumRetries: Int = getConf(STREAMING_META_DATA_NUM_RETRIES)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 
