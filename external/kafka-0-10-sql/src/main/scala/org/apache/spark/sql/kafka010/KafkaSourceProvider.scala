@@ -187,12 +187,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  private def strategy(caseInsensitiveParams: CaseInsensitiveMap[String]) = {
-    val lowercaseParams =
-      caseInsensitiveParams.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+  private def strategy(params: CaseInsensitiveMap[String]) = {
+    val lowercaseParams = params.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
 
-      lowercaseParams.find(x =>
-          STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+    lowercaseParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
       case (ASSIGN, value) =>
         AssignStrategy(JsonUtils.partitions(value))
       case (SUBSCRIBE, value) =>
@@ -206,13 +204,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  private def failOnDataLoss(caseInsensitiveParams: CaseInsensitiveMap[String]) =
-    caseInsensitiveParams.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
+  private def failOnDataLoss(params: CaseInsensitiveMap[String]) =
+    params.getOrElse(FAIL_ON_DATA_LOSS_OPTION_KEY, "true").toBoolean
 
-  private def validateGeneralOptions(caseInsensitiveParams: CaseInsensitiveMap[String]): Unit = {
+  private def validateGeneralOptions(params: CaseInsensitiveMap[String]): Unit = {
     // Validate source options
-    val lowercaseParams =
-      caseInsensitiveParams.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+    val lowercaseParams = params.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedStrategies =
       lowercaseParams.filter { case (k, _) => STRATEGY_OPTION_KEYS.contains(k) }.toSeq
 
@@ -226,8 +223,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
           + STRATEGY_OPTION_KEYS.mkString(", ") + ". See the docs for more details.")
     }
 
-    lowercaseParams.find(x =>
-      STRATEGY_OPTION_KEYS.contains(x._1)).get match {
+    lowercaseParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
       case (ASSIGN, value) =>
         if (!value.trim.startsWith("{")) {
           throw new IllegalArgumentException(
@@ -243,7 +239,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
               s"'subscribe' is '$value'")
         }
       case (SUBSCRIBE_PATTERN, value) =>
-        val pattern = caseInsensitiveParams(SUBSCRIBE_PATTERN).trim()
+        val pattern = params(SUBSCRIBE_PATTERN).trim()
         if (pattern.isEmpty) {
           throw new IllegalArgumentException(
             "Pattern to subscribe is empty as specified value for option " +
@@ -256,22 +252,22 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     // Validate minPartitions value if present
-    if (caseInsensitiveParams.contains(MIN_PARTITIONS_OPTION_KEY)) {
-      val p = caseInsensitiveParams(MIN_PARTITIONS_OPTION_KEY).toInt
+    if (params.contains(MIN_PARTITIONS_OPTION_KEY)) {
+      val p = params(MIN_PARTITIONS_OPTION_KEY).toInt
       if (p <= 0) throw new IllegalArgumentException("minPartitions must be positive")
     }
 
     // Validate user-specified Kafka options
 
-    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
+    if (params.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       logWarning(CUSTOM_GROUP_ID_ERROR_MESSAGE)
-      if (caseInsensitiveParams.contains(GROUP_ID_PREFIX)) {
+      if (params.contains(GROUP_ID_PREFIX)) {
         logWarning("Option 'groupIdPrefix' will be ignored as " +
           s"option 'kafka.${ConsumerConfig.GROUP_ID_CONFIG}' has been set.")
       }
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
+    if (params.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
       throw new IllegalArgumentException(
         s"""
            |Kafka option '${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}' is not supported.
@@ -285,14 +281,14 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
          """.stripMargin)
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}")) {
+    if (params.contains(s"kafka.${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG}' is not supported as keys "
           + "are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame operations "
           + "to explicitly deserialize the keys.")
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}"))
+    if (params.contains(s"kafka.${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}"))
     {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
@@ -305,29 +301,29 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       ConsumerConfig.INTERCEPTOR_CLASSES_CONFIG) // interceptors can modify payload, so not safe
 
     otherUnsupportedConfigs.foreach { c =>
-      if (caseInsensitiveParams.contains(s"kafka.$c")) {
+      if (params.contains(s"kafka.$c")) {
         throw new IllegalArgumentException(s"Kafka option '$c' is not supported")
       }
     }
 
-    if (!caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}")) {
+    if (!params.contains(s"kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Option 'kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}' must be specified for " +
           s"configuring Kafka consumer")
     }
   }
 
-  private def validateStreamOptions(caseInsensitiveParams: CaseInsensitiveMap[String]) = {
+  private def validateStreamOptions(params: CaseInsensitiveMap[String]) = {
     // Stream specific options
-    caseInsensitiveParams.get(ENDING_OFFSETS_OPTION_KEY).map(_ =>
+    params.get(ENDING_OFFSETS_OPTION_KEY).map(_ =>
       throw new IllegalArgumentException("ending offset not valid in streaming queries"))
-    validateGeneralOptions(caseInsensitiveParams)
+    validateGeneralOptions(params)
   }
 
-  private def validateBatchOptions(caseInsensitiveParams: CaseInsensitiveMap[String]) = {
+  private def validateBatchOptions(params: CaseInsensitiveMap[String]) = {
     // Batch specific options
     KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParams, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit) match {
+      params, STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit => // good to go
       case LatestOffsetRangeLimit =>
         throw new IllegalArgumentException("starting offset can't be latest " +
@@ -342,7 +338,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
 
     KafkaSourceProvider.getKafkaOffsetRangeLimit(
-      caseInsensitiveParams, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit) match {
+      params, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit =>
         throw new IllegalArgumentException("ending offset can't be earliest " +
           "for batch queries on Kafka")
@@ -356,10 +352,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         }
     }
 
-    validateGeneralOptions(caseInsensitiveParams)
+    validateGeneralOptions(params)
 
     // Don't want to throw an error, but at least log a warning.
-    if (caseInsensitiveParams.contains(MAX_OFFSET_PER_TRIGGER)) {
+    if (params.contains(MAX_OFFSET_PER_TRIGGER)) {
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
@@ -536,10 +532,10 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
   def getKafkaOffsetRangeLimit(
-      caseInsensitiveParams: CaseInsensitiveMap[String],
+      params: CaseInsensitiveMap[String],
       offsetOptionKey: String,
       defaultOffsets: KafkaOffsetRangeLimit): KafkaOffsetRangeLimit = {
-    caseInsensitiveParams.get(offsetOptionKey).map(_.trim) match {
+    params.get(offsetOptionKey).map(_.trim) match {
       case Some(offset) if offset.toLowerCase(Locale.ROOT) == "latest" =>
         LatestOffsetRangeLimit
       case Some(offset) if offset.toLowerCase(Locale.ROOT) == "earliest" =>
@@ -594,9 +590,8 @@ private[kafka010] object KafkaSourceProvider extends Logging {
    * Returns a unique batch consumer group (group.id), allowing the user to set the prefix of
    * the consumer group
    */
-  private[kafka010] def batchUniqueGroupId(
-      caseInsensitiveParameters: CaseInsensitiveMap[String]): String = {
-    val groupIdPrefix = caseInsensitiveParameters.getOrElse(GROUP_ID_PREFIX, "spark-kafka-relation")
+  private[kafka010] def batchUniqueGroupId(params: CaseInsensitiveMap[String]): String = {
+    val groupIdPrefix = params.getOrElse(GROUP_ID_PREFIX, "spark-kafka-relation")
     s"${groupIdPrefix}-${UUID.randomUUID}"
   }
 
@@ -605,27 +600,27 @@ private[kafka010] object KafkaSourceProvider extends Logging {
    * the consumer group
    */
   private def streamingUniqueGroupId(
-      caseInsensitiveParameters: CaseInsensitiveMap[String],
+      params: CaseInsensitiveMap[String],
       metadataPath: String): String = {
-    val groupIdPrefix = caseInsensitiveParameters.getOrElse(GROUP_ID_PREFIX, "spark-kafka-source")
+    val groupIdPrefix = params.getOrElse(GROUP_ID_PREFIX, "spark-kafka-source")
     s"${groupIdPrefix}-${UUID.randomUUID}-${metadataPath.hashCode}"
   }
 
   private[kafka010] def kafkaParamsForProducer(
-      caseInsensitiveParams: CaseInsensitiveMap[String]): ju.Map[String, Object] = {
-    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
+      params: CaseInsensitiveMap[String]): ju.Map[String, Object] = {
+    if (params.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}' is not supported as keys "
           + "are serialized with ByteArraySerializer.")
     }
 
-    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}")) {
+    if (params.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}' is not supported as "
           + "value are serialized with ByteArraySerializer.")
     }
 
-    val specifiedKafkaParams = convertToSpecifiedParams(caseInsensitiveParams)
+    val specifiedKafkaParams = convertToSpecifiedParams(params)
 
     KafkaConfigUpdater("executor", specifiedKafkaParams)
       .set(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, serClassName)
