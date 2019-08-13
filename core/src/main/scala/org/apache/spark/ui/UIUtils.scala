@@ -425,6 +425,9 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
                 }
               }
             </div>

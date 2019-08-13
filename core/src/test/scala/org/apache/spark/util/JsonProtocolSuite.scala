@@ -366,14 +366,14 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("RDDInfo backward compatibility (scope, parent IDs, callsite)") {
     // "Scope" and "Parent IDs" were introduced in Spark 1.4.0
     // "Callsite" was introduced in Spark 1.6.0
-    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, Seq(1, 6, 8),
+    val rddInfo = new RDDInfo(1, "one", 100, StorageLevel.NONE, false, Seq(1, 6, 8),
       "callsite", Some(new RDDOperationScope("fable")))
     val oldRddInfoJson = JsonProtocol.rddInfoToJson(rddInfo)
       .removeField({ _._1 == "Parent IDs"})
       .removeField({ _._1 == "Scope"})
       .removeField({ _._1 == "Callsite"})
     val expectedRddInfo = new RDDInfo(
-      1, "one", 100, StorageLevel.NONE, Seq.empty, "", scope = None)
+      1, "one", 100, StorageLevel.NONE, false, Seq.empty, "", scope = None)
     assertEquals(expectedRddInfo, JsonProtocol.rddInfoFromJson(oldRddInfoJson))
   }
 
@@ -857,7 +857,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
   }
 
   private def makeRddInfo(a: Int, b: Int, c: Int, d: Long, e: Long) = {
-    val r = new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, Seq(1, 4, 7), a.toString)
+    val r =
+      new RDDInfo(a, "mayor", b, StorageLevel.MEMORY_AND_DISK, false, Seq(1, 4, 7), a.toString)
     r.numCachedPartitions = c
     r.memSize = d
     r.diskSize = e
