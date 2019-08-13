@@ -974,7 +974,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       )
     }
 
-    import DataTypeTestUtils.numericTypes
+    import DataTypeTestUtils._
     numericTypes.foreach { from =>
       val (safeTargetTypes, unsafeTargetTypes) = numericTypes.partition(to => isCastSafe(from, to))
 
@@ -1007,6 +1007,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       makeComplexTypes(dt, true).foreach { complexType =>
         assert(!Cast.canUpCast(complexType, StringType))
       }
+    }
+
+    atomicTypes.foreach { atomicType =>
+      assert(Cast.canUpCast(NullType, atomicType))
     }
   }
 
