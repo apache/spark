@@ -531,7 +531,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan = Project(
       Seq(a, Alias(InSubquery(Seq(a), ListQuery(LocalRelation(b))), "c")()),
       LocalRelation(a))
-    assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
+    assertAnalysisError(plan, "Predicate sub-queries can only be used" +
+        " in Filter/DeleteFromTable" :: Nil)
   }
 
   test("PredicateSubQuery is used is a nested condition") {
