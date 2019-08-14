@@ -114,8 +114,8 @@ private[spark] object HiveUtils extends Logging {
 
   val CONVERT_INSERTING_PARTITIONED_TABLE =
     buildConf("spark.sql.hive.convertInsertingPartitionedTable")
-      .doc("When set to true, and \"spark.sql.hive.convertMetastoreParquet\" or " +
-        "\"spark.sql.hive.convertMetastoreOrc\" is true, the built-in ORC/Parquet writer is used" +
+      .doc("When set to true, and `spark.sql.hive.convertMetastoreParquet` or " +
+        "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
         "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
         "syntax.")
       .booleanConf
