@@ -102,7 +102,7 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
-  private val validNameFormat = "([a-zA-Z0-9]+[\\w]+)".r
+  private val validNameFormat = "([a-zA-Z0-9]+[\\w]*)".r
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
