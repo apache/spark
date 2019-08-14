@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 
-class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
+class SubstituteMvSuite extends QueryTest with SQLTestUtils
   with PrivateMethodTester with MockitoSugar {
 
   var spark: SparkSession = _
@@ -371,7 +371,7 @@ class SubstituteMvOSSuite extends QueryTest with SQLTestUtils
       Seq(Batch("Substitute MV",
         Once,
         EliminateSubqueryAliases,
-        SubstituteMaterializedOSView(mockCatalog.asInstanceOf[HiveMvCatalog]),
+        SubstituteMaterializedView(mockCatalog.asInstanceOf[HiveMvCatalog]),
         org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators))
     }
   }

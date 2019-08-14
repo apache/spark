@@ -295,7 +295,7 @@ private[spark] object HiveUtils extends Logging {
       sparkConf = conf,
       execJars = Seq.empty,
       hadoopConf = hadoopConf,
-      config = newTemporaryConfiguration(useInMemoryDerby = true),
+      config = formatTimeVarsForHiveClient(hadoopConf),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
     loader.createClient().asInstanceOf[HiveClientImpl]

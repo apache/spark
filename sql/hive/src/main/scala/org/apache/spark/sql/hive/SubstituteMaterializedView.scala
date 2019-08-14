@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.mv.Implies
 import org.apache.spark.util.Utils
 
-case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
+case class SubstituteMaterializedView(mvCatalog: HiveMvCatalog)
   extends Rule[LogicalPlan] {
 
   val supportedHiveVersion = Seq("3.1.1")
@@ -39,7 +39,7 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
       case op@PhysicalOperation(projects, filters, leafPlan) if filters.nonEmpty =>
         val rel = getRelation(leafPlan)
         rel match {
-          case Some(relation@HiveTableRelation(table, _, _)) if !isMVTable(Option(table)) =>
+          case Some(relation@HiveTableRelation(table, _, _, _)) if !isMVTable(Option(table)) =>
             transformToMV(projects, filters, relation, table).getOrElse(op)
           case Some(relation@LogicalRelation(_, _, tableOpt, _)) if !isMVTable(tableOpt) =>
             transformToMV(projects, filters, relation, tableOpt.get).getOrElse(op)
@@ -57,20 +57,12 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
   private def transformToMV(projects: Seq[NamedExpression], filters: Seq[Expression],
       relation: LogicalPlan, catalogTable: CatalogTable): Option[LogicalPlan] = {
 
-    // 1. Not checking for project list right now, only filters
-    //    project of mv should be super-set of project of table. Also need to map each
-    //    mv project [AttributeReference] to original [AttributeReference]
-    // 2. returning the 1st MV which matches found
-    // 3. Reducing the seq or filters by And ?
-    // 4. The original relation is substituted with mv's relation
-    // 5. The original filter is transformed to have mv's attribute using name,
-
     val ident = catalogTable.identifier
-    val mv = mvCatalog.
+    val creationData = mvCatalog.
       getMaterializedViewForTable(ident.database.get, ident.table)
 
     // Currently supporting only MV on one table for substitution
-    val mvCatalogTables = getTableNodes(mv.mvDetails)
+    val mvCatalogTables = getTableNodes(creationData.mvDetails)
     mvCatalogTables.map {
       x => {
         x match {
@@ -91,7 +83,6 @@ case class SubstituteMaterializedOSView(mvCatalog: HiveMvCatalog)
       }
     }.find(_.isDefined).getOrElse(None)
   }
-
 
   private def constructLogicalPlan(filters: Seq[Expression], projects: Seq[NamedExpression],
      relationOption: Option[LogicalPlan], originalLogicalPlan: LogicalPlan) = {

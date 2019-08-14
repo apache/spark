@@ -26,12 +26,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     impliesDNF(queryDNF, mvDNF)
   }
 
-  private def foldUsingConjunct(exps: Seq[Expression]): Expression =
-    if (exps.size > 1) {
-      exps.slice(1, exps.size - 1).foldRight(exps.head)(And)
-    } else {
-      exps.head
-    }
+  private def foldUsingConjunct(exprs: Seq[Expression]): Expression = exprs.reduceLeft(And)
 
   private def toDNF(expression: Expression): Option[Seq[Seq[Expression]]] = {
     expression match {
@@ -173,7 +168,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     expression1 match {
       case bc@BinaryComparison(left: Attribute, right: Expression) =>
         impliesBinaryComparision(bc, expression2)
-      case _@IsNotNull(left : Expression) =>
+      case IsNotNull(left) =>
         impliesForNotNullCheck(expression2, left)
       case _ => false
     }
@@ -181,7 +176,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
 
   private def impliesForNotNullCheck(expression2: Expression, left: Expression): Boolean = {
     expression2 match {
-      case _@IsNotNull(child: Expression) => left == child
+      case IsNotNull(child) => left == child
       case _ => false
     }
   }
@@ -191,7 +186,7 @@ class Implies(filters: Seq[Expression], mvFilters: Seq[Expression]) {
     * 2. query: a > 10, mv: a > 10 , will return false
     */
   private def impliesBinaryComparision(leftBc: BinaryComparison,
-                                       rightExpr: Expression): Boolean = {
+     rightExpr: Expression): Boolean = {
     val evaluate: PartialFunction[Expression, Boolean] = {
       case b@BinaryComparison(l: Attribute, r: Expression) =>
         if (l == leftBc.left) {

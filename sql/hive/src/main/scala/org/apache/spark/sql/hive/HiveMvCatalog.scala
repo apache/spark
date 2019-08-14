@@ -25,8 +25,7 @@ class HiveMvCatalog extends MvCatalog {
   private var sparkSession: SparkSession = SparkSession.getActiveSession.get
 
   override def init(session: Any): Unit = {
-    val sparkSession = session.asInstanceOf[SparkSession]
-    this.sparkSession = sparkSession
+    this.sparkSession = session.asInstanceOf[SparkSession]
   }
 
   override def getMaterializedViewForTable(db: String, tblName: String): CatalogCreationData = {
@@ -34,8 +33,10 @@ class HiveMvCatalog extends MvCatalog {
   }
 
   override def getMaterializedViewPlan(catalogTable: CatalogTable): Option[LogicalPlan] = {
-    val viewText = catalogTable.viewOriginalText
-    val optimizedPlan = sparkSession.sql(viewText.get).queryExecution.optimizedPlan
-    Some(optimizedPlan)
+    val viewTextOpt = catalogTable.viewOriginalText
+    viewTextOpt.map {
+      viewText =>
+        sparkSession.sql(viewText).queryExecution.optimizedPlan
+    }
   }
 }

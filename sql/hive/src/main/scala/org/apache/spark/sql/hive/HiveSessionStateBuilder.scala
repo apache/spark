@@ -65,7 +65,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     catalog
   }
 
-  protected lazy val mvCatalog: HiveMvCatalog =
+  private lazy val mvCatalog: HiveMvCatalog =
     session.sharedState.mvCatalog.asInstanceOf[HiveMvCatalog]
 
   /**
@@ -106,7 +106,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   override protected def optimizer: Optimizer = {
     new SparkOptimizer(catalog, experimentalMethods) {
       override def preOptimizationBatches: Seq[Batch] = super.preOptimizationBatches ++
-        Seq(Batch("Materialized view", Once, SubstituteMaterializedOSView(mvCatalog)))
+        Seq(Batch("Materialized view", Once, SubstituteMaterializedView(mvCatalog)))
 
     }
   }

@@ -151,13 +151,10 @@ private[sql] class SharedState(
     wrapped
   }
 
-
   lazy val mvCatalog: MvCatalog = {
-
     val clazz = Utils.classForName(SharedState.mvCatalogClassName(sparkContext.conf))
     val ctor = clazz.getDeclaredConstructor()
-    val mvCatalog = ctor.newInstance().asInstanceOf[MvCatalog]
-    mvCatalog
+    ctor.newInstance().asInstanceOf[MvCatalog]
   }
 
   /**

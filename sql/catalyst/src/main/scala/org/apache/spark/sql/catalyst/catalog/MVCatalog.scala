@@ -20,17 +20,29 @@ package org.apache.spark.sql.catalyst.catalog
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /*
- * Interface for the catalog of MaterializedViews.
+ * Helper trait for the catalog of MaterializedViews.
  *
- * This implementation must be thread-safe as they can be accessed
- * in multiple threads. This catalog is expected to interact with
- * external systems.
  */
 trait MvCatalog {
 
+  /**
+    *
+    * @param catalogTable the table object of MV
+    * @return Option of LogicalPlan corresponding to the table
+    */
   def getMaterializedViewPlan(catalogTable: CatalogTable): Option[LogicalPlan]
 
+  /**
+    * Get all materialized view information of a given table
+    * @param tbl name of the table
+    * @param db database name of the table
+    * @return information about the MV of the given table
+    */
   def getMaterializedViewForTable(tbl: String, db: String): CatalogCreationData
 
+  /**
+    *
+    * @param sparkSession Init code for MV catalog
+    */
   def init(sparkSession: Any): Unit
 }

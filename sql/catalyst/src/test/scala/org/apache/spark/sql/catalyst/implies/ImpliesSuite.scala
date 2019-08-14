@@ -23,6 +23,10 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.mv.Implies
 
+/*
+ * @param expr1 Query filter
+ * @param expr2 MV filter
+ */
 case class ExprContainer(expr1: String, expr2: String)
 
 class ImpliesSuite extends SparkFunSuite {
@@ -41,22 +45,27 @@ class ImpliesSuite extends SparkFunSuite {
                   "(c > 5)"),
     ExprContainer("(c < 10)",
                   "(c < 11)"),
+    ExprContainer("a = 10", "a = 10"),
     ExprContainer("a < 20 and c < 10", "a < 20 and c < 11"),
     ExprContainer("(a > 10 and c < 5) or (a > 20)",
                   "(a > 0 or c < 5)"),
+    ExprContainer("(a < 100 and b < 100)",
+      "(a < 200 and b < 200)"),
     ExprContainer("(a > 100) and (a > 20 or b > 100)",
-                  "(a > 20)")
+      "(a > 20)")
   ) -> true
 
   private val negativeTestExprs: Seq[ExprContainer] Tuple2 Boolean = Seq(
     ExprContainer("(a >= 20)",
-                  "(a > 20)"),
+      "(a > 20)"),
     ExprContainer("(a <= 20)",
-                  "(a < 20)"),
+      "(a < 20)"),
     ExprContainer("(a > 100)",
-                  "(a > 200)"),
+      "(a > 200)"),
     ExprContainer("(a < 100)",
-                  "(a < 20)"),
+      "(a < 20)"),
+    ExprContainer("(a < 100)",
+      "(a = 100)"),
     ExprContainer("(a < 100) and (a < 20 or b > 100)",
                   "(a < 20)")
   ) -> false
