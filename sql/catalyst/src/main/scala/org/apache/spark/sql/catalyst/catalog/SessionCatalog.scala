@@ -114,7 +114,7 @@ class SessionCatalog(
   private def validateName(name: String): Unit = {
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
-        "Valid names only contain alphabet characters, numbers and _ and do not start with _")
+        "Valid names only contain alphabet characters, numbers and _ and do not start with _.")
     }
   }
 
