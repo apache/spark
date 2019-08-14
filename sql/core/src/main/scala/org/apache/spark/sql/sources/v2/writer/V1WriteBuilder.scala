@@ -26,6 +26,9 @@ import org.apache.spark.sql.sources.InsertableRelation
  * instances of the [[WriteBuilder]] interface such as [[SupportsOverwrite]], [[SupportsTruncate]]
  * should be extended as well to support additional operations other than data appends.
  *
+ * This interface is designed to provide Spark DataSources time to migrate to DataSource V2 and
+ * will be removed in a future Spark release.
+ *
  * @since 3.0.0
  */
 @Experimental
@@ -33,7 +36,7 @@ import org.apache.spark.sql.sources.InsertableRelation
 trait V1WriteBuilder extends WriteBuilder {
 
   /**
-   * Creates an [[InsertableRelation]] that allows appending a DataFrame to a
+   * Creates an InsertableRelation that allows appending a DataFrame to a
    * a destination (using data source-specific parameters). The insert method will only be
    * called with `overwrite=false`. The DataSource should implement the overwrite behavior as
    * part of the [[SupportsOverwrite]], and [[SupportsTruncate]] interfaces.
