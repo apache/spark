@@ -50,6 +50,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
   override def afterEach(): Unit = {
     super.afterEach()
     spark.catalog("session").asInstanceOf[TestV2SessionCatalog].clearTables()
+    spark.conf.set(SQLConf.V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
   }
 
   private def verifyTable(tableName: String, expected: DataFrame): Unit = {

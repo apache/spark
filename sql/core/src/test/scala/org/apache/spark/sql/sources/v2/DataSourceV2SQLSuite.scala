@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -493,8 +494,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
 
-    // use the catalog name to force loading with the v2 catalog
-    checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
+    checkAnswer(sparkSession.sql(s"TABLE default.table_name"), sparkSession.table("source"))
+    // The fact that the following line doesn't throw an exception means, the session catalog
+    // can load the table.
+    val t = sparkSession.catalog("session").asTableCatalog
+      .loadTable(Identifier.of(Array.empty, "table_name"))
+    assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
   }
 
   test("DropTable: basic") {
