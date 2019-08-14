@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -212,11 +214,13 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case AppendData(r: DataSourceV2Relation, query, _) =>
       val table = r.table.asWritable
       val writer = table.newWriteBuilder(r.options)
+        .withInputDataSchema(query.schema)
+        .withQueryId(UUID.randomUUID().toString)
       writer match {
         case v1: V1WriteBuilder =>
           AppendDataExecV1(v1, query) :: Nil
         case v2 =>
-          AppendDataExec(table, v2, r.options, planLater(query)) :: Nil
+          AppendDataExec(table, v2, planLater(query)) :: Nil
       }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
@@ -227,11 +231,13 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }.toArray
       val table = r.table.asWritable
       val writer = table.newWriteBuilder(r.options)
+        .withInputDataSchema(query.schema)
+        .withQueryId(UUID.randomUUID().toString)
       writer match {
         case v1: V1WriteBuilder =>
           OverwriteByExpressionExecV1(table, v1, filters, query) :: Nil
         case v2 =>
-          OverwriteByExpressionExec(table, v2, filters, r.options, planLater(query)) :: Nil
+          OverwriteByExpressionExec(table, v2, filters, planLater(query)) :: Nil
       }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>

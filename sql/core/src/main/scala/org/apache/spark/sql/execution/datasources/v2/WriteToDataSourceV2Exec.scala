@@ -247,8 +247,7 @@ case class AtomicReplaceTableAsSelectExec(
 case class AppendDataExec(
     table: SupportsWrite,
     writeBuilder: WriteBuilder,
-    writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan) extends V2TableWriteExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
     doWrite(writeBuilder.buildForBatch())
@@ -269,8 +268,7 @@ case class OverwriteByExpressionExec(
     table: SupportsWrite,
     writeBuilder: WriteBuilder,
     deleteWhere: Array[Filter],
-    writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan) extends V2TableWriteExec {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
@@ -302,18 +300,19 @@ case class OverwriteByExpressionExec(
 case class OverwritePartitionsDynamicExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
+    query: SparkPlan) extends V2TableWriteExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val batchWrite = newWriteBuilder() match {
+    val writeBuilder = table.newWriteBuilder(writeOptions)
+      .withInputDataSchema(query.schema)
+      .withQueryId(UUID.randomUUID().toString)
+    writeBuilder match {
       case builder: SupportsDynamicOverwrite =>
-        builder.overwriteDynamicPartitions().buildForBatch()
+        doWrite(builder.overwriteDynamicPartitions().buildForBatch())
 
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
     }
-
-    doWrite(batchWrite)
   }
 }
 
@@ -325,21 +324,6 @@ case class WriteToDataSourceV2Exec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     doWrite(batchWrite)
-  }
-}
-
-/**
- * Helper for physical plans that build batch writes.
- */
-trait BatchWriteHelper {
-  def table: SupportsWrite
-  def query: SparkPlan
-  def writeOptions: CaseInsensitiveStringMap
-
-  def newWriteBuilder(): WriteBuilder = {
-    table.newWriteBuilder(writeOptions)
-        .withInputDataSchema(query.schema)
-        .withQueryId(UUID.randomUUID().toString)
   }
 }
 
