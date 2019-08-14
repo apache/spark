@@ -72,20 +72,20 @@ res3: Long = 3
   <img src="img/webui-storage-tab.png"
        title="Storage tab"
        alt="Storage tab"
-       width="80%" />
+       width="100%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
 After running above example, we can found two RDDs listed in the Storage tab. Basic information like
 storage level, number of partitions and memory overhead are provided. Note that the newly persisted RDDs
-or DataFrames are not shown in the tab before they are materialized, to monitor a specific RDD or DataFrame
-in this tab, make sure an action operation has been triggered.
+or DataFrames are not shown in the tab before they are materialized, to monitor a specific RDD or DataFrame,
+make sure an action operation has been triggered.
 
 <p style="text-align: center;">
   <img src="img/webui-storage-detail.png"
        title="Storage detail"
        alt="Storage detail"
-       width="80%" />
+       width="100%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
