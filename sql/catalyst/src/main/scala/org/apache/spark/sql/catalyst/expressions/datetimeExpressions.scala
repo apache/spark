@@ -302,6 +302,48 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
   }
 }
 
+case class Milliseconds(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  // DecimalType is used here to not lose precision while converting microseconds to
+  // the fractional part of milliseconds. Scale 3 is taken to have all microseconds as
+  // the fraction. The precision 8 should cover 2 digits for seconds, 3 digits for
+  // milliseconds and 3 digits for microseconds.
+  override def dataType: DataType = DecimalType(8, 3)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getMilliseconds(timestamp.asInstanceOf[Long], timeZone)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMilliseconds($c, $tz)")
+  }
+}
+
+case class Microseconds(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def dataType: DataType = IntegerType
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getMicroseconds(timestamp.asInstanceOf[Long], timeZone)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val tz = ctx.addReferenceObj("timeZone", timeZone)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getMicroseconds($c, $tz)")
+  }
+}
+
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of year of the date/timestamp.",
   examples = """
@@ -347,6 +389,22 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getYear($c)")
+  }
+}
+
+case class IsoYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  override protected def nullSafeEval(date: Any): Any = {
+    DateTimeUtils.getIsoYear(date.asInstanceOf[Int])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getIsoYear($c)")
   }
 }
 
@@ -1880,5 +1938,28 @@ case class Decade(child: Expression) extends UnaryExpression with ImplicitCastIn
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.getDecade($c)")
+  }
+}
+
+case class Epoch(child: Expression, timeZoneId: Option[String] = None)
+    extends UnaryExpression with ImplicitCastInputTypes with TimeZoneAwareExpression {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  // DecimalType is used to not lose precision while converting microseconds to
+  // the fractional part of seconds. Scale 6 is taken to have all microseconds as
+  // the fraction. The precision 20 should cover whole valid range of years [1, 9999]
+  // plus negative years that can be used in some cases though are not officially supported.
+  override def dataType: DataType = DecimalType(20, 6)
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getEpoch(timestamp.asInstanceOf[Long], zoneId)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    defineCodeGen(ctx, ev, c => s"$dtu.getEpoch($c, $zid)")
   }
 }

@@ -1418,6 +1418,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Decade(expression(ctx.source))
       case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
         Year(expression(ctx.source))
+      case "ISOYEAR" =>
+        IsoYear(expression(ctx.source))
       case "QUARTER" | "QTR" =>
         Quarter(expression(ctx.source))
       case "MONTH" | "MON" | "MONS" | "MONTHS" =>
@@ -1440,6 +1442,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Minute(expression(ctx.source))
       case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
         Second(expression(ctx.source))
+      case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+        Milliseconds(expression(ctx.source))
+      case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+        Microseconds(expression(ctx.source))
+      case "EPOCH" =>
+        Epoch(expression(ctx.source))
       case other =>
         throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
     }
