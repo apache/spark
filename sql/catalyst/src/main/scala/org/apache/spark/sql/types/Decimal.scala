@@ -228,6 +228,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {
+      if (decimalVal < Long.MinValue || decimalVal > Long.MaxValue) {
+        throw new AnalysisException(s"Decimal ${decimalVal} does not " +
+            s"fit in range [${Long.MinValue}, ${Long.MaxValue}] for type Long")
+      }
       decimalVal.longValue()
     }
   }

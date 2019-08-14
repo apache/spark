@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.Decimal._
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
@@ -94,8 +95,20 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
     checkValues(Decimal(2e18.toLong), 2e18, 2e18.toLong)
     checkValues(Decimal(Long.MaxValue), Long.MaxValue.toDouble, Long.MaxValue)
     checkValues(Decimal(Long.MinValue), Long.MinValue.toDouble, Long.MinValue)
-    checkValues(Decimal(Double.MaxValue), Double.MaxValue, 0L)
-    checkValues(Decimal(Double.MinValue), Double.MinValue, 0L)
+    intercept[AnalysisException](Decimal(BigDecimal(Long.MaxValue) + 1).toLong)
+    intercept[AnalysisException](Decimal(BigDecimal(Long.MinValue) - 1).toLong)
+    intercept[AnalysisException](Decimal(BigDecimal(Double.MaxValue)).toLong)
+    intercept[AnalysisException](Decimal(BigDecimal(Double.MaxValue)).toLong)
+
+    assert(Decimal(Double.MaxValue).toDouble === Double.MaxValue)
+    assert(Decimal(Double.MinValue).toDouble === Double.MinValue)
+    assert(Decimal(BigDecimal(Double.MaxValue) * 10).toDouble === Double.PositiveInfinity)
+    assert(Decimal(BigDecimal(Double.MinValue) * 10).toDouble === Double.NegativeInfinity)
+
+    assert(Decimal(Float.MaxValue).toFloat === Float.MaxValue)
+    assert(Decimal(Float.MinValue).toFloat === Float.MinValue)
+    assert(Decimal(BigDecimal(Float.MaxValue) * 10).toFloat === Float.PositiveInfinity)
+    assert(Decimal(BigDecimal(Float.MinValue) * 10).toFloat === Float.NegativeInfinity)
   }
 
   // Accessor for the BigDecimal value of a Decimal, which will be null if it's using Longs
