@@ -665,6 +665,33 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+  test("SPARK-28710: Replace permanent function ") {
+    withUserDefinedFunction("replaceTest" -> false) {
+      // initially resources are empty
+      sql(s"CREATE FUNCTION replaceTest AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(sql("SELECT replaceTest(1)"), Row(1.0))
+      // change the resource to TestUDTF.jar
+      sql(
+        s"""
+           |CREATE or REPLACE FUNCTION replaceTest
+           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
+      """.stripMargin)
+      checkAnswer(sql("SELECT replaceTest(1)"), Row(1) :: Row(1) :: Nil)
+      // change the resource to SPARK-21101-1.0.jar
+      sql(
+        s"""
+           |CREATE or REPLACE FUNCTION replaceTest
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      checkAnswer(sql("SELECT replaceTest(2, 'A', 10, 'B', 20)"),
+        Row("A", 10) :: Row("B", 20) :: Nil)
+      // change the resource to empty
+      sql(s"CREATE or REPLACE FUNCTION replaceTest AS '${classOf[GenericUDAFAverage].getName}'")
+      checkAnswer(sql("SELECT replaceTest(5)"), Row(5.0))
+    }
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
