@@ -25,7 +25,7 @@ import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog, TestTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, Identifier, TableCatalog, TestTableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -54,49 +54,49 @@ class PlanResolutionSuite extends AnalysisTest {
     newCatalog
   }
 
-  private val lookupWithDefault: LookupCatalog = new LookupCatalog {
-    override protected val catalogManager = {
-      val manager = mock(classOf[CatalogManager])
-      when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-        invocation.getArgument[String](0) match {
-          case "testcat" =>
-            testCat
-          case "session" =>
-            v2SessionCatalog
-          case name =>
-            throw new CatalogNotFoundException(s"No such catalog: $name")
-        }
-      })
-      when(manager.defaultCatalog).thenReturn(Some(testCat))
-      when(manager.v2SessionCatalog).thenCallRealMethod()
-      manager
-    }
+  private val catalogManagerWithDefault = {
+    val manager = mock(classOf[CatalogManager])
+    when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+      invocation.getArgument[String](0) match {
+        case "testcat" =>
+          testCat
+        case "session" =>
+          v2SessionCatalog
+        case name =>
+          throw new CatalogNotFoundException(s"No such catalog: $name")
+      }
+    })
+    when(manager.defaultCatalog).thenReturn(Some(testCat))
+    when(manager.v2SessionCatalog).thenCallRealMethod()
+    manager
   }
 
-  private val lookupWithoutDefault: LookupCatalog = new LookupCatalog {
-    override protected val catalogManager = {
-      val manager = mock(classOf[CatalogManager])
-      when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
-        invocation.getArgument[String](0) match {
-          case "testcat" =>
-            testCat
-          case "session" =>
-            v2SessionCatalog
-          case name =>
-            throw new CatalogNotFoundException(s"No such catalog: $name")
-        }
-      })
-      when(manager.defaultCatalog).thenReturn(None)
-      when(manager.v2SessionCatalog).thenCallRealMethod()
-      manager
-    }
+  private val catalogManagerWithoutDefault = {
+    val manager = mock(classOf[CatalogManager])
+    when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+      invocation.getArgument[String](0) match {
+        case "testcat" =>
+          testCat
+        case "session" =>
+          v2SessionCatalog
+        case name =>
+          throw new CatalogNotFoundException(s"No such catalog: $name")
+      }
+    })
+    when(manager.defaultCatalog).thenReturn(None)
+    when(manager.v2SessionCatalog).thenCallRealMethod()
+    manager
   }
 
   def parseAndResolve(query: String, withDefault: Boolean = false): LogicalPlan = {
     val newConf = conf.copy()
     newConf.setConfString(DEFAULT_V2_CATALOG.key, "testcat")
-    DataSourceResolution(newConf, if (withDefault) lookupWithDefault else lookupWithoutDefault)
-        .apply(parsePlan(query))
+    val catalogManager = if (withDefault) {
+      catalogManagerWithDefault
+    } else {
+      catalogManagerWithoutDefault
+    }
+    DataSourceResolution(newConf, catalogManager).apply(parsePlan(query))
   }
 
   private def parseResolveCompare(query: String, expected: LogicalPlan): Unit =
