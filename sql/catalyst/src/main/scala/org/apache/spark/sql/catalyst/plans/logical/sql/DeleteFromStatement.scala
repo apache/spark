@@ -14,21 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
+package org.apache.spark.sql.catalyst.plans.logical.sql
 
-private[spark] trait ExecutorPodsSnapshotsStore {
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-  def addSubscriber
-      (processBatchIntervalMillis: Long)
-      (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit)
-
-  def stop(): Unit
-
-  def notifySubscribers(): Unit
-
-  def updatePod(updatedPod: Pod): Unit
-
-  def replaceSnapshot(newSnapshot: Seq[Pod]): Unit
-}
+case class DeleteFromStatement(
+    tableName: Seq[String],
+    tableAlias: Option[String],
+    condition: Expression)
+    extends ParsedStatement

@@ -14,21 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.scheduler.cluster.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
+package org.apache.spark.sql.execution.datasources.v2
 
-private[spark] trait ExecutorPodsSnapshotsStore {
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.sources.Filter
+import org.apache.spark.sql.sources.v2.SupportsDelete
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-  def addSubscriber
-      (processBatchIntervalMillis: Long)
-      (onNewSnapshots: Seq[ExecutorPodsSnapshot] => Unit)
+case class DeleteFromTableExec(
+    table: SupportsDelete,
+    condition: Array[Filter]) extends LeafExecNode {
 
-  def stop(): Unit
+  override protected def doExecute(): RDD[InternalRow] = {
+    table.deleteWhere(condition)
+    sparkContext.emptyRDD
+  }
 
-  def notifySubscribers(): Unit
-
-  def updatePod(updatedPod: Pod): Unit
-
-  def replaceSnapshot(newSnapshot: Seq[Pod]): Unit
+  override def output: Seq[Attribute] = Nil
 }
