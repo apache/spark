@@ -193,8 +193,10 @@ private[spark] class ExecutorMonitor(
         }
       }
 
-      logDebug(s"Activated executors $activatedExecs due to shuffle data needed by new job" +
-        s"${event.jobId}.")
+      if (activatedExecs.nonEmpty) {
+        logDebug(s"Activated executors $activatedExecs due to shuffle data needed by new job" +
+          s"${event.jobId}.")
+      }
 
       if (needTimeoutUpdate) {
         nextTimeout.set(Long.MinValue)
@@ -243,8 +245,10 @@ private[spark] class ExecutorMonitor(
         }
       }
 
-      logDebug(s"Executors $deactivatedExecs do not have active shuffle data after job " +
-        s"${event.jobId} finished.")
+      if (deactivatedExecs.nonEmpty) {
+        logDebug(s"Executors $deactivatedExecs do not have active shuffle data after job " +
+          s"${event.jobId} finished.")
+      }
     }
 
     jobToStageIDs.remove(event.jobId).foreach { stages =>
@@ -505,6 +509,8 @@ private[spark] class ExecutorMonitor(
         excess += 1
       }
     }
+
+    def nonEmpty: Boolean = ids != null && ids.nonEmpty
 
     override def toString(): String = {
       ids.mkString(",") + (if (excess > 0) s" (and $excess more)" else "")
