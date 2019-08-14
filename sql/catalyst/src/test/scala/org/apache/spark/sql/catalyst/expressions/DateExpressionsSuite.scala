@@ -1013,21 +1013,24 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("milliseconds and microseconds") {
     outstandingTimezonesIds.foreach { timezone =>
-        val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
-          Literal(0), Literal(0), Literal(10.123456789), Some(Literal(timezone)))
+      var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
+        Some(Literal(timezone)))
 
-      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.456)))
-      checkEvaluation(Microseconds(timestamp), 10123456)
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 10123457)
 
-      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(0.0))), Decimal(0, 8, 3))
-      checkEvaluation(Microseconds(timestamp.copy(sec = Literal(0.0))), 0)
+      timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
 
-      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(59.999999))),
-        Decimal(BigDecimal(59999.999), 8, 3))
-      checkEvaluation(Microseconds(timestamp.copy(sec = Literal(59.999999))), 59999999)
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 59999999)
 
-      checkEvaluation(Milliseconds(timestamp.copy(sec = Literal(60.0))), Decimal(0, 8, 3))
-      checkEvaluation(Microseconds(timestamp.copy(sec = Literal(60.0))), 0)
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
     }
   }
 
@@ -1036,7 +1039,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nanos = 123456000
     val timestamp = Epoch(MakeTimestamp(
       Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
-      Literal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble), Some(Literal(zoneId.getId))))
+      Literal(Decimal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble, 8, 6)),
+      Some(Literal(zoneId.getId))))
     val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
       .atZone(zoneId).toInstant
     val expected = Decimal(BigDecimal(nanos) / DateTimeUtils.NANOS_PER_SECOND +
