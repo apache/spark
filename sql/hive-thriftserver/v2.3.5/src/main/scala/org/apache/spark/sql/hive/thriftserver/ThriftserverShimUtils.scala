@@ -17,6 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.security.AccessController
+
+import scala.collection.JavaConverters._
+
+import org.apache.commons.lang3.StringUtils
+import org.apache.hadoop.hive.ql.exec.AddToClassPathAction
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.thrift.Type
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema}
@@ -50,6 +56,11 @@ private[thriftserver] object ThriftserverShimUtils {
   }
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
+
+  private[thriftserver] def addToClassPath(loader: ClassLoader, auxJars: String): ClassLoader = {
+    val addAction = new AddToClassPathAction(loader, StringUtils.split(auxJars, ",").toList.asJava)
+    AccessController.doPrivileged(addAction)
+  }
 
   private[thriftserver] val testedProtocolVersions = Seq(
     HIVE_CLI_SERVICE_PROTOCOL_V1,
