@@ -206,55 +206,52 @@ class StringIndexer @Since("1.4.0") (
       .collect()(0)
   }
 
-  @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): StringIndexerModel = {
-    transformSchema(dataset.schema, logging = true)
+  private def sortByFreq(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
+    val (inputCols, _) = getInOutCols()
 
+    val sortFunc = StringIndexer.getSortFunc(ascending = ascending)
+    val orgStrings = countByValue(dataset, inputCols).toSeq
+    ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
+      counts.toSeq.sortWith(sortFunc).map(_._1).toArray
+    }.toArray
+  }
+
+  private def sortByAlphabet(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
     val (inputCols, _) = getInOutCols()
 
     // If input dataset is not originally cached, we need to unpersist it
     // once we persist it later.
     val needUnpersist = dataset.storageLevel == StorageLevel.NONE
 
+    dataset.persist()
+    val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
+    val allLabels = dataset.select(selectedCols: _*)
+      .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
+    val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
+      val sorted = labels.filter(_ != null).sorted
+        if (ascending) {
+          sorted.toArray
+        } else {
+          sorted.reverse.toArray
+        }
+    }.toArray
+    if (needUnpersist) {
+      dataset.unpersist()
+    }
+    labels
+  }
+
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): StringIndexerModel = {
+    transformSchema(dataset.schema, logging = true)
+
     // In case of equal frequency when frequencyDesc/Asc, the strings are further sorted
     // alphabetically.
     val labelsArray = $(stringOrderType) match {
-      case StringIndexer.frequencyDesc =>
-        val sortFunc = StringIndexer.getSortFunc(ascending = false)
-        val orgStrings = countByValue(dataset, inputCols).toSeq
-        ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
-          counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-        }.toArray
-      case StringIndexer.frequencyAsc =>
-        val sortFunc = StringIndexer.getSortFunc(ascending = true)
-        val orgStrings = countByValue(dataset, inputCols).toSeq
-        ThreadUtils.parmap(orgStrings, "sortingStringLabels", 8) { counts =>
-          counts.toSeq.sortWith(sortFunc).map(_._1).toArray
-        }.toArray
-      case StringIndexer.alphabetDesc =>
-        dataset.persist()
-        val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
-        val allLabels = dataset.select(selectedCols: _*)
-          .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
-        val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
-          labels.filter(_ != null).sorted.reverse.toArray
-        }.toArray
-        if (needUnpersist) {
-          dataset.unpersist()
-        }
-        labels
-      case StringIndexer.alphabetAsc =>
-        dataset.persist()
-        val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
-        val allLabels = dataset.select(selectedCols: _*)
-          .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
-        val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
-          labels.filter(_ != null).sorted.toArray
-        }.toArray
-        if (needUnpersist) {
-          dataset.unpersist()
-        }
-        labels
+      case StringIndexer.frequencyDesc => sortByFreq(dataset, ascending = false)
+      case StringIndexer.frequencyAsc => sortByFreq(dataset, ascending = true)
+      case StringIndexer.alphabetDesc => sortByAlphabet(dataset, ascending = false)
+      case StringIndexer.alphabetAsc => sortByAlphabet(dataset, ascending = true)
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
   }
