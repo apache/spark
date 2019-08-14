@@ -53,6 +53,17 @@ import org.apache.spark.streaming.Durations;
  *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
  *      streaming.JavaDirectKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
  *      consumer-group topic1,topic2
+ *
+ * kafka_jaas.conf can manually create, template as:
+ *   KafkaClient {
+ *     com.sun.security.auth.module.Krb5LoginModule required
+ *     keyTab="${path_of_keytab}/kafka.service.keytab"
+ *     useKeyTab=true
+ *     storeKey=true
+ *     useTicketCache=false
+ *     serviceName="kafka"
+ *     principal="kafka/server@example";
+ *   };
  */
 
 public final class JavaDirectKerberizedKafkaWordCount {
