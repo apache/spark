@@ -32,6 +32,6 @@ if [[ "$PYTHON_VERSION_CHECK" == "True" ]]; then
 fi
 
 export JAVA_HOME=/usr/java/jdk-11.0.1
-export PATH=${JAVA_HOME}/bin:${PATH}
+# export PATH=${JAVA_HOME}/bin:${PATH}
 
 exec python -u ./dev/run-tests-jenkins.py "$@"
