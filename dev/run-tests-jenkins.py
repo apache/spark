@@ -122,8 +122,7 @@ def run_tests(tests_timeout):
     test_result_code = subprocess.Popen(['timeout',
                                          tests_timeout,
                                          os.path.join(SPARK_HOME, 'dev', 'run-tests')],
-                                        env=dict(os.environ),
-                                        shell=True).wait()
+                                        env=dict(os.environ)).wait()
 
     failure_note_by_errcode = {
         # error to denote run-tests script failures:
