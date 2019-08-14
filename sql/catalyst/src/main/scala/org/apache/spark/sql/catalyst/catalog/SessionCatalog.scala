@@ -102,7 +102,7 @@ class SessionCatalog(
   @GuardedBy("this")
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
-  private val validNameFormat = "([\\w_]+)".r
+  private val validNameFormat = "([a-zA-Z0-9]+[\\w]+)".r
 
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
@@ -114,7 +114,7 @@ class SessionCatalog(
   private def validateName(name: String): Unit = {
     if (!validNameFormat.pattern.matcher(name).matches()) {
       throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
-        "Valid names only contain alphabet characters, numbers and _.")
+        "Valid names only contain alphabet characters, numbers and _ and do not start with _")
     }
   }
 

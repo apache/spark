@@ -90,12 +90,14 @@ abstract class SessionCatalogSuite extends AnalysisTest {
   def testInvalidName(func: (String) => Unit) {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    val name = "砖"
+    val names = Array("砖" , "_hello")
     // scalastyle:on
-    val e = intercept[AnalysisException] {
-      func(name)
-    }.getMessage
-    assert(e.contains(s"`$name` is not a valid name for tables/databases."))
+    names.foreach { name =>
+      val e = intercept[AnalysisException] {
+        func(name)
+      }.getMessage
+      assert(e.contains(s"`$name` is not a valid name for tables/databases."))
+    }
   }
 
   test("create databases using invalid names") {
