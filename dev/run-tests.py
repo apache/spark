@@ -565,6 +565,10 @@ def main():
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
         excluded_tags = determine_tags_to_exclude(changed_modules)
+
+        if "test-java11" in os.environ["ghprbPullTitle"].lower():
+            os.environ["SBT_OPTS"] = "-Djava.version=11 " + os.environ["SBT_OPTS"]
+
     if not changed_modules:
         changed_modules = [modules.root]
         excluded_tags = []
