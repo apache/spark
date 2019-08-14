@@ -542,4 +542,15 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     }
     assert(e.getMessage.contains("Invalid arguments for function cast"))
   }
+
+  test("[SPARK-23793][SQL]Handle database names in spark.udf.register()") {
+    withTempDatabase(db => {
+      val e = intercept[AnalysisException] {
+        val functionName = s"$db.fun1"
+        spark.udf.register(functionName, (x: Long) => x + 1)
+      }
+      assert(e.getMessage.contains("Invalid arguments for temp function contains database name"))
+    })
+  }
+
 }

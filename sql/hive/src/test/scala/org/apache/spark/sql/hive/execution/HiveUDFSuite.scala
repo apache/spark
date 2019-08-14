@@ -574,9 +574,10 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql(s"CREATE FUNCTION test_avg AS '${classOf[GenericUDAFAverage].getName}'")
       checkAnswer(sql("SELECT test_avg(1)"), Row(1.0))
       // temp function containing dots in the name
-      spark.udf.register("default.test_avg", () => { Math.random() + 2})
-      assert(sql("SELECT `default.test_avg`()").head().getDouble(0) >= 2.0)
-      checkAnswer(sql("SELECT test_avg(1)"), Row(1.0))
+      val e = intercept[AnalysisException] {
+        spark.udf.register("default.test_avg", () => { Math.random() + 2})
+      }
+      assert(e.getMessage.contains("Invalid arguments for temp function contains database name"))
     }
   }
 

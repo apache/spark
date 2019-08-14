@@ -56,9 +56,11 @@ trait FunctionRegistry {
     builder: FunctionBuilder): Unit
 
   /* Create or replace a temporary function. */
-  final def createOrReplaceTempFunction(name: String, builder: FunctionBuilder): Unit = {
+  final def createOrReplaceTempFunction(
+      name: FunctionIdentifier,
+      builder: FunctionBuilder): Unit = {
     registerFunction(
-      FunctionIdentifier(name),
+      name,
       builder)
   }
 
