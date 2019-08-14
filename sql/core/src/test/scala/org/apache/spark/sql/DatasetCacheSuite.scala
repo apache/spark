@@ -246,4 +246,24 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext with TimeLimits 
     assert(df2LimitInnerPlan.isDefined &&
       df2LimitInnerPlan.get.find(_.isInstanceOf[InMemoryTableScanExec]).isEmpty)
   }
+
+  test("SPARK-27739 Save stats from optimized plan") {
+    withTable("a") {
+      spark.range(4)
+        .selectExpr("id", "id % 2 AS p")
+        .write
+        .partitionBy("p")
+        .saveAsTable("a")
+
+      val df = sql("SELECT * FROM a WHERE p = 0")
+      df.cache()
+      df.count()
+      df.queryExecution.withCachedData match {
+        case i: InMemoryRelation =>
+          // Optimized plan has non-default size in bytes
+          assert(i.statsOfPlanToCache.sizeInBytes !==
+            df.sparkSession.sessionState.conf.defaultSizeInBytes)
+      }
+    }
+  }
 }

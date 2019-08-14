@@ -323,7 +323,7 @@ $(document).ready(function () {
                 "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
                 "external sort.");
     $('[data-toggle="tooltip"]').tooltip();
-    tasksSummary = $("#parent-container");
+    var tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
 
         var endPoint = stageEndPoint(appId);
@@ -346,7 +346,7 @@ $(document).ready(function () {
             }
 
             // prepare data for executor summary table
-            stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
+            var stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
                 var executorDetailsMap = {};
@@ -877,7 +877,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 }
-                    ],
+                    ]
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();
@@ -897,14 +897,14 @@ $(document).ready(function () {
                     // Get the column
                     var para = $(this).attr('data-column');
                     if (para == "0") {
-                        var column = taskTableSelector.column(optionalColumns);
+                        var allColumns = taskTableSelector.columns(optionalColumns);
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
-                            column.visible(true);
+                            allColumns.visible(true);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
-                            column.visible(false);
+                            allColumns.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
                                 taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);
