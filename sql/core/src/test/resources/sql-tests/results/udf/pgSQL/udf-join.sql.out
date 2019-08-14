@@ -259,10 +259,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 28
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t)
+SELECT udf(udf('')) AS `xxx`, udf(udf(i)), udf(j), udf(t)
   FROM J1_TBL tx
 -- !query 28 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 28 output
 	0	NULL	zero
 	1	4	one
@@ -278,10 +278,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 29
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c)
+SELECT udf('') AS `xxx`, a, udf(udf(b)), c
   FROM J1_TBL AS t1 (a, b, c)
 -- !query 29 schema
-struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string>
+struct<xxx:string,a:int,CAST(udf(cast(cast(udf(cast(b as string)) as int) as string)) AS INT):int,c:string>
 -- !query 29 output
 	0	NULL	zero
 	1	4	one
@@ -297,10 +297,10 @@ struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as str
 
 
 -- !query 30
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c)
+SELECT udf('') AS `xxx`, udf(a), udf(b), udf(udf(c))
   FROM J1_TBL t1 (a, b, c)
 -- !query 30 schema
-struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string>
+struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(c as string)) as string) as string)) AS STRING):string>
 -- !query 30 output
 	0	NULL	zero
 	1	4	one
@@ -316,10 +316,10 @@ struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as str
 
 
 -- !query 31
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d), udf(e)
+SELECT udf('') AS `xxx`, udf(a), b, udf(c), udf(d), e
   FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e)
 -- !query 31 schema
-struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int,CAST(udf(cast(e as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,b:int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int,e:int>
 -- !query 31 output
 	0	NULL	zero	0	NULL
 	0	NULL	zero	1	-1
@@ -647,11 +647,11 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as str
 
 
 -- !query 35
-SELECT udf('') AS `xxx`, udf(ii), udf(tt), udf(kk)
+SELECT udf(udf('')) AS `xxx`, udf(udf(ii)), udf(udf(tt)), udf(udf(kk))
   FROM (J1_TBL CROSS JOIN J2_TBL)
     AS tx (ii, jj, tt, ii2, kk)
 -- !query 35 schema
-struct<xxx:string,CAST(udf(cast(ii as string)) AS INT):int,CAST(udf(cast(tt as string)) AS STRING):string,CAST(udf(cast(kk as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(ii as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(tt as string)) as string) as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(kk as string)) as int) as string)) AS INT):int>
 -- !query 35 output
 	0	zero	-1
 	0	zero	-3
@@ -755,10 +755,10 @@ struct<xxx:string,CAST(udf(cast(ii as string)) AS INT):int,CAST(udf(cast(tt as s
 
 
 -- !query 36
-SELECT udf('') AS `xxx`, udf(j1_tbl.i), udf(j), udf(t), udf(a.i), udf(a.k), udf(b.i),  udf(b.k)
+SELECT udf('') AS `xxx`, udf(udf(j1_tbl.i)), udf(j), udf(t), udf(a.i), udf(a.k), udf(b.i),  udf(b.k)
   FROM J1_TBL CROSS JOIN J2_TBL a CROSS JOIN J2_TBL b
 -- !query 36 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 36 output
 	0	NULL	zero	0	NULL	0	NULL
 	0	NULL	zero	0	NULL	1	-1
@@ -1669,7 +1669,7 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 38
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL JOIN J2_TBL USING (i)
 -- !query 38 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
@@ -1686,7 +1686,7 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 -- !query 39
 SELECT udf('') AS `xxx`, *
   FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
-  ORDER BY udf(a), udf(d)
+  ORDER BY udf(udf(a)), udf(d)
 -- !query 39 schema
 struct<xxx:string,a:int,b:int,c:string,d:int>
 -- !query 39 output
@@ -1700,7 +1700,7 @@ struct<xxx:string,a:int,b:int,c:string,d:int>
 
 
 -- !query 40
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL NATURAL JOIN J2_TBL
 -- !query 40 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
@@ -1715,10 +1715,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 41
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
+SELECT udf('') AS `xxx`, udf(udf(udf(a))), udf(b), udf(c), udf(d)
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d)
 -- !query 41 schema
-struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(cast(udf(cast(a as string)) as int) as string)) as int) as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
 -- !query 41 output
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1730,10 +1730,10 @@ struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as str
 
 
 -- !query 42
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
+SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)), udf(udf(udf(d)))
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a)
 -- !query 42 schema
-struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(b as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(c as string)) as string) as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(cast(udf(cast(d as string)) as int) as string)) as int) as string)) AS INT):int>
 -- !query 42 output
 	0	NULL	zero	NULL
 	2	3	two	2
@@ -1741,10 +1741,10 @@ struct<xxx:string,CAST(udf(cast(a as string)) AS INT):int,CAST(udf(cast(b as str
 
 
 -- !query 43
-SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.i)
+SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(udf(J1_TBL.j)), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
+  FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) = J2_TBL.i)
 -- !query 43 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(j as string)) as int) as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 43 output
 	0	NULL	zero	0	NULL
 	1	4	one	1	-1
@@ -1756,10 +1756,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 44
-SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), J2_TBL.i, J2_TBL.k
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.k)
+SELECT udf('') AS `xxx`, udf(udf(J1_TBL.i)), udf(udf(J1_TBL.j)), udf(udf(J1_TBL.t)), J2_TBL.i, J2_TBL.k
+  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = udf(J2_TBL.k))
 -- !query 44 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,i:int,k:int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(j as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(t as string)) as string) as string)) AS STRING):string,i:int,k:int>
 -- !query 44 output
 	0	NULL	zero	NULL	0
 	2	3	two	2	2
@@ -1768,7 +1768,7 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 -- !query 45
 SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i <= J2_TBL.k)
+  FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) <= udf(udf(J2_TBL.k)))
 -- !query 45 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 45 output
@@ -1784,9 +1784,9 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 46
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t)
+  ORDER BY udf(udf(i)), udf(k), udf(t)
 -- !query 46 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 46 output
@@ -1808,7 +1808,7 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 -- !query 47
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t)
+  ORDER BY udf(i), udf(udf(k)), udf(t)
 -- !query 47 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 47 output
@@ -1828,10 +1828,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 48
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(udf(i)), udf(j), udf(t), udf(k)
   FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i)
 -- !query 48 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 48 output
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1845,10 +1845,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 49
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(udf(j)), udf(t), udf(k)
   FROM J1_TBL RIGHT JOIN J2_TBL USING (i)
 -- !query 49 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(j as string)) as int) as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 49 output
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1862,11 +1862,11 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 50
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(j), udf(udf(t)), udf(k)
   FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t)
+  ORDER BY udf(udf(i)), udf(k), udf(t)
 -- !query 50 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(t as string)) as string) as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 50 output
 	NULL	NULL	NULL	NULL
 	NULL	NULL	null	NULL
@@ -1886,11 +1886,11 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 51
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(j), t, udf(udf(k))
   FROM J1_TBL FULL JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t)
+  ORDER BY udf(udf(i)), udf(k), udf(udf(t))
 -- !query 51 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,t:string,CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int>
 -- !query 51 output
 	NULL	NULL	NULL	NULL
 	NULL	NULL	null	NULL
@@ -1910,17 +1910,17 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 52
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(udf(k))
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(k) = 1)
 -- !query 52 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(k as string)) as int) as string)) AS INT):int>
 -- !query 52 output
 
 
 
 -- !query 53
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
-  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(i) = 1)
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(udf(i)) = udf(1))
 -- !query 53 schema
 struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 53 output
@@ -2022,7 +2022,7 @@ ee	NULL	42	NULL
 SELECT * FROM
 (SELECT udf(name) as name, t2.n FROM t2) as s2
 INNER JOIN
-(SELECT udf(name) as name, t3.n FROM t3) s3
+(SELECT udf(udf(name)) as name, t3.n FROM t3) s3
 USING (name)
 -- !query 65 schema
 struct<name:string,n:int,n:int>
@@ -2033,7 +2033,7 @@ cc	22	23
 
 -- !query 66
 SELECT * FROM
-(SELECT udf(name) as name, t2.n FROM t2) as s2
+(SELECT udf(udf(name)) as name, t2.n FROM t2) as s2
 LEFT JOIN
 (SELECT udf(name) as name, t3.n FROM t3) s3
 USING (name)
@@ -2046,13 +2046,13 @@ ee	42	NULL
 
 
 -- !query 67
-SELECT udf(name), udf(s2.n), udf(s3.n) FROM
+SELECT udf(name), udf(udf(s2.n)), udf(s3.n) FROM
 (SELECT * FROM t2) as s2
 FULL JOIN
 (SELECT * FROM t3) s3
 USING (name)
 -- !query 67 schema
-struct<CAST(udf(cast(name as string)) AS STRING):string,CAST(udf(cast(n as string)) AS INT):int,CAST(udf(cast(n as string)) AS INT):int>
+struct<CAST(udf(cast(name as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(n as string)) as int) as string)) AS INT):int,CAST(udf(cast(n as string)) AS INT):int>
 -- !query 67 output
 bb	12	13
 cc	22	23
@@ -2062,11 +2062,11 @@ ee	42	NULL
 
 -- !query 68
 SELECT * FROM
-(SELECT udf(name), udf(n) as s2_n, udf(2) as s2_2 FROM t2) as s2
+(SELECT udf(udf(name)) as name, udf(n) as s2_n, udf(2) as s2_2 FROM t2) as s2
 NATURAL INNER JOIN
-(SELECT udf(name), udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3
+(SELECT udf(name) as name, udf(udf(n)) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query 68 schema
-struct<CAST(udf(cast(name as string)) AS STRING):string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<name:string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 68 output
 bb	12	2	13	3
 cc	22	2	23	3
@@ -2074,11 +2074,11 @@ cc	22	2	23	3
 
 -- !query 69
 SELECT * FROM
-(SELECT udf(name), udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(udf(n)) as s2_n, 2 as s2_2 FROM t2) as s2
 NATURAL LEFT JOIN
-(SELECT udf(name), udf(n) as s3_n, 3 as s3_2 FROM t3) s3
+(SELECT udf(udf(name)) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query 69 schema
-struct<CAST(udf(cast(name as string)) AS STRING):string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<name:string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 69 output
 bb	12	2	13	3
 cc	22	2	23	3
@@ -2087,11 +2087,11 @@ ee	42	2	NULL	NULL
 
 -- !query 70
 SELECT * FROM
-(SELECT udf(name), udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
 NATURAL FULL JOIN
-(SELECT udf(name), udf(n) as s3_n, 3 as s3_2 FROM t3) s3
+(SELECT udf(udf(name)) as name, udf(udf(n)) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query 70 schema
-struct<CAST(udf(cast(name as string)) AS STRING):string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<name:string,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 70 output
 bb	12	2	13	3
 cc	22	2	23	3
@@ -2101,26 +2101,26 @@ ee	42	2	NULL	NULL
 
 -- !query 71
 SELECT * FROM
-(SELECT udf(name), udf(n) as s1_n, 1 as s1_1 FROM t1) as s1
+(SELECT udf(udf(name)) as name, udf(n) as s1_n, 1 as s1_1 FROM t1) as s1
 NATURAL INNER JOIN
-(SELECT udf(name), udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
 NATURAL INNER JOIN
-(SELECT udf(name), udf(n) as s3_n, 3 as s3_2 FROM t3) s3
+(SELECT udf(udf(udf(name))) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3
 -- !query 71 schema
-struct<CAST(udf(cast(name as string)) AS STRING):string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<name:string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 71 output
 bb	11	1	12	2	13	3
 
 
 -- !query 72
 SELECT * FROM
-(SELECT udf(name), udf(n) as s1_n, udf(1) as s1_1 FROM t1) as s1
+(SELECT udf(name) as name, udf(n) as s1_n, udf(udf(1)) as s1_1 FROM t1) as s1
 NATURAL FULL JOIN
-(SELECT udf(name), udf(n) as s2_n, udf(2) as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(udf(n)) as s2_n, udf(2) as s2_2 FROM t2) as s2
 NATURAL FULL JOIN
-(SELECT udf(name), udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3
+(SELECT udf(udf(name)) as name, udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3
 -- !query 72 schema
-struct<CAST(udf(cast(name as string)) AS STRING):string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
+struct<name:string,s1_n:int,s1_1:int,s2_n:int,s2_2:int,s3_n:int,s3_2:int>
 -- !query 72 output
 bb	11	1	12	2	13	3
 cc	NULL	NULL	22	2	23	3
@@ -2129,16 +2129,16 @@ ee	NULL	NULL	42	2	NULL	NULL
 
 
 -- !query 73
-SELECT name, udf(s1_n), udf(s2_n), udf(s3_n) FROM
-(SELECT name, udf(n) as s1_n FROM t1) as s1
+SELECT name, udf(udf(s1_n)), udf(s2_n), udf(s3_n) FROM
+(SELECT name, udf(udf(n)) as s1_n FROM t1) as s1
 NATURAL FULL JOIN
   (SELECT * FROM
     (SELECT name, udf(n) as s2_n FROM t2) as s2
     NATURAL FULL JOIN
-    (SELECT name, udf(n) as s3_n FROM t3) as s3
+    (SELECT name, udf(udf(n)) as s3_n FROM t3) as s3
   ) ss2
 -- !query 73 schema
-struct<name:string,CAST(udf(cast(s1_n as string)) AS INT):int,CAST(udf(cast(s2_n as string)) AS INT):int,CAST(udf(cast(s3_n as string)) AS INT):int>
+struct<name:string,CAST(udf(cast(cast(udf(cast(s1_n as string)) as int) as string)) AS INT):int,CAST(udf(cast(s2_n as string)) AS INT):int,CAST(udf(cast(s3_n as string)) AS INT):int>
 -- !query 73 output
 bb	11	12	13
 cc	NULL	22	23
@@ -2151,7 +2151,7 @@ SELECT * FROM
 (SELECT name, n as s1_n FROM t1) as s1
 NATURAL FULL JOIN
   (SELECT * FROM
-    (SELECT name, udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+    (SELECT name, udf(udf(n)) as s2_n, 2 as s2_2 FROM t2) as s2
     NATURAL FULL JOIN
     (SELECT name, udf(n) as s3_n FROM t3) as s3
   ) ss2
@@ -2165,13 +2165,13 @@ ee	NULL	42	2	NULL
 
 
 -- !query 75
-SELECT s1.name, udf(s1_n), s2.name, udf(s2_n) FROM
+SELECT s1.name, udf(s1_n), s2.name, udf(udf(s2_n)) FROM
   (SELECT name, udf(n) as s1_n FROM t1) as s1
 FULL JOIN
   (SELECT name, udf(2) as s2_n FROM t2) as s2
-ON (udf(s1_n) = udf(s2_n))
+ON (udf(udf(s1_n)) = udf(s2_n))
 -- !query 75 schema
-struct<name:string,CAST(udf(cast(s1_n as string)) AS INT):int,name:string,CAST(udf(cast(s2_n as string)) AS INT):int>
+struct<name:string,CAST(udf(cast(s1_n as string)) AS INT):int,name:string,CAST(udf(cast(cast(udf(cast(s2_n as string)) as int) as string)) AS INT):int>
 -- !query 75 output
 NULL	NULL	bb	2
 NULL	NULL	cc	2
@@ -2200,9 +2200,9 @@ struct<>
 
 
 -- !query 78
-select udf(x1), udf(x2) from x
+select udf(udf(x1)), udf(x2) from x
 -- !query 78 schema
-struct<CAST(udf(cast(x1 as string)) AS INT):int,CAST(udf(cast(x2 as string)) AS INT):int>
+struct<CAST(udf(cast(cast(udf(cast(x1 as string)) as int) as string)) AS INT):int,CAST(udf(cast(x2 as string)) AS INT):int>
 -- !query 78 output
 1	11
 2	22
@@ -2212,9 +2212,9 @@ struct<CAST(udf(cast(x1 as string)) AS INT):int,CAST(udf(cast(x2 as string)) AS 
 
 
 -- !query 79
-select udf(y1), udf(y2) from y
+select udf(y1), udf(udf(y2)) from y
 -- !query 79 schema
-struct<CAST(udf(cast(y1 as string)) AS INT):int,CAST(udf(cast(y2 as string)) AS INT):int>
+struct<CAST(udf(cast(y1 as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(y2 as string)) as int) as string)) AS INT):int>
 -- !query 79 output
 1	111
 2	222
@@ -2223,7 +2223,7 @@ struct<CAST(udf(cast(y1 as string)) AS INT):int,CAST(udf(cast(y2 as string)) AS 
 
 
 -- !query 80
-select * from x left join y on (udf(x1) = udf(y1) and udf(x2) is not null)
+select * from x left join y on (udf(x1) = udf(udf(y1)) and udf(x2) is not null)
 -- !query 80 schema
 struct<x1:int,x2:int,y1:int,y2:int>
 -- !query 80 output
@@ -2235,7 +2235,7 @@ struct<x1:int,x2:int,y1:int,y2:int>
 
 
 -- !query 81
-select * from x left join y on (udf(x1) = udf(y1) and udf(y2) is not null)
+select * from x left join y on (udf(udf(x1)) = udf(y1) and udf(y2) is not null)
 -- !query 81 schema
 struct<x1:int,x2:int,y1:int,y2:int>
 -- !query 81 output
@@ -2247,8 +2247,8 @@ struct<x1:int,x2:int,y1:int,y2:int>
 
 
 -- !query 82
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1))
+select * from (x left join y on (udf(x1) = udf(udf(y1)))) left join x xx(xx1,xx2)
+on (udf(udf(x1)) = udf(xx1))
 -- !query 82 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 -- !query 82 output
@@ -2261,7 +2261,7 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 -- !query 83
 select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1) and udf(x2) is not null)
+on (udf(x1) = xx1 and udf(x2) is not null)
 -- !query 83 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 -- !query 83 output
@@ -2273,8 +2273,8 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 
 -- !query 84
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1) and udf(y2) is not null)
+select * from (x left join y on (x1 = udf(y1))) left join x xx(xx1,xx2)
+on (udf(x1) = udf(udf(xx1)) and udf(y2) is not null)
 -- !query 84 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 -- !query 84 output
@@ -2286,8 +2286,8 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 
 -- !query 85
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1) and udf(xx2) is not null)
+select * from (x left join y on (udf(x1) = y1)) left join x xx(xx1,xx2)
+on (udf(udf(x1)) = udf(xx1) and udf(udf(xx2)) is not null)
 -- !query 85 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 -- !query 85 output
@@ -2299,7 +2299,7 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 
 -- !query 86
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
+select * from (x left join y on (udf(udf(x1)) = udf(udf(y1)))) left join x xx(xx1,xx2)
 on (udf(x1) = udf(xx1)) where (udf(x2) is not null)
 -- !query 86 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
@@ -2311,7 +2311,7 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 -- !query 87
 select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1)) where (udf(y2) is not null)
+on (udf(x1) = xx1) where (udf(y2) is not null)
 -- !query 87 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 -- !query 87 output
@@ -2322,7 +2322,7 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 -- !query 88
 select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1)) where (udf(xx2) is not null)
+on (x1 = udf(xx1)) where (xx2 is not null)
 -- !query 88 schema
 struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 -- !query 88 output
@@ -2332,20 +2332,20 @@ struct<x1:int,x2:int,y1:int,y2:int,xx1:int,xx2:int>
 
 
 -- !query 89
-select udf(count(*)) from tenk1 a where udf(unique1) in
+select udf(udf(count(*))) from tenk1 a where udf(udf(unique1)) in
   (select udf(unique1) from tenk1 b join tenk1 c using (unique1)
-   where udf(b.unique2) = udf(42))
+   where udf(udf(b.unique2)) = udf(42))
 -- !query 89 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
+struct<CAST(udf(cast(cast(udf(cast(count(1) as string)) as bigint) as string)) AS BIGINT):bigint>
 -- !query 89 output
 1
 
 
 -- !query 90
 select udf(count(*)) from tenk1 x where
-  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(a.f1)=udf(b.f1)) and
+  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(udf(a.f1))=b.f1) and
   udf(x.unique1) = 0 and
-  udf(x.unique1) in (select aa.f1 from int4_tbl aa,float8_tbl bb where udf(aa.f1)=udf(bb.f1))
+  udf(x.unique1) in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=udf(udf(bb.f1)))
 -- !query 90 schema
 struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 90 output
@@ -2353,20 +2353,20 @@ struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 
 
 -- !query 91
-select udf(count(*)) from tenk1 x where
-  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(a.f1)=udf(b.f1)) and
+select udf(udf(count(*))) from tenk1 x where
+  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(udf(a.f1))=b.f1) and
   udf(x.unique1) = 0 and
-  udf(x.unique1) in (select udf(aa.f1) from int4_tbl aa,float8_tbl bb where udf(aa.f1)=udf(bb.f1))
+  udf(udf(x.unique1)) in (select udf(aa.f1) from int4_tbl aa,float8_tbl bb where udf(aa.f1)=udf(udf(bb.f1)))
 -- !query 91 schema
-struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
+struct<CAST(udf(cast(cast(udf(cast(count(1) as string)) as bigint) as string)) AS BIGINT):bigint>
 -- !query 91 output
 1
 
 
 -- !query 92
 select * from int8_tbl i1 left join (int8_tbl i2 join
-  (select udf(123) as x) ss on udf(i2.q1) = udf(x)) on udf(i1.q2) = udf(i2.q2)
-order by udf(1), 2
+  (select udf(123) as x) ss on udf(udf(i2.q1)) = udf(x)) on udf(udf(i1.q2)) = udf(udf(i2.q2))
+order by udf(udf(1)), 2
 -- !query 92 schema
 struct<q1:bigint,q2:bigint,q1:bigint,q2:bigint,x:int>
 -- !query 92 output
@@ -2383,10 +2383,10 @@ from
   (select udf(t3.tenthous) as x1, udf(coalesce(udf(t1.stringu1), udf(t2.stringu1))) as x2
    from tenk1 t1
    left join tenk1 t2 on udf(t1.unique1) = udf(t2.unique1)
-   join tenk1 t3 on t1.unique2 = t3.unique2) ss,
+   join tenk1 t3 on t1.unique2 = udf(t3.unique2)) ss,
   tenk1 t4,
   tenk1 t5
-where udf(t4.thousand) = udf(t5.unique1) and udf(ss.x1) = udf(t4.tenthous) and udf(ss.x2) = udf(t5.stringu1)
+where udf(t4.thousand) = udf(t5.unique1) and udf(udf(ss.x1)) = t4.tenthous and udf(ss.x2) = udf(udf(t5.stringu1))
 -- !query 93 schema
 struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 93 output
@@ -2396,9 +2396,9 @@ struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 94
 select udf(a.f1), udf(b.f1), udf(t.thousand), udf(t.tenthous) from
   tenk1 t,
-  (select udf(sum(udf(f1))+1) as f1 from int4_tbl i4a) a,
+  (select udf(udf(sum(udf(f1))+1)) as f1 from int4_tbl i4a) a,
   (select udf(sum(udf(f1))) as f1 from int4_tbl i4b) b
-where udf(b.f1) = udf(t.thousand) and udf(a.f1) = udf(b.f1) and udf((udf(a.f1)+udf(b.f1)+999)) = udf(t.tenthous)
+where b.f1 = udf(t.thousand) and udf(a.f1) = udf(b.f1) and udf((udf(a.f1)+udf(b.f1)+999)) = udf(udf(t.tenthous))
 -- !query 94 schema
 struct<CAST(udf(cast(f1 as string)) AS BIGINT):bigint,CAST(udf(cast(f1 as string)) AS BIGINT):bigint,CAST(udf(cast(thousand as string)) AS INT):int,CAST(udf(cast(tenthous as string)) AS INT):int>
 -- !query 94 output
@@ -2408,7 +2408,7 @@ struct<CAST(udf(cast(f1 as string)) AS BIGINT):bigint,CAST(udf(cast(f1 as string
 -- !query 95
 select * from
   j1_tbl full join
-  (select * from j2_tbl order by udf(j2_tbl.i) desc, udf(j2_tbl.k) asc) j2_tbl
+  (select * from j2_tbl order by udf(udf(j2_tbl.i)) desc, udf(j2_tbl.k) asc) j2_tbl
   on udf(j1_tbl.i) = udf(j2_tbl.i) and udf(j1_tbl.i) = udf(j2_tbl.k)
 -- !query 95 schema
 struct<i:int,j:int,t:string,i:int,k:int>
@@ -2436,7 +2436,7 @@ NULL	NULL	null	NULL	NULL
 
 -- !query 96
 select udf(count(*)) from
-  (select * from tenk1 x order by udf(x.thousand), udf(x.twothousand), x.fivethous) x
+  (select * from tenk1 x order by udf(x.thousand), udf(udf(x.twothousand)), x.fivethous) x
   left join
   (select * from tenk1 y order by udf(y.unique2)) y
   on udf(x.thousand) = y.unique2 and x.twothousand = udf(y.hundred) and x.fivethous = y.unique2
@@ -2507,7 +2507,7 @@ struct<>
 
 
 -- !query 104
-select tt1.*, tt2.* from tt1 left join tt2 on udf(tt1.joincol) = udf(tt2.joincol)
+select tt1.*, tt2.* from tt1 left join tt2 on udf(udf(tt1.joincol)) = udf(tt2.joincol)
 -- !query 104 schema
 struct<tt1_id:int,joincol:int,tt2_id:int,joincol:int>
 -- !query 104 output
@@ -2517,7 +2517,7 @@ struct<tt1_id:int,joincol:int,tt2_id:int,joincol:int>
 
 
 -- !query 105
-select tt1.*, tt2.* from tt2 right join tt1 on udf(tt1.joincol) = udf(tt2.joincol)
+select tt1.*, tt2.* from tt2 right join tt1 on udf(udf(tt1.joincol)) = udf(udf(tt2.joincol))
 -- !query 105 schema
 struct<tt1_id:int,joincol:int,tt2_id:int,joincol:int>
 -- !query 105 output
@@ -2528,7 +2528,7 @@ struct<tt1_id:int,joincol:int,tt2_id:int,joincol:int>
 
 -- !query 106
 select udf(count(*)) from tenk1 a, tenk1 b
-  where udf(a.hundred) = udf(b.thousand) and udf(udf((b.fivethous % 10)) < 10)
+  where udf(a.hundred) = b.thousand and udf(udf((b.fivethous % 10)) < 10)
 -- !query 106 schema
 struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 106 output
@@ -2584,14 +2584,14 @@ struct<>
 
 
 -- !query 113
-SELECT udf(a.f1) as f1
+SELECT udf(udf(a.f1)) as f1
 FROM tt4 a
 LEFT JOIN (
         SELECT b.f1
         FROM tt3 b LEFT JOIN tt3 c ON udf(b.f1) = udf(c.f1)
         WHERE udf(c.f1) IS NULL
-) AS d ON udf(a.f1) = udf(d.f1)
-WHERE udf(d.f1) IS NULL
+) AS d ON udf(a.f1) = d.f1
+WHERE udf(udf(d.f1)) IS NULL
 -- !query 113 schema
 struct<f1:int>
 -- !query 113 output
@@ -2621,7 +2621,7 @@ struct<>
 
 
 -- !query 116
-select * from tt5,tt6 where udf(tt5.f1) = udf(tt6.f1) and udf(tt5.f1) = udf(tt5.f2 - tt6.f2)
+select * from tt5,tt6 where udf(tt5.f1) = udf(tt6.f1) and udf(tt5.f1) = udf(udf(tt5.f2) - udf(tt6.f2))
 -- !query 116 schema
 struct<f1:int,f2:int,f1:int,f2:int>
 -- !query 116 output
@@ -2649,12 +2649,12 @@ struct<>
 
 
 -- !query 119
-select udf(yy.pkyy) as yy_pkyy, udf(yy.pkxx) as yy_pkxx, udf(yya.pkyy) as yya_pkyy,
+select udf(udf(yy.pkyy)) as yy_pkyy, udf(yy.pkxx) as yy_pkxx, udf(yya.pkyy) as yya_pkyy,
        udf(xxa.pkxx) as xxa_pkxx, udf(xxb.pkxx) as xxb_pkxx
 from yy
      left join (SELECT * FROM yy where pkyy = 101) as yya ON udf(yy.pkyy) = udf(yya.pkyy)
-     left join xx xxa on udf(yya.pkxx) = udf(xxa.pkxx)
-     left join xx xxb on udf(coalesce (xxa.pkxx, 1)) = udf(xxb.pkxx)
+     left join xx xxa on udf(yya.pkxx) = udf(udf(xxa.pkxx))
+     left join xx xxb on udf(udf(coalesce (xxa.pkxx, 1))) = udf(xxb.pkxx)
 -- !query 119 schema
 struct<yy_pkyy:int,yy_pkxx:int,yya_pkyy:int,xxa_pkxx:int,xxb_pkxx:int>
 -- !query 119 output
@@ -2693,8 +2693,8 @@ struct<>
 
 -- !query 123
 select * from
-  zt2 left join zt3 on (udf(f2) = udf(f3))
-      left join zt1 on (udf(f3) = udf(f1))
+  zt2 left join zt3 on (udf(f2) = udf(udf(f3)))
+      left join zt1 on (udf(udf(f3)) = udf(f1))
 where udf(f2) = 53
 -- !query 123 schema
 struct<f2:int,f3:int,f1:int>
@@ -2712,8 +2712,8 @@ struct<>
 
 -- !query 125
 select * from
-  zt2 left join zt3 on (udf(f2) = udf(f3))
-      left join zv1 on (udf(f3) = udf(f1))
+  zt2 left join zt3 on (f2 = udf(f3))
+      left join zv1 on (udf(f3) = f1)
 where udf(f2) = udf(53)
 -- !query 125 schema
 struct<f2:int,f3:int,f1:int,junk:string>
@@ -2723,9 +2723,9 @@ struct<f2:int,f3:int,f1:int,junk:string>
 
 -- !query 126
 select udf(a.unique2), udf(a.ten), udf(b.tenthous), udf(b.unique2), udf(b.hundred)
-from tenk1 a left join tenk1 b on udf(a.unique2) = udf(b.tenthous)
+from tenk1 a left join tenk1 b on a.unique2 = udf(b.tenthous)
 where udf(a.unique1) = 42 and
-      ((udf(b.unique2) is null and udf(a.ten) = 2) or udf(b.hundred) = udf(3))
+      ((udf(b.unique2) is null and udf(a.ten) = 2) or udf(udf(b.hundred)) = udf(udf(3)))
 -- !query 126 schema
 struct<CAST(udf(cast(unique2 as string)) AS INT):int,CAST(udf(cast(ten as string)) AS INT):int,CAST(udf(cast(tenthous as string)) AS INT):int,CAST(udf(cast(unique2 as string)) AS INT):int,CAST(udf(cast(hundred as string)) AS INT):int>
 -- !query 126 output
@@ -2749,7 +2749,7 @@ struct<>
 
 
 -- !query 129
-select * from a left join b on udf(i) = udf(x) and udf(i) = udf(y) and udf(x) = udf(i)
+select * from a left join b on udf(i) = x and i = udf(y) and udf(x) = udf(i)
 -- !query 129 schema
 struct<i:int,x:int,y:int>
 -- !query 129 output
@@ -2758,7 +2758,7 @@ struct<i:int,x:int,y:int>
 
 -- !query 130
 select udf(t1.q2), udf(count(t2.*))
-from int8_tbl t1 left join int8_tbl t2 on (udf(t1.q2) = udf(t2.q1))
+from int8_tbl t1 left join int8_tbl t2 on (udf(udf(t1.q2)) = t2.q1)
 group by udf(t1.q2) order by 1
 -- !query 130 schema
 struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2) as string)) AS BIGINT):bigint>
@@ -2770,11 +2770,11 @@ struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2
 
 
 -- !query 131
-select udf(t1.q2), udf(count(t2.*))
-from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(t1.q2) = udf(t2.q1))
-group by udf(t1.q2) order by 1
+select udf(udf(t1.q2)), udf(count(t2.*))
+from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(udf(t1.q2)) = udf(t2.q1))
+group by udf(udf(t1.q2)) order by 1
 -- !query 131 schema
-struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2) as string)) AS BIGINT):bigint>
+struct<CAST(udf(cast(cast(udf(cast(q2 as string)) as bigint) as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2) as string)) AS BIGINT):bigint>
 -- !query 131 output
 -4567890123456789	0
 123	2
@@ -2783,13 +2783,13 @@ struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(count(q1, q2
 
 
 -- !query 132
-select udf(t1.q2) as q2, udf(count(t2.*))
+select udf(t1.q2) as q2, udf(udf(count(t2.*)))
 from int8_tbl t1 left join
   (select udf(q1) as q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
   on (udf(t1.q2) = udf(t2.q1))
 group by t1.q2 order by 1
 -- !query 132 schema
-struct<q2:bigint,CAST(udf(cast(count(q1, q2) as string)) AS BIGINT):bigint>
+struct<q2:bigint,CAST(udf(cast(cast(udf(cast(count(q1, q2) as string)) as bigint) as string)) AS BIGINT):bigint>
 -- !query 132 output
 -4567890123456789	0
 123	2
@@ -2833,9 +2833,9 @@ from c left join
   (select a.code, coalesce(b_grp.cnt, 0) as b_cnt, -1 as const
    from a left join
      (select udf(count(1)) as cnt, b.a as a from b group by b.a) as b_grp
-     on udf(a.code) = udf(b_grp.a)
+     on udf(a.code) = udf(udf(b_grp.a))
   ) as ss
-  on (udf(c.a) = udf(ss.code))
+  on (udf(udf(c.a)) = udf(ss.code))
 order by c.name
 -- !query 136 schema
 struct<CAST(udf(cast(name as string)) AS STRING):string,CAST(udf(cast(code as string)) AS STRING):string,CAST(udf(cast(b_cnt as string)) AS BIGINT):bigint,CAST(udf(cast(const as string)) AS INT):int>
@@ -2852,15 +2852,15 @@ LEFT JOIN
 ( SELECT sub3.key3, sub4.value2, COALESCE(sub4.value2, 66) as value3 FROM
     ( SELECT 1 as key3 ) sub3
     LEFT JOIN
-    ( SELECT udf(sub5.key5) as key5, udf(COALESCE(sub6.value1, 1)) as value2 FROM
+    ( SELECT udf(sub5.key5) as key5, udf(udf(COALESCE(sub6.value1, 1))) as value2 FROM
         ( SELECT 1 as key5 ) sub5
         LEFT JOIN
         ( SELECT 2 as key6, 42 as value1 ) sub6
-        ON udf(sub5.key5) = udf(sub6.key6)
+        ON sub5.key5 = udf(sub6.key6)
     ) sub4
-    ON udf(sub4.key5) = udf(sub3.key3)
+    ON udf(sub4.key5) = sub3.key3
 ) sub2
-ON udf(sub1.key1) = udf(sub2.key3)
+ON udf(udf(sub1.key1)) = udf(udf(sub2.key3))
 -- !query 137 schema
 struct<key1:int,key3:int,value2:int,value3:int>
 -- !query 137 output
@@ -2878,11 +2878,11 @@ LEFT JOIN
         ( SELECT 1 as key5 ) sub5
         LEFT JOIN
         ( SELECT 2 as key6, 42 as value1 ) sub6
-        ON sub5.key5 = sub6.key6
+        ON udf(udf(sub5.key5)) = sub6.key6
     ) sub4
     ON sub4.key5 = sub3.key3
 ) sub2
-ON sub1.key1 = sub2.key3
+ON sub1.key1 = udf(udf(sub2.key3))
 -- !query 138 schema
 struct<key1:int,key3:int,CAST(udf(cast(value2 as string)) AS INT):int,value3:int>
 -- !query 138 output
@@ -2890,15 +2890,15 @@ struct<key1:int,key3:int,CAST(udf(cast(value2 as string)) AS INT):int,value3:int
 
 
 -- !query 139
-SELECT udf(qq), udf(unique1)
+SELECT udf(qq), udf(udf(unique1))
   FROM
   ( SELECT udf(COALESCE(q1, 0)) AS qq FROM int8_tbl a ) AS ss1
   FULL OUTER JOIN
-  ( SELECT udf(COALESCE(q2, -1)) AS qq FROM int8_tbl b ) AS ss2
+  ( SELECT udf(udf(COALESCE(q2, -1))) AS qq FROM int8_tbl b ) AS ss2
   USING (qq)
   INNER JOIN tenk1 c ON udf(qq) = udf(unique2)
 -- !query 139 schema
-struct<CAST(udf(cast(qq as string)) AS BIGINT):bigint,CAST(udf(cast(unique1 as string)) AS INT):int>
+struct<CAST(udf(cast(qq as string)) AS BIGINT):bigint,CAST(udf(cast(cast(udf(cast(unique1 as string)) as int) as string)) AS INT):int>
 -- !query 139 output
 123	4596
 123	4596
@@ -2943,9 +2943,9 @@ from nt3 as nt3
      from nt2 as nt2
        left join
          (select nt1.*, (udf(nt1.id) is not null) as a3 from nt1) as ss1
-         on udf(ss1.id) = udf(nt2.nt1_id)
+         on ss1.id = udf(udf(nt2.nt1_id))
     ) as ss2
-    on udf(ss2.id) = udf(nt3.nt2_id)
+    on udf(ss2.id) = nt3.nt2_id
 where udf(nt3.id) = 1 and udf(ss2.b3)
 -- !query 143 schema
 struct<CAST(udf(cast(id as string)) AS INT):int>
@@ -3005,8 +3005,8 @@ NULL	2147483647
 -- !query 146
 select udf(count(*)) from
   tenk1 a join tenk1 b on udf(a.unique1) = udf(b.unique2)
-  left join tenk1 c on udf(a.unique2) = udf(b.unique1) and udf(c.thousand) = udf(a.thousand)
-  join int4_tbl on udf(b.thousand) = udf(f1)
+  left join tenk1 c on udf(a.unique2) = udf(b.unique1) and udf(c.thousand) = udf(udf(a.thousand))
+  join int4_tbl on udf(b.thousand) = f1
 -- !query 146 schema
 struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 146 output
@@ -3016,9 +3016,9 @@ struct<CAST(udf(cast(count(1) as string)) AS BIGINT):bigint>
 -- !query 147
 select udf(b.unique1) from
   tenk1 a join tenk1 b on udf(a.unique1) = udf(b.unique2)
-  left join tenk1 c on udf(b.unique1) = udf(42) and udf(c.thousand) = udf(a.thousand)
-  join int4_tbl i1 on udf(b.thousand) = udf(f1)
-  right join int4_tbl i2 on udf(i2.f1) = udf(b.tenthous)
+  left join tenk1 c on udf(b.unique1) = 42 and c.thousand = udf(a.thousand)
+  join int4_tbl i1 on udf(b.thousand) = udf(udf(f1))
+  right join int4_tbl i2 on udf(udf(i2.f1)) = udf(b.tenthous)
   order by udf(1)
 -- !query 147 schema
 struct<CAST(udf(cast(unique1 as string)) AS INT):int>
@@ -3033,7 +3033,7 @@ NULL
 -- !query 148
 select * from
 (
-  select udf(unique1), udf(q1), udf(coalesce(unique1, -1)) + udf(q1) as fault
+  select udf(unique1), udf(q1), udf(udf(coalesce(unique1, -1)) + udf(q1)) as fault
   from int8_tbl left join tenk1 on (udf(q2) = udf(unique2))
 ) ss
 where udf(fault) = udf(122)
@@ -3047,7 +3047,7 @@ NULL	123	122
 -- !query 149
 select udf(q1), udf(unique2), udf(thousand), udf(hundred)
   from int8_tbl a left join tenk1 b on udf(q1) = udf(unique2)
-  where udf(coalesce(thousand,123)) = udf(q1) and udf(q1) = udf(coalesce(hundred,123))
+  where udf(coalesce(thousand,123)) = udf(q1) and udf(q1) = udf(udf(coalesce(hundred,123)))
 -- !query 149 schema
 struct<CAST(udf(cast(q1 as string)) AS BIGINT):bigint,CAST(udf(cast(unique2 as string)) AS INT):int,CAST(udf(cast(thousand as string)) AS INT):int,CAST(udf(cast(hundred as string)) AS INT):int>
 -- !query 149 output
@@ -3055,19 +3055,19 @@ struct<CAST(udf(cast(q1 as string)) AS BIGINT):bigint,CAST(udf(cast(unique2 as s
 
 
 -- !query 150
-select udf(f1), udf(unique2), case when udf(unique2) is null then udf(f1) else 0 end
-  from int4_tbl a left join tenk1 b on udf(f1) = udf(unique2)
+select udf(f1), udf(unique2), case when udf(udf(unique2)) is null then udf(f1) else 0 end
+  from int4_tbl a left join tenk1 b on udf(f1) = udf(udf(unique2))
   where (case when udf(unique2) is null then udf(f1) else 0 end) = 0
 -- !query 150 schema
-struct<CAST(udf(cast(f1 as string)) AS INT):int,CAST(udf(cast(unique2 as string)) AS INT):int,CASE WHEN (CAST(udf(cast(unique2 as string)) AS INT) IS NULL) THEN CAST(udf(cast(f1 as string)) AS INT) ELSE 0 END:int>
+struct<CAST(udf(cast(f1 as string)) AS INT):int,CAST(udf(cast(unique2 as string)) AS INT):int,CASE WHEN (CAST(udf(cast(cast(udf(cast(unique2 as string)) as int) as string)) AS INT) IS NULL) THEN CAST(udf(cast(f1 as string)) AS INT) ELSE 0 END:int>
 -- !query 150 output
 0	0	0
 
 
 -- !query 151
 select udf(a.unique1), udf(b.unique1), udf(c.unique1), udf(coalesce(b.twothousand, a.twothousand))
-  from tenk1 a left join tenk1 b on udf(b.thousand) = udf(a.unique1)                        left join tenk1 c on udf(c.unique2) = udf(coalesce(b.twothousand, a.twothousand))
-  where udf(a.unique2) < udf(10) and udf(coalesce(b.twothousand, a.twothousand)) = udf(44)
+  from tenk1 a left join tenk1 b on udf(b.thousand) = a.unique1                       left join tenk1 c on udf(c.unique2) = udf(coalesce(b.twothousand, a.twothousand))
+  where a.unique2 < udf(10) and udf(udf(coalesce(b.twothousand, a.twothousand))) = udf(44)
 -- !query 151 schema
 struct<CAST(udf(cast(unique1 as string)) AS INT):int,CAST(udf(cast(unique1 as string)) AS INT):int,CAST(udf(cast(unique1 as string)) AS INT):int,CAST(udf(cast(coalesce(twothousand, twothousand) as string)) AS INT):int>
 -- !query 151 output
@@ -3078,11 +3078,11 @@ struct<CAST(udf(cast(unique1 as string)) AS INT):int,CAST(udf(cast(unique1 as st
 select * from
   text_tbl t1
   inner join int8_tbl i8
-  on udf(i8.q2) = udf(456)
+  on udf(i8.q2) = udf(udf(456))
   right join text_tbl t2
-  on udf(t1.f1) = udf('doh!')
+  on udf(t1.f1) = udf(udf('doh!'))
   left join int4_tbl i4
-  on udf(i8.q1) = udf(i4.f1)
+  on udf(udf(i8.q1)) = i4.f1
 -- !query 152 schema
 struct<f1:string,q1:bigint,q2:bigint,f1:string,f1:int>
 -- !query 152 output
@@ -3092,10 +3092,10 @@ doh!	123	456	hi de ho neighbor	NULL
 
 -- !query 153
 select * from
-  (select udf(1) as id) as xx
+  (select udf(udf(1)) as id) as xx
   left join
     (tenk1 as a1 full join (select udf(1) as id) as yy on (udf(a1.unique1) = udf(yy.id)))
-  on (udf(xx.id) = udf(coalesce(yy.id)))
+  on (xx.id = udf(udf(coalesce(yy.id))))
 -- !query 153 schema
 struct<id:int,unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundred:int,thousand:int,twothousand:int,fivethous:int,tenthous:int,odd:int,even:int,stringu1:string,stringu2:string,string4:string,id:int>
 -- !query 153 output
@@ -3104,8 +3104,8 @@ struct<id:int,unique1:int,unique2:int,two:int,four:int,ten:int,twenty:int,hundre
 
 -- !query 154
 select udf(a.q2), udf(b.q1)
-  from int8_tbl a left join int8_tbl b on udf(a.q2) = udf(coalesce(b.q1, 1))
-  where udf(coalesce(b.q1, 1)) > 0
+  from int8_tbl a left join int8_tbl b on udf(a.q2) = coalesce(b.q1, 1)
+  where udf(udf(coalesce(b.q1, 1)) > 0)
 -- !query 154 schema
 struct<CAST(udf(cast(q2 as string)) AS BIGINT):bigint,CAST(udf(cast(q1 as string)) AS BIGINT):bigint>
 -- !query 154 output
@@ -3153,8 +3153,8 @@ struct<k:int,pd:int>
 
 -- !query 158
 select p.*, linked from parent p
-  left join (select c.*, udf(true) as linked from child c) as ss
-  on (udf(p.k) = udf(ss.k))
+  left join (select c.*, udf(udf(true)) as linked from child c) as ss
+  on (udf(p.k) = udf(udf(ss.k)))
 -- !query 158 schema
 struct<k:int,pd:int,linked:boolean>
 -- !query 158 output
@@ -3165,8 +3165,8 @@ struct<k:int,pd:int,linked:boolean>
 
 -- !query 159
 select p.* from
-  parent p left join child c on (udf(p.k) = udf(c.k))
-  where udf(p.k) = udf(1) and udf(p.k) = udf(2)
+  parent p left join child c on (udf(p.k) = c.k)
+  where p.k = udf(1) and udf(udf(p.k)) = udf(udf(2))
 -- !query 159 schema
 struct<k:int,pd:int>
 -- !query 159 output
@@ -3175,8 +3175,8 @@ struct<k:int,pd:int>
 
 -- !query 160
 select p.* from
-  (parent p left join child c on (udf(p.k) = udf(c.k))) join parent x on udf(p.k) = udf(x.k)
-  where udf(p.k) = udf(1) and udf(p.k) = udf(2)
+  (parent p left join child c on (udf(p.k) = c.k)) join parent x on p.k = udf(x.k)
+  where udf(p.k) = udf(1) and udf(udf(p.k)) = udf(udf(2))
 -- !query 160 schema
 struct<k:int,pd:int>
 -- !query 160 output
@@ -3204,7 +3204,7 @@ struct<>
 
 
 -- !query 163
-SELECT * FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(a.id) IS NULL OR udf(a.id) > 0)
+SELECT * FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(udf(a.id)) IS NULL OR udf(a.id) > 0)
 -- !query 163 schema
 struct<id:int,a_id:int,id:int>
 -- !query 163 output
@@ -3212,7 +3212,7 @@ struct<id:int,a_id:int,id:int>
 
 
 -- !query 164
-SELECT b.* FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(a.id) IS NULL OR udf(a.id) > 0)
+SELECT b.* FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(a.id) IS NULL OR udf(udf(a.id)) > 0)
 -- !query 164 schema
 struct<id:int,a_id:int>
 -- !query 164 output
@@ -3234,7 +3234,7 @@ SELECT * FROM
     (SELECT udf(1) AS x) ss1
   LEFT JOIN
     (SELECT udf(q1), udf(q2), udf(COALESCE(dat1, q1)) AS y
-     FROM int8_tbl LEFT JOIN innertab ON udf(q2) = udf(id)) ss2
+     FROM int8_tbl LEFT JOIN innertab ON udf(udf(q2)) = id) ss2
   ON true
 -- !query 166 schema
 struct<x:int,CAST(udf(cast(q1 as string)) AS BIGINT):bigint,CAST(udf(cast(q2 as string)) AS BIGINT):bigint,y:bigint>
@@ -3270,7 +3270,7 @@ cannot resolve '`y.f1`' given input columns: [j.f1, j.f1, x.q1, x.q2]; line 3 po
 -- !query 169
 -- error
 select * from
-  int8_tbl x join (int4_tbl x cross join int4_tbl y(ff)) j on udf(q1) = udf(f1)
+  int8_tbl x join (int4_tbl x cross join int4_tbl y(ff)) j on udf(q1) = udf(udf(f1))
 -- !query 169 schema
 struct<q1:bigint,q2:bigint,f1:int,ff:int>
 -- !query 169 output
@@ -3282,7 +3282,7 @@ struct<q1:bigint,q2:bigint,f1:int,ff:int>
 
 
 select udf(t1.uunique1) from
-  tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two)
+  tenk1 t1 join tenk2 t2 on t1.two = udf(t2.two)
 -- !query 170 schema
 struct<>
 -- !query 170 output
@@ -3292,13 +3292,13 @@ cannot resolve '`t1.uunique1`' given input columns: [t1.even, t2.even, t1.fiveth
 
 -- !query 171
 -- error, prefer "t1" suggestion
-select udf(t2.uunique1) from
-  tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two)
+select udf(udf(t2.uunique1)) from
+  tenk1 t1 join tenk2 t2 on udf(t1.two) = t2.two
 -- !query 171 schema
 struct<>
 -- !query 171 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`t2.uunique1`' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 2 pos 11
+cannot resolve '`t2.uunique1`' given input columns: [t1.even, t2.even, t1.fivethous, t2.fivethous, t1.four, t2.four, t1.hundred, t2.hundred, t1.odd, t2.odd, t1.string4, t2.string4, t1.stringu1, t2.stringu1, t1.stringu2, t2.stringu2, t1.ten, t2.ten, t1.tenthous, t2.tenthous, t1.thousand, t2.thousand, t1.twenty, t2.twenty, t1.two, t2.two, t1.twothousand, t2.twothousand, t1.unique1, t2.unique1, t1.unique2, t2.unique2]; line 2 pos 15
 
 
 -- !query 172
@@ -3338,39 +3338,39 @@ cannot resolve '`uunique1`' given input columns: [t1.even, t2.even, t1.fivethous
 
 
 
-select udf(f1,g) from int4_tbl a, (select udf(f1) as g) ss
+select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss
 -- !query 173 schema
 struct<>
 -- !query 173 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`f1`' given input columns: []; line 26 pos 46
+cannot resolve '`f1`' given input columns: []; line 26 pos 55
 
 
 -- !query 174
-select udf(f1,g) from int4_tbl a, (select udf(a.f1) as g) ss
+select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss
 -- !query 174 schema
 struct<>
 -- !query 174 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`a.f1`' given input columns: []; line 1 pos 46
+cannot resolve '`a.f1`' given input columns: []; line 1 pos 42
 
 
 -- !query 175
-select udf(f1,g) from int4_tbl a cross join (select udf(f1) as g) ss
+select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss
 -- !query 175 schema
 struct<>
 -- !query 175 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`f1`' given input columns: []; line 1 pos 56
+cannot resolve '`f1`' given input columns: []; line 1 pos 61
 
 
 -- !query 176
-select udf(f1,g) from int4_tbl a cross join (select udf(a.f1) as g) ss
+select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss
 -- !query 176 schema
 struct<>
 -- !query 176 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`a.f1`' given input columns: []; line 1 pos 56
+cannot resolve '`a.f1`' given input columns: []; line 1 pos 60
 
 
 -- !query 177
@@ -3415,8 +3415,8 @@ struct<>
 
 -- !query 182
 select * from j1
-inner join j2 on udf(j1.id1) = udf(j2.id1) and udf(j1.id2) = udf(j2.id2)
-where udf(j1.id1) % 1000 = 1 and udf(j2.id1) % 1000 = 1
+inner join j2 on udf(j1.id1) = udf(j2.id1) and udf(udf(j1.id2)) = udf(j2.id2)
+where udf(j1.id1) % 1000 = 1 and udf(udf(j2.id1) % 1000) = 1
 -- !query 182 schema
 struct<id1:int,id2:int,id1:int,id2:int>
 -- !query 182 output

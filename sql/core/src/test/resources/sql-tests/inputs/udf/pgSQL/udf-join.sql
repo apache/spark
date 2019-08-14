@@ -78,16 +78,16 @@ INSERT INTO J2_TBL VALUES (NULL, 0);
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t)
   FROM J1_TBL AS tx;
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t)
+SELECT udf(udf('')) AS `xxx`, udf(udf(i)), udf(j), udf(t)
   FROM J1_TBL tx;
 
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c)
+SELECT udf('') AS `xxx`, a, udf(udf(b)), c
   FROM J1_TBL AS t1 (a, b, c);
 
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c)
+SELECT udf('') AS `xxx`, udf(a), udf(b), udf(udf(c))
   FROM J1_TBL t1 (a, b, c);
 
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d), udf(e)
+SELECT udf('') AS `xxx`, udf(a), b, udf(c), udf(d), e
   FROM J1_TBL t1 (a, b, c), J2_TBL t2 (d, e);
 
 -- [SPARK-28377] Fully support correlation names in the FROM clause
@@ -113,7 +113,7 @@ SELECT udf('') AS `xxx`, udf(i), udf(k), udf(t)
 SELECT udf('') AS `xxx`, udf(t1.i), udf(k), udf(t)
   FROM J1_TBL t1 CROSS JOIN J2_TBL t2;
 
-SELECT udf('') AS `xxx`, udf(ii), udf(tt), udf(kk)
+SELECT udf(udf('')) AS `xxx`, udf(udf(ii)), udf(udf(tt)), udf(udf(kk))
   FROM (J1_TBL CROSS JOIN J2_TBL)
     AS tx (ii, jj, tt, ii2, kk);
 
@@ -122,7 +122,7 @@ SELECT udf('') AS `xxx`, udf(ii), udf(tt), udf(kk)
 --   FROM (J1_TBL t1 (a, b, c) CROSS JOIN J2_TBL t2 (d, e))
 --     AS tx (ii, jj, tt, ii2, kk);
 
-SELECT udf('') AS `xxx`, udf(j1_tbl.i), udf(j), udf(t), udf(a.i), udf(a.k), udf(b.i),  udf(b.k)
+SELECT udf('') AS `xxx`, udf(udf(j1_tbl.i)), udf(j), udf(t), udf(a.i), udf(a.k), udf(b.i),  udf(b.k)
   FROM J1_TBL CROSS JOIN J2_TBL a CROSS JOIN J2_TBL b;
 
 
@@ -143,12 +143,12 @@ SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL INNER JOIN J2_TBL USING (i);
 
 -- Same as above, slightly different syntax
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL JOIN J2_TBL USING (i);
 
 SELECT udf('') AS `xxx`, *
   FROM J1_TBL t1 (a, b, c) JOIN J2_TBL t2 (a, d) USING (a)
-  ORDER BY udf(a), udf(d);
+  ORDER BY udf(udf(a)), udf(d);
 
 -- [SPARK-28377] Fully support correlation names in the FROM clause
 -- SELECT '' AS `xxx`, *
@@ -161,13 +161,13 @@ SELECT udf('') AS `xxx`, *
 -- Inner equi-join on all columns with the same name
 --
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL NATURAL JOIN J2_TBL;
 
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
+SELECT udf('') AS `xxx`, udf(udf(udf(a))), udf(b), udf(c), udf(d)
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d);
 
-SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
+SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)), udf(udf(udf(d)))
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a);
 
 -- [SPARK-28377] Fully support correlation names in the FROM clause
@@ -181,11 +181,11 @@ SELECT udf('') AS `xxx`, udf(a), udf(b), udf(c), udf(d)
 -- Inner joins (equi-joins)
 --
 
-SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.i);
+SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(udf(J1_TBL.j)), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
+  FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) = J2_TBL.i);
 
-SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), J2_TBL.i, J2_TBL.k
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = J2_TBL.k);
+SELECT udf('') AS `xxx`, udf(udf(J1_TBL.i)), udf(udf(J1_TBL.j)), udf(udf(J1_TBL.t)), J2_TBL.i, J2_TBL.k
+  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i = udf(J2_TBL.k));
 
 
 --
@@ -193,7 +193,7 @@ SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), J2_TBL.i, 
 --
 
 SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL.i), udf(J2_TBL.k)
-  FROM J1_TBL JOIN J2_TBL ON (J1_TBL.i <= J2_TBL.k);
+  FROM J1_TBL JOIN J2_TBL ON (udf(J1_TBL.i) <= udf(udf(J2_TBL.k)));
 
 
 --
@@ -201,33 +201,33 @@ SELECT udf('') AS `xxx`, udf(J1_TBL.i), udf(J1_TBL.j), udf(J1_TBL.t), udf(J2_TBL
 -- Note that OUTER is a noise word
 --
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT OUTER JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t);
+  ORDER BY udf(udf(i)), udf(k), udf(t);
 
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL LEFT JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t);
+  ORDER BY udf(i), udf(udf(k)), udf(t);
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(udf(i)), udf(j), udf(t), udf(k)
   FROM J1_TBL RIGHT OUTER JOIN J2_TBL USING (i);
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(udf(j)), udf(t), udf(k)
   FROM J1_TBL RIGHT JOIN J2_TBL USING (i);
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(j), udf(udf(t)), udf(k)
   FROM J1_TBL FULL OUTER JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t);
+  ORDER BY udf(udf(i)), udf(k), udf(t);
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(j), t, udf(udf(k))
   FROM J1_TBL FULL JOIN J2_TBL USING (i)
-  ORDER BY udf(i), udf(k), udf(t);
+  ORDER BY udf(udf(i)), udf(k), udf(udf(t));
 
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(udf(k))
   FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(k) = 1);
 
 SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
-  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(i) = 1);
+  FROM J1_TBL LEFT JOIN J2_TBL USING (i) WHERE (udf(udf(i)) = udf(1));
 
 --
 -- semijoin selectivity for <>
@@ -269,16 +269,16 @@ SELECT * FROM t1 FULL JOIN t2 USING (name) FULL JOIN t3 USING (name);
 SELECT * FROM
 (SELECT udf(name) as name, t2.n FROM t2) as s2
 INNER JOIN
-(SELECT udf(name) as name, t3.n FROM t3) s3
+(SELECT udf(udf(name)) as name, t3.n FROM t3) s3
 USING (name);
 
 SELECT * FROM
-(SELECT udf(name) as name, t2.n FROM t2) as s2
+(SELECT udf(udf(name)) as name, t2.n FROM t2) as s2
 LEFT JOIN
 (SELECT udf(name) as name, t3.n FROM t3) s3
 USING (name);
 
-SELECT udf(name), udf(s2.n), udf(s3.n) FROM
+SELECT udf(name), udf(udf(s2.n)), udf(s3.n) FROM
 (SELECT * FROM t2) as s2
 FULL JOIN
 (SELECT * FROM t3) s3
@@ -287,58 +287,58 @@ USING (name);
 -- Cases with non-nullable expressions in subquery results;
 -- make sure these go to null as expected
 SELECT * FROM
-(SELECT udf(name), udf(n) as s2_n, udf(2) as s2_2 FROM t2) as s2
+(SELECT udf(udf(name)) as name, udf(n) as s2_n, udf(2) as s2_2 FROM t2) as s2
 NATURAL INNER JOIN
-(SELECT udf(name), udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3;
+(SELECT udf(name) as name, udf(udf(n)) as s3_n, udf(3) as s3_2 FROM t3) s3;
 
 SELECT * FROM
-(SELECT udf(name), udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(udf(n)) as s2_n, 2 as s2_2 FROM t2) as s2
 NATURAL LEFT JOIN
-(SELECT udf(name), udf(n) as s3_n, 3 as s3_2 FROM t3) s3;
+(SELECT udf(udf(name)) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3;
 
 SELECT * FROM
-(SELECT udf(name), udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
 NATURAL FULL JOIN
-(SELECT udf(name), udf(n) as s3_n, 3 as s3_2 FROM t3) s3;
+(SELECT udf(udf(name)) as name, udf(udf(n)) as s3_n, 3 as s3_2 FROM t3) s3;
 
 SELECT * FROM
-(SELECT udf(name), udf(n) as s1_n, 1 as s1_1 FROM t1) as s1
+(SELECT udf(udf(name)) as name, udf(n) as s1_n, 1 as s1_1 FROM t1) as s1
 NATURAL INNER JOIN
-(SELECT udf(name), udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
 NATURAL INNER JOIN
-(SELECT udf(name), udf(n) as s3_n, 3 as s3_2 FROM t3) s3;
+(SELECT udf(udf(udf(name))) as name, udf(n) as s3_n, 3 as s3_2 FROM t3) s3;
 
 SELECT * FROM
-(SELECT udf(name), udf(n) as s1_n, udf(1) as s1_1 FROM t1) as s1
+(SELECT udf(name) as name, udf(n) as s1_n, udf(udf(1)) as s1_1 FROM t1) as s1
 NATURAL FULL JOIN
-(SELECT udf(name), udf(n) as s2_n, udf(2) as s2_2 FROM t2) as s2
+(SELECT udf(name) as name, udf(udf(n)) as s2_n, udf(2) as s2_2 FROM t2) as s2
 NATURAL FULL JOIN
-(SELECT udf(name), udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3;
+(SELECT udf(udf(name)) as name, udf(n) as s3_n, udf(3) as s3_2 FROM t3) s3;
 
-SELECT name, udf(s1_n), udf(s2_n), udf(s3_n) FROM
-(SELECT name, udf(n) as s1_n FROM t1) as s1
+SELECT name, udf(udf(s1_n)), udf(s2_n), udf(s3_n) FROM
+(SELECT name, udf(udf(n)) as s1_n FROM t1) as s1
 NATURAL FULL JOIN
   (SELECT * FROM
     (SELECT name, udf(n) as s2_n FROM t2) as s2
     NATURAL FULL JOIN
-    (SELECT name, udf(n) as s3_n FROM t3) as s3
+    (SELECT name, udf(udf(n)) as s3_n FROM t3) as s3
   ) ss2;
 
 SELECT * FROM
 (SELECT name, n as s1_n FROM t1) as s1
 NATURAL FULL JOIN
   (SELECT * FROM
-    (SELECT name, udf(n) as s2_n, 2 as s2_2 FROM t2) as s2
+    (SELECT name, udf(udf(n)) as s2_n, 2 as s2_2 FROM t2) as s2
     NATURAL FULL JOIN
     (SELECT name, udf(n) as s3_n FROM t3) as s3
   ) ss2;
 
 -- Constants as join keys can also be problematic
-SELECT s1.name, udf(s1_n), s2.name, udf(s2_n) FROM
+SELECT s1.name, udf(s1_n), s2.name, udf(udf(s2_n)) FROM
   (SELECT name, udf(n) as s1_n FROM t1) as s1
 FULL JOIN
   (SELECT name, udf(2) as s2_n FROM t2) as s2
-ON (udf(s1_n) = udf(s2_n));
+ON (udf(udf(s1_n)) = udf(s2_n));
 
 
 -- Test for propagation of nullability constraints into sub-joins
@@ -351,53 +351,53 @@ create or replace temporary view y as select * from
   (values (1,111), (2,222), (3,333), (4,null))
   as v(y1, y2);
 
-select udf(x1), udf(x2) from x;
-select udf(y1), udf(y2) from y;
+select udf(udf(x1)), udf(x2) from x;
+select udf(y1), udf(udf(y2)) from y;
 
-select * from x left join y on (udf(x1) = udf(y1) and udf(x2) is not null);
-select * from x left join y on (udf(x1) = udf(y1) and udf(y2) is not null);
+select * from x left join y on (udf(x1) = udf(udf(y1)) and udf(x2) is not null);
+select * from x left join y on (udf(udf(x1)) = udf(y1) and udf(y2) is not null);
 
+select * from (x left join y on (udf(x1) = udf(udf(y1)))) left join x xx(xx1,xx2)
+on (udf(udf(x1)) = udf(xx1));
 select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1));
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1) and udf(x2) is not null);
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1) and udf(y2) is not null);
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1) and udf(xx2) is not null);
+on (udf(x1) = xx1 and udf(x2) is not null);
+select * from (x left join y on (x1 = udf(y1))) left join x xx(xx1,xx2)
+on (udf(x1) = udf(udf(xx1)) and udf(y2) is not null);
+select * from (x left join y on (udf(x1) = y1)) left join x xx(xx1,xx2)
+on (udf(udf(x1)) = udf(xx1) and udf(udf(xx2)) is not null);
 -- these should NOT give the same answers as above
-select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
+select * from (x left join y on (udf(udf(x1)) = udf(udf(y1)))) left join x xx(xx1,xx2)
 on (udf(x1) = udf(xx1)) where (udf(x2) is not null);
 select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1)) where (udf(y2) is not null);
+on (udf(x1) = xx1) where (udf(y2) is not null);
 select * from (x left join y on (udf(x1) = udf(y1))) left join x xx(xx1,xx2)
-on (udf(x1) = udf(xx1)) where (udf(xx2) is not null);
+on (x1 = udf(xx1)) where (xx2 is not null);
 
 --
 -- regression test: check for bug with propagation of implied equality
 -- to outside an IN
 --
-select udf(count(*)) from tenk1 a where udf(unique1) in
+select udf(udf(count(*))) from tenk1 a where udf(udf(unique1)) in
   (select udf(unique1) from tenk1 b join tenk1 c using (unique1)
-   where udf(b.unique2) = udf(42));
+   where udf(udf(b.unique2)) = udf(42));
 
 --
 -- regression test: check for failure to generate a plan with multiple
 -- degenerate IN clauses
 --
 select udf(count(*)) from tenk1 x where
-  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(a.f1)=udf(b.f1)) and
+  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(udf(a.f1))=b.f1) and
   udf(x.unique1) = 0 and
-  udf(x.unique1) in (select aa.f1 from int4_tbl aa,float8_tbl bb where udf(aa.f1)=udf(bb.f1));
+  udf(x.unique1) in (select aa.f1 from int4_tbl aa,float8_tbl bb where aa.f1=udf(udf(bb.f1)));
 
 -- try that with GEQO too
 -- begin;
 -- set geqo = on;
 -- set geqo_threshold = 2;
-select udf(count(*)) from tenk1 x where
-  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(a.f1)=udf(b.f1)) and
+select udf(udf(count(*))) from tenk1 x where
+  udf(x.unique1) in (select udf(a.f1) from int4_tbl a,float8_tbl b where udf(udf(a.f1))=b.f1) and
   udf(x.unique1) = 0 and
-  udf(x.unique1) in (select udf(aa.f1) from int4_tbl aa,float8_tbl bb where udf(aa.f1)=udf(bb.f1));
+  udf(udf(x.unique1)) in (select udf(aa.f1) from int4_tbl aa,float8_tbl bb where udf(aa.f1)=udf(udf(bb.f1)));
 -- rollback;
 
 -- Skip this test because table b inherits from table a and we do not support this feature, see inherits.sql
@@ -422,8 +422,8 @@ select udf(count(*)) from tenk1 x where
 -- order by 1, 2;
 
 select * from int8_tbl i1 left join (int8_tbl i2 join
-  (select udf(123) as x) ss on udf(i2.q1) = udf(x)) on udf(i1.q2) = udf(i2.q2)
-order by udf(1), 2;
+  (select udf(123) as x) ss on udf(udf(i2.q1)) = udf(x)) on udf(udf(i1.q2)) = udf(udf(i2.q2))
+order by udf(udf(1)), 2;
 
 --
 -- regression test: check a case where join_clause_is_movable_into() gives
@@ -434,10 +434,10 @@ from
   (select udf(t3.tenthous) as x1, udf(coalesce(udf(t1.stringu1), udf(t2.stringu1))) as x2
    from tenk1 t1
    left join tenk1 t2 on udf(t1.unique1) = udf(t2.unique1)
-   join tenk1 t3 on t1.unique2 = t3.unique2) ss,
+   join tenk1 t3 on t1.unique2 = udf(t3.unique2)) ss,
   tenk1 t4,
   tenk1 t5
-where udf(t4.thousand) = udf(t5.unique1) and udf(ss.x1) = udf(t4.tenthous) and udf(ss.x2) = udf(t5.stringu1);
+where udf(t4.thousand) = udf(t5.unique1) and udf(udf(ss.x1)) = t4.tenthous and udf(ss.x2) = udf(udf(t5.stringu1));
 
 --
 -- regression test: check a case where we formerly missed including an EC
@@ -452,9 +452,9 @@ where udf(t4.thousand) = udf(t5.unique1) and udf(ss.x1) = udf(t4.tenthous) and u
 
 select udf(a.f1), udf(b.f1), udf(t.thousand), udf(t.tenthous) from
   tenk1 t,
-  (select udf(sum(udf(f1))+1) as f1 from int4_tbl i4a) a,
+  (select udf(udf(sum(udf(f1))+1)) as f1 from int4_tbl i4a) a,
   (select udf(sum(udf(f1))) as f1 from int4_tbl i4b) b
-where udf(b.f1) = udf(t.thousand) and udf(a.f1) = udf(b.f1) and udf((udf(a.f1)+udf(b.f1)+999)) = udf(t.tenthous);
+where b.f1 = udf(t.thousand) and udf(a.f1) = udf(b.f1) and udf((udf(a.f1)+udf(b.f1)+999)) = udf(udf(t.tenthous));
 
 --
 -- check a case where we formerly got confused by conflicting sort orders
@@ -468,7 +468,7 @@ where udf(b.f1) = udf(t.thousand) and udf(a.f1) = udf(b.f1) and udf((udf(a.f1)+u
 
 select * from
   j1_tbl full join
-  (select * from j2_tbl order by udf(j2_tbl.i) desc, udf(j2_tbl.k) asc) j2_tbl
+  (select * from j2_tbl order by udf(udf(j2_tbl.i)) desc, udf(j2_tbl.k) asc) j2_tbl
   on udf(j1_tbl.i) = udf(j2_tbl.i) and udf(j1_tbl.i) = udf(j2_tbl.k);
 
 --
@@ -482,7 +482,7 @@ select * from
 --   on x.thousand = y.unique2 and x.twothousand = y.hundred and x.fivethous = y.unique2;
 
 select udf(count(*)) from
-  (select * from tenk1 x order by udf(x.thousand), udf(x.twothousand), x.fivethous) x
+  (select * from tenk1 x order by udf(x.thousand), udf(udf(x.twothousand)), x.fivethous) x
   left join
   (select * from tenk1 y order by udf(y.unique2)) y
   on udf(x.thousand) = y.unique2 and x.twothousand = udf(y.hundred) and x.fivethous = y.unique2;
@@ -552,9 +552,9 @@ create or replace temporary view tt2 as select * from
 
 -- these should give the same results
 
-select tt1.*, tt2.* from tt1 left join tt2 on udf(tt1.joincol) = udf(tt2.joincol);
+select tt1.*, tt2.* from tt1 left join tt2 on udf(udf(tt1.joincol)) = udf(tt2.joincol);
 
-select tt1.*, tt2.* from tt2 right join tt1 on udf(tt1.joincol) = udf(tt2.joincol);
+select tt1.*, tt2.* from tt2 right join tt1 on udf(udf(tt1.joincol)) = udf(udf(tt2.joincol));
 
 -- reset enable_hashjoin;
 -- reset enable_nestloop;
@@ -570,7 +570,7 @@ select tt1.*, tt2.* from tt2 right join tt1 on udf(tt1.joincol) = udf(tt2.joinco
 -- select count(*) from tenk1 a, tenk1 b
 --   where a.hundred = b.thousand and (b.fivethous % 10) < 10;
 select udf(count(*)) from tenk1 a, tenk1 b
-  where udf(a.hundred) = udf(b.thousand) and udf(udf((b.fivethous % 10)) < 10);
+  where udf(a.hundred) = b.thousand and udf(udf((b.fivethous % 10)) < 10);
 
 -- reset work_mem;
 -- reset enable_mergejoin;
@@ -590,14 +590,14 @@ CREATE TABLE tt4(f1 int) USING parquet;
 INSERT INTO tt4 VALUES (0),(1),(9999);
 -- analyze tt4;
 
-SELECT udf(a.f1) as f1
+SELECT udf(udf(a.f1)) as f1
 FROM tt4 a
 LEFT JOIN (
         SELECT b.f1
         FROM tt3 b LEFT JOIN tt3 c ON udf(b.f1) = udf(c.f1)
         WHERE udf(c.f1) IS NULL
-) AS d ON udf(a.f1) = udf(d.f1)
-WHERE udf(d.f1) IS NULL;
+) AS d ON udf(a.f1) = d.f1
+WHERE udf(udf(d.f1)) IS NULL;
 
 --
 -- regression test for proper handling of outer joins within antijoins
@@ -627,7 +627,7 @@ create or replace temporary view tt6 as select * from
   (values (1, 9), (1, 2), (2, 9))
   as v(f1, f2);
 
-select * from tt5,tt6 where udf(tt5.f1) = udf(tt6.f1) and udf(tt5.f1) = udf(tt5.f2 - tt6.f2);
+select * from tt5,tt6 where udf(tt5.f1) = udf(tt6.f1) and udf(tt5.f1) = udf(udf(tt5.f2) - udf(tt6.f2));
 
 --
 -- regression test for problems of the sort depicted in bug #3588
@@ -640,12 +640,12 @@ create or replace temporary view yy as select * from
   (values (101, 1), (201, 2), (301, NULL))
   as v(pkyy, pkxx);
 
-select udf(yy.pkyy) as yy_pkyy, udf(yy.pkxx) as yy_pkxx, udf(yya.pkyy) as yya_pkyy,
+select udf(udf(yy.pkyy)) as yy_pkyy, udf(yy.pkxx) as yy_pkxx, udf(yya.pkyy) as yya_pkyy,
        udf(xxa.pkxx) as xxa_pkxx, udf(xxb.pkxx) as xxb_pkxx
 from yy
      left join (SELECT * FROM yy where pkyy = 101) as yya ON udf(yy.pkyy) = udf(yya.pkyy)
-     left join xx xxa on udf(yya.pkxx) = udf(xxa.pkxx)
-     left join xx xxb on udf(coalesce (xxa.pkxx, 1)) = udf(xxb.pkxx);
+     left join xx xxa on udf(yya.pkxx) = udf(udf(xxa.pkxx))
+     left join xx xxb on udf(udf(coalesce (xxa.pkxx, 1))) = udf(xxb.pkxx);
 
 --
 -- regression test for improper pushing of constants across outer-join clauses
@@ -661,15 +661,15 @@ create or replace temporary view zt2 as select * from
 create or replace temporary view zt3(f3 int) using parquet;
 
 select * from
-  zt2 left join zt3 on (udf(f2) = udf(f3))
-      left join zt1 on (udf(f3) = udf(f1))
+  zt2 left join zt3 on (udf(f2) = udf(udf(f3)))
+      left join zt1 on (udf(udf(f3)) = udf(f1))
 where udf(f2) = 53;
 
 create temp view zv1 as select *,'dummy' AS junk from zt1;
 
 select * from
-  zt2 left join zt3 on (udf(f2) = udf(f3))
-      left join zv1 on (udf(f3) = udf(f1))
+  zt2 left join zt3 on (f2 = udf(f3))
+      left join zv1 on (udf(f3) = f1)
 where udf(f2) = udf(53);
 
 --
@@ -678,9 +678,9 @@ where udf(f2) = udf(53);
 --
 
 select udf(a.unique2), udf(a.ten), udf(b.tenthous), udf(b.unique2), udf(b.hundred)
-from tenk1 a left join tenk1 b on udf(a.unique2) = udf(b.tenthous)
+from tenk1 a left join tenk1 b on a.unique2 = udf(b.tenthous)
 where udf(a.unique1) = 42 and
-      ((udf(b.unique2) is null and udf(a.ten) = 2) or udf(b.hundred) = udf(3));
+      ((udf(b.unique2) is null and udf(a.ten) = 2) or udf(udf(b.hundred)) = udf(udf(3)));
 
 --
 -- test proper positioning of one-time quals in EXISTS (8.4devel bug)
@@ -705,7 +705,7 @@ where udf(a.unique1) = 42 and
 create or replace temporary view a (i integer) using parquet;
 create or replace temporary view b (x integer, y integer) using parquet;
 
-select * from a left join b on udf(i) = udf(x) and udf(i) = udf(y) and udf(x) = udf(i);
+select * from a left join b on udf(i) = x and i = udf(y) and udf(x) = udf(i);
 
 -- rollback;
 
@@ -733,19 +733,19 @@ select * from a left join b on udf(i) = udf(x) and udf(i) = udf(y) and udf(x) = 
 -- test NULL behavior of whole-row Vars, per bug #5025
 --
 select udf(t1.q2), udf(count(t2.*))
-from int8_tbl t1 left join int8_tbl t2 on (udf(t1.q2) = udf(t2.q1))
+from int8_tbl t1 left join int8_tbl t2 on (udf(udf(t1.q2)) = t2.q1)
 group by udf(t1.q2) order by 1;
 
-select udf(t1.q2), udf(count(t2.*))
-from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(t1.q2) = udf(t2.q1))
-group by udf(t1.q2) order by 1;
+select udf(udf(t1.q2)), udf(count(t2.*))
+from int8_tbl t1 left join (select * from int8_tbl) t2 on (udf(udf(t1.q2)) = udf(t2.q1))
+group by udf(udf(t1.q2)) order by 1;
 
 -- [SPARK-28330] Enhance query limit
 -- select t1.q2, count(t2.*)
 -- from int8_tbl t1 left join (select * from int8_tbl offset 0) t2 on (t1.q2 = t2.q1)
 -- group by t1.q2 order by 1;
 
-select udf(t1.q2) as q2, udf(count(t2.*))
+select udf(t1.q2) as q2, udf(udf(count(t2.*)))
 from int8_tbl t1 left join
   (select udf(q1) as q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
   on (udf(t1.q2) = udf(t2.q1))
@@ -770,9 +770,9 @@ from c left join
   (select a.code, coalesce(b_grp.cnt, 0) as b_cnt, -1 as const
    from a left join
      (select udf(count(1)) as cnt, b.a as a from b group by b.a) as b_grp
-     on udf(a.code) = udf(b_grp.a)
+     on udf(a.code) = udf(udf(b_grp.a))
   ) as ss
-  on (udf(c.a) = udf(ss.code))
+  on (udf(udf(c.a)) = udf(ss.code))
 order by c.name;
 
 -- rollback;
@@ -787,15 +787,15 @@ LEFT JOIN
 ( SELECT sub3.key3, sub4.value2, COALESCE(sub4.value2, 66) as value3 FROM
     ( SELECT 1 as key3 ) sub3
     LEFT JOIN
-    ( SELECT udf(sub5.key5) as key5, udf(COALESCE(sub6.value1, 1)) as value2 FROM
+    ( SELECT udf(sub5.key5) as key5, udf(udf(COALESCE(sub6.value1, 1))) as value2 FROM
         ( SELECT 1 as key5 ) sub5
         LEFT JOIN
         ( SELECT 2 as key6, 42 as value1 ) sub6
-        ON udf(sub5.key5) = udf(sub6.key6)
+        ON sub5.key5 = udf(sub6.key6)
     ) sub4
-    ON udf(sub4.key5) = udf(sub3.key3)
+    ON udf(sub4.key5) = sub3.key3
 ) sub2
-ON udf(sub1.key1) = udf(sub2.key3);
+ON udf(udf(sub1.key1)) = udf(udf(sub2.key3));
 
 -- test the path using join aliases, too
 SELECT * FROM
@@ -808,11 +808,11 @@ LEFT JOIN
         ( SELECT 1 as key5 ) sub5
         LEFT JOIN
         ( SELECT 2 as key6, 42 as value1 ) sub6
-        ON sub5.key5 = sub6.key6
+        ON udf(udf(sub5.key5)) = sub6.key6
     ) sub4
     ON sub4.key5 = sub3.key3
 ) sub2
-ON sub1.key1 = sub2.key3;
+ON sub1.key1 = udf(udf(sub2.key3));
 
 --
 -- test case where a PlaceHolderVar is used as a nestloop parameter
@@ -827,11 +827,11 @@ ON sub1.key1 = sub2.key3;
 --   USING (qq)
 --   INNER JOIN tenk1 c ON qq = unique2;
 
-SELECT udf(qq), udf(unique1)
+SELECT udf(qq), udf(udf(unique1))
   FROM
   ( SELECT udf(COALESCE(q1, 0)) AS qq FROM int8_tbl a ) AS ss1
   FULL OUTER JOIN
-  ( SELECT udf(COALESCE(q2, -1)) AS qq FROM int8_tbl b ) AS ss2
+  ( SELECT udf(udf(COALESCE(q2, -1))) AS qq FROM int8_tbl b ) AS ss2
   USING (qq)
   INNER JOIN tenk1 c ON udf(qq) = udf(unique2);
 
@@ -868,9 +868,9 @@ from nt3 as nt3
      from nt2 as nt2
        left join
          (select nt1.*, (udf(nt1.id) is not null) as a3 from nt1) as ss1
-         on udf(ss1.id) = udf(nt2.nt1_id)
+         on ss1.id = udf(udf(nt2.nt1_id))
     ) as ss2
-    on udf(ss2.id) = udf(nt3.nt2_id)
+    on udf(ss2.id) = nt3.nt2_id
 where udf(nt3.id) = 1 and udf(ss2.b3);
 
 -- [SPARK-28379] Correlated scalar subqueries must be aggregated
@@ -1049,8 +1049,8 @@ select * from int4_tbl a full join int4_tbl b on false;
 
 select udf(count(*)) from
   tenk1 a join tenk1 b on udf(a.unique1) = udf(b.unique2)
-  left join tenk1 c on udf(a.unique2) = udf(b.unique1) and udf(c.thousand) = udf(a.thousand)
-  join int4_tbl on udf(b.thousand) = udf(f1);
+  left join tenk1 c on udf(a.unique2) = udf(b.unique1) and udf(c.thousand) = udf(udf(a.thousand))
+  join int4_tbl on udf(b.thousand) = f1;
 
 -- explain (costs off)
 -- select b.unique1 from
@@ -1062,9 +1062,9 @@ select udf(count(*)) from
 
 select udf(b.unique1) from
   tenk1 a join tenk1 b on udf(a.unique1) = udf(b.unique2)
-  left join tenk1 c on udf(b.unique1) = udf(42) and udf(c.thousand) = udf(a.thousand)
-  join int4_tbl i1 on udf(b.thousand) = udf(f1)
-  right join int4_tbl i2 on udf(i2.f1) = udf(b.tenthous)
+  left join tenk1 c on udf(b.unique1) = 42 and c.thousand = udf(a.thousand)
+  join int4_tbl i1 on udf(b.thousand) = udf(udf(f1))
+  right join int4_tbl i2 on udf(udf(i2.f1)) = udf(b.tenthous)
   order by udf(1);
 
 -- explain (costs off)
@@ -1078,7 +1078,7 @@ select udf(b.unique1) from
 
 select * from
 (
-  select udf(unique1), udf(q1), udf(coalesce(unique1, -1)) + udf(q1) as fault
+  select udf(unique1), udf(q1), udf(udf(coalesce(unique1, -1)) + udf(q1)) as fault
   from int8_tbl left join tenk1 on (udf(q2) = udf(unique2))
 ) ss
 where udf(fault) = udf(122)
@@ -1107,15 +1107,15 @@ order by udf(fault);
 
 select udf(q1), udf(unique2), udf(thousand), udf(hundred)
   from int8_tbl a left join tenk1 b on udf(q1) = udf(unique2)
-  where udf(coalesce(thousand,123)) = udf(q1) and udf(q1) = udf(coalesce(hundred,123));
+  where udf(coalesce(thousand,123)) = udf(q1) and udf(q1) = udf(udf(coalesce(hundred,123)));
 
 -- explain (costs off)
 -- select f1, unique2, case when unique2 is null then f1 else 0 end
 --   from int4_tbl a left join tenk1 b on f1 = unique2
 --   where (case when unique2 is null then f1 else 0 end) = 0;
 
-select udf(f1), udf(unique2), case when udf(unique2) is null then udf(f1) else 0 end
-  from int4_tbl a left join tenk1 b on udf(f1) = udf(unique2)
+select udf(f1), udf(unique2), case when udf(udf(unique2)) is null then udf(f1) else 0 end
+  from int4_tbl a left join tenk1 b on udf(f1) = udf(udf(unique2))
   where (case when udf(unique2) is null then udf(f1) else 0 end) = 0;
 
 --
@@ -1128,8 +1128,8 @@ select udf(f1), udf(unique2), case when udf(unique2) is null then udf(f1) else 0
 --   where a.unique2 < 10 and coalesce(b.twothousand, a.twothousand) = 44;
 
 select udf(a.unique1), udf(b.unique1), udf(c.unique1), udf(coalesce(b.twothousand, a.twothousand))
-  from tenk1 a left join tenk1 b on udf(b.thousand) = udf(a.unique1)                        left join tenk1 c on udf(c.unique2) = udf(coalesce(b.twothousand, a.twothousand))
-  where udf(a.unique2) < udf(10) and udf(coalesce(b.twothousand, a.twothousand)) = udf(44);
+  from tenk1 a left join tenk1 b on udf(b.thousand) = a.unique1                       left join tenk1 c on udf(c.unique2) = udf(coalesce(b.twothousand, a.twothousand))
+  where a.unique2 < udf(10) and udf(udf(coalesce(b.twothousand, a.twothousand))) = udf(44);
 
 --
 -- check handling of join aliases when flattening multiple levels of subquery
@@ -1253,11 +1253,11 @@ select udf(a.unique1), udf(b.unique1), udf(c.unique1), udf(coalesce(b.twothousan
 select * from
   text_tbl t1
   inner join int8_tbl i8
-  on udf(i8.q2) = udf(456)
+  on udf(i8.q2) = udf(udf(456))
   right join text_tbl t2
-  on udf(t1.f1) = udf('doh!')
+  on udf(t1.f1) = udf(udf('doh!'))
   left join int4_tbl i4
-  on udf(i8.q1) = udf(i4.f1);
+  on udf(udf(i8.q1)) = i4.f1;
 
 -- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)
 --
@@ -1350,10 +1350,10 @@ select * from
 --   on (xx.id = coalesce(yy.id));
 
 select * from
-  (select udf(1) as id) as xx
+  (select udf(udf(1)) as id) as xx
   left join
     (tenk1 as a1 full join (select udf(1) as id) as yy on (udf(a1.unique1) = udf(yy.id)))
-  on (udf(xx.id) = udf(coalesce(yy.id)));
+  on (xx.id = udf(udf(coalesce(yy.id))));
 
 --
 -- test ability to push constants through outer join clauses
@@ -1379,8 +1379,8 @@ select * from
 --     from int8_tbl a left join int8_tbl b on a.q2 = coalesce(b.q1, 1)
 --     where coalesce(b.q1, 1) > 0;
 select udf(a.q2), udf(b.q1)
-  from int8_tbl a left join int8_tbl b on udf(a.q2) = udf(coalesce(b.q1, 1))
-  where udf(coalesce(b.q1, 1)) > 0;
+  from int8_tbl a left join int8_tbl b on udf(a.q2) = coalesce(b.q1, 1)
+  where udf(udf(coalesce(b.q1, 1)) > 0);
 
 -- reset enable_hashjoin;
 -- reset enable_nestloop;
@@ -1470,8 +1470,8 @@ select p.* from parent p left join child c on (udf(p.k) = udf(c.k));
 
 -- this case is not
 select p.*, linked from parent p
-  left join (select c.*, udf(true) as linked from child c) as ss
-  on (udf(p.k) = udf(ss.k));
+  left join (select c.*, udf(udf(true)) as linked from child c) as ss
+  on (udf(p.k) = udf(udf(ss.k)));
 -- explain (costs off)
 --   select p.*, linked from parent p
 --     left join (select c.*, true as linked from child c) as ss
@@ -1479,16 +1479,16 @@ select p.*, linked from parent p
 
 -- check for a 9.0rc1 bug: join removal breaks pseudoconstant qual handling
 select p.* from
-  parent p left join child c on (udf(p.k) = udf(c.k))
-  where udf(p.k) = udf(1) and udf(p.k) = udf(2);
+  parent p left join child c on (udf(p.k) = c.k)
+  where p.k = udf(1) and udf(udf(p.k)) = udf(udf(2));
 -- explain (costs off)
 -- select p.* from
 --   parent p left join child c on (p.k = c.k)
 --   where p.k = 1 and p.k = 2;
 
 select p.* from
-  (parent p left join child c on (udf(p.k) = udf(c.k))) join parent x on udf(p.k) = udf(x.k)
-  where udf(p.k) = udf(1) and udf(p.k) = udf(2);
+  (parent p left join child c on (udf(p.k) = c.k)) join parent x on p.k = udf(x.k)
+  where udf(p.k) = udf(1) and udf(udf(p.k)) = udf(udf(2));
 -- explain (costs off)
 -- select p.* from
 --   (parent p left join child c on (p.k = c.k)) join parent x on p.k = x.k
@@ -1504,8 +1504,8 @@ create or replace temporary view b as select * from
   (values (0, 0), (1, NULL))
   as v(id, a_id);
 
-SELECT * FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(a.id) IS NULL OR udf(a.id) > 0);
-SELECT b.* FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(a.id) IS NULL OR udf(a.id) > 0);
+SELECT * FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(udf(a.id)) IS NULL OR udf(a.id) > 0);
+SELECT b.* FROM b LEFT JOIN a ON (udf(b.a_id) = udf(a.id)) WHERE (udf(a.id) IS NULL OR udf(udf(a.id)) > 0);
 
 -- rollback;
 
@@ -1520,7 +1520,7 @@ SELECT * FROM
     (SELECT udf(1) AS x) ss1
   LEFT JOIN
     (SELECT udf(q1), udf(q2), udf(COALESCE(dat1, q1)) AS y
-     FROM int8_tbl LEFT JOIN innertab ON udf(q2) = udf(id)) ss2
+     FROM int8_tbl LEFT JOIN innertab ON udf(udf(q2)) = id) ss2
   ON true;
 
 -- rollback;
@@ -1573,16 +1573,16 @@ select * from
 select * from
   int8_tbl x join (int4_tbl x cross join int4_tbl y) j on udf(q1) = udf(y.f1); -- error
 select * from
-  int8_tbl x join (int4_tbl x cross join int4_tbl y(ff)) j on udf(q1) = udf(f1); -- ok
+  int8_tbl x join (int4_tbl x cross join int4_tbl y(ff)) j on udf(q1) = udf(udf(f1)); -- ok
 
 --
 -- Test hints given on incorrect column references are useful
 --
 
 select udf(t1.uunique1) from
-  tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two); -- error, prefer "t1" suggestion
-select udf(t2.uunique1) from
-  tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two); -- error, prefer "t2" suggestion
+  tenk1 t1 join tenk2 t2 on t1.two = udf(t2.two); -- error, prefer "t1" suggestion
+select udf(udf(t2.uunique1)) from
+  tenk1 t1 join tenk2 t2 on udf(t1.two) = t2.two; -- error, prefer "t2" suggestion
 select udf(uunique1) from
   tenk1 t1 join tenk2 t2 on udf(t1.two) = udf(t2.two); -- error, suggest both at once
 
@@ -1845,10 +1845,10 @@ select udf(uunique1) from
 --          where t1.q1 = ss.q2) ss0;
 
 -- test some error cases where LATERAL should have been used but wasn't
-select udf(f1,g) from int4_tbl a, (select udf(f1) as g) ss;
-select udf(f1,g) from int4_tbl a, (select udf(a.f1) as g) ss;
-select udf(f1,g) from int4_tbl a cross join (select udf(f1) as g) ss;
-select udf(f1,g) from int4_tbl a cross join (select udf(a.f1) as g) ss;
+select udf(udf(f1,g)) from int4_tbl a, (select udf(udf(f1)) as g) ss;
+select udf(f1,g) from int4_tbl a, (select a.f1 as g) ss;
+select udf(udf(f1,g)) from int4_tbl a cross join (select udf(f1) as g) ss;
+select udf(f1,g) from int4_tbl a cross join (select udf(udf(a.f1)) as g) ss;
 -- SQL:2008 says the left table is in scope but illegal to access here
 -- select f1,g from int4_tbl a right join lateral generate_series(0, a.f1) g on true;
 -- select f1,g from int4_tbl a full join lateral generate_series(0, a.f1) g on true;
@@ -2046,8 +2046,8 @@ INSERT INTO j2 values(1,2);
 -- where j1.id1 % 1000 = 1 and j2.id1 % 1000 = 1;
 
 select * from j1
-inner join j2 on udf(j1.id1) = udf(j2.id1) and udf(j1.id2) = udf(j2.id2)
-where udf(j1.id1) % 1000 = 1 and udf(j2.id1) % 1000 = 1;
+inner join j2 on udf(j1.id1) = udf(j2.id1) and udf(udf(j1.id2)) = udf(j2.id2)
+where udf(j1.id1) % 1000 = 1 and udf(udf(j2.id1) % 1000) = 1;
 
 -- reset enable_nestloop;
 -- reset enable_hashjoin;
