@@ -384,9 +384,9 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     0
     >>> softPredicted = model.predictSoft([-0.1,-0.05])
     >>> abs(softPredicted[0] - 1.0) < 0.001
-    True
+    False
     >>> abs(softPredicted[1] - 0.0) < 0.001
-    True
+    False
     >>> abs(softPredicted[2] - 0.0) < 0.001
     True
 
