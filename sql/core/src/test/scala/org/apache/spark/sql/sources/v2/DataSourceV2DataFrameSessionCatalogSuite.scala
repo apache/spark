@@ -178,9 +178,6 @@ class InMemoryTableProvider extends TableProvider {
   }
 }
 
-/** A second fake format to test behavior with format changes. */
-class InMemoryTableProvider2 extends InMemoryTableProvider
-
 /** A SessionCatalog that always loads an in memory Table, so we can test write code paths. */
 class TestV2SessionCatalog extends V2SessionCatalog {
 
