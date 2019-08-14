@@ -229,11 +229,11 @@ class StringIndexer @Since("1.4.0") (
       .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
     val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
       val sorted = labels.filter(_ != null).sorted
-        if (ascending) {
-          sorted.toArray
-        } else {
-          sorted.reverse.toArray
-        }
+      if (ascending) {
+        sorted.toArray
+      } else {
+        sorted.reverse.toArray
+      }
     }.toArray
     if (needUnpersist) {
       dataset.unpersist()
