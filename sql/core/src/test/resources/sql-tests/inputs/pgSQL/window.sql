@@ -540,7 +540,6 @@ create table numerics (
     f_numeric int
 ) using parquet;
 
--- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
 insert into numerics values
 (1, -3, -3, -3),
 (2, -1, -1, -1),
@@ -548,11 +547,10 @@ insert into numerics values
 (4, 1.1, 1.1, 1.1),
 (5, 1.12, 1.12, 1.12),
 (6, 2, 2, 2),
-(7, 100, 100, 100);
--- (8, 'infinity', 'infinity', '1000'),
--- (9, 'NaN', 'NaN', 'NaN');
--- (0, '-infinity', '-infinity', '-1000'),  -- numeric type lacks infinities
-
+(7, 100, 100, 100)
+(8, 'infinity', 'infinity', '1000'),
+(9, 'NaN', 'NaN', 'NaN');
+(0, '-infinity', '-infinity', '-1000');  -- numeric type lacks infinities
 
 select id, f_float4, first(id) over w, last(id) over w
 from numerics
@@ -1377,10 +1375,12 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
   FROM (VALUES(1,1),(2,2),(3,3),(4,4)) t(i,v);
 
 -- ensure aggregate over numeric properly recovers from NaN values
--- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
--- SELECT a, b,
---        SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
--- FROM (VALUES(1,1),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
+SELECT a, b,
+       SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
+FROM (VALUES(1,1),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
+
+select f_float4, sum(f_float4) over (order by f_float8 rows between 1
+  preceding and current row) from numerics;
 
 -- It might be tempting for someone to add an inverse trans function for
 -- float and double precision. This should not be done as it can give incorrect
