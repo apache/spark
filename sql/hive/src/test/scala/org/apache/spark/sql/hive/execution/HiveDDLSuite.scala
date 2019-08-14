@@ -552,8 +552,8 @@ class HiveDDLSuite
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet")
     }
-    assert(e.message.contains("Create Partitioned Table must specify data type for " +
-      "the partition columns."))
+    assert(e.message.contains("Must specify a data type for each partition column while creating " +
+      "Hive partitioned table."))
   }
 
   test("add/drop partition with location - managed table") {
