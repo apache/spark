@@ -21,7 +21,8 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -179,20 +180,21 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def simpleString(maxFields: Int): String = statePrefix + super.simpleString(maxFields)
 
-  override def simpleString(planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
-    val operatorID = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
-    s"$nodeName ($operatorID)".trim
-  }
-
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
-  def verboseString(
-    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-    wholeStageCodegenId: Option[Int]): String = {
-    val codegenIdStr = wholeStageCodegenId.map("[codegen id : " + _ + "]").getOrElse("")
-    val opId = planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
+  override def simpleStringWithNodeId(): String = {
+    val tag = new TreeNodeTag[Int]("operatorId")
+    val operatorId = getTagValue(tag).map(id => s"$id").getOrElse("unknown")
+    s"$nodeName ($operatorId)".trim
+  }
+
+  def verboseStringWithOperatorId(): String = {
+    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
+    val codegenIdStr = getTagValue(codegenTag).map(id => s"[codegen id : $id]").getOrElse("")
+    val opIdTag = new TreeNodeTag[Int]("operatorId")
+    val operatorId = getTagValue(opIdTag).map(id => s"$id").getOrElse("unknown")
     s"""
-       |($opId) $nodeName $codegenIdStr
+       |($operatorId) $nodeName $codegenIdStr
      """.stripMargin
   }
 
@@ -353,9 +355,9 @@ object QueryPlan extends PredicateHelper {
       verbose: Boolean,
       addSuffix: Boolean,
       maxFields: Int = SQLConf.get.maxToStringFields,
-      planToOpID: mutable.LinkedHashMap[QueryPlan[_], Int] = mutable.LinkedHashMap.empty): Unit = {
+      printOperatorId: Boolean = false): Unit = {
     try {
-      plan.treeString(append, verbose, addSuffix, maxFields, planToOpID)
+      plan.treeString(append, verbose, addSuffix, maxFields, printOperatorId)
     } catch {
       case e: AnalysisException => append(e.toString)
     }

@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, PlanExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 
 object ExplainUtils {
   /**
@@ -39,42 +40,34 @@ object ExplainUtils {
   private def processPlanSkippingSubqueries[T <: QueryPlan[T]](
       plan: => QueryPlan[T],
       append: String => Unit,
-      startOperatorID: Int,
-      planToOperatorIDArray: ArrayBuffer[mutable.LinkedHashMap[QueryPlan[_], Int]]): Int = {
+      startOperatorID: Int): Int = {
 
     // ReusedSubqueryExecs are skipped over
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return startOperatorID
     }
 
-    val planToOperationID = new mutable.LinkedHashMap[QueryPlan[_], Int]()
-    val operationIDToPlan = new mutable.LinkedHashMap[Int, QueryPlan[_]]()
-    val planToWholeStageID = new mutable.LinkedHashMap[QueryPlan[_], Int]()
+    val operationIDs = new mutable.ArrayBuffer[(Int, QueryPlan[_])]()
     var currentOperatorID = startOperatorID
     try {
-      currentOperatorID = generateOperatorIDs(plan,
-        currentOperatorID,
-        planToOperationID,
-        operationIDToPlan)
-      generateWholeStageCodegenIdMap(plan, planToWholeStageID)
+      currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operationIDs)
+      generateWholeStageCodegenIdMap(plan)
 
       QueryPlan.append(
         plan,
         append,
         verbose = false,
         addSuffix = false,
-        planToOpID = planToOperationID)
+        printOperatorId = true)
 
       append("\n")
       var i: Integer = 0
-      for ((opId, curPlan) <- operationIDToPlan) {
-        append(curPlan.verboseString(planToOperationID,
-          planToWholeStageID.get(curPlan)))
+      for ((opId, curPlan) <- operationIDs) {
+        append(curPlan.verboseStringWithOperatorId())
       }
     } catch {
       case e: AnalysisException => append(e.toString)
     }
-    planToOperatorIDArray += planToOperationID
     currentOperatorID
   }
 
@@ -86,32 +79,32 @@ object ExplainUtils {
   def processPlan[T <: QueryPlan[T]](
       plan: => QueryPlan[T],
       append: String => Unit): Unit = {
+    try {
+      val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, SparkPlan)]
+      var currentOperatorID = 0
+      currentOperatorID = processPlanSkippingSubqueries(plan, append, currentOperatorID)
+      getSubqueries(plan, subqueries)
+      var i = 0
 
-    val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, SparkPlan)]
-    val planToOperatorIDArray = ArrayBuffer.empty[mutable.LinkedHashMap[QueryPlan[_], Int]]
-    var currentOperatorID = 0
-    currentOperatorID =
-      processPlanSkippingSubqueries(plan, append, currentOperatorID, planToOperatorIDArray)
-    getSubqueries(plan, subqueries)
-    var i = 0
+      // Process all the subqueries in the plan.
+      for (sub <- subqueries) {
+        if (i == 0) {
+          append("\n===== Subqueries =====\n\n")
+        }
+        i = i + 1
+        append(s"Subquery:$i Hosting operator id = " +
+          s"${getOpId(sub._1)} Hosting Expression = ${sub._2}\n")
 
-    // Process all the subqueries in the plan.
-    for (sub <- subqueries) {
-      if (i == 0) {
-        append("\n===== Subqueries =====\n\n")
+        // For each subquery expression in the parent plan, process its child plan to compute
+        // the explain output.
+        currentOperatorID = processPlanSkippingSubqueries(
+          sub._3,
+          append,
+          currentOperatorID)
+        append("\n")
       }
-      i = i + 1
-      append(s"Subquery:$i Hosting operator id = " +
-        s"${getOperatorId(planToOperatorIDArray, sub._1)} Hosting Expression = ${sub._2}\n")
-
-      // For each subquery expression in the parent plan, process its child plan to compute
-      // the explain output.
-      currentOperatorID = processPlanSkippingSubqueries(
-        sub._3,
-        append,
-        currentOperatorID,
-        planToOperatorIDArray)
-      append("\n")
+    } finally {
+      removeTags(plan)
     }
   }
 
@@ -127,28 +120,26 @@ object ExplainUtils {
   private def generateOperatorIDs(
       plan: QueryPlan[_],
       startOperatorID: Int,
-      planToOperationID: mutable.LinkedHashMap[QueryPlan[_], Int],
-      operationIDToPlan: mutable.LinkedHashMap[Int, QueryPlan[_]]): Int = {
-
+      operatorIDs: mutable.ArrayBuffer[(Int, QueryPlan[_])]): Int = {
     var currentOperationID = startOperatorID
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return currentOperationID
     }
+    val tag = new TreeNodeTag[Int]("operatorId")
     plan.foreachUp {
       case p: WholeStageCodegenExec =>
       case p: InputAdapter =>
       case other: QueryPlan[_] =>
-        if (!planToOperationID.get(other).isDefined) {
+        if (!other.getTagValue(tag).isDefined) {
           currentOperationID += 1
-          planToOperationID.put(other, currentOperationID)
-          operationIDToPlan.put(currentOperationID, other)
+          other.setTagValue(tag, currentOperationID)
+          operatorIDs += ((currentOperationID, other))
         }
         other.innerChildren.foreach { plan =>
           currentOperationID = generateOperatorIDs(plan,
             currentOperationID,
-            planToOperationID,
-            operationIDToPlan)
+            operatorIDs)
         }
     }
     currentOperationID
@@ -157,23 +148,22 @@ object ExplainUtils {
    * Traverses the supplied input plan in a top-down fashion to produce the following map:
    *    1. operator -> whole stage codegen id
    */
-  private def generateWholeStageCodegenIdMap(
-      plan: QueryPlan[_],
-      planToWholeStageID: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
+  private def generateWholeStageCodegenIdMap(plan: QueryPlan[_]): Unit = {
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return
     }
+    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
     var currentCodegenId = -1
     plan.foreach {
       case p: WholeStageCodegenExec => currentCodegenId = p.codegenStageId
       case p: InputAdapter => currentCodegenId = -1
       case other: QueryPlan[_] =>
         if (currentCodegenId != -1) {
-          planToWholeStageID.put(other, currentCodegenId)
+          other.setTagValue(codegenTag, currentCodegenId)
         }
         other.innerChildren.foreach { plan =>
-          generateWholeStageCodegenIdMap(plan, planToWholeStageID)
+          generateWholeStageCodegenIdMap(plan)
         }
     }
   }
@@ -205,14 +195,26 @@ object ExplainUtils {
    * Returns the operator identifier for the supplied plan by performing a lookup
    * against an list of plan to operator identifier maps.
    */
-  private def getOperatorId(
-      planToIdMaps: ArrayBuffer[mutable.LinkedHashMap[QueryPlan[_], Int]],
-      planToLookup: QueryPlan[_]): String = {
-    val plan = planToIdMaps.find(_.get(planToLookup).isDefined)
-    if (plan.isDefined) {
-      s"${plan.get(planToLookup)}"
-    } else {
-      "unknown"
+  def getOpId(plan: QueryPlan[_]): String = {
+    val tag = new TreeNodeTag[Int]("operatorId")
+    plan.getTagValue(tag).map(v => s"$v").getOrElse("unknown")
+  }
+
+  def getCodegenId(plan: QueryPlan[_]): String = {
+    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
+    plan.getTagValue(codegenTag).map(v => s"[codegen id : $v]").getOrElse("")
+  }
+
+  def removeTags(plan: QueryPlan[_]): Unit = {
+    val opIdTag = new TreeNodeTag[Int]("operatorId")
+    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
+    plan foreach {
+      case plan: QueryPlan[_] =>
+        plan.removeTag(opIdTag)
+        plan.removeTag(codegenTag)
+        plan.innerChildren.foreach { p =>
+          removeTags(p)
+        }
     }
   }
 }

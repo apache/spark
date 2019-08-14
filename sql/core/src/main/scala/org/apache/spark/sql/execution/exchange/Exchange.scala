@@ -24,10 +24,9 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -88,18 +87,11 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
     child.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
   }
 
-  override def verboseString(
-    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-    codegenId: Option[Int]): String = {
-    val cdgen = wholestageCodegenIdStr(codegenId)
-    val reuse_op = planToOperatorID.get(child)
-    val reuse_op_str = if (reuse_op.isDefined) {
-      s"${reuse_op.get}"
-    } else {
-      "unknown"
-    }
+  override def verboseStringWithOperatorId(): String = {
+    val cdgen = ExplainUtils.getCodegenId(this)
+    val reuse_op_str = ExplainUtils.getOpId(child)
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
        |Output : ${output}
      """.stripMargin
   }

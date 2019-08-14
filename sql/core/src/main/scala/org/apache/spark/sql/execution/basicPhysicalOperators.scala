@@ -83,11 +83,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def verboseString(
-    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-    codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Output    : ${projectList.mkString("[", ", ", "]")}
        |Input     : ${child.output.mkString("[", ", ", "]")}
      """.stripMargin
@@ -239,11 +237,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-      codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Input     : ${child.output.mkString("[", ", ", "]")}
        |Condition : ${condition}
      """.stripMargin
@@ -713,8 +709,8 @@ abstract class BaseSubqueryExec extends SparkPlan {
     prefix: String = "",
     addSuffix: Boolean = false,
     maxFields: Int,
-    planLabelMap: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
-    if (planLabelMap.isEmpty) {
+    printNodeId: Boolean): Unit = {
+    if (!printNodeId) {
       super.generateTreeString(
         depth,
         lastChildren,
@@ -723,7 +719,7 @@ abstract class BaseSubqueryExec extends SparkPlan {
         "",
         false,
         maxFields,
-        planLabelMap)
+        printNodeId)
     }
   }
 }

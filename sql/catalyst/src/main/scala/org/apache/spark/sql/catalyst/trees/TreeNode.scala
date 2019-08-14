@@ -531,14 +531,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * @param maxFields Maximum number of fields that will be converted to strings.
    *                  Any elements beyond the limit will be dropped.
    */
-  def simpleString(maxFields: Int): String = {
-    s"$nodeName ${argString(maxFields)}".trim
-  }
+  def simpleString(maxFields: Int): String = s"$nodeName ${argString(maxFields)}".trim
 
-  def simpleString(
-     planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): String = s"$nodeName".trim
+  def simpleStringWithNodeId(): String = simpleString(0)
 
-    /** ONE line description of this node with more information */
+  /** ONE line description of this node with more information */
   def verboseString(maxFields: Int): String
 
   /** ONE line description of this node with some suffix information */
@@ -547,15 +544,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
+  // final def treeString: String = treeString(verbose = true)
+
   final def treeString: String = treeString(verbose = true)
 
   final def treeString(
-      verbose: Boolean,
-      addSuffix: Boolean = false,
-      maxFields: Int = SQLConf.get.maxToStringFields): String = {
+    verbose: Boolean,
+    addSuffix: Boolean = false,
+    maxFields: Int = SQLConf.get.maxToStringFields,
+    printOperatorId: Boolean = false): String = {
     val concat = new PlanStringConcat()
-
-    treeString(concat.append, verbose, addSuffix, maxFields, mutable.LinkedHashMap.empty)
+    treeString(concat.append, verbose, addSuffix, maxFields, printOperatorId)
     concat.toString
   }
 
@@ -564,8 +563,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     verbose: Boolean,
     addSuffix: Boolean,
     maxFields: Int,
-    planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int] ): Unit = {
-    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, planToOperatorID)
+    printOperatorId: Boolean): Unit = {
+    generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId)
   }
 
   /**
@@ -626,14 +625,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Note that this traversal (numbering) order must be the same as [[getNodeNumbered]].
    */
   def generateTreeString(
-      depth: Int,
-      lastChildren: Seq[Boolean],
-      append: String => Unit,
-      verbose: Boolean,
-      prefix: String = "",
-      addSuffix: Boolean = false,
-      maxFields: Int,
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
+    depth: Int,
+    lastChildren: Seq[Boolean],
+    append: String => Unit,
+    verbose: Boolean,
+    prefix: String = "",
+    addSuffix: Boolean = false,
+    maxFields: Int,
+    printNodeId: Boolean): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -645,10 +644,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     val str = if (verbose) {
       if (addSuffix) verboseStringWithSuffix(maxFields) else verboseString(maxFields)
     } else {
-      if (planToOperatorID.isEmpty) {
-        simpleString(maxFields)
+      if (printNodeId) {
+        simpleStringWithNodeId()
       } else {
-        simpleString(planToOperatorID)
+        simpleString(maxFields)
       }
     }
     append(prefix)
@@ -658,20 +657,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ false, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, planToOperatorID = planToOperatorID))
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId))
       innerChildren.last.generateTreeString(
         depth + 2, lastChildren :+ children.isEmpty :+ true, append, verbose,
-        addSuffix = addSuffix, maxFields = maxFields, planToOperatorID = planToOperatorID)
+        addSuffix = addSuffix, maxFields = maxFields, printNodeId = printNodeId)
     }
 
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(
         depth + 1, lastChildren :+ false, append, verbose, prefix, addSuffix,
-        maxFields, planToOperatorID)
+        maxFields, printNodeId = printNodeId)
       )
       children.last.generateTreeString(
         depth + 1, lastChildren :+ true, append, verbose, prefix,
-        addSuffix, maxFields, planToOperatorID)
+        addSuffix, maxFields, printNodeId = printNodeId)
     }
   }
 

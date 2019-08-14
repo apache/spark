@@ -50,20 +50,17 @@ case class SortMergeJoinExec(
     s"$nodeName $joinType"
   }
 
-  override def simpleString(planLabelMap: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
-    val label = planLabelMap.get(this).getOrElse(-1)
-    s"$nodeName $joinType ($label)".trim
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType ($opId)".trim
   }
 
-  override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-      codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     val joinCondStr = if (condition.isDefined) {
       s"${condition.get}"
     } else "None"
-
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Left keys : ${leftKeys}
        |Right keys: ${rightKeys}
        |Join condition : ${joinCondStr}

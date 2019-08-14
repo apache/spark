@@ -110,7 +110,7 @@ abstract class QueryStageExec extends LeafExecNode {
       prefix: String = "",
       addSuffix: Boolean = false,
       maxFields: Int,
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): Unit = {
+      printNodeId: Boolean): Unit = {
     super.generateTreeString(depth,
       lastChildren,
       append,
@@ -118,9 +118,9 @@ abstract class QueryStageExec extends LeafExecNode {
       prefix,
       addSuffix,
       maxFields,
-      planToOperatorID)
+      printNodeId)
     plan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, planToOperatorID)
+      depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId)
   }
 }
 

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.{ExplainUtils, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
 
@@ -39,20 +39,18 @@ trait HashJoin {
   val left: SparkPlan
   val right: SparkPlan
 
-  override def simpleString(planLabelMap: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
-    val label = planLabelMap.get(this).getOrElse(-1)
-    s"$nodeName $joinType ${buildSide} ($label)".trim
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType ${buildSide} ($opId)".trim
   }
 
-  override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-      codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     val joinCondStr = if (condition.isDefined) {
       s"${condition.get}"
     } else "None"
 
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Left keys: ${leftKeys}
        |Right keys: ${rightKeys}
        |Join condition: ${joinCondStr}

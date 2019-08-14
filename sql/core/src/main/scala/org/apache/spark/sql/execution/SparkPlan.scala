@@ -528,11 +528,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 trait LeafExecNode extends SparkPlan {
   override final def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
-  override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-      codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Output: ${producedAttributes.mkString("[", ", ", "]")}
      """.stripMargin
   }
@@ -549,11 +547,9 @@ trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override final def children: Seq[SparkPlan] = child :: Nil
-  override def verboseString(
-      planToOperatorID : mutable.LinkedHashMap[QueryPlan[_], Int],
-      codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Input: ${child.output.mkString("[", ", ", "]")}
      """.stripMargin
   }
@@ -564,11 +560,9 @@ trait BinaryExecNode extends SparkPlan {
   def right: SparkPlan
 
   override final def children: Seq[SparkPlan] = Seq(left, right)
-  override def verboseString(
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int],
-      codegenId: Option[Int]): String = {
+  override def verboseStringWithOperatorId(): String = {
     s"""
-       |(${operatorIdStr(planToOperatorID)}) $nodeName ${wholestageCodegenIdStr(codegenId)}
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
        |Left output: ${left.output.mkString("[", ", ", "]")}
        |Right output: ${right.output.mkString("[", ", ", "]")}
      """.stripMargin

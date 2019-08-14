@@ -157,43 +157,57 @@ EXPLAIN
 struct<plan:string>
 -- !query 7 output
 == Physical Plan ==
-*HashAggregate (8)
-+- Exchange (7)
-   +- *HashAggregate (6)
-      +- Union (5)
+*HashAggregate (12)
++- Exchange (11)
+   +- *HashAggregate (10)
+      +- Union (9)
          :- *Project (4)
          :  +- *Filter (3)
          :     +- *ColumnarToRow (2)
          :        +- Scan parquet default.explain_temp1 (1)
-         +- *Project (4)
-            +- *Filter (3)
-               +- *ColumnarToRow (2)
-                  +- Scan parquet default.explain_temp1 (1)
+         +- *Project (8)
+            +- *Filter (7)
+               +- *ColumnarToRow (6)
+                  +- Scan parquet default.explain_temp1 (5)
 
 
 (1) Scan parquet default.explain_temp1 
 Output: [key#x, val#x]
      
-(2) ColumnarToRow [codegen id : 2]
+(2) ColumnarToRow [codegen id : 1]
 Input: [key#x, val#x]
      
-(3) Filter [codegen id : 2]
+(3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
      
-(4) Project [codegen id : 2]
+(4) Project [codegen id : 1]
 Output    : [key#x, val#x]
 Input     : [key#x, val#x]
      
-(5) Union 
+(5) Scan parquet default.explain_temp1 
+Output: [key#x, val#x]
      
-(6) HashAggregate [codegen id : 3]
+(6) ColumnarToRow [codegen id : 2]
 Input: [key#x, val#x]
      
-(7) Exchange 
+(7) Filter [codegen id : 2]
+Input     : [key#x, val#x]
+Condition : (isnotnull(key#x) AND (key#x > 0))
+     
+(8) Project [codegen id : 2]
+Output    : [key#x, val#x]
+Input     : [key#x, val#x]
+     
+(9) Union 
+     
+(10) HashAggregate [codegen id : 3]
 Input: [key#x, val#x]
      
-(8) HashAggregate [codegen id : 4]
+(11) Exchange 
+Input: [key#x, val#x]
+     
+(12) HashAggregate [codegen id : 4]
 Input: [key#x, val#x]
 
 
