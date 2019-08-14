@@ -29,7 +29,7 @@ import org.apache.spark.sql.sources.v2.{Table, TableCapability}
 import org.apache.spark.sql.types.StructType
 
 /**
- * An implementation of catalog v2 [[Table]] to expose v1 table metadata.
+ * An implementation of catalog v2 `Table` to expose v1 table metadata.
  */
 case class UnresolvedTable(v1Table: CatalogTable) extends Table {
   implicit class IdentifierHelper(identifier: TableIdentifier) {
