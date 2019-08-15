@@ -97,6 +97,7 @@ case class InsertAdaptiveSparkPlan(
       case expressions.ScalarSubquery(p, _, exprId)
           if !subqueryMapBuilder.contains(exprId.id) =>
         val executedPlan = compileSubquery(p)
+        verifyAdaptivePlan(executedPlan, p)
         val scalarSubquery = execution.ScalarSubquery(
           SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
         subqueryMapBuilder.put(exprId.id, scalarSubquery)
@@ -106,15 +107,17 @@ case class InsertAdaptiveSparkPlan(
     subqueryMapBuilder
   }
 
-  private def compileSubquery(plan: LogicalPlan): SparkPlan = {
+  def compileSubquery(plan: LogicalPlan): SparkPlan = {
     val queryExec = new QueryExecution(session, plan)
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
-    val adaptivePlan = this.applyInternal(queryExec.sparkPlan, queryExec)
-    if (!adaptivePlan.isInstanceOf[AdaptiveSparkPlanExec]) {
-      throw SubqueryAdaptiveNotSupportedException(plan)
+    this.applyInternal(queryExec.sparkPlan, queryExec)
+  }
+
+  private def verifyAdaptivePlan(plan: SparkPlan, logicalPlan: LogicalPlan): Unit = {
+    if (!plan.isInstanceOf[AdaptiveSparkPlanExec]) {
+      throw SubqueryAdaptiveNotSupportedException(logicalPlan)
     }
-    adaptivePlan
   }
 }
 
