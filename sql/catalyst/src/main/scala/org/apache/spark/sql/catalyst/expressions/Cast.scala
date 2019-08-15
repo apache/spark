@@ -183,14 +183,14 @@ object Cast {
 
     case (FloatType | DoubleType, TimestampType) => true
     case (TimestampType, DateType) => false
-    case (TimestampType, _: IntegralType) if to != LongType => true
+
     case (_, DateType) => true
     case (DateType, TimestampType) => false
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
 
     case (_, to: DecimalType) if !canNullSafeCastToDecimal(from, to) => true
-    case (_: NumericType, _: IntegralType) if !legalNumericPrecedence(from, to) => true
+    case (_: FractionalType, _: IntegralType) => true  // NaN, infinity
     case _ => false
   }
 
