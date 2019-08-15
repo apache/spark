@@ -35,6 +35,64 @@ progress of all jobs and the overall event timeline. When you click on a job on 
 page, you see the details page for that job. The details page further shows the event timeline,
 DAG visualization, and all stages of the job.
 
+The information that is displayed in this section is
+* User: Current Spark user
+* Total uptime: Time since Spark application started
+* Scheduling mode: See [job scheduling](job-scheduling.html#configuring-pool-properties)
+* Number of jobs per status: Active, Completed, Failed
+
+<p style="text-align: center;">
+  <img src="img/AllJobsPageDetail1.png" title="Basic info" alt="Basic info" width="20%"/>
+</p>
+
+* Event timeline: Displays in chronological order the events related to the executors (added, removed) and the jobs
+
+<p style="text-align: center;">
+  <img src="img/AllJobsPageDetail2.png" title="Event timeline" alt="Event timeline"/>
+</p>
+
+* Details of jobs grouped by status: Displays detailed information of the jobs including Job ID, description (with a link to detailed job page), submitted time, duration, stages summary and tasks progress bar
+
+<p style="text-align: center;">
+  <img src="img/AllJobsPageDetail3.png" title="Details of jobs grouped by status" alt="Details of jobs grouped by status"/>
+</p>
+
+
+When you click on a specific job, you can see the detailed information of this job.
+
+### Jobs detail
+
+This page displays the details of a specific job identified by its job ID. 
+* Job Status: (running, succeeded, failed)
+* Number of stages per status (active, pending, completed, skipped, failed)
+* Associated SQL Query: Link to the sql tab for this job
+* Event timeline: Displays in chronological order the events related to the executors (added, removed) and the stages of the job
+
+<p style="text-align: center;">
+  <img src="img/JobPageDetail1.png" title="Event timeline" alt="Event timeline"/>
+</p>
+
+* DAG visualization: Visual representation of the directed acyclic graph of this job where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied on RDD.
+
+<p style="text-align: center;">
+  <img src="img/JobPageDetail2.png" title="DAG" alt="DAG" width="40%">
+</p>
+
+* List of stages (grouped by state active, pending, completed, skipped, and failed)
+	* Stage ID
+	* Description of the stage
+	* Submitted timestamp
+	* Duration of the stage
+	* Tasks progress bar
+	* Input: Bytes read from storage in this stage
+	* Output: Bytes written in storage in this stage
+	* Shuffle read: Total shuffle bytes and records read, includes both data read locally and data read from remote executors
+	* Shuffle write: Bytes and records written to disk in order to be read by a shuffle in a future stage
+
+<p style="text-align: center;">
+  <img src="img/JobPageDetail3.png" title="DAG" alt="DAG">
+</p>
+
 ## Stages Tab
 The Stages tab displays a summary page that shows the current state of all stages of all jobs in
 the Spark application, and, when you click on a stage, a details page for that stage. The details
@@ -117,3 +175,4 @@ illustrate how Spark parses, analyzes, optimizes and performs the query.
 The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
 scheduling delay and processing time for each micro-batch in the data stream, which can be useful
 for troubleshooting the streaming application.
+
