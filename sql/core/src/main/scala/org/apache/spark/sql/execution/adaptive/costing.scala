@@ -17,20 +17,16 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.sql.execution.SparkPlan
+
 /**
  * Represents the cost of a plan.
  */
 trait Cost extends Ordered[Cost]
 
 /**
- * A simple implementation of [[Cost]], which takes a number of [[Long]] as the cost value.
+ * Evaluates the cost of a physical plan.
  */
-case class SimpleCost(value: Long) extends Cost {
-
-  override def compare(that: Cost): Int = that match {
-    case SimpleCost(thatValue) =>
-      if (value < thatValue) -1 else if (value > thatValue) 1 else 0
-    case _ =>
-      throw new IllegalArgumentException(s"Could not compare cost with $that")
-  }
+trait CostEvaluator {
+  def evaluateCost(plan: SparkPlan): Cost
 }

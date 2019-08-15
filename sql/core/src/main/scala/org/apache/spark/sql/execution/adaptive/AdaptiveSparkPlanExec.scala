@@ -174,8 +174,8 @@ case class AdaptiveSparkPlanExec(
         // Do re-planning and try creating new stages on the new physical plan.
         val updatedLogicalPlan = updateLogicalPlan(currentLogicalPlan, stagesToReplace)
         val (newPhysicalPlan, newLogicalPlan) = reOptimize(updatedLogicalPlan)
-        val origCost = evaluateCost(currentPhysicalPlan)
-        val newCost = evaluateCost(newPhysicalPlan)
+        val origCost = SimpleCostEvaluator.evaluateCost(currentPhysicalPlan)
+        val newCost = SimpleCostEvaluator.evaluateCost(newPhysicalPlan)
         if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
           cleanUpTempTags(newPhysicalPlan)
@@ -404,16 +404,6 @@ case class AdaptiveSparkPlanExec(
         plan.unsetTagValue(AdaptiveSparkPlanExec.TEMP_LOGICAL_PLAN_TAG)
       case _ =>
     }
-  }
-
-  /**
-   * Evaluate the cost of a physical plan.
-   */
-  private def evaluateCost(plan: SparkPlan): Cost = {
-    val cost = plan.collect {
-      case s: ShuffleExchangeExec => s
-    }.size
-    SimpleCost(cost)
   }
 
   /**
