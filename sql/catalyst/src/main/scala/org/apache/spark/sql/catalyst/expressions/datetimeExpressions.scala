@@ -1969,9 +1969,22 @@ case class Epoch(child: Expression, timeZoneId: Option[String] = None)
   arguments = """
     Arguments:
       * field - selects which part of the source should be extracted. Supported string values are:
-                ["MILLENNIUM", "CENTURY", "DECADE", "YEAR", "QUARTER", "MONTH",
-                 "WEEK", "DAY", "DAYOFWEEK", "DOW", "ISODOW", "DOY",
-                 "HOUR", "MINUTE", "SECOND"]
+                ["MILLENNIUM", "MILLENNIA", "MIL", "MILS",
+                 "CENTURY", "CENTURIES", "C", "CENT",
+                 "DECADE", "DECADES", "DEC", "DECS",
+                 "YEAR", "Y", "YEARS", "YR", "YRS",
+                 "ISOYEAR",
+                 "QUARTER", "QTR",
+                 "MONTH", "MON", "MONS", "MONTHS",
+                 "WEEK", "W", "WEEKS",
+                 "DAY", "D", "DAYS",
+                 "DAYOFWEEK", "DOW", "ISODOW", "DOY",
+                 "HOUR", "H", "HOURS", "HR", "HRS",
+                 "MINUTE", "M", "MIN", "MINS", "MINUTES",
+                 "SECOND", "S", "SEC", "SECONDS", "SECS",
+                 "MILLISECONDS", "MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS",
+                 "MICROSECONDS", "USEC", "USECS", "USECONDS", "MICROSECON", "US",
+                 "EPOCH"]
       * source - a date (or timestamp) column from where `field` should be extracted
   """,
   examples = """
