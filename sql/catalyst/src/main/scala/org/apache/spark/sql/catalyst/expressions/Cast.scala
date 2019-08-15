@@ -1252,20 +1252,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType if failOnIntegerOverflow =>
-      val longValue = ctx.freshName("longValue")
-      (c, evPrim, evNull) =>
-        code"""
-          long $longValue = ${timestampToIntegerCode(c)};
-          if ($longValue == (byte) $longValue) {
-            $evPrim = (byte) $longValue;
-          } else {
-            throw new ArithmeticException("Casting $c to Byte causes overflow");
-          }
-        """
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (byte) ${timestampToIntegerCode(c)};"
-    case DecimalType() =>
+    case TimestampType => castTimestampToInteger(ctx, "byte")
+    case DecimalType() if failOnIntegerOverflow =>
       val floatValue = ctx.freshName("floatValue")
       (c, evPrim, evNull) =>
         code"""
@@ -1276,7 +1264,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             throw new ArithmeticException("Casting $c to Byte causes overflow");
           }
         """
-    case _: ShortType | _: IntegerType | _: LongType =>
+    case DecimalType() =>
+      (c, evPrim, evNull) => code"$evPrim = $c.toByte();"
+    case _: ShortType | _: IntegerType | _: LongType if failOnIntegerOverflow =>
       (c, evPrim, evNull) =>
         code"""
           if ($c == (byte) $c) {
@@ -1285,7 +1275,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             throw new ArithmeticException("Casting $c to Byte causes overflow");
           }
         """
-    case _: FloatType | _: DoubleType =>
+    case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
       (c, evPrim, evNull) =>
         code"""
           if ($c > ${Byte.MinValue - 1} && $c < ${Byte.MaxValue + 1}) {
@@ -1294,6 +1284,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             throw new ArithmeticException("Casting $c to Byte causes overflow");
           }
         """
+    case x: NumericType =>
+      (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
 
   private[this] def castToShortCode(
@@ -1315,19 +1307,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType if failOnIntegerOverflow =>
-      val longValue = ctx.freshName("longValue")
-      (c, evPrim, evNull) =>
-        code"""
-          long $longValue = ${timestampToIntegerCode(c)};
-          if ($longValue == (short) $longValue) {
-            $evPrim = (short) $longValue;
-          } else {
-            throw new ArithmeticException("Casting $c to Short causes overflow");
-          }
-        """
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (short) ${timestampToIntegerCode(c)};"
+    case TimestampType => castTimestampToInteger(ctx, "short")
 
     case DecimalType() if failOnIntegerOverflow =>
       val floatValue = ctx.freshName("floatValue")
@@ -1365,6 +1345,23 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
 
+  private def castTimestampToInteger(ctx: CodegenContext, intType: String): CastFunction = {
+    if (failOnIntegerOverflow) {
+      val longValue = ctx.freshName("longValue")
+      (c, evPrim, evNull) =>
+        code"""
+          long $longValue = ${timestampToIntegerCode(c)};
+          if ($longValue == ($intType) $longValue) {
+            $evPrim = ($intType) $longValue;
+          } else {
+            throw new ArithmeticException("Casting $c to ${intType.capitalize} causes overflow");
+          }
+        """
+    } else {
+      (c, evPrim, evNull) => code"$evPrim = ($intType) ${timestampToIntegerCode(c)};"
+    }
+  }
+
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
@@ -1382,19 +1379,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? 1 : 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType if failOnIntegerOverflow =>
-      val longValue = ctx.freshName("longValue")
-      (c, evPrim, evNull) =>
-        code"""
-          long $longValue = ${timestampToIntegerCode(c)};
-          if ($longValue == (int) $longValue) {
-            $evPrim = (int) $longValue;
-          } else {
-            throw new ArithmeticException("Casting $c to Int causes overflow");
-          }
-        """
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (int) ${timestampToIntegerCode(c)};"
+    case TimestampType => castTimestampToInteger(ctx, "int")
     case DecimalType() if failOnIntegerOverflow =>
       val doubleValue = ctx.freshName("doubleValue")
       (c, evPrim, evNull) =>
