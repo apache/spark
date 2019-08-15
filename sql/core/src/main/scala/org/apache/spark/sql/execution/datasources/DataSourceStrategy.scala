@@ -626,35 +626,25 @@ object DataSourceStrategy {
  * Support for recalculating table statistics if table statistics are not available.
  */
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  def getHdfsSize(catalogTable: CatalogTable): Long = {
-    try {
-      val hadoopConf = session.sessionState.newHadoopConf()
-      val tablePath = new Path(catalogTable.location)
-      val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-      fs.getContentSummary(tablePath).getLength
-    } catch {
-      case e: IOException =>
-        logWarning("Failed to get table size from hdfs.", e)
-        session.sessionState.conf.defaultSizeInBytes
-    }
-  }
+
+  private val sessionConf = session.sessionState.conf
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case logical @ LogicalRelation(relation, _, Some(table), _)
-      if session.sessionState.conf.fallBackToHdfsForStatsEnabled &&
-        session.sessionState.conf.manageFilesourcePartitions && table.stats.isEmpty &&
+    case logical @ LogicalRelation(_, _, Some(table), _)
+      if sessionConf.fallBackToHdfsForStatsEnabled && table.stats.isEmpty &&
+        sessionConf.manageFilesourcePartitions &&
         table.tracksPartitionsInCatalog && table.partitionColumnNames.nonEmpty =>
-      val withStats =
-        table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(getHdfsSize(table)))))
+      val sizeInBytes = CommandUtils.getSizeInBytesFallBackToHdfs(session, table)
+      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
       logical.copy(catalogTable = Some(withStats))
 
     case relation: HiveTableRelation
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
-      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        getHdfsSize(table)
+      val sizeInBytes = if (sessionConf.fallBackToHdfsForStatsEnabled) {
+        CommandUtils.getSizeInBytesFallBackToHdfs(session, table)
       } else {
-        session.sessionState.conf.defaultSizeInBytes
+        sessionConf.defaultSizeInBytes
       }
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
       relation.copy(tableMeta = withStats)
