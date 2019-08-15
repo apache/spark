@@ -52,6 +52,9 @@ import org.apache.spark.streaming.kafka010._
  *     serviceName="kafka"
  *     principal="kafka/server@example";
  *   };
+ *
+ * Note: This file uses SASL_PLAINTEXT for simplicity;however,
+ * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Consider using SASL_SSL.
  */
 object DirectKerberizedKafkaWordCount {
   def main(args: Array[String]) {
