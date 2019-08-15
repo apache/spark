@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Numeric.{ByteIsIntegral, IntIsIntegral, LongIsIntegral, ShortIsIntegral}
+import scala.math.Numeric._
 import scala.math.Ordering
+
+import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
@@ -107,4 +109,82 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
   override def times(x: Long, y: Long): Long = Math.multiplyExact(x, y)
 
   override def negate(x: Long): Long = Math.negateExact(x)
+
+  override def toInt(x: Long): Int =
+    if (x == x.toInt) {
+      x.toInt
+    } else {
+      throw new ArithmeticException(s"Casting $x to Int causes overflow.")
+    }
+}
+
+object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
+  private def exceptionMessage(x: Float, dataType: String): String =
+    s"Casting $x to $dataType causes overflow."
+
+  override def toInt(x: Float): Int = {
+    if (x <= Int.MaxValue && x >= Int.MinValue) {
+      x.toInt
+    } else {
+      throw new ArithmeticException(exceptionMessage(x, "Int"))
+    }
+  }
+
+  override def toLong(x: Float): Long = {
+    if (x <= Long.MaxValue && x >= Long.MinValue) {
+      x.toLong
+    } else {
+      throw new ArithmeticException(exceptionMessage(x, "Long"))
+    }
+  }
+}
+
+object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
+  private def exceptionMessage(x: Double, dataType: String): String =
+    s"Casting $x to $dataType causes overflow."
+
+  private val intUpperBound = Int.MaxValue + 1L
+  private val intLowerBound = Int.MinValue - 1L
+
+  override def toInt(x: Double): Int = {
+    if (x < intUpperBound && x > intLowerBound) {
+      x.toInt
+    } else {
+      throw new ArithmeticException(exceptionMessage(x, "Int"))
+    }
+  }
+
+  override def toLong(x: Double): Long = {
+    if (x <= Long.MaxValue && x >= Long.MinValue) {
+      x.toLong
+    } else {
+      throw new ArithmeticException(exceptionMessage(x, "Long"))
+    }
+  }
+}
+
+object DecimalExactNumeric extends DecimalIsConflicted {
+  private def exceptionMessage(x: Decimal, dataType: String): String =
+    s"Casting $x to $dataType causes overflow."
+
+  private val intUpperBound = Decimal(Int.MaxValue + 1L)
+  private val intLowerBound = Decimal(Int.MinValue - 1L)
+  private val longUpperBound = Decimal(Long.MaxValue) + Decimal(1L)
+  private val longLowerBound = Decimal(Long.MinValue) - Decimal(1L)
+
+  override def toInt(x: Decimal): Int = {
+    if (x < intUpperBound && x > intLowerBound) {
+      x.toInt
+    } else {
+      throw new ArithmeticException(exceptionMessage(x, "Int"))
+    }
+  }
+
+  override def toLong(x: Decimal): Long = {
+    if (x < longUpperBound && x > longLowerBound) {
+      x.toLong
+    } else {
+      throw new ArithmeticException(exceptionMessage(x, "Long"))
+    }
+  }
 }
