@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.processors.CommandProcessor;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
@@ -69,16 +71,16 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
       LOG.info("Putting temp output to file " + sessionState.getTmpOutputFile().toString());
       sessionState.in = null; // hive server's session input stream is not used
       // open a per-session file in auto-flush mode for writing temp results
-      sessionState.out = new PrintStream(new FileOutputStream(sessionState.getTmpOutputFile()), true, "UTF-8");
+      sessionState.out = new PrintStream(new FileOutputStream(sessionState.getTmpOutputFile()), true, UTF_8.name());
       // TODO: for hadoop jobs, progress is printed out to session.err,
       // we should find a way to feed back job progress to client
-      sessionState.err = new PrintStream(System.err, true, "UTF-8");
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name());
     } catch (IOException e) {
       LOG.error("Error in creating temp output file ", e);
       try {
         sessionState.in = null;
-        sessionState.out = new PrintStream(System.out, true, "UTF-8");
-        sessionState.err = new PrintStream(System.err, true, "UTF-8");
+        sessionState.out = new PrintStream(System.out, true, UTF_8.name());
+        sessionState.err = new PrintStream(System.err, true, UTF_8.name());
       } catch (UnsupportedEncodingException ee) {
         LOG.error("Error creating PrintStream", e);
         ee.printStackTrace();

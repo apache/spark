@@ -24,6 +24,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.Try
 
+import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
@@ -1190,19 +1191,36 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("SPARK-28054: Unable to insert partitioned table when partition name is upper case") {
-    withTable("spark_28054_test") {
-      sql("set hive.exec.dynamic.partition.mode=nonstrict")
-      sql("CREATE TABLE spark_28054_test (KEY STRING, VALUE STRING) PARTITIONED BY (DS STRING)")
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("spark_28054_test") {
+        sql("CREATE TABLE spark_28054_test (KEY STRING, VALUE STRING) PARTITIONED BY (DS STRING)")
 
-      sql("INSERT INTO TABLE spark_28054_test PARTITION(DS) SELECT 'k' KEY, 'v' VALUE, '1' DS")
+        sql("INSERT INTO TABLE spark_28054_test PARTITION(DS) SELECT 'k' KEY, 'v' VALUE, '1' DS")
 
-      assertResult(Array(Row("k", "v", "1"))) {
-        sql("SELECT * from spark_28054_test").collect()
+        assertResult(Array(Row("k", "v", "1"))) {
+          sql("SELECT * from spark_28054_test").collect()
+        }
+
+        sql("INSERT INTO TABLE spark_28054_test PARTITION(ds) SELECT 'k' key, 'v' value, '2' ds")
+        assertResult(Array(Row("k", "v", "1"), Row("k", "v", "2"))) {
+          sql("SELECT * from spark_28054_test").collect()
+        }
+      }
+    }
+  }
+
+  // This test case is moved from HiveCompatibilitySuite to make it easy to test with JDK 11.
+  test("udf_radians") {
+    withSQLConf("hive.fetch.task.conversion" -> "more") {
+      val result = sql("select radians(57.2958) FROM src tablesample (1 rows)").collect()
+      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+        assertResult(Array(Row(1.0000003575641672))) (result)
+      } else {
+        assertResult(Array(Row(1.000000357564167))) (result)
       }
 
-      sql("INSERT INTO TABLE spark_28054_test PARTITION(ds) SELECT 'k' key, 'v' value, '2' ds")
-      assertResult(Array(Row("k", "v", "1"), Row("k", "v", "2"))) {
-        sql("SELECT * from spark_28054_test").collect()
+      assertResult(Array(Row(2.4999991485811655))) {
+        sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
       }
     }
   }

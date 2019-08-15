@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.internal.SQLConf.BUCKETING_MAX_BUCKETS
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -252,7 +253,7 @@ class CreateTableAsSelectSuite
 
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
-    withSQLConf("spark.sql.sources.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+    withSQLConf(BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
 
       // Within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {

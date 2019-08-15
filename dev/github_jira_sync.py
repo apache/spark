@@ -22,7 +22,14 @@ import json
 import os
 import re
 import sys
-import urllib2
+if sys.version < '3':
+    from urllib2 import urlopen
+    from urllib2 import Request
+    from urllib2 import HTTPError
+else:
+    from urllib.request import urlopen
+    from urllib.request import Request
+    from urllib.error import HTTPError
 
 try:
     import jira.client
@@ -52,16 +59,16 @@ MAX_FILE = ".github-jira-max"
 
 def get_url(url):
     try:
-        request = urllib2.Request(url)
+        request = Request(url)
         request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
-        return urllib2.urlopen(request)
-    except urllib2.HTTPError:
+        return urlopen(request)
+    except HTTPError:
         print("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
 
 
 def get_json(urllib_response):
-    return json.load(urllib_response)
+    return json.loads(urllib_response.read().decode("utf-8"))
 
 
 # Return a list of (JIRA id, JSON dict) tuples:
@@ -80,7 +87,7 @@ def get_jira_prs():
                 result = result + [(jira, pull)]
 
         # Check if there is another page
-        link_headers = filter(lambda k: k.startswith("Link"), page.info().headers)
+        link_headers = list(filter(lambda k: k.startswith("Link"), page.headers))
         if not link_headers or "next" not in link_headers[0]:
             has_next_page = False
         else:
@@ -122,13 +129,13 @@ def reset_pr_labels(pr_num, jira_components):
     url = '%s/issues/%s/labels' % (GITHUB_API_BASE, pr_num)
     labels = ', '.join(('"%s"' % c) for c in jira_components)
     try:
-        request = urllib2.Request(url, data='{"labels":[%s]}' % labels)
+        request = Request(url, data=('{"labels":[%s]}' % labels).encode('utf-8'))
         request.add_header('Content-Type', 'application/json')
         request.add_header('Authorization', 'token %s' % GITHUB_OAUTH_KEY)
         request.get_method = lambda: 'PUT'
-        urllib2.urlopen(request)
+        urlopen(request)
         print("Set %s with labels %s" % (pr_num, labels))
-    except urllib2.HTTPError:
+    except HTTPError:
         print("Unable to update PR labels, exiting: %s" % url)
         sys.exit(-1)
 

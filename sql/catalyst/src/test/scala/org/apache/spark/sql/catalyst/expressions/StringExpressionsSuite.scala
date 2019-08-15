@@ -428,6 +428,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("overlay") {
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(6, IntegerType)), "Spark_SQL")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("CORE"),
+      Literal.create(7, IntegerType)), "Spark CORE")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("ANSI "),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), "Spark ANSI SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("tructured"),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), "Structured SQL")
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("_"),
+      Literal.create(6, IntegerType)), null)
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("CORE"),
+      Literal.create(7, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("ANSI "),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("tructured"),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(new Overlay(Literal("Spark的SQL"), Literal("_"),
+      Literal.create(6, IntegerType)), "Spark_SQL")
+    // scalastyle:on
+  }
+
   test("translate") {
     checkEvaluation(
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")

@@ -95,4 +95,9 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
     val daysSinceEpoch = formatter.parse("2018 Dec")
     assert(daysSinceEpoch === LocalDate.of(2018, 12, 1).toEpochDay)
   }
+
+  test("formatting negative years with default pattern") {
+    val epochDays = LocalDate.of(-99, 1, 1).toEpochDay.toInt
+    assert(DateFormatter().format(epochDays) === "-0099-01-01")
+  }
 }
