@@ -37,7 +37,9 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     spark
       .range(sinceSecond, sinceSecond + cardinality, 1, 1)
       .selectExpr(exprs: _*)
-      .write.format("noop").save()
+      .write
+      .format("noop")
+      .save()
   }
 
   private def run(cardinality: Long, name: String, exprs: String*): Unit = {
