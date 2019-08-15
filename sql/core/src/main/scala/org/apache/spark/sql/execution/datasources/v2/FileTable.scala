@@ -20,11 +20,12 @@ import java.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.streaming.{FileStreamSink, MetadataLogFileIndex}
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -44,23 +45,37 @@ abstract class FileTable(
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
-      checkEmptyGlobPath = true, checkFilesExist = true)
-    val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-    new InMemoryFileIndex(
-      sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+    if (FileStreamSink.hasMetadata(paths, hadoopConf, sparkSession.sessionState.conf)) {
+      // We are reading from the results of a streaming query. We will load files from
+      // the metadata log instead of listing them using HDFS APIs.
+      new MetadataLogFileIndex(sparkSession, new Path(paths.head),
+        options.asScala.toMap, userSpecifiedSchema)
+    } else {
+      // This is a non-streaming file based datasource.
+      val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
+        checkEmptyGlobPath = true, checkFilesExist = true)
+      val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+      new InMemoryFileIndex(
+        sparkSession, rootPathsSpecified, caseSensitiveMap, userSpecifiedSchema, fileStatusCache)
+    }
   }
 
-  lazy val dataSchema: StructType = userSpecifiedSchema.map { schema =>
-    val partitionSchema = fileIndex.partitionSchema
-    val resolver = sparkSession.sessionState.conf.resolver
-    StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
-  }.orElse {
-    inferSchema(fileIndex.allFiles())
-  }.getOrElse {
-    throw new AnalysisException(
-      s"Unable to infer schema for $formatName. It must be specified manually.")
-  }.asNullable
+  lazy val dataSchema: StructType = {
+    val schema = userSpecifiedSchema.map { schema =>
+      val partitionSchema = fileIndex.partitionSchema
+      val resolver = sparkSession.sessionState.conf.resolver
+      StructType(schema.filterNot(f => partitionSchema.exists(p => resolver(p.name, f.name))))
+    }.orElse {
+      inferSchema(fileIndex.allFiles())
+    }.getOrElse {
+      throw new AnalysisException(
+        s"Unable to infer schema for $formatName. It must be specified manually.")
+    }
+    fileIndex match {
+      case _: MetadataLogFileIndex => schema
+      case _ => schema.asNullable
+    }
+  }
 
   override lazy val schema: StructType = {
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis

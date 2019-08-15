@@ -610,6 +610,12 @@ abstract class StreamExecution(
         }
     }
   }
+
+  protected def purge(threshold: Long): Unit = {
+    logDebug(s"Purging metadata at threshold=$threshold")
+    offsetLog.purge(threshold)
+    commitLog.purge(threshold)
+  }
 }
 
 object StreamExecution {

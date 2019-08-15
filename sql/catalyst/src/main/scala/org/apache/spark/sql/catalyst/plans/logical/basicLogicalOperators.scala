@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
@@ -65,7 +67,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  override def validConstraints: Set[Expression] =
+  override lazy val validConstraints: Set[Expression] =
     getAllValidConstraints(projectList)
 }
 
@@ -133,7 +135,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: Set[Expression] = {
     val predicates = splitConjunctivePredicates(condition)
       .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
@@ -178,7 +180,7 @@ case class Intersect(
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override protected def validConstraints: Set[Expression] =
+  override protected lazy val validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
 
   override def maxRows: Option[Long] = {
@@ -198,7 +200,7 @@ case class Except(
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
-  override protected def validConstraints: Set[Expression] = leftConstraints
+  override protected lazy val validConstraints: Set[Expression] = leftConstraints
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -294,7 +296,7 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     common ++ others
   }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: Set[Expression] = {
     children
       .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(merge(_, _))
@@ -326,7 +328,7 @@ case class Join(
     }
   }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected lazy val validConstraints: Set[Expression] = {
     joinType match {
       case _: InnerLike if condition.isDefined =>
         left.constraints
@@ -408,6 +410,21 @@ trait V2WriteCommand extends Command {
 }
 
 /**
+ * Create a new table with a v2 catalog.
+ */
+case class CreateV2Table(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    ignoreIfExists: Boolean) extends Command with V2CreateTablePlan {
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
+    this.copy(partitioning = rewritten)
+  }
+}
+
+/**
  * Create a new table from a select query with a v2 catalog.
  */
 case class CreateTableAsSelect(
@@ -417,8 +434,59 @@ case class CreateTableAsSelect(
     query: LogicalPlan,
     properties: Map[String, String],
     writeOptions: Map[String, String],
-    ignoreIfExists: Boolean) extends Command {
+    ignoreIfExists: Boolean) extends Command with V2CreateTablePlan {
 
+  override def tableSchema: StructType = query.schema
+  override def children: Seq[LogicalPlan] = Seq(query)
+
+  override lazy val resolved: Boolean = childrenResolved && {
+    // the table schema is created from the query schema, so the only resolution needed is to check
+    // that the columns referenced by the table's partitioning exist in the query schema
+    val references = partitioning.flatMap(_.references).toSet
+    references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
+    this.copy(partitioning = rewritten)
+  }
+}
+
+/**
+ * Replace a table with a v2 catalog.
+ *
+ * If the table does not exist, and orCreate is true, then it will be created.
+ * If the table does not exist, and orCreate is false, then an exception will be thrown.
+ *
+ * The persisted table will have no contents as a result of this operation.
+ */
+case class ReplaceTable(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    tableSchema: StructType,
+    partitioning: Seq[Transform],
+    properties: Map[String, String],
+    orCreate: Boolean) extends Command with V2CreateTablePlan {
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
+    this.copy(partitioning = rewritten)
+  }
+}
+
+/**
+ * Replaces a table from a select query with a v2 catalog.
+ *
+ * If the table does not exist, and orCreate is true, then it will be created.
+ * If the table does not exist, and orCreate is false, then an exception will be thrown.
+ */
+case class ReplaceTableAsSelect(
+    catalog: TableCatalog,
+    tableName: Identifier,
+    partitioning: Seq[Transform],
+    query: LogicalPlan,
+    properties: Map[String, String],
+    writeOptions: Map[String, String],
+    orCreate: Boolean) extends Command with V2CreateTablePlan {
+
+  override def tableSchema: StructType = query.schema
   override def children: Seq[LogicalPlan] = Seq(query)
 
   override lazy val resolved: Boolean = {
@@ -426,6 +494,10 @@ case class CreateTableAsSelect(
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
     references.map(_.fieldNames).forall(query.schema.findNestedField(_).isDefined)
+  }
+
+  override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
+    this.copy(partitioning = rewritten)
   }
 }
 
@@ -485,6 +557,62 @@ object OverwritePartitionsDynamic {
 
   def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
     OverwritePartitionsDynamic(table, query, isByName = false)
+  }
+}
+
+case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(table)
+
+  override val output = DescribeTableSchema.describeTableAttributes()
+}
+
+case class DeleteFromTable(
+    child: LogicalPlan,
+    condition: Expression) extends Command {
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * Drop a table.
+ */
+case class DropTable(
+    catalog: TableCatalog,
+    ident: Identifier,
+    ifExists: Boolean) extends Command
+
+/**
+ * Alter a table.
+ */
+case class AlterTable(
+    catalog: TableCatalog,
+    ident: Identifier,
+    table: NamedRelation,
+    changes: Seq[TableChange]) extends Command {
+
+  override def children: Seq[LogicalPlan] = Seq(table)
+
+  override lazy val resolved: Boolean = childrenResolved && {
+    changes.forall {
+      case add: AddColumn =>
+        add.fieldNames match {
+          case Array(_) =>
+            // a top-level field can always be added
+            true
+          case _ =>
+            // the parent field must exist
+            table.schema.findNestedField(add.fieldNames.init, includeCollections = true).isDefined
+        }
+
+      case colChange: ColumnChange =>
+        // the column that will be changed must exist
+        table.schema.findNestedField(colChange.fieldNames, includeCollections = true).isDefined
+
+      case _ =>
+        // property changes require no resolution checks
+        true
+    }
   }
 }
 
@@ -566,6 +694,8 @@ case class View(
     desc: CatalogTable,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+
+  override def producedAttributes: AttributeSet = outputSet
 
   override lazy val resolved: Boolean = child.resolved
 
@@ -710,7 +840,7 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
-  override def validConstraints: Set[Expression] = {
+  override lazy val validConstraints: Set[Expression] = {
     val nonAgg = aggregateExpressions.filter(_.find(_.isInstanceOf[AggregateExpression]).isEmpty)
     getAllValidConstraints(nonAgg)
   }
@@ -809,12 +939,13 @@ case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override def references: AttributeSet =
+  @transient
+  override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
   // the constraints of the child may no longer be valid.
-  override protected def validConstraints: Set[Expression] = Set.empty[Expression]
+  override protected lazy val validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
 /**
@@ -1083,7 +1214,7 @@ case class OneRowRelation() extends LeafNode {
   /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
   override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = {
     val newCopy = OneRowRelation()
-    newCopy.tags ++= this.tags
+    newCopy.copyTagsFrom(this)
     newCopy
   }
 }
@@ -1094,4 +1225,17 @@ case class Deduplicate(
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+}
+
+/** A trait used for logical plan nodes that create or replace V2 table definitions. */
+trait V2CreateTablePlan extends LogicalPlan {
+  def tableName: Identifier
+  def partitioning: Seq[Transform]
+  def tableSchema: StructType
+
+  /**
+   * Creates a copy of this node with the new partitoning transforms. This method is used to
+   * rewrite the partition transforms normalized according to the table schema.
+   */
+  def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
 }

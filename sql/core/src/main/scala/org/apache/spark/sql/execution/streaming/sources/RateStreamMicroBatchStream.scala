@@ -76,7 +76,7 @@ class RateStreamMicroBatchStream(
           if (content(0) == 'v') {
             val indexOfNewLine = content.indexOf("\n")
             if (indexOfNewLine > 0) {
-              parseVersion(content.substring(0, indexOfNewLine), VERSION)
+              validateVersion(content.substring(0, indexOfNewLine), VERSION)
               LongOffset(SerializedOffset(content.substring(indexOfNewLine + 1)))
             } else {
               throw new IllegalStateException(

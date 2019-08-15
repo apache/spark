@@ -23,8 +23,10 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.Utils;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -49,8 +51,10 @@ public class Catalogs {
    */
   public static CatalogPlugin load(String name, SQLConf conf)
       throws CatalogNotFoundException, SparkException {
-    String pluginClassName = conf.getConfString("spark.sql.catalog." + name, null);
-    if (pluginClassName == null) {
+    String pluginClassName;
+    try {
+      pluginClassName = conf.getConfString("spark.sql.catalog." + name);
+    } catch (NoSuchElementException e){
       throw new CatalogNotFoundException(String.format(
           "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined", name, name));
     }
@@ -66,7 +70,8 @@ public class Catalogs {
             name, pluginClassName));
       }
 
-      CatalogPlugin plugin = CatalogPlugin.class.cast(pluginClass.newInstance());
+      CatalogPlugin plugin =
+        CatalogPlugin.class.cast(pluginClass.getDeclaredConstructor().newInstance());
 
       plugin.initialize(name, catalogOptions(name, conf));
 
@@ -76,6 +81,11 @@ public class Catalogs {
       throw new SparkException(String.format(
           "Cannot find catalog plugin class for catalog '%s': %s", name, pluginClassName));
 
+    } catch (NoSuchMethodException e) {
+      throw new SparkException(String.format(
+          "Failed to find public no-arg constructor for catalog '%s': %s", name, pluginClassName),
+          e);
+
     } catch (IllegalAccessException e) {
       throw new SparkException(String.format(
           "Failed to call public no-arg constructor for catalog '%s': %s", name, pluginClassName),
@@ -83,7 +93,12 @@ public class Catalogs {
 
     } catch (InstantiationException e) {
       throw new SparkException(String.format(
-          "Failed while instantiating plugin for catalog '%s': %s", name, pluginClassName),
+          "Cannot instantiate abstract catalog plugin class for catalog '%s': %s", name,
+          pluginClassName), e.getCause());
+
+    } catch (InvocationTargetException e) {
+      throw new SparkException(String.format(
+          "Failed during instantiating constructor for catalog '%s': %s", name, pluginClassName),
           e.getCause());
     }
   }

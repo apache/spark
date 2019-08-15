@@ -415,7 +415,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       .map { case (k, v) => (k.substring(prefix.length), v) }
   }
 
-
   /**
    * Get a parameter as an integer, falling back to a default if not set
    * @throws NumberFormatException If the value cannot be interpreted as an integer
@@ -499,6 +498,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
         throw new IllegalArgumentException(s"Illegal value for config key $key: ${e.getMessage}", e)
     }
   }
+
 
   /**
    * Checks for illegal or deprecated config settings. Throws an exception for the former. Not

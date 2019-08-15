@@ -22,12 +22,27 @@ import java.io._
 import scala.tools.nsc.interpreter.SimpleReader
 
 import org.apache.log4j.{Level, LogManager}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 
-class ReplSuite extends SparkFunSuite {
+class ReplSuite extends SparkFunSuite with BeforeAndAfterAll {
+
+  private var originalClassLoader: ClassLoader = null
+
+  override def beforeAll(): Unit = {
+    originalClassLoader = Thread.currentThread().getContextClassLoader
+  }
+
+  override def afterAll(): Unit = {
+    if (originalClassLoader != null) {
+      // Reset the class loader to not affect other suites. REPL will set its own class loader but
+      // doesn't reset it.
+      Thread.currentThread().setContextClassLoader(originalClassLoader)
+    }
+  }
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"

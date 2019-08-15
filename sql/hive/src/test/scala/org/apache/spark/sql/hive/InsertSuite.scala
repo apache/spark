@@ -201,8 +201,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            |SELECT 7, 8, 3
           """.stripMargin)
     }
-    assert(e.getMessage.contains(
-      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [c]"))
+    assert(e.getMessage.contains("IF NOT EXISTS with dynamic partitions: c"))
 
     // If the partition already exists, the insert will overwrite the data
     // unless users specify IF NOT EXISTS
@@ -755,6 +754,18 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }.getMessage
 
       assert(e.contains("mismatched input 'ROW'"))
+    }
+  }
+
+
+  test("insert overwrite to dir from non-existent table") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' TABLE notexists")
+      }.getMessage
+      assert(e.contains("Table or view not found"))
     }
   }
 

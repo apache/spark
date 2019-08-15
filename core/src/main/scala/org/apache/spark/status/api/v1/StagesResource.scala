@@ -20,11 +20,7 @@ import java.util.{HashMap, List => JList, Locale}
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, MediaType, MultivaluedMap, UriInfo}
 
-import org.apache.spark.SparkException
-import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.status.api.v1.StageStatus._
-import org.apache.spark.status.api.v1.TaskSorting._
-import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.ui.jobs.ApiHelper._
 import org.apache.spark.util.Utils
 

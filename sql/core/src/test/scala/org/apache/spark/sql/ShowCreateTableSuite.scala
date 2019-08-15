@@ -162,6 +162,26 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("temp view") {
+    val viewName = "spark_28383"
+    withTempView(viewName) {
+      sql(s"CREATE TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        sql(s"SHOW CREATE TABLE $viewName")
+      }
+      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+    }
+
+    withGlobalTempView(viewName) {
+      sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val ex = intercept[AnalysisException] {
+        val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
+        sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
+      }
+      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+    }
+  }
+
   test("SPARK-24911: keep quotes for nested fields") {
     withTable("t1") {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
