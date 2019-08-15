@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
+import com.google.common.cache.CacheBuilder
+
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
@@ -50,7 +52,11 @@ class BlockManagerMasterEndpoint(
   extends IsolatedRpcEndpoint with Logging {
 
   // Mapping from executor id to the block manager's local disk directories.
-  private val executorIdToLocalDirs = new mutable.HashMap[String, Array[String]]
+  private val executorIdToLocalDirs =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
+      .build[String, Array[String]]()
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
@@ -399,9 +405,7 @@ class BlockManagerMasterEndpoint(
       topologyMapper.getTopologyForHost(idWithoutTopologyInfo.host))
 
     val time = System.currentTimeMillis()
-    if (!executorIdToLocalDirs.contains(id.executorId)) {
-      executorIdToLocalDirs(id.executorId) = localDirs
-    }
+    executorIdToLocalDirs.get(id.executorId, () => localDirs)
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
@@ -491,8 +495,11 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
-  private def getLocalDirs(executorIds: Array[String]): BlockManagerLocalDirs = {
-    BlockManagerLocalDirs(executorIds.map { id => id -> executorIdToLocalDirs(id) }.toMap)
+  private def getLocalDirs(executorIds: Array[String]): Map[String, Array[String]] = {
+    executorIds
+      .map { id => id -> executorIdToLocalDirs.getIfPresent(id) }
+      .filter(_._2 != null)
+      .toMap
   }
 
   private def getLocationsAndStatus(
@@ -518,7 +525,7 @@ class BlockManagerMasterEndpoint(
               .get(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
               .getOrElse(false))
-      }.map { bmId => executorIdToLocalDirs(bmId.executorId) }
+      }.flatMap { bmId => Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)) }
       Some(BlockLocationsAndStatus(locations, status.get, localDirs))
     } else {
       None

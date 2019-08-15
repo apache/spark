@@ -100,11 +100,6 @@ private[spark] object BlockManagerMessages {
   case class GetLocalDirs(executorIds: Array[String]) extends ToBlockManagerMaster
 
   /**
-   * The response message of `GetLocalDirs` request.
-   */
-  case class BlockManagerLocalDirs(localDirs: Map[String, Array[String]])
-
-  /**
    * The response message of `GetLocationsAndStatus` request.
    *
    * @param localDirs if it is persisted-to-disk on the same host as the requester executor is

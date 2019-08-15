@@ -1083,6 +1083,14 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
+    ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
+      .doc("The maximum size of the cache of the local dirs for the executors. This cache will " +
+        "be used to avoid the network in case of fetching disk persisted RDD blocks or shuffle " +
+        "blocks (when `spark.shuffle.readHostLocalDisk.enabled` is set) from the same host.")
+      .intConf
+      .createWithDefault(1000)
+
   private[spark] val SHUFFLE_SYNC =
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")

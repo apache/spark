@@ -67,9 +67,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
 
   // This test ensures that the external shuffle service is actually in use for the other tests.
   test("using external shuffle service") {
-    val confWithoutHostLocalRead =
-      conf.clone.set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
-    sc = new SparkContext("local-cluster[2,1,1024]", "test", confWithoutHostLocalRead)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
+    sc.getConf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(false)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
@@ -101,8 +100,10 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
   }
 
   test("SPARK-27651: host local disk reading avoids external shuffle service on the same node") {
-    sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
-    conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(true)
+    val confWithHostLocalRead =
+      conf.clone.set(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, true)
+    sc = new SparkContext("local-cluster[2,1,1024]", "test", confWithHostLocalRead)
+    sc.getConf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(true)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])

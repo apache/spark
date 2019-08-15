@@ -1003,12 +1003,11 @@ private[spark] class BlockManager(
   }
 
   private[spark] def getHostLocalDirs(executorIds: Array[String])
-    : scala.collection.Map[String, Array[String]] = {
+      : scala.collection.Map[String, Array[String]] = {
     val cachedItems = executorIdToLocalDirsCache.filterKeys(executorIds.contains(_))
     if (cachedItems.size < executorIds.length) {
       val notCachedItems = master
         .getHostLocalDirs(executorIds.filterNot(executorIdToLocalDirsCache.contains))
-        .localDirs
       executorIdToLocalDirsCache ++= notCachedItems
       cachedItems ++ notCachedItems
     } else {
