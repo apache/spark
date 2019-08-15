@@ -15,24 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-class HiveDataFrameJoinSuite extends QueryTest with TestHiveSingleton {
-  import spark.implicits._
-
-  // We should move this into SQL package if we make case sensitivity configurable in SQL.
-  test("join - self join auto resolve ambiguity with case insensitivity") {
-    val df = Seq((1, "1"), (2, "2")).toDF("key", "value")
-    checkAnswer(
-      df.join(df, df("key") === df("Key")),
-      Row(1, "1", 1, "1") :: Row(2, "2", 2, "2") :: Nil)
-
-    checkAnswer(
-      df.join(df.filter($"value" === "2"), df("key") === df("Key")),
-      Row(2, "2", 2, "2") :: Nil)
-  }
-
-}
+case class DeleteFromStatement(
+    tableName: Seq[String],
+    tableAlias: Option[String],
+    condition: Expression)
+    extends ParsedStatement

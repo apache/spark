@@ -81,6 +81,69 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Extracts PythonUDFs in logical aggregate, which are used in grouping keys, evaluate them
+ * before aggregate.
+ * This must be executed after `ExtractPythonUDFFromAggregate` rule and before `ExtractPythonUDFs`.
+ */
+object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
+  private def hasScalarPythonUDF(e: Expression): Boolean = {
+    e.find(PythonUDF.isScalarPythonUDF).isDefined
+  }
+
+  private def extract(agg: Aggregate): LogicalPlan = {
+    val projList = new ArrayBuffer[NamedExpression]()
+    val groupingExpr = new ArrayBuffer[Expression]()
+    val attributeMap = mutable.HashMap[PythonUDF, NamedExpression]()
+
+    agg.groupingExpressions.foreach { expr =>
+      if (hasScalarPythonUDF(expr)) {
+        val newE = expr transformDown {
+          case p: PythonUDF =>
+            // This is just a sanity check, the rule PullOutNondeterministic should
+            // already pull out those nondeterministic expressions.
+            assert(p.udfDeterministic, "Non-determinstic PythonUDFs should not appear " +
+              "in grouping expression")
+            val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
+            if (attributeMap.contains(canonicalized)) {
+              attributeMap(canonicalized)
+            } else {
+              val alias = Alias(p, "groupingPythonUDF")()
+              projList += alias
+              attributeMap += ((canonicalized, alias.toAttribute))
+              alias.toAttribute
+            }
+        }
+        groupingExpr += newE
+      } else {
+        groupingExpr += expr
+      }
+    }
+    val aggExpr = agg.aggregateExpressions.map { expr =>
+      expr.transformUp {
+        // PythonUDF over aggregate was pull out by ExtractPythonUDFFromAggregate.
+        // PythonUDF here should be either
+        // 1. Argument of an aggregate function.
+        //    CheckAnalysis guarantees the arguments are deterministic.
+        // 2. PythonUDF in grouping key. Grouping key must be deterministic.
+        // 3. PythonUDF not in grouping key. It is either no arguments or with grouping key
+        // in its arguments. Such PythonUDF was pull out by ExtractPythonUDFFromAggregate, too.
+        case p: PythonUDF if p.udfDeterministic =>
+          val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
+          attributeMap.getOrElse(canonicalized, p)
+      }.asInstanceOf[NamedExpression]
+    }
+    agg.copy(
+      groupingExpressions = groupingExpr,
+      aggregateExpressions = aggExpr,
+      child = Project(projList ++ agg.child.output, agg.child))
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case agg: Aggregate if agg.groupingExpressions.exists(hasScalarPythonUDF(_)) =>
+      extract(agg)
+  }
+}
 
 /**
  * Extracts PythonUDFs from operators, rewriting the query plan so that the UDF can be evaluated

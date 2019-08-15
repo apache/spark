@@ -146,17 +146,17 @@ object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String],
-      logicalPlan: LogicalPlan): InMemoryRelation = {
+      optimizedPlan: LogicalPlan): InMemoryRelation = {
     val cacheBuilder = CachedRDDBuilder(useCompression, batchSize, storageLevel, child, tableName)
-    val relation = new InMemoryRelation(child.output, cacheBuilder, logicalPlan.outputOrdering)
-    relation.statsOfPlanToCache = logicalPlan.stats
+    val relation = new InMemoryRelation(child.output, cacheBuilder, optimizedPlan.outputOrdering)
+    relation.statsOfPlanToCache = optimizedPlan.stats
     relation
   }
 
-  def apply(cacheBuilder: CachedRDDBuilder, logicalPlan: LogicalPlan): InMemoryRelation = {
+  def apply(cacheBuilder: CachedRDDBuilder, optimizedPlan: LogicalPlan): InMemoryRelation = {
     val relation = new InMemoryRelation(
-      cacheBuilder.cachedPlan.output, cacheBuilder, logicalPlan.outputOrdering)
-    relation.statsOfPlanToCache = logicalPlan.stats
+      cacheBuilder.cachedPlan.output, cacheBuilder, optimizedPlan.outputOrdering)
+    relation.statsOfPlanToCache = optimizedPlan.stats
     relation
   }
 

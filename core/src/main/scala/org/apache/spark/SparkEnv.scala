@@ -36,7 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
-import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
@@ -331,7 +331,7 @@ object SparkEnv extends Logging {
 
     val externalShuffleClient = if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
       val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores)
-      Some(new ExternalShuffleClient(transConf, securityManager,
+      Some(new ExternalBlockStoreClient(transConf, securityManager,
         securityManager.isAuthenticationEnabled(), conf.get(config.SHUFFLE_REGISTRATION_TIMEOUT)))
     } else {
       None
