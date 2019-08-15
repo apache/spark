@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -493,8 +494,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
 
-    // use the catalog name to force loading with the v2 catalog
-    checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
+    checkAnswer(sparkSession.sql(s"TABLE default.table_name"), sparkSession.table("source"))
+    // The fact that the following line doesn't throw an exception means, the session catalog
+    // can load the table.
+    val t = sparkSession.catalog("session").asTableCatalog
+      .loadTable(Identifier.of(Array.empty, "table_name"))
+    assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
   }
 
   test("DropTable: basic") {
@@ -1859,6 +1864,42 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
           errorMsg
         )
       }
+    }
+  }
+
+  test("DeleteFrom: basic") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t WHERE id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom: alias") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t tbl WHERE tbl.id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom: fail if has subquery") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id IN (SELECT id FROM $t)")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
     }
   }
 

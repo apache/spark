@@ -125,7 +125,7 @@ struct<date_trunc_week:string,week_trunc:timestamp>
 -- !query 13
 SELECT make_timestamp(2014,12,28,6,30,45.887)
 -- !query 13 schema
-struct<make_timestamp(2014, 12, 28, 6, 30, CAST(45.887 AS DOUBLE)):timestamp>
+struct<make_timestamp(2014, 12, 28, 6, 30, CAST(45.887 AS DECIMAL(8,6))):timestamp>
 -- !query 13 output
 2014-12-28 06:30:45.887
 

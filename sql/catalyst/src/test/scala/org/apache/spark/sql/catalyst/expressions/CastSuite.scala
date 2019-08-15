@@ -1049,4 +1049,30 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         Cast(Literal(134.12), DecimalType(3, 2)), "cannot be represented")
     }
   }
+
+  test("Process Infinity, -Infinity, NaN in case insensitive manner") {
+    Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.PositiveInfinity)
+    }
+    Seq("-infinity", "-infiniTy", "  -infinity  ", "  -inf  ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.NegativeInfinity)
+    }
+    Seq("inf", "+inf", "infinity", "+infiNity", " infinity ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.PositiveInfinity)
+    }
+    Seq("-infinity", "-infiniTy", "  -infinity  ", "  -inf  ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.NegativeInfinity)
+    }
+    Seq("nan", "nAn", " nan ").foreach { value =>
+      checkEvaluation(cast(value, FloatType), Float.NaN)
+    }
+    Seq("nan", "nAn", " nan ").foreach { value =>
+      checkEvaluation(cast(value, DoubleType), Double.NaN)
+    }
+
+    // Invalid literals when casted to double and float results in null.
+    Seq(DoubleType, FloatType).foreach { dataType =>
+      checkEvaluation(cast("badvalue", dataType), null)
+    }
+  }
 }

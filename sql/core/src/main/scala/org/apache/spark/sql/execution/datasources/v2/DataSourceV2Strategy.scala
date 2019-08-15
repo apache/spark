@@ -24,7 +24,7 @@ import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalog.v2.StagingTableCatalog
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -221,6 +221,15 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
       OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
+
+    case DeleteFromTable(r: DataSourceV2Relation, condition) =>
+      // fail if any filter cannot be converted. correctness depends on removing all matching data.
+      val filters = splitConjunctivePredicates(condition).map {
+        f => DataSourceStrategy.translateFilter(f).getOrElse(
+          throw new AnalysisException(s"Exec delete failed:" +
+              s" cannot translate expression to source filter: $f"))
+      }.toArray
+      DeleteFromTableExec(r.table.asDeletable, filters) :: Nil
 
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
