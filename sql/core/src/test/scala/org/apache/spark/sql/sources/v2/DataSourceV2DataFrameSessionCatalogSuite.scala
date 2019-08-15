@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
@@ -41,6 +41,10 @@ class DataSourceV2DataFrameSessionCatalogSuite
   with BeforeAndAfter {
   import testImplicits._
 
+  private def catalog(name: String): CatalogPlugin = {
+    spark.sessionState.catalogManager.catalog(name)
+  }
+
   private val v2Format = classOf[InMemoryTableProvider].getName
 
   before {
@@ -49,7 +53,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
 
   override def afterEach(): Unit = {
     super.afterEach()
-    spark.catalog("session").asInstanceOf[TestV2SessionCatalog].clearTables()
+    catalog("session").asInstanceOf[TestV2SessionCatalog].clearTables()
     spark.conf.set(SQLConf.V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
   }
 

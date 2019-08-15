@@ -485,18 +485,17 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
-    val sparkSession = spark.newSession()
-    sparkSession.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
+    spark.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
 
-    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
 
-    sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
+    sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
 
-    checkAnswer(sparkSession.sql(s"TABLE default.table_name"), sparkSession.table("source"))
+    checkAnswer(sql(s"TABLE default.table_name"), spark.table("source"))
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
-    val t = sparkSession.catalog("session").asTableCatalog
+    val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
   }
