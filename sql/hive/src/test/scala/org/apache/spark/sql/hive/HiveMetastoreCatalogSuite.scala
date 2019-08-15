@@ -285,7 +285,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
   }
 
-  test("Set the bucketed data source table SerDe correctly") {
+  test("SPARK-27592 set the bucketed data source table SerDe correctly") {
     val provider = "parquet"
     withTable("t") {
       spark.sql(
