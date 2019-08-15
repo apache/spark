@@ -630,6 +630,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   private val sessionConf = session.sessionState.conf
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    // For the data source table, we only recalculate the table statistics when it creates
+    // the CatalogFileIndex using defaultSizeInBytes. See SPARK-25474 for more details.
     case logical @ LogicalRelation(_, _, Some(table), _)
       if sessionConf.fallBackToHdfsForStatsEnabled && table.stats.isEmpty &&
         sessionConf.manageFilesourcePartitions &&
