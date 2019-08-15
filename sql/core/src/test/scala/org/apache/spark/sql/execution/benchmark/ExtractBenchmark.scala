@@ -48,7 +48,7 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def run(cardinality: Int, field: String): Unit = {
+  private def run(cardinality: Long, field: String): Unit = {
     codegenBenchmark(s"$field of timestamp", cardinality) {
       doBenchmark(cardinality, s"EXTRACT($field FROM (cast(id as timestamp)))")
     }
