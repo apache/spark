@@ -113,6 +113,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
+  test("SPARK-27545 Uncache table needs to delete the temporary view") {
+    withTempView("testCacheTable") {
+      sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
+      assertCached(spark.table("testCacheTable"))
+      sql("UNCACHE TABLE testCacheTable")
+      sql("CACHE TABLE testCacheTable AS SELECT key FROM testData LIMIT 10")
+    }
+  }
+
   test("unpersist an uncached table will not raise exception") {
     assert(None == spark.sharedState.cacheManager.lookupCachedData(testData))
     testData.unpersist(blocking = true)
