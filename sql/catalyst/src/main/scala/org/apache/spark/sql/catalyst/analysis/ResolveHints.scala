@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{IntegerLiteral, Literal, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -150,14 +150,15 @@ object ResolveHints {
           case "REPARTITION" => true
           case "COALESCE" => false
         }
-        h.parameters match {
+        val numPartitions = h.parameters match {
           case Seq(IntegerLiteral(numPartitions)) =>
-            Repartition(numPartitions, shuffle, h.child)
+            numPartitions
           case Seq(numPartitions: Int) =>
-            Repartition(numPartitions, shuffle, h.child)
+            numPartitions
           case _ =>
             throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
         }
+        Repartition(numPartitions, shuffle, h.child)
     }
   }
 
