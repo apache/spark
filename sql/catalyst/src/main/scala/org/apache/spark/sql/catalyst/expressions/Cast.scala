@@ -1252,7 +1252,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
+    case TimestampType if failOnIntegerOverflow =>
       val longValue = ctx.freshName("longValue")
       (c, evPrim, evNull) =>
         code"""
