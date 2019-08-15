@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, NamespaceChange, TableChange}
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RemoveProperty, RenameColumn, SetProperty, UpdateColumnComment, UpdateColumnType}
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 
@@ -219,5 +219,7 @@ object CatalogV2Util {
       Option(catalog.asTableCatalog.loadTable(ident))
     } catch {
       case _: NoSuchTableException => None
+      case _: NoSuchDatabaseException => None
+      case _: NoSuchNamespaceException => None
     }
 }
