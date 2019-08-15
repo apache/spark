@@ -138,8 +138,9 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   /** Total number of nodes, summed over all trees in the ensemble. */
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 
-  /** Returns the indices of leave of all trees given a input vector.
-   *  The leave are indexed from zero by pre-order in each tree.
+  /**
+   * @return the indices of leave of all trees given a input vector.
+   *         The leave are indexed from zero by pre-order in each tree.
    */
   def predictLeaf(features: Vector): Vector = {
     val indices = trees.map(_.predictLeaf(features))
