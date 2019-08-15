@@ -172,7 +172,7 @@ class PlannerSuite extends SharedSparkSession {
   }
 
   test("SPARK-11390 explain should print PushedFilters of PhysicalRDD") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { file =>
         val path = file.getCanonicalPath
         testData.write.parquet(path)

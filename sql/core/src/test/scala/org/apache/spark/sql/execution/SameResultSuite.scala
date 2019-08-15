@@ -33,7 +33,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("FileSourceScanExec: different orders of data filters and partition filters") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { path =>
         val tmpDir = path.getCanonicalPath
         spark.range(10)
@@ -52,7 +52,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
   }
 
   test("FileScan: different orders of data filters and partition filters") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       Seq("orc", "json", "csv", "parquet").foreach { format =>
         withTempPath { path =>
           val tmpDir = path.getCanonicalPath
@@ -85,7 +85,7 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
   }
 
   test("TextScan") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
         val tmpDir = path.getCanonicalPath
         spark.range(10)

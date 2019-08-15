@@ -1588,21 +1588,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
+  val USE_V1_SOURCE_LIST = buildConf("spark.sql.sources.useV1SourceList")
     .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 read paths are disabled. Reads from these" +
-      " sources will fall back to the V1 sources.")
+    .doc("A comma-separated list of data source short names or fully qualified data source " +
+      "implementation class names for which Data Source V2 code path is disabled. These data " +
+      "source will fallback to Data Source V1 code path.")
     .stringConf
     .createWithDefault("")
-
-  val USE_V1_SOURCE_WRITER_LIST = buildConf("spark.sql.sources.write.useV1SourceList")
-    .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 write paths are disabled. Writes from these" +
-      " sources will fall back to the V1 sources.")
-    .stringConf
-    .createWithDefault("csv,json,orc,text,parquet")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -2332,10 +2324,6 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
-
-  def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
-
-  def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 

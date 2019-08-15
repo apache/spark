@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
+import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
@@ -251,64 +251,62 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    val session = df.sparkSession
-    val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val canUseV2 = canUseV2Source(session, cls) && partitioningColumns.isEmpty
+    lookupV2Provider() match {
+      // TODO(SPARK-26778): use V2 implementations when partition columns are specified
+      case Some(provider) if partitioningColumns.isEmpty =>
+        saveToV2Source(provider)
 
-    // In Data Source V2 project, partitioning is still under development.
-    // Here we fallback to V1 if partitioning columns are specified.
-    // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
-    if (canUseV2) {
-      val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        provider, session.sessionState.conf)
-      val options = sessionOptions ++ extraOptions
-      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+      case _ => saveToV1Source()
+    }
+  }
 
-      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-      provider.getTable(dsOptions) match {
-        // TODO (SPARK-27815): To not break existing tests, here we treat file source as a special
-        // case, and pass the save mode to file source directly. This hack should be removed.
-        case table: FileTable =>
-          val write = table.newWriteBuilder(dsOptions).asInstanceOf[FileWriteBuilder]
-            .mode(modeForDSV1) // should not change default mode for file source.
-            .withQueryId(UUID.randomUUID().toString)
-            .withInputDataSchema(df.logicalPlan.schema)
-            .buildForBatch()
-          // The returned `Write` can be null, which indicates that we can skip writing.
-          if (write != null) {
+  private def saveToV2Source(provider: TableProvider): Unit = {
+    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+      provider, df.sparkSession.sessionState.conf)
+    val options = sessionOptions ++ extraOptions
+    val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+    provider.getTable(dsOptions) match {
+      // TODO (SPARK-27815): To not break existing tests, here we treat file source as a special
+      // case, and pass the save mode to file source directly. This hack should be removed.
+      case table: FileTable =>
+        val write = table.newWriteBuilder(dsOptions).asInstanceOf[FileWriteBuilder]
+          .mode(modeForDSV1) // should not change default mode for file source.
+          .withQueryId(UUID.randomUUID().toString)
+          .withInputDataSchema(df.logicalPlan.schema)
+          .buildForBatch()
+        // The returned `Write` can be null, which indicates that we can skip writing.
+        if (write != null) {
+          runCommand(df.sparkSession, "save") {
+            WriteToDataSourceV2(write, df.logicalPlan)
+          }
+        }
+
+      case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+        lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+        modeForDSV2 match {
+          case SaveMode.Append =>
             runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2(write, df.logicalPlan)
+              AppendData.byName(relation, df.logicalPlan)
             }
-          }
 
-        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
-          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
-          modeForDSV2 match {
-            case SaveMode.Append =>
-              runCommand(df.sparkSession, "save") {
-                AppendData.byName(relation, df.logicalPlan)
-              }
+          case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
+            // truncate the table
+            runCommand(df.sparkSession, "save") {
+              OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+            }
 
-            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-              // truncate the table
-              runCommand(df.sparkSession, "save") {
-                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
-              }
+          case other =>
+            throw new AnalysisException(s"TableProvider implementation $source cannot be " +
+              s"written with $other mode, please use Append or Overwrite " +
+              "modes instead.")
+        }
 
-            case other =>
-              throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-                s"written with $other mode, please use Append or Overwrite " +
-                "modes instead.")
-          }
-
-        // Streaming also uses the data source V2 API. So it may be that the data source implements
-        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
-        // as though it's a V1 source.
-        case _ => saveToV1Source()
-      }
-    } else {
-      saveToV1Source()
+      // Streaming also uses the data source V2 API. So it may be that the data source
+      // implements v2, but has no v2 implementation for batch writes. In that case, we fall
+      // back to saving as though it's a V1 source.
+      case _ => saveToV1Source()
     }
   }
 
@@ -489,8 +487,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     val session = df.sparkSession
-    val provider = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val canUseV2 = canUseV2Source(session, provider)
+    val canUseV2 = lookupV2Provider().isDefined
     val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
@@ -835,14 +832,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def modeForDSV2 = mode.getOrElse(SaveMode.Append)
 
-  private def canUseV2Source(session: SparkSession, providerClass: Class[_]): Boolean = {
-    val useV1Sources =
-      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
-    val shouldUseV1Source = providerClass.newInstance() match {
-      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
-      case _ => useV1Sources.contains(providerClass.getCanonicalName.toLowerCase(Locale.ROOT))
+  private def lookupV2Provider() = {
+    DataSource.lookupDataSourceV2(source, df.sparkSession.sessionState.conf) match {
+      // File source v2 write path is currently broken.
+      case Some(_: FileDataSourceV2) => None
+      case other => other
     }
-    !shouldUseV1Source && classOf[TableProvider].isAssignableFrom(providerClass)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

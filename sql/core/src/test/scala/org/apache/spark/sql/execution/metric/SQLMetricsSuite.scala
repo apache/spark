@@ -437,7 +437,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
     assert(res2 === (150L, 0L, 150L) :: (0L, 150L, 10L) :: Nil)
 
     // TODO: test file source V2 as well when its statistics is correctly computed.
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempDir { tempDir =>
         val dir = new File(tempDir, "pqS").getCanonicalPath
 
