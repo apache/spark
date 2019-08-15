@@ -825,6 +825,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("y", true)
     checkCast("yes", true)
     checkCast("1", true)
+    checkCast("on", true)
+    checkCast("    true   ", true)
 
     checkCast("f", false)
     checkCast("false", false)
@@ -832,6 +834,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("n", false)
     checkCast("no", false)
     checkCast("0", false)
+    checkCast("off", false)
+    checkCast("    off    ", false)
 
     checkEvaluation(cast("abc", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
