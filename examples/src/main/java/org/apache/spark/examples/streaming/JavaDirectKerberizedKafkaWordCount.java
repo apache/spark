@@ -64,6 +64,9 @@ import org.apache.spark.streaming.Durations;
  *     serviceName="kafka"
  *     principal="kafka/server@example";
  *   };
+ *
+ * Note: This file uses SASL_PLAINTEXT for simplicity;however,
+ * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Consider using SASL_SSL.
  */
 
 public final class JavaDirectKerberizedKafkaWordCount {
