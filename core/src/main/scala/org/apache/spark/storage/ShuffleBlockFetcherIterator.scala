@@ -23,7 +23,7 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
 
 import org.apache.commons.io.IOUtils
 
@@ -113,7 +113,7 @@ final class ShuffleBlockFetcherIterator(
 
   /** Host local blockIds to fetch by executors, excluding zero-sized blocks. */
   private[this] val hostLocalBlocksByExecutor =
-    scala.collection.mutable.LinkedHashMap[BlockManagerId, Seq[(BlockId, Long, Int)]]()
+    LinkedHashMap[BlockManagerId, Seq[(BlockId, Long, Int)]]()
 
   /** Host local blocks to fetch, excluding zero-sized blocks. */
   private[this] val hostLocalBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
@@ -458,8 +458,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] def fetchHostLocalBlocks() {
     logDebug(s"Start fetching host-local blocks: ${hostLocalBlocks.mkString(", ")}")
     val hostLocalExecutorIds = hostLocalBlocksByExecutor.keySet.map(_.executorId)
-    val readsWithoutLocalDir =
-      scala.collection.mutable.LinkedHashMap[BlockManagerId, Seq[(BlockId, Long, Int)]]()
+    val readsWithoutLocalDir = LinkedHashMap[BlockManagerId, Seq[(BlockId, Long, Int)]]()
     val localDirsByExec = blockManager.getHostLocalDirs(hostLocalExecutorIds.toArray)
     hostLocalBlocksByExecutor.foreach { case (bmId, blockInfos) =>
       val localDirs = localDirsByExec.get(bmId.executorId)
@@ -495,6 +494,11 @@ final class ShuffleBlockFetcherIterator(
       logInfo(s"Add ${collectedRemoteRequests.size} new remote fetches as local dirs " +
         "have not been cached for some executor")
       fetchRequests ++= Utils.randomize(collectedRemoteRequests)
+
+      // The reason to call fetchUpToMaxBytes() here is to handle the case when only host-local
+      // blocks are requested and all fall back on to remote fetching. Without fetchUpToMaxBytes()
+      // the next() method would block forever waiting to dequeue from the results queue.
+      fetchUpToMaxBytes()
     }
   }
 

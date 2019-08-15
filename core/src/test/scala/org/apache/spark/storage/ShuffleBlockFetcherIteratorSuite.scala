@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.Semaphore
 
-import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -75,6 +74,21 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(mockManagedBuffer.createInputStream()).thenReturn(in)
     when(mockManagedBuffer.size()).thenReturn(size)
     mockManagedBuffer
+  }
+
+  def verifyBufferRelease(buffer: ManagedBuffer, inputStream: InputStream): Unit = {
+    // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
+    val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
+    verify(buffer, times(0)).release()
+    val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
+
+    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
+    wrappedInputStream.close()
+    verify(buffer, times(1)).release()
+    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+    wrappedInputStream.close() // close should be idempotent
+    verify(buffer, times(1)).release()
+    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
   }
 
   test("successful 3 local + 4 host local + 2 remote reads + 1 host local without local dir") {
@@ -160,18 +174,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = allBlocks(blockId)
-      // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
-      val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
-      verify(mockBuf, times(0)).release()
-      val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
-
-      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
-      wrappedInputStream.close()
-      verify(mockBuf, times(1)).release()
-      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
-      wrappedInputStream.close() // close should be idempotent
-      verify(mockBuf, times(1)).release()
-      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+      verifyBufferRelease(mockBuf, inputStream)
     }
 
     // 2 remote blocks are read from the same block manager and 1 host-local is fall back on to
