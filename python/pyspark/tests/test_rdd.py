@@ -68,6 +68,25 @@ class RDDTests(ReusedPySparkTestCase):
         it2 = rdd2.toLocalIterator()
         self.assertEqual([1, 2, 3], sorted(it2))
 
+    def test_to_localiterator_prefetch(self):
+        # Test that we fetch the next partition in parallel
+        # We do this by returning the current time and:
+        # reading the first elem, waiting, and reading the second elem
+        # If not in parallel then these would be at different times
+        # But since they are being computed in parallel we see the time
+        # is "close enough" to the same.
+        rdd = self.sc.parallelize(range(10), 10)
+        times1 = rdd.map(lambda x: time.now)
+        times2 = rdd.map(lambda x: time.now)
+        timesIterPrefetch = times1.toLocalIterator(prefetchPartitions=True)
+        timesIter = times1.toLocalIterator(prefetchPartitions=False)
+        timesPrefetchHead = timesIterPrefetch.next()
+        timesHead = timesIter.next()
+        time.sleep(2)
+        timesPrefetchNext = timesIterPrefetch.next()
+        timesNext = timesIter.next()
+        # TODO write the asserts
+
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
         x = u"\u00A1Hola, mundo!"
