@@ -339,7 +339,8 @@ def build_spark_assembly_sbt(hadoop_version, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    build_spark_unidoc_sbt(hadoop_version)
+    # TODO(sknapp): remove comment before merging
+    # build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):
