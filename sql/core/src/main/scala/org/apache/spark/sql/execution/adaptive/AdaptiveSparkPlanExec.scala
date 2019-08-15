@@ -91,6 +91,8 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages(conf)
   )
 
+  @transient private val costEvaluator = SimpleCostEvaluator
+
   @volatile private var currentPhysicalPlan = initialPlan
 
   private var isFinalPlan = false
@@ -174,8 +176,8 @@ case class AdaptiveSparkPlanExec(
         // Do re-planning and try creating new stages on the new physical plan.
         val updatedLogicalPlan = updateLogicalPlan(currentLogicalPlan, stagesToReplace)
         val (newPhysicalPlan, newLogicalPlan) = reOptimize(updatedLogicalPlan)
-        val origCost = SimpleCostEvaluator.evaluateCost(currentPhysicalPlan)
-        val newCost = SimpleCostEvaluator.evaluateCost(newPhysicalPlan)
+        val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+        val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
         if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
           cleanUpTempTags(newPhysicalPlan)
