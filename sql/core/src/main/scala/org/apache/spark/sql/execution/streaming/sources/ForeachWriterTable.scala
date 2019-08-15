@@ -164,7 +164,6 @@ class ForeachDataWriter[T](
         writer.close(errorOrNull)
       } catch {
         case t: Throwable =>
-          logWarning("Failed closing Foreach writer", t)
           throw t
       } finally {
         closeCalled = true
