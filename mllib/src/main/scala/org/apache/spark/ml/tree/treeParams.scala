@@ -382,7 +382,41 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase(Locale.ROOT)
 }
 
+/**
+ * Parameters for Decision Tree-based ensemble classification algorithms.
+ */
+private[ml] trait TreeEnsembleClassifierParams
+  extends TreeEnsembleParams with ProbabilisticClassifierParams {
 
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+    }
+    outputSchema
+  }
+}
+
+/**
+ * Parameters for Decision Tree-based ensemble regression algorithms.
+ */
+private[ml] trait TreeEnsembleRegressorParams
+  extends TreeEnsembleParams {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if ($(leafCol).nonEmpty) {
+      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
+    }
+    outputSchema
+  }
+}
 
 /**
  * Parameters for Random Forest algorithms.
@@ -411,34 +445,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 }
 
 private[ml] trait RandomForestClassifierParams
-  extends RandomForestParams with TreeClassifierParams with ProbabilisticClassifierParams {
-
-  override protected def validateAndTransformSchema(
-      schema: StructType,
-      fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
-    }
-    outputSchema
-  }
-}
+  extends RandomForestParams with TreeEnsembleClassifierParams with TreeClassifierParams
 
 private[ml] trait RandomForestRegressorParams
-  extends RandomForestParams with TreeRegressorParams {
-
-  override protected def validateAndTransformSchema(
-      schema: StructType,
-      fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
-    }
-    outputSchema
-  }
-}
+  extends RandomForestParams with TreeEnsembleRegressorParams with TreeRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
@@ -508,19 +518,8 @@ private[ml] object GBTClassifierParams {
     Array("logistic").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTClassifierParams extends GBTParams with HasVarianceImpurity
-  with ProbabilisticClassifierParams {
-
-  override protected def validateAndTransformSchema(
-      schema: StructType,
-      fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
-    }
-    outputSchema
-  }
+private[ml] trait GBTClassifierParams
+  extends GBTParams with TreeEnsembleClassifierParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)
@@ -557,18 +556,8 @@ private[ml] object GBTRegressorParams {
     Array("squared", "absolute").map(_.toLowerCase(Locale.ROOT))
 }
 
-private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
-
-  override protected def validateAndTransformSchema(
-      schema: StructType,
-      fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    var outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    if ($(leafCol).nonEmpty) {
-      outputSchema = SchemaUtils.appendColumn(outputSchema, $(leafCol), new VectorUDT)
-    }
-    outputSchema
-  }
+private[ml] trait GBTRegressorParams
+  extends GBTParams with TreeEnsembleRegressorParams with TreeRegressorParams {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)

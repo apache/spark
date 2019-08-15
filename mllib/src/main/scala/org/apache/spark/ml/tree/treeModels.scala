@@ -36,8 +36,6 @@ import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Abstraction for Decision Tree models.
- *
- * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
  */
 private[spark] trait DecisionTreeModel {
 
@@ -79,8 +77,9 @@ private[spark] trait DecisionTreeModel {
   /** Convert to spark.mllib DecisionTreeModel (losing some information) */
   private[spark] def toOld: OldDecisionTreeModel
 
-  /** Returns an iterator that traverses (DFS, left to right) the leaves
-   *  in the subtree of this node.
+  /**
+   * @return an iterator that traverses (DFS, left to right) the leaves
+   *         in the subtree of this node.
    */
   private def leafIterator(node: Node): Iterator[LeafNode] = {
     node match {
@@ -94,8 +93,9 @@ private[spark] trait DecisionTreeModel {
     leafIterator(rootNode).zipWithIndex.toMap
   }
 
-  /** Returns the index of leaf given a input vector.
-   *  The leave are indexed from zero by pre-order.
+  /**
+   * @return the index of leaf given a input vector.
+   *         The leave are indexed from zero by pre-order.
    */
   def predictLeaf(features: Vector): Double = {
     leafIndices(rootNode.predictImpl(features)).toDouble
@@ -104,9 +104,6 @@ private[spark] trait DecisionTreeModel {
 
 /**
  * Abstraction for models which are ensembles of decision trees
- *
- * TODO: Add support for predicting probabilities and raw predictions  SPARK-3727
- *
  * @tparam M  Type of tree model in this ensemble
  */
 private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
