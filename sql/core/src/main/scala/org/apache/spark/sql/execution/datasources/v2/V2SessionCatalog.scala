@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchT
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
-import org.apache.spark.sql.sources.v2.{Table, TableCapability}
+import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -70,7 +71,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
         throw new NoSuchTableException(ident)
     }
 
-    CatalogTableAsV2(catalogTable)
+    UnresolvedTable(catalogTable)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
@@ -177,66 +178,6 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
   }
 
   override def toString: String = s"V2SessionCatalog($name)"
-}
-
-/**
- * An implementation of catalog v2 [[Table]] to expose v1 table metadata.
- */
-case class CatalogTableAsV2(v1Table: CatalogTable) extends Table {
-  implicit class IdentifierHelper(identifier: TableIdentifier) {
-    def quoted: String = {
-      identifier.database match {
-        case Some(db) =>
-          Seq(db, identifier.table).map(quote).mkString(".")
-        case _ =>
-          quote(identifier.table)
-
-      }
-    }
-
-    private def quote(part: String): String = {
-      if (part.contains(".") || part.contains("`")) {
-        s"`${part.replace("`", "``")}`"
-      } else {
-        part
-      }
-    }
-  }
-
-  def catalogTable: CatalogTable = v1Table
-
-  lazy val options: Map[String, String] = {
-    v1Table.storage.locationUri match {
-      case Some(uri) =>
-        v1Table.storage.properties + ("path" -> uri.toString)
-      case _ =>
-        v1Table.storage.properties
-    }
-  }
-
-  override lazy val properties: util.Map[String, String] = v1Table.properties.asJava
-
-  override lazy val schema: StructType = v1Table.schema
-
-  override lazy val partitioning: Array[Transform] = {
-    val partitions = new mutable.ArrayBuffer[Transform]()
-
-    v1Table.partitionColumnNames.foreach { col =>
-      partitions += LogicalExpressions.identity(col)
-    }
-
-    v1Table.bucketSpec.foreach { spec =>
-      partitions += LogicalExpressions.bucket(spec.numBuckets, spec.bucketColumnNames: _*)
-    }
-
-    partitions.toArray
-  }
-
-  override def name: String = v1Table.identifier.quoted
-
-  override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
-
-  override def toString: String = s"CatalogTableAsV2($name)"
 }
 
 private[sql] object V2SessionCatalog {
