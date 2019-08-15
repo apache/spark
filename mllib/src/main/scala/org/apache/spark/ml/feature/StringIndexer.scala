@@ -219,15 +219,10 @@ class StringIndexer @Since("1.4.0") (
   private def sortByAlphabet(dataset: Dataset[_], ascending: Boolean): Array[Array[String]] = {
     val (inputCols, _) = getInOutCols()
 
-    // If input dataset is not originally cached, we need to unpersist it
-    // once we persist it later.
-    val needUnpersist = dataset.storageLevel == StorageLevel.NONE
-
-    dataset.persist()
     val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
     val allLabels = dataset.select(selectedCols: _*)
       .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
-    val labels = ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
+    ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
       val sorted = labels.filter(_ != null).sorted
       if (ascending) {
         sorted.toArray
@@ -235,10 +230,6 @@ class StringIndexer @Since("1.4.0") (
         sorted.reverse.toArray
       }
     }.toArray
-    if (needUnpersist) {
-      dataset.unpersist()
-    }
-    labels
   }
 
   @Since("2.0.0")
