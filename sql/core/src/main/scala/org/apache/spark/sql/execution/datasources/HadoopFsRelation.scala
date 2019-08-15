@@ -72,7 +72,8 @@ case class HadoopFsRelation(
     val compressionFactor = sqlContext.conf.fileCompressionFactor
     val defaultSize = (location.sizeInBytes * compressionFactor).toLong
     location match {
-      case cfi: CatalogFileIndex if sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled =>
+      case cfi: CatalogFileIndex if sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled
+        && defaultSize == sqlContext.conf.defaultSizeInBytes =>
         CommandUtils.getSizeInBytesFallBackToHdfs(sparkSession, new Path(cfi.table.location),
           defaultSize)
       case _ => defaultSize
