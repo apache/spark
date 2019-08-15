@@ -30,11 +30,11 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 

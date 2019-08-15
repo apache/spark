@@ -24,7 +24,6 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
@@ -35,11 +34,11 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 
-class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
+class FileBasedDataSourceSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   override def beforeAll(): Unit = {

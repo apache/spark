@@ -30,12 +30,12 @@ import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, TableCatalog, Tabl
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class V2SessionCatalogSuite
-    extends SparkFunSuite with SharedSQLContext with BeforeAndAfter with BeforeAndAfterAll {
+    extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   private val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
