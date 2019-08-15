@@ -252,6 +252,7 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
+    <!-- TODO Remove this once Hive 2.3.6 released -->
     <repository>
       <id>staged</id>
       <name>staged-releases</name>
