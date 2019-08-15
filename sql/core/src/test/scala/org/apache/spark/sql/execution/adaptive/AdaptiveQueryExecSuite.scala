@@ -26,7 +26,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
-
   import testImplicits._
 
   setupTestData()
@@ -83,8 +82,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Change merge join to broadcast join") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a where value = '1'")
       val smj = findTopLevelSortMergeJoin(plan)
@@ -120,11 +119,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Scalar subquery") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a " +
-          "where value = (SELECT max(a) from testData3)")
+        "where value = (SELECT max(a) from testData3)")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
@@ -134,11 +133,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Scalar subquery in later stages") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT * FROM testData join testData2 ON key = a " +
-          "where (value + a) = (SELECT max(a) from testData3)")
+        "where (value + a) = (SELECT max(a) from testData3)")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
@@ -148,8 +147,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("multiple joins") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |WITH t4 AS (
@@ -169,8 +168,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("multiple joins with aggregate") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |WITH t4 AS (
@@ -192,8 +191,8 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("multiple joins with aggregate 2") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "500") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |WITH t4 AS (
@@ -215,11 +214,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Exchange reuse") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT value FROM testData join testData2 ON key = a " +
-          "join (SELECT value v from testData join testData3 ON key = a) on value = v")
+        "join (SELECT value v from testData join testData3 ON key = a) on value = v")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
@@ -231,11 +230,11 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Exchange reuse with subqueries") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT a FROM testData join testData2 ON key = a " +
-          "where value = (SELECT max(a) from testData join testData2 ON key = a)")
+        "where value = (SELECT max(a) from testData join testData2 ON key = a)")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
@@ -247,13 +246,13 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Exchange reuse across subqueries") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
-      SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
+        SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT a FROM testData join testData2 ON key = a " +
-          "where value >= (SELECT max(a) from testData join testData2 ON key = a) " +
-          "and a <= (SELECT max(a) from testData join testData2 ON key = a)")
+        "where value >= (SELECT max(a) from testData join testData2 ON key = a) " +
+        "and a <= (SELECT max(a) from testData join testData2 ON key = a)")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
@@ -267,12 +266,12 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Subquery reuse") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT a FROM testData join testData2 ON key = a " +
-          "where value >= (SELECT max(a) from testData join testData2 ON key = a) " +
-          "and a <= (SELECT max(a) from testData join testData2 ON key = a)")
+        "where value >= (SELECT max(a) from testData join testData2 ON key = a) " +
+        "and a <= (SELECT max(a) from testData join testData2 ON key = a)")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
@@ -286,15 +285,15 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
 
   test("Broadcast exchange reuse across subqueries") {
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "20000000",
-      SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "20000000",
+        SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         "SELECT a FROM testData join testData2 ON key = a " +
-          "where value >= (" +
-          "SELECT /*+ broadcast(testData2) */ max(key) from testData join testData2 ON key = a) " +
-          "and a <= (" +
-          "SELECT /*+ broadcast(testData2) */ max(value) from testData join testData2 ON key = a)")
+        "where value >= (" +
+        "SELECT /*+ broadcast(testData2) */ max(key) from testData join testData2 ON key = a) " +
+        "and a <= (" +
+        "SELECT /*+ broadcast(testData2) */ max(value) from testData join testData2 ON key = a)")
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
