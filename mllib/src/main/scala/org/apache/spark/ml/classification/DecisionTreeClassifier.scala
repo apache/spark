@@ -26,7 +26,7 @@ import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.tree.{DecisionTreeModel, Node, TreeClassifierParams}
+import org.apache.spark.ml.tree.{DecisionTreeModel, HasClassificationImpurity, Node}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
@@ -179,7 +179,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
 object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifier] {
   /** Accessor for supported impurities: entropy, gini */
   @Since("1.4.0")
-  final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
+  final val supportedImpurities: Array[String] = HasClassificationImpurity.supportedImpurities
 
   @Since("2.0.0")
   override def load(path: String): DecisionTreeClassifier = super.load(path)
