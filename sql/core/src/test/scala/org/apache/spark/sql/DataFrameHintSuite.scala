@@ -69,4 +69,10 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
       df.hint("REPARTITION", 100),
       UnresolvedHint("REPARTITION", Seq(100), df.logicalPlan))
   }
+
+  test("repartitionby hint") {
+    check(
+      df.hint("REPARTITIONBY", 10, $"id".expr),
+      UnresolvedHint("REPARTITIONBY", Seq(10, $"id".expr), df.logicalPlan))
+  }
 }

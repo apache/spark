@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
+import org.apache.spark.sql.catalyst.expressions.{IntegerLiteral, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -150,15 +150,47 @@ object ResolveHints {
           case "REPARTITION" => true
           case "COALESCE" => false
         }
-        val numPartitions = h.parameters match {
+        h.parameters match {
           case Seq(IntegerLiteral(numPartitions)) =>
-            numPartitions
+            Repartition(numPartitions, shuffle, h.child)
           case Seq(numPartitions: Int) =>
-            numPartitions
+            Repartition(numPartitions, shuffle, h.child)
           case _ =>
             throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
         }
-        Repartition(numPartitions, shuffle, h.child)
+    }
+  }
+
+  /**
+   * @see RepartitionByExpression
+   */
+  object ResolveRepartitionByHints extends Rule[LogicalPlan] {
+    private val REPARTITIONBY_HINT_NAMES = Set("REPARTITIONBY")
+
+    private def createRepartitionByExpression(
+        numPartitions: Int, parameters: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
+      val exprs = parameters.drop(1)
+      val errExprs = exprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+      if (errExprs.nonEmpty) throw new AnalysisException(
+        s"""Invalid type exprs : $errExprs
+           |expects UnresolvedAttribute type
+        """.stripMargin)
+      RepartitionByExpression(
+        exprs.map(_.asInstanceOf[UnresolvedAttribute]), h.child, numPartitions)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case h: UnresolvedHint
+        if REPARTITIONBY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        h.parameters match {
+          case param @ Seq(IntegerLiteral(numPartitions), _*) =>
+            createRepartitionByExpression(numPartitions, param, h)
+          case param @ Seq(numPartitions: Int, _*) =>
+            createRepartitionByExpression(numPartitions, param, h)
+          case _ =>
+            throw new AnalysisException("RepartitionBy hint expects a partition number " +
+              "and columns")
+        }
     }
   }
 

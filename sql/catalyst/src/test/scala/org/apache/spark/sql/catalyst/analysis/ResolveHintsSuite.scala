@@ -24,10 +24,11 @@ import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.IntegerType
 
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
@@ -181,5 +182,26 @@ class ResolveHintsSuite extends AnalysisTest {
     assert(logAppender.loggingEvents.exists(
       e => e.getLevel == Level.WARN &&
         e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
+  }
+
+  test("test repartition by") {
+    checkAnalysis(
+      UnresolvedHint("RePartitionBy", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+
+    checkAnalysis(
+      UnresolvedHint("REPARTITIONBY", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+
+    val errMsg = "RepartitionBy hint expects a partition number and columns"
+    assertAnalysisError(
+      UnresolvedHint("REPARTITIONBY", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
+      Seq(errMsg))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITIONBY",
+        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
+        table("TaBlE")),
+      Seq(errMsg))
   }
 }
