@@ -93,7 +93,7 @@ checkJavaVersion <- function() {
   javaVersionStr <- strsplit(javaVersionFilter[[1]], "[\"]")[[1L]][2]
   # javaVersionStr is of the form 1.8.0_92/9.0.x/11.0.x.
   # We are using 8, 9, 10, 11 for sparkJavaVersion.
-  versions = strsplit(javaVersionStr, "[.]")[[1L]]
+  versions <- strsplit(javaVersionStr, "[.]")[[1L]]
   if ("1" == versions[1]) {
     javaVersionNum <- as.integer(versions[2])
   } else {
