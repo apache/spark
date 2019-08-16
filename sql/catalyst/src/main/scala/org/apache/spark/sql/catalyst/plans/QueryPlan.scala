@@ -183,16 +183,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   override def simpleStringWithNodeId(): String = {
-    val tag = new TreeNodeTag[Int]("operatorId")
-    val operatorId = getTagValue(tag).map(id => s"$id").getOrElse("unknown")
+    val operatorId = getTagValue(QueryPlan.opidTag).map(id => s"$id").getOrElse("unknown")
     s"$nodeName ($operatorId)".trim
   }
 
   def verboseStringWithOperatorId(): String = {
-    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
-    val codegenIdStr = getTagValue(codegenTag).map(id => s"[codegen id : $id]").getOrElse("")
-    val opIdTag = new TreeNodeTag[Int]("operatorId")
-    val operatorId = getTagValue(opIdTag).map(id => s"$id").getOrElse("unknown")
+    val codegenIdStr =
+      getTagValue(QueryPlan.codegenTag).map(id => s"[codegen id : $id]").getOrElse("")
+    val operatorId = getTagValue(QueryPlan.opidTag).map(id => s"$id").getOrElse("unknown")
     s"""
        |($operatorId) $nodeName $codegenIdStr
      """.stripMargin
@@ -308,6 +306,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 }
 
 object QueryPlan extends PredicateHelper {
+  val opidTag = TreeNodeTag[Int]("operatorId")
+  val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
+
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
    * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we

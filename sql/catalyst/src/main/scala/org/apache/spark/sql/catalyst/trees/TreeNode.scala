@@ -533,7 +533,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def simpleString(maxFields: Int): String = s"$nodeName ${argString(maxFields)}".trim
 
-  def simpleStringWithNodeId(): String = simpleString(0)
+  /**
+   * ONE line description of this node containing the node identifier.
+   * @return
+   */
+  def simpleStringWithNodeId(): String
 
   /** ONE line description of this node with more information */
   def verboseString(maxFields: Int): String
@@ -544,26 +548,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  // final def treeString: String = treeString(verbose = true)
-
   final def treeString: String = treeString(verbose = true)
 
   final def treeString(
-    verbose: Boolean,
-    addSuffix: Boolean = false,
-    maxFields: Int = SQLConf.get.maxToStringFields,
-    printOperatorId: Boolean = false): String = {
+      verbose: Boolean,
+      addSuffix: Boolean = false,
+      maxFields: Int = SQLConf.get.maxToStringFields,
+      printOperatorId: Boolean = false): String = {
     val concat = new PlanStringConcat()
     treeString(concat.append, verbose, addSuffix, maxFields, printOperatorId)
     concat.toString
   }
 
   def treeString(
-    append: String => Unit,
-    verbose: Boolean,
-    addSuffix: Boolean,
-    maxFields: Int,
-    printOperatorId: Boolean): Unit = {
+      append: String => Unit,
+      verbose: Boolean,
+      addSuffix: Boolean,
+      maxFields: Int,
+      printOperatorId: Boolean): Unit = {
     generateTreeString(0, Nil, append, verbose, "", addSuffix, maxFields, printOperatorId)
   }
 

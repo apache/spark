@@ -131,7 +131,7 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
-  def simpleString[T <: QueryPlan[T]]: String = withRedaction {
+  def simpleString: String = withRedaction {
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
     if (SQLConf.get.sqlExplainLegacyFormat == false) {

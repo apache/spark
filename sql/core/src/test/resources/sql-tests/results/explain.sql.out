@@ -53,14 +53,14 @@ EXPLAIN
 struct<plan:string>
 -- !query 5 output
 == Physical Plan ==
-*Sort (9)
+* Sort (9)
 +- Exchange (8)
-   +- *HashAggregate (7)
+   +- * HashAggregate (7)
       +- Exchange (6)
-         +- *HashAggregate (5)
-            +- *Project (4)
-               +- *Filter (3)
-                  +- *ColumnarToRow (2)
+         +- * HashAggregate (5)
+            +- * Project (4)
+               +- * Filter (3)
+                  +- * ColumnarToRow (2)
                      +- Scan parquet default.explain_temp1 (1)
 
 
@@ -105,14 +105,14 @@ EXPLAIN
 struct<plan:string>
 -- !query 6 output
 == Physical Plan ==
-*Project (9)
-+- *Filter (8)
-   +- *HashAggregate (7)
+* Project (9)
++- * Filter (8)
+   +- * HashAggregate (7)
       +- Exchange (6)
-         +- *HashAggregate (5)
-            +- *Project (4)
-               +- *Filter (3)
-                  +- *ColumnarToRow (2)
+         +- * HashAggregate (5)
+            +- * Project (4)
+               +- * Filter (3)
+                  +- * ColumnarToRow (2)
                      +- Scan parquet default.explain_temp1 (1)
 
 
@@ -157,17 +157,17 @@ EXPLAIN
 struct<plan:string>
 -- !query 7 output
 == Physical Plan ==
-*HashAggregate (12)
+* HashAggregate (12)
 +- Exchange (11)
-   +- *HashAggregate (10)
+   +- * HashAggregate (10)
       +- Union (9)
-         :- *Project (4)
-         :  +- *Filter (3)
-         :     +- *ColumnarToRow (2)
+         :- * Project (4)
+         :  +- * Filter (3)
+         :     +- * ColumnarToRow (2)
          :        +- Scan parquet default.explain_temp1 (1)
-         +- *Project (8)
-            +- *Filter (7)
-               +- *ColumnarToRow (6)
+         +- * Project (8)
+            +- * Filter (7)
+               +- * ColumnarToRow (6)
                   +- Scan parquet default.explain_temp1 (5)
 
 
@@ -221,15 +221,15 @@ EXPLAIN
 struct<plan:string>
 -- !query 8 output
 == Physical Plan ==
-*BroadcastHashJoin Inner BuildRight (10)
-:- *Project (4)
-:  +- *Filter (3)
-:     +- *ColumnarToRow (2)
+* BroadcastHashJoin Inner BuildRight (10)
+:- * Project (4)
+:  +- * Filter (3)
+:     +- * ColumnarToRow (2)
 :        +- Scan parquet default.explain_temp1 (1)
 +- BroadcastExchange (9)
-   +- *Project (8)
-      +- *Filter (7)
-         +- *ColumnarToRow (6)
+   +- * Project (8)
+      +- * Filter (7)
+         +- * ColumnarToRow (6)
             +- Scan parquet default.explain_temp2 (5)
 
 
@@ -280,15 +280,15 @@ EXPLAIN
 struct<plan:string>
 -- !query 9 output
 == Physical Plan ==
-*BroadcastHashJoin Inner BuildRight (10)
-:- *Project (4)
-:  +- *Filter (3)
-:     +- *ColumnarToRow (2)
+* BroadcastHashJoin Inner BuildRight (10)
+:- * Project (4)
+:  +- * Filter (3)
+:     +- * ColumnarToRow (2)
 :        +- Scan parquet default.explain_temp1 (1)
 +- BroadcastExchange (9)
-   +- *Project (8)
-      +- *Filter (7)
-         +- *ColumnarToRow (6)
+   +- * Project (8)
+      +- * Filter (7)
+         +- * ColumnarToRow (6)
             +- Scan parquet default.explain_temp2 (5)
 
 
@@ -339,13 +339,13 @@ EXPLAIN
 struct<plan:string>
 -- !query 10 output
 == Physical Plan ==
-*BroadcastHashJoin LeftOuter BuildRight (8)
-:- *ColumnarToRow (2)
+* BroadcastHashJoin LeftOuter BuildRight (8)
+:- * ColumnarToRow (2)
 :  +- Scan parquet default.explain_temp1 (1)
 +- BroadcastExchange (7)
-   +- *Project (6)
-      +- *Filter (5)
-         +- *ColumnarToRow (4)
+   +- * Project (6)
+      +- * Filter (5)
+         +- * ColumnarToRow (4)
             +- Scan parquet default.explain_temp2 (3)
 
 
@@ -393,9 +393,9 @@ EXPLAIN
 struct<plan:string>
 -- !query 11 output
 == Physical Plan ==
-*Project (4)
-+- *Filter (3)
-   +- *ColumnarToRow (2)
+* Project (4)
++- * Filter (3)
+   +- * ColumnarToRow (2)
       +- Scan parquet default.explain_temp1 (1)
 
 
@@ -416,12 +416,12 @@ Input     : [key#x, val#x]
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
-*HashAggregate (11)
+* HashAggregate (11)
 +- Exchange (10)
-   +- *HashAggregate (9)
-      +- *Project (8)
-         +- *Filter (7)
-            +- *ColumnarToRow (6)
+   +- * HashAggregate (9)
+      +- * Project (8)
+         +- * Filter (7)
+            +- * ColumnarToRow (6)
                +- Scan parquet default.explain_temp2 (5)
 
 
@@ -449,12 +449,12 @@ Input: [max#x]
 Input: [max#x]
      
 Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x
-*HashAggregate (18)
+* HashAggregate (18)
 +- Exchange (17)
-   +- *HashAggregate (16)
-      +- *Project (15)
-         +- *Filter (14)
-            +- *ColumnarToRow (13)
+   +- * HashAggregate (16)
+      +- * Project (15)
+         +- * Filter (14)
+            +- * ColumnarToRow (13)
                +- Scan parquet default.explain_temp3 (12)
 
 
@@ -497,8 +497,8 @@ EXPLAIN
 struct<plan:string>
 -- !query 12 output
 == Physical Plan ==
-*Filter (3)
-+- *ColumnarToRow (2)
+* Filter (3)
++- * ColumnarToRow (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -515,12 +515,12 @@ Condition : ((KEY#x = Subquery scalar-subquery#x) OR (KEY#x = Subquery scalar-su
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
-*HashAggregate (10)
+* HashAggregate (10)
 +- Exchange (9)
-   +- *HashAggregate (8)
-      +- *Project (7)
-         +- *Filter (6)
-            +- *ColumnarToRow (5)
+   +- * HashAggregate (8)
+      +- * Project (7)
+         +- * Filter (6)
+            +- * ColumnarToRow (5)
                +- Scan parquet default.explain_temp2 (4)
 
 
@@ -548,12 +548,12 @@ Input: [max#x]
 Input: [max#x]
      
 Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
-*HashAggregate (17)
+* HashAggregate (17)
 +- Exchange (16)
-   +- *HashAggregate (15)
-      +- *Project (14)
-         +- *Filter (13)
-            +- *ColumnarToRow (12)
+   +- * HashAggregate (15)
+      +- * Project (14)
+         +- * Filter (13)
+            +- * ColumnarToRow (12)
                +- Scan parquet default.explain_temp3 (11)
 
 
@@ -589,8 +589,8 @@ EXPLAIN
 struct<plan:string>
 -- !query 13 output
 == Physical Plan ==
-*Project (3)
-+- *ColumnarToRow (2)
+* Project (3)
++- * ColumnarToRow (2)
    +- Scan parquet default.explain_temp1 (1)
 
 
@@ -607,10 +607,10 @@ Input     : []
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
-*HashAggregate (8)
+* HashAggregate (8)
 +- Exchange (7)
-   +- *HashAggregate (6)
-      +- *ColumnarToRow (5)
+   +- * HashAggregate (6)
+      +- * ColumnarToRow (5)
          +- Scan parquet default.explain_temp1 (4)
 
 
@@ -644,15 +644,15 @@ EXPLAIN
 struct<plan:string>
 -- !query 14 output
 == Physical Plan ==
-*BroadcastHashJoin Inner BuildRight (10)
-:- *Project (4)
-:  +- *Filter (3)
-:     +- *ColumnarToRow (2)
+* BroadcastHashJoin Inner BuildRight (10)
+:- * Project (4)
+:  +- * Filter (3)
+:     +- * ColumnarToRow (2)
 :        +- Scan parquet default.explain_temp1 (1)
 +- BroadcastExchange (9)
-   +- *Project (8)
-      +- *Filter (7)
-         +- *ColumnarToRow (6)
+   +- * Project (8)
+      +- * Filter (7)
+         +- * ColumnarToRow (6)
             +- Scan parquet default.explain_temp1 (5)
 
 
@@ -706,16 +706,16 @@ EXPLAIN
 struct<plan:string>
 -- !query 15 output
 == Physical Plan ==
-*BroadcastHashJoin Inner BuildRight (11)
-:- *HashAggregate (7)
+* BroadcastHashJoin Inner BuildRight (11)
+:- * HashAggregate (7)
 :  +- Exchange (6)
-:     +- *HashAggregate (5)
-:        +- *Project (4)
-:           +- *Filter (3)
-:              +- *ColumnarToRow (2)
+:     +- * HashAggregate (5)
+:        +- * Project (4)
+:           +- * Filter (3)
+:              +- * ColumnarToRow (2)
 :                 +- Scan parquet default.explain_temp1 (1)
 +- BroadcastExchange (10)
-   +- *HashAggregate (9)
+   +- * HashAggregate (9)
       +- ReusedExchange (8)
 
 

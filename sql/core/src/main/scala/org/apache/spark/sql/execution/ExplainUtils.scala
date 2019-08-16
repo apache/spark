@@ -126,14 +126,13 @@ object ExplainUtils {
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return currentOperationID
     }
-    val tag = new TreeNodeTag[Int]("operatorId")
     plan.foreachUp {
       case p: WholeStageCodegenExec =>
       case p: InputAdapter =>
       case other: QueryPlan[_] =>
-        if (!other.getTagValue(tag).isDefined) {
+        if (!other.getTagValue(QueryPlan.opidTag).isDefined) {
           currentOperationID += 1
-          other.setTagValue(tag, currentOperationID)
+          other.setTagValue(QueryPlan.opidTag, currentOperationID)
           operatorIDs += ((currentOperationID, other))
         }
         other.innerChildren.foreach { plan =>
@@ -153,14 +152,13 @@ object ExplainUtils {
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return
     }
-    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
     var currentCodegenId = -1
     plan.foreach {
       case p: WholeStageCodegenExec => currentCodegenId = p.codegenStageId
       case p: InputAdapter => currentCodegenId = -1
       case other: QueryPlan[_] =>
         if (currentCodegenId != -1) {
-          other.setTagValue(codegenTag, currentCodegenId)
+          other.setTagValue(QueryPlan.codegenTag, currentCodegenId)
         }
         other.innerChildren.foreach { plan =>
           generateWholeStageCodegenIdMap(plan)
@@ -196,22 +194,18 @@ object ExplainUtils {
    * against an list of plan to operator identifier maps.
    */
   def getOpId(plan: QueryPlan[_]): String = {
-    val tag = new TreeNodeTag[Int]("operatorId")
-    plan.getTagValue(tag).map(v => s"$v").getOrElse("unknown")
+    plan.getTagValue(QueryPlan.opidTag).map(v => s"$v").getOrElse("unknown")
   }
 
   def getCodegenId(plan: QueryPlan[_]): String = {
-    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
-    plan.getTagValue(codegenTag).map(v => s"[codegen id : $v]").getOrElse("")
+    plan.getTagValue(QueryPlan.codegenTag).map(v => s"[codegen id : $v]").getOrElse("")
   }
 
   def removeTags(plan: QueryPlan[_]): Unit = {
-    val opIdTag = new TreeNodeTag[Int]("operatorId")
-    val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
     plan foreach {
       case plan: QueryPlan[_] =>
-        plan.removeTag(opIdTag)
-        plan.removeTag(codegenTag)
+        plan.removeTag(QueryPlan.opidTag)
+        plan.removeTag(QueryPlan.codegenTag)
         plan.innerChildren.foreach { p =>
           removeTags(p)
         }
