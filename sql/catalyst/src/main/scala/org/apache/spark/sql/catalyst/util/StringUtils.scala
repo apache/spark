@@ -66,10 +66,10 @@ object StringUtils extends Logging {
   }
 
   private[this] val trueStrings =
-    Set("t", "true", "y", "yes", "1", "on").map(UTF8String.fromString)
+    Set("true", "tru", "tr", "t", "yes", "ye", "y", "on", "1").map(UTF8String.fromString)
 
   private[this] val falseStrings =
-    Set("f", "false", "n", "no", "0", "off").map(UTF8String.fromString)
+    Set("false", "fals", "fal", "fa", "f", "no", "n", "off", "of", "0").map(UTF8String.fromString)
 
   // scalastyle:off caselocale
   def isTrueString(s: UTF8String): Boolean = trueStrings.contains(s.toLowerCase.trim())
