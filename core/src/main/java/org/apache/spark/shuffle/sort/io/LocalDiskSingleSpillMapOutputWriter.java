@@ -21,17 +21,17 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.shuffle.api.SingleFileShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.util.Utils;
 
-public class LocalDiskSingleFileMapOutputWriter
-    implements SingleFileShuffleMapOutputWriter {
+public class LocalDiskSingleSpillMapOutputWriter
+    implements SingleSpillShuffleMapOutputWriter {
 
   private final int shuffleId;
   private final int mapId;
   private final IndexShuffleBlockResolver blockResolver;
 
-  public LocalDiskSingleFileMapOutputWriter(
+  public LocalDiskSingleSpillMapOutputWriter(
       int shuffleId,
       int mapId,
       IndexShuffleBlockResolver blockResolver) {
@@ -41,12 +41,14 @@ public class LocalDiskSingleFileMapOutputWriter
   }
 
   @Override
-  public void transferMapOutputFile(
-      File mapOutputFile,
+  public void transferMapSpillFile(
+      File mapSpillFile,
       long[] partitionLengths) throws IOException {
+    // The map spill file already has the proper format, and it contains all of the partition data.
+    // So just transfer it directly to the destination without any merging.
     File outputFile = blockResolver.getDataFile(shuffleId, mapId);
     File tempFile = Utils.tempFileWith(outputFile);
-    Files.move(mapOutputFile.toPath(), tempFile.toPath());
+    Files.move(mapSpillFile.toPath(), tempFile.toPath());
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tempFile);
   }
 }

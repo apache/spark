@@ -69,7 +69,7 @@ public interface ShuffleExecutorComponents {
    *                         with the same (shuffleId, mapId) pair can be distinguished by the
    *                         different values of mapTaskAttemptId.
    */
-  default Optional<SingleFileShuffleMapOutputWriter> createSingleFileMapOutputWriter(
+  default Optional<SingleSpillShuffleMapOutputWriter> createSingleFileMapOutputWriter(
       int shuffleId,
       int mapId,
       long mapTaskAttemptId) throws IOException {

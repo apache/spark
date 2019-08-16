@@ -18,8 +18,8 @@
 package org.apache.spark.shuffle.api;
 
 import java.io.File;
-
 import java.io.IOException;
+
 import org.apache.spark.annotation.Private;
 
 /**
@@ -27,10 +27,10 @@ import org.apache.spark.annotation.Private;
  * file to the backing store.
  */
 @Private
-public interface SingleFileShuffleMapOutputWriter {
+public interface SingleSpillShuffleMapOutputWriter {
 
   /**
-   * Transfer a file that contains the bytes of all the splits written by this map task.
+   * Transfer a file that contains the bytes of all the partitions written by this map task.
    */
-  void transferMapOutputFile(File mapOutputFile, long[] partitionLengths) throws IOException;
+  void transferMapSpillFile(File mapOutputFile, long[] partitionLengths) throws IOException;
 }

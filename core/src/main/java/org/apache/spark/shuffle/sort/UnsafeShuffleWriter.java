@@ -54,7 +54,7 @@ import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
-import org.apache.spark.shuffle.api.SingleFileShuffleMapOutputWriter;
+import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
@@ -271,14 +271,14 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       mapWriter.commitAllPartitions();
       return new long[partitioner.numPartitions()];
     } else if (spills.length == 1) {
-      Optional<SingleFileShuffleMapOutputWriter> maybeSingleFileWriter =
+      Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(
               shuffleId, mapId, taskContext.taskAttemptId());
       if (maybeSingleFileWriter.isPresent()) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
         partitionLengths = spills[0].partitionLengths;
-        maybeSingleFileWriter.get().transferMapOutputFile(spills[0].file, partitionLengths);
+        maybeSingleFileWriter.get().transferMapSpillFile(spills[0].file, partitionLengths);
       } else {
         partitionLengths = mergeSpillsUsingStandardWriter(spills);
       }
