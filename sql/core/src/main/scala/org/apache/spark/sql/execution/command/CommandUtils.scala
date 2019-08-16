@@ -353,7 +353,7 @@ object CommandUtils extends Logging {
       fs.getContentSummary(tablePath).getLength
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get table size from HDFS. Using the default data size.", e)
+        logWarning("Failed to get table size from HDFS. Using the default data size.", e)
         session.sessionState.conf.defaultSizeInBytes
     }
   }

@@ -622,7 +622,7 @@ object DataSourceStrategy {
 
 
 /**
- * Support for recalculating table statistics if table statistics are not available.
+ * Defines default table statistics if table statistics are not available.
  */
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
