@@ -183,7 +183,6 @@ object Cast {
 
     case (FloatType | DoubleType, TimestampType) => true
     case (TimestampType, DateType) => false
-
     case (_, DateType) => true
     case (DateType, TimestampType) => false
     case (DateType, _) => true
@@ -1283,7 +1282,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
   }
 
-  private[this] def castIntegerToIntegerCode(intType: String): CastFunction = {
+  private[this] def castIntegerToIntegerExactCode(intType: String): CastFunction = {
     assert(failOnIntegerOverflow)
     (c, evPrim, evNull) =>
       code"""
@@ -1328,7 +1327,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType => castTimestampToIntegerCode(ctx, "byte")
     case DecimalType() => castDecimalToIntegerCode(ctx, "byte")
     case _: ShortType | _: IntegerType | _: LongType if failOnIntegerOverflow =>
-      castIntegerToIntegerCode("byte")
+      castIntegerToIntegerExactCode("byte")
     case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
       castFractionToIntegerExactCode("byte")
     case x: NumericType =>
@@ -1357,7 +1356,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType => castTimestampToIntegerCode(ctx, "short")
     case DecimalType() => castDecimalToIntegerCode(ctx, "short")
     case _: IntegerType | _: LongType if failOnIntegerOverflow =>
-      castIntegerToIntegerCode("short")
+      castIntegerToIntegerExactCode("short")
     case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
       castFractionToIntegerExactCode("short")
     case x: NumericType =>
@@ -1383,7 +1382,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegerCode(ctx, "int")
     case DecimalType() => castDecimalToIntegerCode(ctx, "int")
-    case _: LongType if failOnIntegerOverflow => castIntegerToIntegerCode("int")
+    case _: LongType if failOnIntegerOverflow => castIntegerToIntegerExactCode("int")
     case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
       castFractionToIntegerExactCode("int")
     case x: NumericType =>
