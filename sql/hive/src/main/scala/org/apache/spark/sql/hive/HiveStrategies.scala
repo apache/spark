@@ -113,29 +113,41 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case relation @ HiveTableRelation(table, _, partitionCols)
-      if DDLUtils.isHiveTable(table) && table.stats.isEmpty =>
-      val conf = session.sessionState.conf
-      // For partitioned tables, the partition directory may be outside of the table directory.
-      // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
-      val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
-        try {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(table.location)
-          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          fs.getContentSummary(tablePath).getLength
-        } catch {
-          case e: IOException =>
-            logWarning("Failed to get table size from HDFS.", e)
-            conf.defaultSizeInBytes
-        }
-      } else {
-        conf.defaultSizeInBytes
+  private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
+    val table = relation.tableMeta
+    val partitionCols = relation.partitionCols
+    val conf = session.sessionState.conf
+    // For partitioned tables, the partition directory may be outside of the table directory.
+    // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
+    val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
+      try {
+        val hadoopConf = session.sessionState.newHadoopConf()
+        val tablePath = new Path(table.location)
+        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        fs.getContentSummary(tablePath).getLength
+      } catch {
+        case e: IOException =>
+          logWarning("Failed to get table size from HDFS.", e)
+          conf.defaultSizeInBytes
       }
+    } else {
+      conf.defaultSizeInBytes
+    }
 
-      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      relation.copy(tableMeta = withStats)
+    val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+    relation.copy(tableMeta = withStats)
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case relation: HiveTableRelation
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      hiveTableWithStats(relation)
+
+    // handles InsertIntoTable specially as the table in InsertIntoTable is not added in its
+    // children, hence not matched directly by previous HiveTableRelation case.
+    case i @ InsertIntoTable(relation: HiveTableRelation, _, _, _, _)
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      i.copy(table = hiveTableWithStats(relation))
   }
 }
 

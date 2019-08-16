@@ -197,9 +197,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           Some(partitionSchema))
 
         val logicalRelation = cached.getOrElse {
-          val defaultSizeInBytes = sparkSession.sessionState.conf.defaultSizeInBytes
-          val sizeInBytes =
-            relation.tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(defaultSizeInBytes)
+          val sizeInBytes = relation.stats.sizeInBytes.toLong
           val fileIndex = {
             val index = new CatalogFileIndex(sparkSession, relation.tableMeta, sizeInBytes)
             if (lazyPruningEnabled) {
