@@ -1,0 +1,22 @@
+================================================================================================
+Benchmark Java Serializer Deserialization use vs not use Class Resolve Cache
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_111-b14 on Linux 4.15.0-55-generic
+Intel(R) Core(TM) i7-6950X CPU @ 3.00GHz
+Benchmark Java Serializer Deserialization use vs not use Class Resolve Cache:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+Int with cache:true                                 173            200          58          0.6        1733.9       1.0X
+Long with cache:true                                161            163           2          0.6        1614.3       1.1X
+Float with cache:true                               161            179          45          0.6        1612.0       1.1X
+Double with cache:true                              162            164           2          0.6        1624.3       1.1X
+String(10) with cache:true                           41             42           2          2.4         410.3       4.2X
+Person(String(10), Int) with cache:true             185            186           3          0.5        1850.5       0.9X
+Student(Person, String(10)) with cache:true            390            392           3          0.3        3900.8       0.4X
+Int with cache:false                                241            248          13          0.4        2414.2       0.7X
+Long with cache:false                               234            235           2          0.4        2335.6       0.7X
+Float with cache:false                              238            242           6          0.4        2381.0       0.7X
+Double with cache:false                             239            240           1          0.4        2390.4       0.7X
+String(10) with cache:false                          41             43           1          2.4         414.7       4.2X
+Person(String(10), Int) with cache:false            244            245           1          0.4        2437.4       0.7X
+Student(Person, String(10)) with cache:false            509            511           1          0.2        5086.7       0.3X

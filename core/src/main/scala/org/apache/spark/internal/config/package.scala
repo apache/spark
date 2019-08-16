@@ -1333,6 +1333,11 @@ package object config {
     .booleanConf
     .createWithDefault(true)
 
+  private[spark] val JAVA_SERIALIZER_CACHE_RESOLVED_CLASSES =
+    ConfigBuilder("spark.serializer.JavaSerializer.cache.resolvedClasses")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val JARS = ConfigBuilder("spark.jars")
     .stringConf
     .toSequence
