@@ -83,7 +83,8 @@ case class ReduceNumShufflePartitions(conf: SQLConf) extends Rule[SparkPlan] {
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleMetrics.filter(_ != null)
       // We may have different pre-shuffle partition numbers, don't reduce shuffle partition number
-      // in that case.
+      // in that case. For example when we union fully aggregated data (data is arranged to a single
+      // partition) and a result of a SortMergeJoin (multiple partitions).
       val distinctNumPreShufflePartitions =
         validMetrics.map(stats => stats.bytesByPartitionId.length).distinct
       if (validMetrics.nonEmpty && distinctNumPreShufflePartitions.length == 1) {
