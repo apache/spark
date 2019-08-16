@@ -1409,7 +1409,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    new DatePart(Literal(ctx.field.getText), expression(ctx.source))
+    val fieldStr = ctx.field.getText
+    val source = expression(ctx.source)
+    val extractField = DatePart.parseExtractField(fieldStr, source, {
+      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
+    })
+    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
   }
 
   /**
