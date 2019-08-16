@@ -51,7 +51,6 @@ object JavaSerializerBenchmark extends BenchmarkBase {
   }
 
   private def run(useCache: Boolean, benchmark: Benchmark): Unit = {
-    // Benchmark Primitives
     def createCase[T: ClassTag](name: String, size: Int, gen: () => T): Unit = {
       lazy val ser = createSerializer(useCache)
       val data: Array[ByteBuffer] = Array.fill(size)(ser.serialize(gen()))
