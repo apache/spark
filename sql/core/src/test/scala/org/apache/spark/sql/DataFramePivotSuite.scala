@@ -120,14 +120,12 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   // Tests for optimized pivot (with PivotFirst) below
 
   test("optimized pivot planned") {
-    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
-      val df = courseSales.groupBy("year")
-        // pivot with extra columns to trigger optimization
-        .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
-        .agg(sum($"earnings"))
-      val queryExecution = spark.sessionState.executePlan(df.queryExecution.logical)
-      assert(queryExecution.simpleString.contains("pivotfirst"))
-    }
+    val df = courseSales.groupBy("year")
+      // pivot with extra columns to trigger optimization
+      .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+      .agg(sum($"earnings"))
+    val queryExecution = spark.sessionState.executePlan(df.queryExecution.logical)
+    assert(queryExecution.simpleString.contains("pivotfirst"))
   }
 
 

@@ -439,139 +439,133 @@ class StreamSuite extends StreamTest {
     .set("spark.redaction.string.regex", "file:/[\\w_]+")
 
   test("explain - redaction") {
-    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
-      val replacement = "*********"
+    val replacement = "*********"
 
-      val inputData = MemoryStream[String]
-      val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
-      // Test StreamingQuery.display
-      val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
-        .start()
-        .asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery
-      try {
-        inputData.addData("abc")
-        q.processAllAvailable()
+    val inputData = MemoryStream[String]
+    val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      inputData.addData("abc")
+      q.processAllAvailable()
 
-        val explainWithoutExtended = q.explainInternal(false)
-        assert(explainWithoutExtended.contains(replacement))
-        assert(explainWithoutExtended.contains("StateStoreRestore"))
-        assert(!explainWithoutExtended.contains("file:/"))
+      val explainWithoutExtended = q.explainInternal(false)
+      assert(explainWithoutExtended.contains(replacement))
+      assert(explainWithoutExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
 
-        val explainWithExtended = q.explainInternal(true)
-        assert(explainWithExtended.contains(replacement))
-        assert(explainWithExtended.contains("StateStoreRestore"))
-        assert(!explainWithoutExtended.contains("file:/"))
-      } finally {
-        q.stop()
-      }
+      val explainWithExtended = q.explainInternal(true)
+      assert(explainWithExtended.contains(replacement))
+      assert(explainWithExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
+    } finally {
+      q.stop()
     }
   }
 
   test("explain") {
-    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
-      val inputData = MemoryStream[String]
-      val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
+    val inputData = MemoryStream[String]
+    val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
 
-      // Test `df.explain`
-      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
-      val explainString =
-        spark.sessionState
-          .executePlan(explain)
-          .executedPlan
-          .executeCollect()
-          .map(_.getString(0))
-          .mkString("\n")
-      assert(explainString.contains("StateStoreRestore"))
-      assert(explainString.contains("StreamingRelation"))
-      assert(!explainString.contains("LocalTableScan"))
+    // Test `df.explain`
+    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    assert(explainString.contains("StateStoreRestore"))
+    assert(explainString.contains("StreamingRelation"))
+    assert(!explainString.contains("LocalTableScan"))
 
-      // Test StreamingQuery.display
-      val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
-        .start()
-        .asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery
-      try {
-        assert("No physical plan. Waiting for data." === q.explainInternal(false))
-        assert("No physical plan. Waiting for data." === q.explainInternal(true))
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      assert("No physical plan. Waiting for data." === q.explainInternal(false))
+      assert("No physical plan. Waiting for data." === q.explainInternal(true))
 
-        inputData.addData("abc")
-        q.processAllAvailable()
+      inputData.addData("abc")
+      q.processAllAvailable()
 
-        val explainWithoutExtended = q.explainInternal(false)
-        // `extended = false` only displays the physical plan.
-        assert("StreamingDataSourceV2Relation".r
-          .findAllMatchIn(explainWithoutExtended).size === 0)
-        assert("BatchScan".r
-          .findAllMatchIn(explainWithoutExtended).size === 1)
-        // Use "StateStoreRestore" to verify that it does output a streaming physical plan
-        assert(explainWithoutExtended.contains("StateStoreRestore"))
+      val explainWithoutExtended = q.explainInternal(false)
+      // `extended = false` only displays the physical plan.
+      assert("StreamingDataSourceV2Relation".r
+        .findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("BatchScan".r
+        .findAllMatchIn(explainWithoutExtended).size === 1)
+      // Use "StateStoreRestore" to verify that it does output a streaming physical plan
+      assert(explainWithoutExtended.contains("StateStoreRestore"))
 
-        val explainWithExtended = q.explainInternal(true)
-        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
-        // plan.
-        assert("StreamingDataSourceV2Relation".r
-          .findAllMatchIn(explainWithExtended).size === 3)
-        assert("BatchScan".r
-          .findAllMatchIn(explainWithExtended).size === 1)
-        // Use "StateStoreRestore" to verify that it does output a streaming physical plan
-        assert(explainWithExtended.contains("StateStoreRestore"))
-      } finally {
-        q.stop()
-      }
+      val explainWithExtended = q.explainInternal(true)
+      // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+      // plan.
+      assert("StreamingDataSourceV2Relation".r
+        .findAllMatchIn(explainWithExtended).size === 3)
+      assert("BatchScan".r
+        .findAllMatchIn(explainWithExtended).size === 1)
+      // Use "StateStoreRestore" to verify that it does output a streaming physical plan
+      assert(explainWithExtended.contains("StateStoreRestore"))
+    } finally {
+      q.stop()
     }
   }
 
   test("explain-continuous") {
-    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
-      val inputData = ContinuousMemoryStream[Int]
-      val df = inputData.toDS().map(_ * 2).filter(_ > 5)
+    val inputData = ContinuousMemoryStream[Int]
+    val df = inputData.toDS().map(_ * 2).filter(_ > 5)
 
-      // Test `df.explain`
-      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
-      val explainString =
-        spark.sessionState
-          .executePlan(explain)
-          .executedPlan
-          .executeCollect()
-          .map(_.getString(0))
-          .mkString("\n")
-      assert(explainString.contains("Filter"))
-      assert(explainString.contains("MapElements"))
-      assert(!explainString.contains("LocalTableScan"))
+    // Test `df.explain`
+    val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+    val explainString =
+      spark.sessionState
+        .executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    assert(explainString.contains("Filter"))
+    assert(explainString.contains("MapElements"))
+    assert(!explainString.contains("LocalTableScan"))
 
-      // Test StreamingQuery.display
-      val q = df.writeStream.queryName("memory_continuous_explain")
-        .outputMode(OutputMode.Update()).format("memory")
-        .trigger(Trigger.Continuous("1 seconds"))
-        .start()
-        .asInstanceOf[StreamingQueryWrapper]
-        .streamingQuery
-      try {
-        // in continuous mode, the query will be run even there's no data
-        // sleep a bit to ensure initialization
-        eventually(timeout(2.seconds), interval(100.milliseconds)) {
-          assert(q.lastExecution != null)
-        }
-
-        val explainWithoutExtended = q.explainInternal(false)
-
-        // `extended = false` only displays the physical plan.
-        assert("StreamingDataSourceV2Relation".r
-          .findAllMatchIn(explainWithoutExtended).size === 0)
-        assert("ContinuousScan".r
-          .findAllMatchIn(explainWithoutExtended).size === 1)
-
-        val explainWithExtended = q.explainInternal(true)
-        // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
-        // plan.
-        assert("StreamingDataSourceV2Relation".r
-          .findAllMatchIn(explainWithExtended).size === 3)
-        assert("ContinuousScan".r
-          .findAllMatchIn(explainWithExtended).size === 1)
-      } finally {
-        q.stop()
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_continuous_explain")
+      .outputMode(OutputMode.Update()).format("memory")
+      .trigger(Trigger.Continuous("1 seconds"))
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      // in continuous mode, the query will be run even there's no data
+      // sleep a bit to ensure initialization
+      eventually(timeout(2.seconds), interval(100.milliseconds)) {
+        assert(q.lastExecution != null)
       }
+
+      val explainWithoutExtended = q.explainInternal(false)
+
+      // `extended = false` only displays the physical plan.
+      assert("StreamingDataSourceV2Relation".r
+        .findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("ContinuousScan".r
+        .findAllMatchIn(explainWithoutExtended).size === 1)
+
+      val explainWithExtended = q.explainInternal(true)
+      // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
+      // plan.
+      assert("StreamingDataSourceV2Relation".r
+        .findAllMatchIn(explainWithExtended).size === 3)
+      assert("ContinuousScan".r
+        .findAllMatchIn(explainWithExtended).size === 1)
+    } finally {
+      q.stop()
     }
   }
 

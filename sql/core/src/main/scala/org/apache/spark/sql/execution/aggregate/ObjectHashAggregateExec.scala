@@ -143,8 +143,7 @@ case class ObjectHashAggregateExec(
 
   override def verboseString(maxFields: Int): String = toString(verbose = true, maxFields)
 
-  override def simpleString(maxFields: Int): String =
-    toString(verbose = false, maxFields)
+  override def simpleString(maxFields: Int): String = toString(verbose = false, maxFields)
 
   private def toString(verbose: Boolean, maxFields: Int): String = {
     val allAggregateExpressions = aggregateExpressions

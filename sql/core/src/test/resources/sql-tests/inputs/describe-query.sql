@@ -23,10 +23,8 @@ DESCRIBE
      insert into desc_temp2 select *;
 
 -- Explain
-SET spark.sql.explain.legacy.format = true;
 EXPLAIN DESC QUERY SELECT * FROM desc_temp2 WHERE key > 0;
 EXPLAIN EXTENDED DESC WITH s AS (SELECT 'hello' as col1) SELECT * FROM s;
-SET spark.sql.explain.legacy.format = false;
 
 -- cleanup
 DROP TABLE desc_temp1;

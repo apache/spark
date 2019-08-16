@@ -81,13 +81,11 @@ DESC EXTENDED v;
 DESC v PARTITION (c='Us', d=1);
 
 -- Explain Describe Table
-SET spark.sql.explain.legacy.format = true;
 EXPLAIN DESC t;
 EXPLAIN DESC EXTENDED t;
 EXPLAIN EXTENDED DESC t;
 EXPLAIN DESCRIBE t b;
 EXPLAIN DESCRIBE t PARTITION (c='Us', d=2);
-SET spark.sql.explain.legacy.format = false;
 
 -- DROP TEST TABLES/VIEWS
 DROP TABLE t;

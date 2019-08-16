@@ -1537,7 +1537,7 @@ object SQLConf {
         "the plan in tree form with minimalistic information about each operator. The second part" +
         "describes each operator in a verbose way with its arguments")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
     .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +

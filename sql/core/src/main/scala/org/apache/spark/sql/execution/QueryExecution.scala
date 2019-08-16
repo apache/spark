@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
@@ -131,10 +128,12 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
-  def simpleString: String = withRedaction {
+  def simpleString: String = simpleString(false)
+
+  def simpleString(formatted: Boolean): String = withRedaction {
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
-    if (SQLConf.get.sqlExplainLegacyFormat == false) {
+    if (SQLConf.get.sqlExplainLegacyFormat == false || formatted) {
       ExplainUtils.processPlan(executedPlan, concat.append)
     } else {
       QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)

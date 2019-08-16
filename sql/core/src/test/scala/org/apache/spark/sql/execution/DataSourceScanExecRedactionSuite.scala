@@ -42,28 +42,24 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSparkSes
   protected def getRootPath(df: DataFrame): Path
 
   test("treeString is redacted") {
-    withSQLConf("spark.sql.explain.legacy.format" -> "true") {
-      withTempDir { dir =>
-        val basePath = dir.getCanonicalPath
-        spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
-        val df = spark.read.orc(basePath)
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      spark.range(0, 10).toDF("a").write.orc(new Path(basePath, "foo=1").toString)
+      val df = spark.read.orc(basePath)
 
-        val rootPath = getRootPath(df)
-        assert(rootPath.toString.contains(dir.toURI.getPath.stripSuffix("/")))
+      val rootPath = getRootPath(df)
+      assert(rootPath.toString.contains(dir.toURI.getPath.stripSuffix("/")))
 
-        assert(!df.queryExecution.sparkPlan.treeString(verbose = true).contains(rootPath.getName))
-        assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(
-          rootPath.getName)
-        )
-        assert(!df.queryExecution.toString.contains(rootPath.getName))
-        assert(!df.queryExecution.simpleString.contains(rootPath.getName))
+      assert(!df.queryExecution.sparkPlan.treeString(verbose = true).contains(rootPath.getName))
+      assert(!df.queryExecution.executedPlan.treeString(verbose = true).contains(rootPath.getName))
+      assert(!df.queryExecution.toString.contains(rootPath.getName))
+      assert(!df.queryExecution.simpleString.contains(rootPath.getName))
 
-        val replacement = "*********"
-        assert(df.queryExecution.sparkPlan.treeString(verbose = true).contains(replacement))
-        assert(df.queryExecution.executedPlan.treeString(verbose = true).contains(replacement))
-        assert(df.queryExecution.toString.contains(replacement))
-        assert(df.queryExecution.simpleString.contains(replacement))
-      }
+      val replacement = "*********"
+      assert(df.queryExecution.sparkPlan.treeString(verbose = true).contains(replacement))
+      assert(df.queryExecution.executedPlan.treeString(verbose = true).contains(replacement))
+      assert(df.queryExecution.toString.contains(replacement))
+      assert(df.queryExecution.simpleString.contains(replacement))
     }
   }
 }
