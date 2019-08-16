@@ -89,7 +89,7 @@ class RDDTests(ReusedPySparkTestCase):
         timesPrefetchNext = next(timesIterPrefetch)
         print("With prefetch times are: " + str(timesPrefetchHead) + "," + str(timesPrefetchNext))
         self.assertTrue(timesNext - timesHead >= timedelta(seconds=2))
-        self.assertTrue(timesPrefetchNext - timesPrefetchHead < timedelta(seconds=2))
+        self.assertTrue(timesPrefetchNext - timesPrefetchHead < timedelta(seconds=1))
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970

@@ -2457,7 +2457,9 @@ class RDD(object):
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         with SCCallSiteSync(self.context) as css:
-            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd(), prefetchPartitions)
+            sock_info = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(
+                self._jrdd.rdd(),
+                prefetchPartitions)
         return _local_iterator_from_socket(sock_info, self._jrdd_deserializer)
 
     def barrier(self):
