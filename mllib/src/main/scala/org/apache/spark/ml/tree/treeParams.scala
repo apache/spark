@@ -189,7 +189,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 /**
  * Parameters for Decision Tree-based classification algorithms.
  */
-private[ml] trait HasClassificationImpurity extends Params {
+private[ml] trait TreeClassifierParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
@@ -200,9 +200,9 @@ private[ml] trait HasClassificationImpurity extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${HasClassificationImpurity.supportedImpurities.mkString(", ")}",
+    s" ${TreeClassifierParams.supportedImpurities.mkString(", ")}",
     (value: String) =>
-      HasClassificationImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
+      TreeClassifierParams.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "gini")
 
@@ -222,14 +222,14 @@ private[ml] trait HasClassificationImpurity extends Params {
   }
 }
 
-private[ml] object HasClassificationImpurity {
+private[ml] object TreeClassifierParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] =
     Array("entropy", "gini").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait DecisionTreeClassifierParams
-  extends DecisionTreeParams with HasClassificationImpurity with ProbabilisticClassifierParams {
+  extends DecisionTreeParams with TreeClassifierParams with ProbabilisticClassifierParams {
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -243,7 +243,7 @@ private[ml] trait DecisionTreeClassifierParams
   }
 }
 
-private[ml] trait HasRegressionImpurity extends Params {
+private[ml] trait HasVarianceImpurity extends Params {
   /**
    * Criterion used for information gain calculation (case-insensitive).
    * This impurity type is used in DecisionTreeRegressor, RandomForestRegressor, GBTRegressor
@@ -255,9 +255,9 @@ private[ml] trait HasRegressionImpurity extends Params {
    */
   final val impurity: Param[String] = new Param[String](this, "impurity", "Criterion used for" +
     " information gain calculation (case-insensitive). Supported options:" +
-    s" ${HasRegressionImpurity.supportedImpurities.mkString(", ")}",
+    s" ${HasVarianceImpurity.supportedImpurities.mkString(", ")}",
     (value: String) =>
-      HasRegressionImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
+      HasVarianceImpurity.supportedImpurities.contains(value.toLowerCase(Locale.ROOT)))
 
   setDefault(impurity -> "variance")
 
@@ -276,7 +276,7 @@ private[ml] trait HasRegressionImpurity extends Params {
   }
 }
 
-private[ml] object HasRegressionImpurity {
+private[ml] object HasVarianceImpurity {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] =
     Array("variance").map(_.toLowerCase(Locale.ROOT))
@@ -285,7 +285,7 @@ private[ml] object HasRegressionImpurity {
 /**
  * Parameters for Decision Tree-based regression algorithms.
  */
-private[ml] trait TreeRegressorParams extends HasRegressionImpurity
+private[ml] trait TreeRegressorParams extends HasVarianceImpurity
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
@@ -449,7 +449,7 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
 }
 
 private[ml] trait RandomForestClassifierParams
-  extends RandomForestParams with TreeEnsembleClassifierParams with HasClassificationImpurity
+  extends RandomForestParams with TreeEnsembleClassifierParams with TreeClassifierParams
 
 private[ml] trait RandomForestRegressorParams
   extends RandomForestParams with TreeEnsembleRegressorParams with TreeRegressorParams
@@ -523,7 +523,7 @@ private[ml] object GBTClassifierParams {
 }
 
 private[ml] trait GBTClassifierParams
-  extends GBTParams with TreeEnsembleClassifierParams with HasRegressionImpurity {
+  extends GBTParams with TreeEnsembleClassifierParams with HasVarianceImpurity {
 
   /**
    * Loss function which GBT tries to minimize. (case-insensitive)

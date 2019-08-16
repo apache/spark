@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
-import org.apache.spark.ml.tree.{HasClassificationImpurity, TreeEnsembleModel}
+import org.apache.spark.ml.tree.{TreeClassifierParams, TreeEnsembleModel}
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.{Identifiable, MetadataUtils}
@@ -162,7 +162,7 @@ class RandomForestClassifier @Since("1.4.0") (
 object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifier] {
   /** Accessor for supported impurity settings: entropy, gini */
   @Since("1.4.0")
-  final val supportedImpurities: Array[String] = HasClassificationImpurity.supportedImpurities
+  final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
   @Since("1.4.0")
