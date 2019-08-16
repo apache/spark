@@ -651,24 +651,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("Data source tables support fallback to HDFS for size estimation") {
-    // Non-partitioned table
+  test("Non-partitioned data source table support fallback to HDFS for size estimation") {
     withTempDir { dir =>
-      Seq(false, true).foreach { fallBackToHDFSForStats =>
-        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFSForStats") {
+      Seq(false, true).foreach { fallBackToHDFS =>
+        withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFS") {
           withTable("spark_25474") {
             sql(s"CREATE TABLE spark_25474 (c1 BIGINT) USING PARQUET LOCATION '${dir.toURI}'")
             spark.range(5).write.mode(SaveMode.Overwrite).parquet(dir.getCanonicalPath)
 
             assert(getCatalogTable("spark_25474").stats.isEmpty)
             val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
+            // fallBackToHDFS = true: The table stats will be recalculated by DetermineTableStats
+            // fallBackToHDFS = false: The table stats will be recalculated by FileIndex
             assert(relation.stats.sizeInBytes === getDataSize(dir))
           }
         }
       }
     }
+  }
 
-    // Partitioned table
+  test("Partitioned data source table support fallback to HDFS for size estimation") {
     Seq(false, true).foreach { fallBackToHDFSForStats =>
       withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFSForStats") {
         withTable("spark_25474") {
