@@ -23,7 +23,7 @@ SELECT false AS `false`;
 SELECT boolean('t') AS true;
 
 -- [SPARK-27931] Trim the string when cast string type to boolean type
-SELECT boolean('   f           ') AS `true`;
+SELECT boolean('   f           ') AS `false`;
 
 SELECT boolean('true') AS true;
 
