@@ -234,7 +234,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Writes a key-value pair.
    */
-  def write(key: Any, value: Any) {
+  override def write(key: Any, value: Any) {
     if (!streamOpen) {
       open()
     }

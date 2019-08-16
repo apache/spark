@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.collection
+package org.apache.spark.shuffle
 
-import java.io.{Closeable, FilterOutputStream, OutputStream}
+import java.io.{Closeable, OutputStream}
 
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.shuffle.api.ShufflePartitionWriter
 import org.apache.spark.storage.BlockId
+import org.apache.spark.util.collection.PairsWriter
 
 /**
  * A key-value writer inspired by {@link DiskBlockObjectWriter} that pushes the bytes to an
@@ -50,7 +50,7 @@ private[spark] class ShufflePartitionPairsWriter(
     }
     objOut.writeKey(key)
     objOut.writeValue(value)
-    writeMetrics.incRecordsWritten(1)
+    recordWritten()
   }
 
   private def open(): Unit = {
@@ -60,15 +60,15 @@ private[spark] class ShufflePartitionPairsWriter(
   }
 
   override def close(): Unit = {
-    if (isOpen) {
+    if (objOut != null) {
       // Closing objOut should propagate close to all inner layers
       objOut.close()
-      objOut = null
-      wrappedStream = null
-      partitionStream = null
-      isOpen = false
-      updateBytesWritten()
     }
+    objOut = null
+    wrappedStream = null
+    partitionStream = null
+    isOpen = false
+    updateBytesWritten()
   }
 
   /**
@@ -88,11 +88,5 @@ private[spark] class ShufflePartitionPairsWriter(
     val bytesWrittenDiff = numBytesWritten - curNumBytesWritten
     writeMetrics.incBytesWritten(bytesWrittenDiff)
     curNumBytesWritten = numBytesWritten
-  }
-
-  private class CloseShieldOutputStream(delegate: OutputStream)
-    extends FilterOutputStream(delegate) {
-
-    override def close(): Unit = flush()
   }
 }

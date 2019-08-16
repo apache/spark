@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
+import org.apache.spark.shuffle.ShufflePartitionPairsWriter
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 
@@ -671,9 +672,9 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * TODO remove this, as this is only used by UnsafeRowSerializerSuite in the SQL project.
-   * We should figure out an alternative way to test that so that we can remove this otherwise
-   * unused code path.
+   * TODO(SPARK-28764): remove this, as this is only used by UnsafeRowSerializerSuite in the SQL
+   * project. We should figure out an alternative way to test that so that we can remove this
+   * otherwise unused code path.
    */
   def writePartitionedFile(
       blockId: BlockId,
@@ -724,7 +725,9 @@ private[spark] class ExternalSorter[K, V, C](
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
    */
   def writePartitionedMapOutput(
-      shuffleId: Int, mapId: Int, mapOutputWriter: ShuffleMapOutputWriter): Array[Long] = {
+      shuffleId: Int,
+      mapId: Int,
+      mapOutputWriter: ShuffleMapOutputWriter): Array[Long] = {
     // Track location of each range in the map output
     val lengths = new Array[Long](numPartitions)
     var nextPartitionId = 0
