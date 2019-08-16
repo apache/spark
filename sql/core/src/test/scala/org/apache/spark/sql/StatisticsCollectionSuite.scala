@@ -671,17 +671,17 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("Partitioned data source table support fallback to HDFS for size estimation") {
-    Seq(false, true).foreach { fallBackToHDFSForStats =>
-      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFSForStats") {
-        withTable("spark_25474") {
-          withTempDir { dir =>
-            spark.sql("CREATE TABLE spark_25474(a int, b int) USING parquet " +
+    Seq(false, true).foreach { fallBackToHDFS =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFS") {
+        withTempDir { dir =>
+          withTable("spark_25474") {
+            sql("CREATE TABLE spark_25474(a int, b int) USING parquet " +
                 s"PARTITIONED BY(a) LOCATION '${dir.toURI}'")
-            spark.sql("INSERT INTO TABLE spark_25474 PARTITION(a=1) SELECT 2")
+            sql("INSERT INTO TABLE spark_25474 PARTITION(a=1) SELECT 2")
 
             assert(getCatalogTable("spark_25474").stats.isEmpty)
             val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
-            if (fallBackToHDFSForStats) {
+            if (fallBackToHDFS) {
               assert(relation.stats.sizeInBytes > 0)
               assert(relation.stats.sizeInBytes < conf.defaultSizeInBytes)
             } else {
