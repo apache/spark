@@ -139,8 +139,8 @@ struct<54:string,timestamp:timestamp,year:int,month:int,day:int,hour:int,minute:
 
 -- !query 14
 SELECT '' AS `54`, d1 as `timestamp`,
-    date_part( 'quarter', d1) AS `quarter`, date_part( 'msec', d1) AS `msec`,
-    date_part( 'usec', d1) AS `usec`
+    date_part( 'quarter', d1) AS quarter, date_part( 'msec', d1) AS msec,
+    date_part( 'usec', d1) AS usec
     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query 14 schema
 struct<54:string,timestamp:timestamp,quarter:int,msec:decimal(8,3),usec:int>
@@ -153,8 +153,8 @@ struct<54:string,timestamp:timestamp,quarter:int,msec:decimal(8,3),usec:int>
 
 -- !query 15
 SELECT '' AS `54`, d1 as `timestamp`,
-    date_part( 'isoyear', d1) AS `isoyear`, date_part( 'week', d1) AS `week`,
-    date_part( 'dow', d1) AS `dow`
+    date_part( 'isoyear', d1) AS isoyear, date_part( 'week', d1) AS week,
+    date_part( 'dow', d1) AS dow
     FROM TIMESTAMP_TBL WHERE d1 BETWEEN '1902-01-01' AND '2038-01-01'
 -- !query 15 schema
 struct<54:string,timestamp:timestamp,isoyear:int,week:int,dow:int>
