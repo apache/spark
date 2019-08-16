@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -1009,5 +1009,48 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Decade(date.copy(year = Literal(-10))), -1)
     checkEvaluation(Decade(date.copy(year = Literal(-11))), -2)
     checkEvaluation(Decade(date.copy(year = Literal(-2019))), -202)
+  }
+
+  test("milliseconds and microseconds") {
+    outstandingTimezonesIds.foreach { timezone =>
+      var timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
+        Literal(0), Literal(0), Literal(Decimal(BigDecimal(10.123456789), 8, 6)),
+        Some(Literal(timezone)))
+
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(10123.457), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 10123457)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(0.0, 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(59.999999), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(BigDecimal(59999.999), 8, 3))
+      checkEvaluation(Microseconds(timestamp), 59999999)
+
+      timestamp = timestamp.copy(sec = Literal(Decimal(BigDecimal(60.0), 8, 6)))
+      checkEvaluation(Milliseconds(timestamp), Decimal(0, 8, 3))
+      checkEvaluation(Microseconds(timestamp), 0)
+    }
+  }
+
+  test("epoch") {
+    val zoneId = ZoneId.systemDefault()
+    val nanos = 123456000
+    val timestamp = Epoch(MakeTimestamp(
+      Literal(2019), Literal(8), Literal(9), Literal(0), Literal(0),
+      Literal(Decimal(nanos / DateTimeUtils.NANOS_PER_SECOND.toDouble, 8, 6)),
+      Some(Literal(zoneId.getId))))
+    val instant = LocalDateTime.of(2019, 8, 9, 0, 0, 0, nanos)
+      .atZone(zoneId).toInstant
+    val expected = Decimal(BigDecimal(nanos) / DateTimeUtils.NANOS_PER_SECOND +
+      instant.getEpochSecond +
+      zoneId.getRules.getOffset(instant).getTotalSeconds)
+    checkEvaluation(timestamp, expected)
+  }
+
+  test("ISO 8601 week-numbering year") {
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
+    checkEvaluation(IsoYear(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
   }
 }

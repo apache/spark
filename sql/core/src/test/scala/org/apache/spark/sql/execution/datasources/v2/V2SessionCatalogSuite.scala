@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -45,6 +46,7 @@ class V2SessionCatalogSuite
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     spark.sql("""CREATE DATABASE IF NOT EXISTS db""")
+    spark.sql("""CREATE DATABASE IF NOT EXISTS db2""")
     spark.sql("""CREATE DATABASE IF NOT EXISTS ns""")
     spark.sql("""CREATE DATABASE IF NOT EXISTS ns2""")
   }
@@ -52,6 +54,7 @@ class V2SessionCatalogSuite
   override protected def afterAll(): Unit = {
     spark.sql("""DROP TABLE IF EXISTS db.test_table""")
     spark.sql("""DROP DATABASE IF EXISTS db""")
+    spark.sql("""DROP DATABASE IF EXISTS db2""")
     spark.sql("""DROP DATABASE IF EXISTS ns""")
     spark.sql("""DROP DATABASE IF EXISTS ns2""")
     super.afterAll()
@@ -59,6 +62,7 @@ class V2SessionCatalogSuite
 
   after {
     newCatalog().dropTable(testIdent)
+    newCatalog().dropTable(testIdentNew)
   }
 
   private def newCatalog(): TableCatalog = {
@@ -67,7 +71,9 @@ class V2SessionCatalogSuite
     newCatalog
   }
 
-  private val testIdent = Identifier.of(Array("db"), "test_table")
+  private val testNs = Array("db")
+  private val testIdent = Identifier.of(testNs, "test_table")
+  private val testIdentNew = Identifier.of(testNs, "test_table_new")
 
   test("Catalogs can load the catalog") {
     val catalog = newCatalog()
@@ -679,5 +685,71 @@ class V2SessionCatalogSuite
 
     assert(!wasDropped)
     assert(!catalog.tableExists(testIdent))
+  }
+
+  test("renameTable") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNew))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+    catalog.renameTable(testIdent, testIdentNew)
+
+    assert(!catalog.tableExists(testIdent))
+    assert(catalog.tableExists(testIdentNew))
+  }
+
+  test("renameTable: fail if table does not exist") {
+    val catalog = newCatalog()
+
+    val exc = intercept[NoSuchTableException] {
+      catalog.renameTable(testIdent, testIdentNew)
+    }
+
+    assert(exc.message.contains(testIdent.quoted))
+    assert(exc.message.contains("not found"))
+  }
+
+  test("renameTable: fail if new table name already exists") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNew))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdentNew, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+    assert(catalog.tableExists(testIdentNew))
+
+    val exc = intercept[TableAlreadyExistsException] {
+      catalog.renameTable(testIdent, testIdentNew)
+    }
+
+    assert(exc.message.contains(testIdentNew.quoted))
+    assert(exc.message.contains("already exists"))
+  }
+
+  test("renameTable: fail if db does not match for old and new table names") {
+    val catalog = newCatalog()
+    val testIdentNewOtherDb = Identifier.of(Array("db2"), "test_table_new")
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNewOtherDb))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+
+    val exc = intercept[AnalysisException] {
+      catalog.renameTable(testIdent, testIdentNewOtherDb)
+    }
+
+    assert(exc.message.contains(testIdent.namespace.quoted))
+    assert(exc.message.contains(testIdentNewOtherDb.namespace.quoted))
+    assert(exc.message.contains("RENAME TABLE source and destination databases do not match"))
   }
 }

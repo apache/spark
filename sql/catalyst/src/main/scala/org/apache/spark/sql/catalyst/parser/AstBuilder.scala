@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -336,6 +336,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+  }
+
+  override def visitDeleteFromTable(
+      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
+
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableAlias = if (ctx.tableAlias() != null) {
+      val ident = ctx.tableAlias().strictIdentifier()
+      if (ident != null) { Some(ident.getText) } else { None }
+    } else {
+      None
+    }
+
+    DeleteFromStatement(tableId, tableAlias, expression(ctx.whereClause().booleanExpression()))
   }
 
   /**
@@ -1404,6 +1418,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Decade(expression(ctx.source))
       case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
         Year(expression(ctx.source))
+      case "ISOYEAR" =>
+        IsoYear(expression(ctx.source))
       case "QUARTER" | "QTR" =>
         Quarter(expression(ctx.source))
       case "MONTH" | "MON" | "MONS" | "MONTHS" =>
@@ -1426,6 +1442,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Minute(expression(ctx.source))
       case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
         Second(expression(ctx.source))
+      case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+        Milliseconds(expression(ctx.source))
+      case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+        Microseconds(expression(ctx.source))
+      case "EPOCH" =>
+        Epoch(expression(ctx.source))
       case other =>
         throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
     }
