@@ -178,6 +178,22 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
       }
       return Optional.of(partChannel);
     }
+
+    @Override
+    public long getNumBytesWritten() {
+      if (partChannel != null) {
+        try {
+          return partChannel.getCount();
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+      } else if (partStream != null) {
+        return partStream.getCount();
+      } else {
+        // Assume an empty partition if stream and channel are never created
+        return 0;
+      }
+    }
   }
 
   private class PartitionWriterStream extends OutputStream {
