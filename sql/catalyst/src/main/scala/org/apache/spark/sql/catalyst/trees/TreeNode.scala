@@ -627,14 +627,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * Note that this traversal (numbering) order must be the same as [[getNodeNumbered]].
    */
   def generateTreeString(
-    depth: Int,
-    lastChildren: Seq[Boolean],
-    append: String => Unit,
-    verbose: Boolean,
-    prefix: String = "",
-    addSuffix: Boolean = false,
-    maxFields: Int,
-    printNodeId: Boolean): Unit = {
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      append: String => Unit,
+      verbose: Boolean,
+      prefix: String = "",
+      addSuffix: Boolean = false,
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
 
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
