@@ -14,11 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from datetime import datetime, timedelta
 import hashlib
 import os
 import random
 import sys
 import tempfile
+import time
 from glob import glob
 
 from py4j.protocol import Py4JJavaError
@@ -75,17 +77,19 @@ class RDDTests(ReusedPySparkTestCase):
         # If not in parallel then these would be at different times
         # But since they are being computed in parallel we see the time
         # is "close enough" to the same.
-        rdd = self.sc.parallelize(range(10), 10)
-        times1 = rdd.map(lambda x: time.now)
-        times2 = rdd.map(lambda x: time.now)
+        rdd = self.sc.parallelize(range(2), 2)
+        times1 = rdd.map(lambda x: datetime.now())
+        times2 = rdd.map(lambda x: datetime.now())
         timesIterPrefetch = times1.toLocalIterator(prefetchPartitions=True)
-        timesIter = times1.toLocalIterator(prefetchPartitions=False)
-        timesPrefetchHead = timesIterPrefetch.next()
-        timesHead = timesIter.next()
+        timesIter = times2.toLocalIterator(prefetchPartitions=False)
+        timesPrefetchHead = next(timesIterPrefetch)
+        timesHead = next(timesIter)
         time.sleep(2)
-        timesPrefetchNext = timesIterPrefetch.next()
-        timesNext = timesIter.next()
-        # TODO write the asserts
+        timesNext = next(timesIter)
+        timesPrefetchNext = next(timesIterPrefetch)
+        print("With prefetch times are: " + str(timesPrefetchHead) + "," + str(timesPrefetchNext))
+        self.assertTrue(timesNext - timesHead >= timedelta(seconds=2))
+        self.assertTrue(timesPrefetchNext - timesPrefetchHead < timedelta(seconds=2))
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
