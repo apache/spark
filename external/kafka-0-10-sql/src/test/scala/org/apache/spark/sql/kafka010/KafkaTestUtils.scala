@@ -69,7 +69,7 @@ class KafkaTestUtils(
   private var kdc: MiniKdc = _
 
   // Zookeeper related configurations
-  private val zkHost = "127.0.0.1"
+  private val zkHost = "localhost"
   private var zkPort: Int = 0
   private val zkConnectionTimeout = 60000
   private val zkSessionTimeout = 10000
@@ -78,7 +78,7 @@ class KafkaTestUtils(
   private var zkUtils: ZkUtils = _
 
   // Kafka broker related configurations
-  private val brokerHost = "127.0.0.1"
+  private val brokerHost = "localhost"
   private var brokerPort = 0
   private var brokerConf: KafkaConfig = _
 
@@ -137,12 +137,12 @@ class KafkaTestUtils(
     assert(kdcReady, "KDC should be set up beforehand")
     val baseDir = Utils.createTempDir()
 
-    val zkServerUser = "zookeeper/127.0.0.1"
+    val zkServerUser = "zookeeper/localhost"
     val zkServerKeytabFile = new File(baseDir, "zookeeper.keytab")
     kdc.createPrincipal(zkServerKeytabFile, zkServerUser)
     logDebug(s"Created keytab file: ${zkServerKeytabFile.getAbsolutePath()}")
 
-    val zkClientUser = "zkclient/127.0.0.1"
+    val zkClientUser = "zkclient/localhost"
     val zkClientKeytabFile = new File(baseDir, "zkclient.keytab")
     kdc.createPrincipal(zkClientKeytabFile, zkClientUser)
     logDebug(s"Created keytab file: ${zkClientKeytabFile.getAbsolutePath()}")
@@ -242,6 +242,8 @@ class KafkaTestUtils(
       val jaasConfigFile = createJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
       Configuration.getConfiguration.refresh()
+    } else {
+      System.clearProperty(JAVA_AUTH_CONFIG)
     }
     setupEmbeddedZookeeper()
     setupEmbeddedKafkaServer()
@@ -606,6 +608,8 @@ class KafkaTestUtils(
 
     if (secure) {
       System.setProperty(ZOOKEEPER_AUTH_PROVIDER, classOf[SASLAuthenticationProvider].getName)
+    } else {
+      System.clearProperty(ZOOKEEPER_AUTH_PROVIDER)
     }
     val zookeeper = new ZooKeeperServer(snapshotDir, logDir, 500)
     val (ip, port) = {
