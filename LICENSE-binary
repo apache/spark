@@ -464,10 +464,8 @@ javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
 Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 
-javax.annotation:javax.annotation-api    https://jcp.org/en/jsr/detail?id=250
 javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
-javax.ws.rs:javax.ws.rs-api https://github.com/jax-rs
 javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
 org.glassfish.hk2:hk2-api https://github.com/javaee/glassfish
 org.glassfish.hk2:hk2-locator (same)
@@ -491,6 +489,12 @@ org.glassfish.jaxb:jaxb-runtime
 jakarta.xml.bind:jakarta.xml.bind-api
 com.sun.istack:istack-commons-runtime
 
+
+Eclipse Public License (EPL) 2.0
+--------------------------------
+
+jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
+jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 
 Mozilla Public License (MPL) 1.1
 --------------------------------
