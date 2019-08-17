@@ -252,6 +252,9 @@ streaming_kinesis_asl = Module(
 )
 
 
+# kafka-0-8 support is deprecated as of Spark 2.3 and removed in Spark 3.x.
+# Since Spark 2.4 supports Scala-2.12, and kafka-0-8 does not, we have made
+# streaming-kafka-0-8 optional for pyspark testing in 2.4.
 streaming_kafka = Module(
     name="streaming-kafka-0-8",
     dependencies=[streaming],
