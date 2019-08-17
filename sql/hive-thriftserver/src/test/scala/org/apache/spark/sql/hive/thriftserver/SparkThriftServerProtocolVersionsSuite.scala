@@ -222,10 +222,11 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
         assert(rs.next())
         assert(rs.getString(1) === "ABC")
       }
-      testExecuteStatementWithProtocolVersion(version,
-        "SELECT cast(cast(49960 as int) as binary)") { rs =>
+      testExecuteStatementWithProtocolVersion(version, "SELECT cast(49960 as binary)") { rs =>
         assert(rs.next())
-        assert(rs.getString(1) === UTF8String.fromBytes(NumberConverter.toBinary(49960)).toString)
+        assertResult(Array(0, 0, 65533, 40).map(_.toChar)) {
+          rs.getString(1).toCharArray
+        }
       }
       testExecuteStatementWithProtocolVersion(version, "SELECT cast(null as binary)") { rs =>
         assert(rs.next())
