@@ -95,4 +95,3 @@ main "$@"
 # then reenable echo and propagate the code.
 exit_status=$?
 onExit
-
