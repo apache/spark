@@ -19,10 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import java.io.{File, PrintWriter}
 import java.net.URI
-import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
@@ -2753,27 +2751,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              """.stripMargin)
           sql("SELECT * FROM foo.first")
           checkAnswer(spark.table("foo.first"), Row("second"))
-        }
-      }
-    }
-  }
-
-  test("SPARK-28084 check for case insensitive property of partition column name in load command") {
-    withTempDir { dir =>
-      val path = dir.toURI.toString.stripSuffix("/")
-      val dirPath = dir.getAbsoluteFile
-      Files.append("1", new File(dirPath, s"part-r-00001"), StandardCharsets.UTF_8)
-      withTable("part_table") {
-        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-          sql(
-            """
-              |CREATE TABLE part_table (c STRING)
-              |PARTITIONED BY (d STRING)
-            """.stripMargin)
-          spark.sql("LOAD DATA LOCAL INPATH"
-            + path +
-            """ /part-r-00001 INTO TABLE part_table PARTITION(D ="1")""")
-          checkAnswer(sql("SELECT * FROM part_table"), Seq(Row("1"), Row("1")))
         }
       }
     }
