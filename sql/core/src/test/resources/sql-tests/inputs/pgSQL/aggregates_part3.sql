@@ -3,7 +3,7 @@
 --
 --
 -- AGGREGATES [Part 3]
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/aggregates.sql#L352-L605
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L352-L605
 
 -- We do not support inheritance tree, skip related tests.
 -- try it on an inheritance tree
@@ -32,9 +32,8 @@
 
 -- drop table minmaxtest cascade;
 
--- [SPARK-9830] It is not allowed to use an aggregate function in the argument of another aggregate function
 -- check for correct detection of nested-aggregate errors
--- select max(min(unique1)) from tenk1;
+select max(min(unique1)) from tenk1;
 -- select (select max(min(unique1)) from int8_tbl) from tenk1;
 
 -- These tests only test the explain. Skip these tests.
@@ -211,10 +210,10 @@
 
 -- Skip these tests because we do not have a bytea type
 -- string_agg bytea tests
--- create table bytea_test_table(v bytea);
+CREATE TABLE bytea_test_table(v BINARY) USING parquet;
 
 -- select string_agg(v, '') from bytea_test_table;
-
+-- [SPARK-28121] decode can not accept 'hex' as charset
 -- insert into bytea_test_table values(decode('ff','hex'));
 
 -- select string_agg(v, '') from bytea_test_table;
@@ -248,22 +247,19 @@
 -- outer reference in FILTER (PostgreSQL extension)
 select (select count(*)
         from (values (1)) t0(inner_c))
-from (values (2),(3)) t1(outer_c);
--- Rewriting to CASE WHEN will hit: Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses
+from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
 -- select (select count(*) filter (where outer_c <> 0)
 --         from (values (1)) t0(inner_c))
--- from (values (2),(3)) t1(outer_c);
--- Rewriting to CASE WHEN will hit: Found an aggregate expression in a correlated predicate that has both outer and local references
+-- from (values (2),(3)) t1(outer_c); -- outer query is aggregation query
 -- select (select count(inner_c) filter (where outer_c <> 0)
 --         from (values (1)) t0(inner_c))
 -- from (values (2),(3)) t1(outer_c); -- inner query is aggregation query
--- Can not rewrite this pattern: aggregate_name(sub-query) filter()
 -- select
 --   (select max((select i.unique2 from tenk1 i where i.unique1 = o.unique1))
 --      filter (where o.unique1 < 10))
 -- from tenk1 o;					-- outer query is aggregation query
+
 -- subquery in FILTER clause (PostgreSQL extension)
--- Rewriting to CASE WHEN will hit: IN/EXISTS predicate sub-queries can only be used in a Filter
 -- select sum(unique1) FILTER (WHERE
 --  unique1 IN (SELECT unique1 FROM onek where unique1 < 100)) FROM tenk1;
 
