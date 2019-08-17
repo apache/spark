@@ -312,8 +312,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       //
       // We allow the individual merge methods to report their own IO times since different merge
       // strategies use different IO techniques.  We count IO during merge towards the shuffle
-      // shuffle write time, which appears to be consistent with the "not bypassing merge-sort"
-      // branch in ExternalSorter.
+      // write time, which appears to be consistent with the "not bypassing merge-sort" branch in
+      // ExternalSorter.
       if (fastMergeEnabled && fastMergeIsSupported) {
         // Compression is disabled or we are using an IO compression codec that supports
         // decompression of concatenated compressed streams, so we can perform a fast spill merge
