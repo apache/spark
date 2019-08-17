@@ -271,11 +271,11 @@ private[kafka010] class KafkaSource(
     val rdd = if (includeHeaders) {
       new KafkaSourceRDD(
         sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss)
-        .map(KafkaOffsetReader.toInternalRowWithHeaders(_))
+        .map(KafkaOffsetReader.toInternalRowWithHeaders)
     } else {
       new KafkaSourceRDD(
         sc, executorKafkaParams, offsetRanges, pollTimeoutMs, failOnDataLoss)
-        .map(KafkaOffsetReader.toInternalRowWithoutHeaders(_))
+        .map(KafkaOffsetReader.toInternalRowWithoutHeaders)
     }
 
     logInfo("GetBatch generating RDD of offset range: " +

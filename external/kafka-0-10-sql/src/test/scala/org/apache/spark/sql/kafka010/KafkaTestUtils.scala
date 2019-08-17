@@ -387,17 +387,19 @@ class KafkaTestUtils(
                    partition: Option[Int]): Seq[(String, RecordMetadata)] = {
     producer = new KafkaProducer[String, String](producerConfiguration)
     val offsets = try {
-      records.map { r =>
-        val value = r._1
-        val headers = r._2.map(t => new RecordHeader(t._1, t._2).asInstanceOf[Header])
+      records.map { case (value, header) =>
+        val headers = header.map { case (k, v) =>
+          new RecordHeader(k, v).asInstanceOf[Header]
+        }
         val record = partition match {
           case Some(p) =>
-            new ProducerRecord[String, String](topic, p, null, value, headers.toIterable.asJava)
+            new ProducerRecord[String, String](topic, p, null, value, headers.asJava)
           case None =>
-            new ProducerRecord[String, String](topic, null, null, value, headers.toIterable.asJava)
+            new ProducerRecord[String, String](topic, null, null, value, headers.asJava)
         }
         val metadata = producer.send(record).get(10, TimeUnit.SECONDS)
-        logInfo(s"\tSent $r to partition ${metadata.partition}, offset ${metadata.offset}")
+        logInfo(s"\tSent ($value, $header) to partition ${metadata.partition}," +
+          " offset ${metadata.offset}")
         (value, metadata)
       }
     } finally {

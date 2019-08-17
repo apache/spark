@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -70,7 +71,8 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   protected def createDF(
       topic: String,
       withOptions: Map[String, String] = Map.empty[String, String],
-      brokerAddress: Option[String] = None, includeHeaders: Boolean = false) = {
+      brokerAddress: Option[String] = None,
+      includeHeaders: Boolean = false) = {
     val df = spark
       .read
       .format("kafka")
@@ -160,18 +162,18 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
       topic, ("1", Seq()), Some(0)
     )
     testUtils.sendMessage(
-      topic, ("2", Seq(("a", "b".getBytes("UTF-8")), ("c", "d".getBytes("UTF-8")))), Some(1)
+      topic, ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))), Some(1)
     )
     testUtils.sendMessage(
-      topic, ("3", Seq(("e", "f".getBytes("UTF-8")), ("e", "g".getBytes("UTF-8")))), Some(2)
+      topic, ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8)))), Some(2)
     )
 
     // Implicit offset values, should default to earliest and latest
     val df = createDF(topic, includeHeaders = true)
     // Test that we default to "earliest" and "latest"
     checkAnswer(df, Seq(("1", null),
-      ("2", Seq(("a", "b".getBytes("UTF-8")), ("c", "d".getBytes("UTF-8")))),
-      ("3", Seq(("e", "f".getBytes("UTF-8")), ("e", "g".getBytes("UTF-8"))))).toDF)
+      ("2", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))),
+      ("3", Seq(("e", "f".getBytes(UTF_8)), ("e", "g".getBytes(UTF_8))))).toDF)
   }
 
   test("reuse same dataframe in query") {

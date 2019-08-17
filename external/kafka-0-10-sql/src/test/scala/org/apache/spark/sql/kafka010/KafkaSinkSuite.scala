@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -371,21 +372,21 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     testUtils.createTopic(topic)
     val data = Seq(
       Row(topic, "1", Seq(
-        Row("a", "b".getBytes("UTF-8"))
+        Row("a", "b".getBytes(UTF_8))
       )),
       Row(topic, "2", Seq(
-        Row("c", "d".getBytes("UTF-8")),
-        Row("e", "f".getBytes("UTF-8"))
+        Row("c", "d".getBytes(UTF_8)),
+        Row("e", "f".getBytes(UTF_8))
       )),
       Row(topic, "3", Seq(
-        Row("g", "h".getBytes("UTF-8")),
-        Row("g", "i".getBytes("UTF-8"))
+        Row("g", "h".getBytes(UTF_8)),
+        Row("g", "i".getBytes(UTF_8))
       )),
       Row(topic, "4", null),
       Row(topic, "5", Seq(
-        Row("j", "k".getBytes("UTF-8")),
-        Row("j", "l".getBytes("UTF-8")),
-        Row("m", "n".getBytes("UTF-8"))
+        Row("j", "k".getBytes(UTF_8)),
+        Row("j", "l".getBytes(UTF_8)),
+        Row("m", "n".getBytes(UTF_8))
       ))
     )
 
@@ -405,14 +406,14 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
         "CAST(value as STRING) value",
         "CAST(headers as ARRAY<STRUCT<key:STRING,value:BINARY>>) headers"
       ),
-      Row("1", Seq(Row("a", "b".getBytes("UTF-8")))) ::
-        Row("2", Seq(Row("c", "d".getBytes("UTF-8")), Row("e", "f".getBytes("UTF-8")))) ::
-        Row("3", Seq(Row("g", "h".getBytes("UTF-8")), Row("g", "i".getBytes("UTF-8")))) ::
+      Row("1", Seq(Row("a", "b".getBytes(UTF_8)))) ::
+        Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8)))) ::
+        Row("3", Seq(Row("g", "h".getBytes(UTF_8)), Row("g", "i".getBytes(UTF_8)))) ::
         Row("4", null) ::
         Row("5", Seq(
-          Row("j", "k".getBytes("UTF-8")),
-          Row("j", "l".getBytes("UTF-8")),
-          Row("m", "n".getBytes("UTF-8")))) ::
+          Row("j", "k".getBytes(UTF_8)),
+          Row("j", "l".getBytes(UTF_8)),
+          Row("m", "n".getBytes(UTF_8)))) ::
         Nil
     )
   }

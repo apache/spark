@@ -96,13 +96,11 @@ private[kafka010] abstract class KafkaRowWriter(
       new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value)
     } else {
       val headerArray = projectedRow.getArray(3)
-      val headers = (0 until headerArray.numElements()).map(
-        i => {
-          val struct = headerArray.getStruct(i, 2)
-          new RecordHeader(struct.getUTF8String(0).toString, struct.getBinary(1))
-            .asInstanceOf[Header]
-        }
-      )
+      val headers = (0 until headerArray.numElements()).map { i =>
+        val struct = headerArray.getStruct(i, 2)
+        new RecordHeader(struct.getUTF8String(0).toString, struct.getBinary(1))
+          .asInstanceOf[Header]
+      }
       new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, null, key, value, headers.asJava)
     }
     producer.send(record, callback)
