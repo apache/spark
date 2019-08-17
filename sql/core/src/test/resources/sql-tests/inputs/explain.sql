@@ -8,14 +8,14 @@ SET spark.sql.codegen.wholeStage = true;
 
 -- single table
 EXPLAIN FORMATTED
-  SELECT KEY, Max(val) 
+  SELECT key, max(val) 
   FROM   explain_temp1 
-  WHERE  KEY > 0 
-  GROUP  BY KEY 
-  ORDER  BY KEY; 
+  WHERE  key > 0 
+  GROUP  BY key 
+  ORDER  BY key; 
 
 EXPLAIN FORMATTED
-  SELECT key, Max(val)
+  SELECT key, max(val)
   FROM explain_temp1
   WHERE key > 0
   GROUP BY key
@@ -32,26 +32,26 @@ EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a, 
          explain_temp2 b 
-  WHERE  a.KEY = b.KEY; 
+  WHERE  a.key = b.key; 
 
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 
          INNER JOIN explain_temp2 b 
-                 ON a.KEY = b.KEY; 
+                 ON a.key = b.key; 
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 
          LEFT OUTER JOIN explain_temp2 b 
-                      ON a.KEY = b.KEY;
+                      ON a.key = b.key;
 
 -- Subqueries nested.
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 
-  WHERE  KEY = (SELECT Max(KEY) 
+  WHERE  key = (SELECT max(key) 
                 FROM   explain_temp2 
-                WHERE  KEY = (SELECT Max(KEY) 
+                WHERE  key = (SELECT max(key) 
                               FROM   explain_temp3 
                               WHERE  val > 0) 
                        AND val = 2) 
@@ -60,11 +60,11 @@ EXPLAIN FORMATTED
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 
-  WHERE  KEY = (SELECT Max(KEY) 
+  WHERE  key = (SELECT max(key) 
                 FROM   explain_temp2 
                 WHERE  val > 0) 
          OR
-         KEY = (SELECT Max(KEY) 
+         key = (SELECT max(key) 
                 FROM   explain_temp3
                 WHERE  val > 0);
 
@@ -95,26 +95,26 @@ SET spark.sql.explain.legacy.format = false;
 
 -- single table
 EXPLAIN 
-  SELECT KEY, Max(val) 
+  SELECT key, max(val) 
   FROM   explain_temp1 
-  WHERE  KEY > 0 
-  GROUP  BY KEY 
-  ORDER  BY KEY; 
+  WHERE  key > 0 
+  GROUP  BY key 
+  ORDER  BY key; 
 
 -- Join
 EXPLAIN 
   SELECT * 
   FROM   explain_temp1 a, 
          explain_temp2 b 
-  WHERE  a.KEY = b.KEY; 
+  WHERE  a.key = b.key; 
 
 SET spark.sql.explain.legacy.format = true;
--- single table
+-- Make sure switching the config swiches the explain mode.
 EXPLAIN 
-  SELECT KEY, Max(val) 
-  FROM   explain_temp1 
-  WHERE  KEY > 0 
-  GROUP  BY KEY;
+  SELECT key, max(val) 
+  FROM   VALUES (1,1), (1,2) AS t1(key, val)
+  WHERE  key> 0 
+  GROUP  BY key;
    
 -- cleanup
 DROP TABLE explain_temp1;

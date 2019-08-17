@@ -36,11 +36,11 @@ spark.sql.codegen.wholeStage	true
 
 -- !query 4
 EXPLAIN FORMATTED
-  SELECT KEY, Max(val) 
+  SELECT key, max(val) 
   FROM   explain_temp1 
-  WHERE  KEY > 0 
-  GROUP  BY KEY 
-  ORDER  BY KEY
+  WHERE  key > 0 
+  GROUP  BY key 
+  ORDER  BY key
 -- !query 4 schema
 struct<plan:string>
 -- !query 4 output
@@ -64,7 +64,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : (isnotnull(KEY#x) AND (KEY#x > 0))
+Condition : (isnotnull(key#x) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -74,21 +74,21 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (6) Exchange 
-Input: [KEY#x, max#x]
+Input: [key#x, max#x]
      
 (7) HashAggregate [codegen id : 2]
-Input: [KEY#x, max#x]
+Input: [key#x, max#x]
      
 (8) Exchange 
-Input: [KEY#x, max(val)#x]
+Input: [key#x, max(val)#x]
      
 (9) Sort [codegen id : 3]
-Input: [KEY#x, max(val)#x]
+Input: [key#x, max(val)#x]
 
 
 -- !query 5
 EXPLAIN FORMATTED
-  SELECT key, Max(val)
+  SELECT key, max(val)
   FROM explain_temp1
   WHERE key > 0
   GROUP BY key
@@ -208,7 +208,7 @@ EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a, 
          explain_temp2 b 
-  WHERE  a.KEY = b.KEY
+  WHERE  a.key = b.key
 -- !query 7 schema
 struct<plan:string>
 -- !query 7 output
@@ -233,7 +233,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 2]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (4) Project [codegen id : 2]
 Output    : [key#x, val#x]
@@ -247,7 +247,7 @@ Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (8) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -257,8 +257,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (10) BroadcastHashJoin [codegen id : 2]
-Left keys: List(KEY#x)
-Right keys: List(KEY#x)
+Left keys: List(key#x)
+Right keys: List(key#x)
 Join condition: None
 
 
@@ -267,7 +267,7 @@ EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 
          INNER JOIN explain_temp2 b 
-                 ON a.KEY = b.KEY
+                 ON a.key = b.key
 -- !query 8 schema
 struct<plan:string>
 -- !query 8 output
@@ -292,7 +292,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 2]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (4) Project [codegen id : 2]
 Output    : [key#x, val#x]
@@ -306,7 +306,7 @@ Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (8) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -316,8 +316,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (10) BroadcastHashJoin [codegen id : 2]
-Left keys: List(KEY#x)
-Right keys: List(KEY#x)
+Left keys: List(key#x)
+Right keys: List(key#x)
 Join condition: None
 
 
@@ -326,7 +326,7 @@ EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 
          LEFT OUTER JOIN explain_temp2 b 
-                      ON a.KEY = b.KEY
+                      ON a.key = b.key
 -- !query 9 schema
 struct<plan:string>
 -- !query 9 output
@@ -355,7 +355,7 @@ Input: [key#x, val#x]
      
 (5) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (6) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -365,8 +365,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (8) BroadcastHashJoin [codegen id : 2]
-Left keys: List(KEY#x)
-Right keys: List(KEY#x)
+Left keys: List(key#x)
+Right keys: List(key#x)
 Join condition: None
 
 
@@ -374,9 +374,9 @@ Join condition: None
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 
-  WHERE  KEY = (SELECT Max(KEY) 
+  WHERE  key = (SELECT max(key) 
                 FROM   explain_temp2 
-                WHERE  KEY = (SELECT Max(KEY) 
+                WHERE  key = (SELECT max(key) 
                               FROM   explain_temp3 
                               WHERE  val > 0) 
                        AND val = 2) 
@@ -399,7 +399,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : (((isnotnull(KEY#x) AND isnotnull(val#x)) AND (KEY#x = Subquery scalar-subquery#x)) AND (val#x > 3))
+Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x)) AND (val#x > 3))
      
 (4) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -425,7 +425,7 @@ Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : (((isnotnull(KEY#x) AND isnotnull(val#x)) AND (KEY#x = Subquery scalar-subquery#x)) AND (val#x = 2))
+Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x)) AND (val#x = 2))
      
 (8) Project [codegen id : 1]
 Output    : [key#x]
@@ -478,11 +478,11 @@ Input: [max#x]
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 
-  WHERE  KEY = (SELECT Max(KEY) 
+  WHERE  key = (SELECT max(key) 
                 FROM   explain_temp2 
                 WHERE  val > 0) 
          OR
-         KEY = (SELECT Max(KEY) 
+         key = (SELECT max(key) 
                 FROM   explain_temp3
                 WHERE  val > 0)
 -- !query 11 schema
@@ -502,7 +502,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : ((KEY#x = Subquery scalar-subquery#x) OR (KEY#x = Subquery scalar-subquery#x))
+Condition : ((key#x = Subquery scalar-subquery#x) OR (key#x = Subquery scalar-subquery#x))
      
 ===== Subqueries =====
 
@@ -759,11 +759,11 @@ spark.sql.explain.legacy.format	false
 
 -- !query 16
 EXPLAIN 
-  SELECT KEY, Max(val) 
+  SELECT key, max(val) 
   FROM   explain_temp1 
-  WHERE  KEY > 0 
-  GROUP  BY KEY 
-  ORDER  BY KEY
+  WHERE  key > 0 
+  GROUP  BY key 
+  ORDER  BY key
 -- !query 16 schema
 struct<plan:string>
 -- !query 16 output
@@ -787,7 +787,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : (isnotnull(KEY#x) AND (KEY#x > 0))
+Condition : (isnotnull(key#x) AND (key#x > 0))
      
 (4) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -797,16 +797,16 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (6) Exchange 
-Input: [KEY#x, max#x]
+Input: [key#x, max#x]
      
 (7) HashAggregate [codegen id : 2]
-Input: [KEY#x, max#x]
+Input: [key#x, max#x]
      
 (8) Exchange 
-Input: [KEY#x, max(val)#x]
+Input: [key#x, max(val)#x]
      
 (9) Sort [codegen id : 3]
-Input: [KEY#x, max(val)#x]
+Input: [key#x, max(val)#x]
 
 
 -- !query 17
@@ -814,7 +814,7 @@ EXPLAIN
   SELECT * 
   FROM   explain_temp1 a, 
          explain_temp2 b 
-  WHERE  a.KEY = b.KEY
+  WHERE  a.key = b.key
 -- !query 17 schema
 struct<plan:string>
 -- !query 17 output
@@ -839,7 +839,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 2]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (4) Project [codegen id : 2]
 Output    : [key#x, val#x]
@@ -853,7 +853,7 @@ Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : isnotnull(KEY#x)
+Condition : isnotnull(key#x)
      
 (8) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -863,8 +863,8 @@ Input     : [key#x, val#x]
 Input: [key#x, val#x]
      
 (10) BroadcastHashJoin [codegen id : 2]
-Left keys: List(KEY#x)
-Right keys: List(KEY#x)
+Left keys: List(key#x)
+Right keys: List(key#x)
 Join condition: None
 
 
@@ -878,21 +878,19 @@ spark.sql.explain.legacy.format	true
 
 -- !query 19
 EXPLAIN 
-  SELECT KEY, Max(val) 
-  FROM   explain_temp1 
-  WHERE  KEY > 0 
-  GROUP  BY KEY
+  SELECT key, max(val) 
+  FROM   VALUES (1,1), (1,2) AS t1(key, val)
+  WHERE  key> 0 
+  GROUP  BY key
 -- !query 19 schema
 struct<plan:string>
 -- !query 19 output
 == Physical Plan ==
-*HashAggregate(keys=[KEY#x], functions=[max(val#x)])
-+- Exchange hashpartitioning(KEY#x, 200), true
-   +- *HashAggregate(keys=[KEY#x], functions=[partial_max(val#x)])
-      +- *Project [key#x, val#x]
-         +- *Filter (isnotnull(KEY#x) AND (KEY#x > 0))
-            +- *ColumnarToRow
-               +- FileScan parquet default.explain_temp1[key#x,val#x] Batched: true, DataFilters: [isnotnull(key#x), (key#x > 0)], Format: Parquet, Location: InMemoryFileIndex[file:/Users/dbiswal/mygit/apache/spark/sql/core/spark-warehouse/org.apache.spar..., PartitionFilters: [], PushedFilters: [IsNotNull(key), GreaterThan(key,0)], ReadSchema: struct<key:int,val:int>
+*HashAggregate(keys=[key#x], functions=[max(val#x)])
++- Exchange hashpartitioning(key#x, 200), true
+   +- *HashAggregate(keys=[key#x], functions=[partial_max(val#x)])
+      +- *Filter (key#x > 0)
+         +- *LocalTableScan [key#x, val#x]
 
 
 -- !query 20
