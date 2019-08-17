@@ -163,7 +163,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
         if (nullOnOverflow) {
           checkAnswer(structDf, Row(null))
         } else {
-          val e = intercept[Exception] {
+          val e = intercept[SparkException] {
             structDf.collect
           }
           assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
