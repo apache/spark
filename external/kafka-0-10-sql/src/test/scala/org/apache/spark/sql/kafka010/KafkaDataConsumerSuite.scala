@@ -163,7 +163,7 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
           val headers = record.headers().toArray.map(header => (header.key(), header.value())).toSeq
           (value, headers)
         }
-        data zip rcvd foreach { case (expected, actual) =>
+        data.zip(rcvd).foreach { case (expected, actual) =>
           // value
           assert(expected._1 === actual._1)
           // headers
