@@ -115,6 +115,7 @@ select max(min(unique1)) from tenk1;
 
 -- test specific code paths
 
+-- [SPARK-28768] Implement more text pattern operators
 -- select aggfns(distinct a,a,c order by c using ~<~,a)
 --   from (values (1,3,'foo'),(0,null,null),(2,2,'bar'),(3,1,'baz')) v(a,b,c),
 --        generate_series(1,2) i;
@@ -208,12 +209,12 @@ select max(min(unique1)) from tenk1;
 -- select string_agg(distinct f1, ',' order by f1::text) from varchar_tbl;  -- not ok
 -- select string_agg(distinct f1::text, ',' order by f1::text) from varchar_tbl;  -- ok
 
--- Skip these tests because we do not have a bytea type
+-- [SPARK-28121] decode can not accept 'hex' as charset
 -- string_agg bytea tests
-CREATE TABLE bytea_test_table(v BINARY) USING parquet;
+-- CREATE TABLE bytea_test_table(v BINARY) USING parquet;
 
 -- select string_agg(v, '') from bytea_test_table;
--- [SPARK-28121] decode can not accept 'hex' as charset
+
 -- insert into bytea_test_table values(decode('ff','hex'));
 
 -- select string_agg(v, '') from bytea_test_table;
