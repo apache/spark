@@ -327,12 +327,14 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     import Options.Rename._
     fc.rename(srcPath, dstPath, if (overwriteIfPossible) OVERWRITE else NONE)
+    mayRemoveCrcFile(srcPath)
   }
 
 
   override def delete(path: Path): Unit = {
     try {
       fc.delete(path, true)
+      mayRemoveCrcFile(path)
     } catch {
       case e: FileNotFoundException =>
       // ignore if file has already been deleted
@@ -342,6 +344,18 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   override def isLocal: Boolean = fc.getDefaultFileSystem match {
     case _: LocalFs | _: RawLocalFs => true // LocalFs = RawLocalFs + ChecksumFs
     case _ => false
+  }
+
+  private def mayRemoveCrcFile(path: Path): Unit = {
+    val checksumFile = new Path(path.getParent, s".${path.getName}.crc")
+    try {
+      if (exists(checksumFile)) {
+        // checksum file exists, deleting it
+        delete(checksumFile)
+      }
+    } catch {
+      case _: IOException => // ignore, we are removing crc file as "best-effort"
+    }
   }
 }
 
