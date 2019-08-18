@@ -53,7 +53,7 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given context.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): HiveThriftServer2 = {
+  def startWithContext(sqlContext: SQLContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
 
     val executionHive = HiveUtils.newClientForExecution(
@@ -69,7 +69,6 @@ object HiveThriftServer2 extends Logging {
     } else {
       None
     }
-    server
   }
 
   def main(args: Array[String]) {
