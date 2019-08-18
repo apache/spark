@@ -2168,7 +2168,7 @@ ee	NULL	42	2	NULL
 SELECT s1.name, udf(s1_n), s2.name, udf(udf(s2_n)) FROM
   (SELECT name, udf(n) as s1_n FROM t1) as s1
 FULL JOIN
-  (SELECT name, udf(2) as s2_n FROM t2) as s2
+  (SELECT name, 2 as s2_n FROM t2) as s2
 ON (udf(udf(s1_n)) = udf(s2_n))
 -- !query 75 schema
 struct<name:string,CAST(udf(cast(s1_n as string)) AS INT):int,name:string,CAST(udf(cast(cast(udf(cast(s2_n as string)) as int) as string)) AS INT):int>
@@ -2714,7 +2714,7 @@ struct<>
 select * from
   zt2 left join zt3 on (f2 = udf(f3))
       left join zv1 on (udf(f3) = f1)
-where udf(f2) = udf(53)
+where udf(udf(f2)) = 53
 -- !query 125 schema
 struct<f2:int,f3:int,f1:int,junk:string>
 -- !query 125 output

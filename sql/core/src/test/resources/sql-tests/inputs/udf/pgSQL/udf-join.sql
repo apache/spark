@@ -337,7 +337,7 @@ NATURAL FULL JOIN
 SELECT s1.name, udf(s1_n), s2.name, udf(udf(s2_n)) FROM
   (SELECT name, udf(n) as s1_n FROM t1) as s1
 FULL JOIN
-  (SELECT name, udf(2) as s2_n FROM t2) as s2
+  (SELECT name, 2 as s2_n FROM t2) as s2
 ON (udf(udf(s1_n)) = udf(s2_n));
 
 
@@ -670,7 +670,7 @@ create temp view zv1 as select *,'dummy' AS junk from zt1;
 select * from
   zt2 left join zt3 on (f2 = udf(f3))
       left join zv1 on (udf(f3) = f1)
-where udf(f2) = udf(53);
+where udf(udf(f2)) = 53;
 
 --
 -- regression test for improper extraction of OR indexqual conditions
