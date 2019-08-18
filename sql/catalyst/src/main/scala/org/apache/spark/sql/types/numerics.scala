@@ -122,8 +122,11 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
   private def exceptionMessage(x: Float, dataType: String): String =
     s"Casting $x to $dataType causes overflow."
 
+  private val intUpperBound = Int.MaxValue + 1L
+  private val intLowerBound = Int.MinValue - 1L
+
   override def toInt(x: Float): Int = {
-    if (x <= Int.MaxValue && x >= Int.MinValue) {
+    if (x < intUpperBound && x > intLowerBound) {
       x.toInt
     } else {
       throw new ArithmeticException(exceptionMessage(x, "Int"))

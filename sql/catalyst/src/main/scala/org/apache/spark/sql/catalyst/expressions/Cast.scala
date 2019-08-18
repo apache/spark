@@ -462,10 +462,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Int](_, d => null)
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
-    case x: NumericType if failOnIntegerOverflow =>
-      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: NumericType =>
-      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      if (failOnIntegerOverflow) {
+        b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
+      } else {
+        b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
+      }
   }
 
   // IntConverter
@@ -478,14 +480,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType =>
-      buildCast[Long](_, t => {
-        val longValue = timestampToLong(t)
-        if (failOnIntegerOverflow) {
-          LongExactNumeric.toInt(longValue)
-        } else {
-          longValue.toInt
-        }
-      })
+      if (failOnIntegerOverflow) {
+        buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
+      } else {
+        buildCast[Long](_, t => timestampToLong(t).toInt)
+      }
     case x: NumericType if failOnIntegerOverflow =>
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
@@ -1205,7 +1204,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
   private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * (long)$MICROS_PER_SECOND"
-  private[this] def timestampToIntegerCode(ts: ExprValue): Block =
+  private[this] def timestampToLongCode(ts: ExprValue): Block =
     code"java.lang.Math.floorDiv($ts, $MICROS_PER_SECOND)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
@@ -1241,7 +1240,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val longValue = ctx.freshName("longValue")
       (c, evPrim, evNull) =>
         code"""
-          long $longValue = ${timestampToIntegerCode(c)};
+          long $longValue = ${timestampToLongCode(c)};
           if ($longValue == ($intType) $longValue) {
             $evPrim = ($intType) $longValue;
           } else {
@@ -1249,7 +1248,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
         """
     } else {
-      (c, evPrim, evNull) => code"$evPrim = ($intType) ${timestampToIntegerCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = ($intType) ${timestampToLongCode(c)};"
     }
   }
 
@@ -1408,7 +1407,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToIntegerCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
     case DecimalType() if failOnIntegerOverflow =>
       (c, evPrim, evNull) =>
         code"""
