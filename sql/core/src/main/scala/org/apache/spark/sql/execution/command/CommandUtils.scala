@@ -137,15 +137,4 @@ object CommandUtils extends Logging {
     }
     newStats
   }
-
-  def getSizeInBytesFallBackToHdfs(session: SparkSession, path: Path, defaultSize: Long): Long = {
-    try {
-      val hadoopConf = session.sessionState.newHadoopConf()
-      path.getFileSystem(hadoopConf).getContentSummary(path).getLength
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Failed to get table size from hdfs. Using the default size, $defaultSize.", e)
-        defaultSize
-    }
-  }
 }
