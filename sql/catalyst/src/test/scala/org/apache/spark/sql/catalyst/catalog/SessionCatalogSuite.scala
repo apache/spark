@@ -1429,7 +1429,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
         catalog.dropFunction(
           FunctionIdentifier("something", Some("unknown_db")), ignoreIfNotExists = false)
       }
-      intercept[NoSuchPermanentFunctionException] {
+      intercept[NoSuchFunctionException] {
         catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = false)
       }
       catalog.dropFunction(FunctionIdentifier("does_not_exist"), ignoreIfNotExists = true)
