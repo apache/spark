@@ -23,8 +23,7 @@ import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
-import org.apache.spark.ml.linalg
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
@@ -303,10 +302,10 @@ private[ml] object TreeTests extends SparkFunSuite {
    */
   val leafIndices1 = Array(1.0, 0.0, 1.0, 1.0, 2.0)
 
-  def getSingleTreeLeafData: Array[(Double, linalg.Vector)] =
+  def getSingleTreeLeafData: Array[(Double, Vector)] =
     leafIndices0.zip(leafVectors)
 
-  def getTwoTreesLeafData: Array[(linalg.Vector, linalg.Vector)] =
+  def getTwoTreesLeafData: Array[(Vector, Vector)] =
     leafIndices0.zip(leafIndices1).zip(leafVectors)
       .map { case ((i0, i1), vec) => (Vectors.dense(i0, i1), vec) }
 }

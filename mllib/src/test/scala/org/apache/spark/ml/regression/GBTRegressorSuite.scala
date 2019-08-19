@@ -135,10 +135,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setPredictionCol("")
 
     val data = TreeTests.getTwoTreesLeafData
-
-    data.foreach { case (leafId, vec) =>
-      assert(leafId === model.predictLeaf(vec))
-    }
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
     val df = sc.parallelize(data, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")

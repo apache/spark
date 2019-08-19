@@ -323,10 +323,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       .setProbabilityCol("")
 
     val data = TreeTests.getSingleTreeLeafData
-
-    data.foreach { case (leafId, vec) =>
-      assert(leafId === model.predictLeaf(vec))
-    }
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
 
     val df = sc.parallelize(data, 1).toDF("leafId", "features")
     model.transform(df).select("leafId", "predictedLeafId")
