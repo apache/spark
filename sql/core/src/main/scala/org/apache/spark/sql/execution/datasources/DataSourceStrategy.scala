@@ -630,10 +630,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // For the data source table, we only recalculate the table statistics
-    // when the table stats are not available. See SPARK-25474 for more details.
+    // when the table stats are not available and it will use CatalogFileIndex.
     case logical @ LogicalRelation(_, _, Some(table), _)
       if DDLUtils.isDatasourceTable(table) && table.stats.isEmpty &&
-        conf.fallBackToHdfsForStatsEnabled =>
+        conf.fallBackToHdfsForStatsEnabled && conf.manageFilesourcePartitions &&
+        table.tracksPartitionsInCatalog && table.partitionColumnNames.nonEmpty =>
       val sizeInBytes = CommandUtils.getSizeInBytesFallBackToHdfs(session, table)
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
       logical.copy(catalogTable = Some(withStats))

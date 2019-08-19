@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -661,8 +662,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
             assert(getCatalogTable("spark_25474").stats.isEmpty)
             val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
-            // fallBackToHDFS = true: The table stats will be recalculated by DetermineTableStats
-            // fallBackToHDFS = false: The table stats will be recalculated by FileIndex
+            // Table statistics are always recalculated by FileIndex
             assert(relation.stats.sizeInBytes === getDataSize(dir))
           }
         }
@@ -682,10 +682,37 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             assert(getCatalogTable("spark_25474").stats.isEmpty)
             val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
             if (fallBackToHDFS) {
-              assert(relation.stats.sizeInBytes > 0)
-              assert(relation.stats.sizeInBytes < conf.defaultSizeInBytes)
+              assert(relation.stats.sizeInBytes ===
+                CommandUtils.getSizeInBytesFallBackToHdfs(spark, getCatalogTable("spark_25474")))
             } else {
               assert(relation.stats.sizeInBytes === conf.defaultSizeInBytes)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("Partitioned data source table support fallback to HDFS for size estimation" +
+    "with defaultSizeInBytes") {
+    val defaultSizeInBytes = 10 * 1024 * 1024
+    Seq(false, true).foreach { fallBackToHDFS =>
+      withSQLConf(
+        SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFS",
+        SQLConf.DEFAULT_SIZE_IN_BYTES.key -> s"$defaultSizeInBytes") {
+        withTempDir { dir =>
+          withTable("spark_25474") {
+            sql("CREATE TABLE spark_25474(a int, b int) USING parquet " +
+              s"PARTITIONED BY(a) LOCATION '${dir.toURI}'")
+            sql("INSERT INTO TABLE spark_25474 PARTITION(a=1) SELECT 2")
+
+            assert(getCatalogTable("spark_25474").stats.isEmpty)
+            val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
+            if (fallBackToHDFS) {
+              assert(relation.stats.sizeInBytes ===
+                CommandUtils.getSizeInBytesFallBackToHdfs(spark, getCatalogTable("spark_25474")))
+            } else {
+              assert(relation.stats.sizeInBytes === defaultSizeInBytes)
             }
           }
         }
