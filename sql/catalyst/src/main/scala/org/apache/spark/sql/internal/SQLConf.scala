@@ -1140,6 +1140,15 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
 
+  val FILE_SOURCE_SCHEMA_FORCE_NULLABLE =
+    buildConf("spark.sql.streaming.fileSource.schema.forceNullable")
+      .internal()
+      .doc("When true, force the schema of streaming file source to be nullable (including all " +
+        "the fields). Otherwise, the schema might not be compatible with actual data, which " +
+        "leads to corruptions.")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_SCHEMA_INFERENCE =
     buildConf("spark.sql.streaming.schemaInference")
       .internal()
@@ -1532,8 +1541,9 @@ object SQLConf {
     .createWithDefault(false)
 
   val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .internal()
     .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types.")
+      "if both sides are integral types. This is for PostgreSQL test cases only.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1784,6 +1794,14 @@ object SQLConf {
     .doc("If it is set to true, the div operator returns always a bigint. This behavior was " +
       "inherited from Hive. Otherwise, the return type is the data type of the operands.")
     .internal()
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
+    buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
+      .internal()
+      .doc("When true, the bucketed table scan will list files during planning to figure out the " +
+        "output ordering, which is expensive and may make the planning quite slow.")
     .booleanConf
     .createWithDefault(false)
 

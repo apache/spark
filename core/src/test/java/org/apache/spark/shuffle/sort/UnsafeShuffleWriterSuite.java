@@ -533,7 +533,7 @@ public class UnsafeShuffleWriterSuite {
     long newPeakMemory;
     try {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
-        writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+        writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
         newPeakMemory = writer.getPeakMemoryUsedBytes();
         if (i % numRecordsPerPage == 0) {
           // The first page is allocated in constructor, another page will be allocated after
@@ -550,7 +550,7 @@ public class UnsafeShuffleWriterSuite {
       newPeakMemory = writer.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);
       for (int i = 0; i < numRecordsPerPage; i++) {
-        writer.insertRecordIntoSorter(new Tuple2<Object, Object>(1, 1));
+        writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
       }
       newPeakMemory = writer.getPeakMemoryUsedBytes();
       assertEquals(previousPeakMemory, newPeakMemory);

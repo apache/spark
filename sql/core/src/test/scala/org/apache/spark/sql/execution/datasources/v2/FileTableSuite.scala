@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -51,7 +51,7 @@ class DummyFileTable(
   override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[TextFileFormat]
 }
 
-class FileTableSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class FileTableSuite extends QueryTest with SharedSparkSession {
 
   test("Data type validation should check data schema only") {
     withTempPath { dir =>

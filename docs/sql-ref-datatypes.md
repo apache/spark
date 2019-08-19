@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Reference
-displayTitle: Reference
+title: Data Types
+displayTitle: Data Types
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,10 +19,6 @@ license: |
   limitations under the License.
 ---
 
-* Table of contents
-{:toc}
-
-## Data Types
 
 Spark SQL and DataFrames support the following data types:
 
@@ -634,25 +630,5 @@ from pyspark.sql.types import *
   </td>
 </tr>
 </table>
-
 </div>
-
 </div>
-
-## NaN Semantics
-
-There is specially handling for not-a-number (NaN) when dealing with `float` or `double` types that
-does not exactly match standard floating point semantics.
-Specifically:
-
- - NaN = NaN returns true.
- - In aggregations, all NaN values are grouped together.
- - NaN is treated as a normal value in join keys.
- - NaN values go last when in ascending order, larger than any other numeric value.
- 
-## Arithmetic operations
- 
-Operations performed on numeric types (with the exception of `decimal`) are not checked for overflow.
-This means that in case an operation causes an overflow, the result is the same that the same operation
-returns in a Java/Scala program (eg. if the sum of 2 integers is higher than the maximum value representable,
-the result is a negative number).

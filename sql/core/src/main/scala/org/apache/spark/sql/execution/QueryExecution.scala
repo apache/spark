@@ -118,7 +118,7 @@ class QueryExecution(
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
-    InsertAdaptiveSparkPlan(sparkSession),
+    InsertAdaptiveSparkPlan(sparkSession, this),
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
