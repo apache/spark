@@ -264,6 +264,10 @@ object ShuffleExchangeExec {
             prefixComparator,
             prefixComputer,
             pageSize,
+            // As we need to compare the binary of UnsafeRow here, we can't make sure whether all
+            // the fields can sort fully with prefix like SortExec. So we disable radix sort here
+            // to avoid getting unstable sort, and result to a correctness bug.
+            // See more details in SPARK-28699.
             false /* canUseRadixSort */)
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
