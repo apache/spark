@@ -366,6 +366,6 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourceRequirements(requirements: Seq[ResourceRequirement]): String = {
-    requirements.map { req => s"${req.amount} ${req.resourceName}"}.mkString(", ")
+    requirements.map(req => s"${req.amount} ${req.resourceName}").mkString(", ")
   }
 }
