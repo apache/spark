@@ -1843,7 +1843,7 @@ Here are the details of all the sinks in Spark.
     <td><b>Foreach Sink</b></td>
     <td>Append, Update, Complete</td>
     <td>None</td>
-    <td>Depends on ForeachWriter implementation</td>
+    <td>Yes (at-least-once)</td>
     <td>More details in the <a href="#using-foreach-and-foreachbatch">next section</a></td>
   </tr>
   <tr>
@@ -2251,10 +2251,11 @@ When the streaming query is started, Spark calls the function or the object’s 
 
 - The close() method (if it exists) is called if an open() method exists and returns successfully (irrespective of the return value), except if the JVM or Python process crashes in the middle.
 
-- **Note:** Spark does not guarantee same output for (partitionId, epochId) on failure, so deduplication
+- **Note:** Spark does not guarantee same output for (partitionId, epochId), so deduplication
   cannot be achieved with (partitionId, epochId). e.g. source provides different number of
   partitions for some reasons, Spark optimization changes number of partitions, etc.
   See [SPARK-28650](https://issues.apache.org/jira/browse/SPARK-28650) for more details.
+  If you need deduplication on output, try out `foreachBatch` instead.
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether

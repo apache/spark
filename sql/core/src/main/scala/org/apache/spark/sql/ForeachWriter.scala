@@ -50,10 +50,11 @@ import org.apache.spark.annotation.Evolving
  *
  * Important points to note:
  * <ul>
- * <li>Spark doesn't guarantee same output for (partitionId, epochId) on failure, so deduplication
+ * <li>Spark doesn't guarantee same output for (partitionId, epochId), so deduplication
  *     cannot be achieved with (partitionId, epochId). e.g. source provides different number of
  *     partitions for some reason, Spark optimization changes number of partitions, etc.
- *     Refer SPARK-28650 for more details.
+ *     Refer SPARK-28650 for more details. If you need deduplication on output, try out
+ *     `foreachBatch` instead.
  *
  * <li>The `close()` method will be called if `open()` method returns successfully (irrespective
  *     of the return value), except if the JVM crashes in the middle.
