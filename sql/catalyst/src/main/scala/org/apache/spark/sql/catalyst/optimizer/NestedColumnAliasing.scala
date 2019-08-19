@@ -124,10 +124,9 @@ object NestedColumnAliasing {
         // We only need to deal with two `ExtractValue`: `GetArrayStructFields` and
         // `GetStructField`. Please refer to the method `collectRootReferenceAndExtractValue`.
         val dedupNestedFields = nestedFields.filter {
-          case a @ GetArrayStructFields(child, _, _, _, _) =>
-            nestedFields.forall(f => f == a || child.find(_.semanticEquals(f)).isEmpty)
-          case n @ GetStructField(child, _, _) =>
-            nestedFields.forall(f => f == n || child.find(_.semanticEquals(f)).isEmpty)
+          case e @ (_: GetStructField | _: GetArrayStructFields) =>
+            val child = e.children.head
+            nestedFields.forall(f => child.find(_.semanticEquals(f)).isEmpty)
           case _ => true
         }
 
