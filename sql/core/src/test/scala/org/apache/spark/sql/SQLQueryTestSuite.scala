@@ -107,8 +107,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   import IntegratedUDFTestUtils._
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+  protected val isTestWithConfigSets: Boolean = true
 
-  private val baseResourcePath = {
+  protected val baseResourcePath = {
     // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
     // relative path. Otherwise, we use classloader's getResource to find the location.
     if (regenerateGoldenFiles) {
@@ -119,13 +120,16 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  private val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
-  private val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
+  protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
+  protected val goldenFilePath = new File(baseResourcePath, "results").getAbsolutePath
 
-  private val validFileExtensions = ".sql"
+  protected val validFileExtensions = ".sql"
+
+  private val notIncludedMsg = "[not included in comparison]"
+  private val clsName = this.getClass.getCanonicalName
 
   /** List of test cases to ignore, in lower cases. */
-  private val blackList = Set(
+  protected def blackList: Set[String] = Set(
     "blacklist.sql"   // Do NOT remove this one. It is here to test the blacklist functionality.
   )
 
@@ -133,7 +137,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   listTestCases().foreach(createScalaTestCase)
 
   /** A single SQL query's output. */
-  private case class QueryOutput(sql: String, schema: String, output: String) {
+  protected case class QueryOutput(sql: String, schema: String, output: String) {
     def toString(queryIndex: Int): String = {
       // We are explicitly not using multi-line string due to stripMargin removing "|" in output.
       s"-- !query $queryIndex\n" +
@@ -146,7 +150,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   /** A test case. */
-  private trait TestCase {
+  protected trait TestCase {
     val name: String
     val inputFile: String
     val resultFile: String
@@ -156,35 +160,35 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
    * traits that indicate UDF or PgSQL to trigger the code path specific to each. For instance,
    * PgSQL tests require to register some UDF functions.
    */
-  private trait PgSQLTest
+  protected trait PgSQLTest
 
-  private trait UDFTest {
+  protected trait UDFTest {
     val udf: TestUDF
   }
 
   /** A regular test case. */
-  private case class RegularTestCase(
+  protected case class RegularTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase
 
   /** A PostgreSQL test case. */
-  private case class PgSQLTestCase(
+  protected case class PgSQLTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase with PgSQLTest
 
   /** A UDF test case. */
-  private case class UDFTestCase(
+  protected case class UDFTestCase(
       name: String,
       inputFile: String,
       resultFile: String,
       udf: TestUDF) extends TestCase with UDFTest
 
   /** A UDF PostgreSQL test case. */
-  private case class UDFPgSQLTestCase(
+  protected case class UDFPgSQLTestCase(
       name: String,
       inputFile: String,
       resultFile: String,
       udf: TestUDF) extends TestCase with UDFTest with PgSQLTest
 
-  private def createScalaTestCase(testCase: TestCase): Unit = {
+  protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (blackList.exists(t =>
         testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
@@ -222,7 +226,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   /** Run a test case. */
-  private def runTest(testCase: TestCase): Unit = {
+  protected def runTest(testCase: TestCase): Unit = {
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = input.split("\n").partition(_.trim.startsWith("--"))
@@ -235,7 +239,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
     // When we are regenerating the golden files, we don't need to set any config as they
     // all need to return the same result
-    if (regenerateGoldenFiles) {
+    if (regenerateGoldenFiles || !isTestWithConfigSets) {
       runQueries(queries, testCase, None)
     } else {
       val configSets = {
@@ -271,7 +275,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  private def runQueries(
+  protected def runQueries(
       queries: Seq[String],
       testCase: TestCase,
       configSet: Option[Seq[(String, String)]]): Unit = {
@@ -388,19 +392,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     try {
       val df = session.sql(sql)
       val schema = df.schema
-      val notIncludedMsg = "[not included in comparison]"
-      val clsName = this.getClass.getCanonicalName
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer = hiveResultString(df.queryExecution.executedPlan)
-        .map(_.replaceAll("#\\d+", "#x")
-        .replaceAll(
-          s"Location.*/sql/core/spark-warehouse/$clsName/",
-          s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
-        .replaceAll("Created By.*", s"Created By $notIncludedMsg")
-        .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
-        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-        .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
-        .replaceAll("\\*\\(\\d+\\) ", "*"))  // remove the WholeStageCodegen codegenStageIds
+      val answer = hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
@@ -418,7 +411,19 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  private def listTestCases(): Seq[TestCase] = {
+  protected def replaceNotIncludedMsg(line: String): String = {
+    line.replaceAll("#\\d+", "#x")
+      .replaceAll(
+        s"Location.*/sql/core/spark-warehouse/$clsName/",
+        s"Location ${notIncludedMsg}sql/core/spark-warehouse/")
+      .replaceAll("Created By.*", s"Created By $notIncludedMsg")
+      .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
+      .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
+      .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
+      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
+  }
+
+  protected def listTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
@@ -444,7 +449,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   /** Returns all the files (not directories) in a directory, recursively. */
-  private def listFilesRecursively(path: File): Seq[File] = {
+  protected def listFilesRecursively(path: File): Seq[File] = {
     val (dirs, files) = path.listFiles().partition(_.isDirectory)
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
