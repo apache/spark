@@ -45,7 +45,7 @@ object JavaSerializerBenchmark extends BenchmarkBase {
     val name = "Benchmark Java Serializer Deserialization use vs not use Class Resolve Cache"
     runBenchmark(name) {
       val benchmark = new Benchmark(name, N, 10, output = output)
-      Seq(true, false).foreach(useUnsafe => run(useUnsafe, benchmark))
+      Seq(true, false).foreach(userCache => run(userCache, benchmark))
       benchmark.run()
     }
   }

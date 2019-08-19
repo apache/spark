@@ -1334,7 +1334,8 @@ package object config {
     .createWithDefault(true)
 
   private[spark] val JAVA_SERIALIZER_CACHE_RESOLVED_CLASSES =
-    ConfigBuilder("spark.serializer.JavaSerializer.cache.resolvedClasses")
+    ConfigBuilder("spark.serializer.javaSerializer.cache.resolvedClasses")
+      .doc("Whether to cache the resolved class when deserialize object with JavaSerializer")
       .booleanConf
       .createWithDefault(true)
 

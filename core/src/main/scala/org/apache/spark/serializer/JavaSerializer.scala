@@ -68,7 +68,7 @@ private[spark] class JavaDeserializationStream(
   private val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass): Class[_] = {
       if (useCache) {
-        serializerInstance.resolvedClassesCache.computeIfAbsent(
+        serializerInstance.resolvedClassesCache.get.computeIfAbsent(
           (desc.getName, loader), pair => normalResolve(pair._1))
       } else {
         normalResolve(desc.getName)
@@ -112,7 +112,11 @@ private[spark] class JavaSerializerInstance(
     useCache: Boolean)
   extends SerializerInstance {
 
-  lazy val resolvedClassesCache = new ConcurrentHashMap[(String, ClassLoader), Class[_]]()
+  val resolvedClassesCache = if (useCache) {
+    Some(new ConcurrentHashMap[(String, ClassLoader), Class[_]]())
+  } else {
+    None
+  }
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     val bos = new ByteBufferOutputStream()
