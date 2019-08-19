@@ -93,7 +93,8 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages(conf)
   )
 
-  @volatile private var currentPhysicalPlan = initialPlan
+  @volatile private var currentPhysicalPlan =
+    applyPhysicalRules(initialPlan, queryStagePreparationRules)
 
   private var isFinalPlan = false
 
@@ -122,7 +123,6 @@ case class AdaptiveSparkPlanExec(
     if (isFinalPlan) {
       currentPhysicalPlan.execute()
     } else {
-      currentPhysicalPlan = applyPhysicalRules(currentPhysicalPlan, queryStagePreparationRules)
       // Make sure we only update Spark UI if this plan's `QueryExecution` object matches the one
       // retrieved by the `sparkContext`'s current execution ID. Note that sub-queries do not have
       // their own execution IDs and therefore rely on the main query to update UI.

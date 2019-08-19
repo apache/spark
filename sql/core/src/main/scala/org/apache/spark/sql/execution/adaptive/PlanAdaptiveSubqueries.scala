@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.ListQuery
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ExecSubqueryExpression, SparkPlan}
 
 case class PlanAdaptiveSubqueries(
-    subqueryMap: mutable.HashMap[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
+    subqueryMap: scala.collection.Map[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {

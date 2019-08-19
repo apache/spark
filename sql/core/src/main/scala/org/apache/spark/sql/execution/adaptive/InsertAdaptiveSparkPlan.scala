@@ -92,19 +92,19 @@ case class InsertAdaptiveSparkPlan(
    * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
    */
   private def buildSubqueryMap(plan: SparkPlan): mutable.HashMap[Long, ExecSubqueryExpression] = {
-    val subqueryMapBuilder = mutable.HashMap.empty[Long, ExecSubqueryExpression]
+    val subqueryMap = mutable.HashMap.empty[Long, ExecSubqueryExpression]
     plan.foreach(_.expressions.foreach(_.foreach {
       case expressions.ScalarSubquery(p, _, exprId)
-          if !subqueryMapBuilder.contains(exprId.id) =>
+          if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(p)
         verifyAdaptivePlan(executedPlan, p)
         val scalarSubquery = execution.ScalarSubquery(
           SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
-        subqueryMapBuilder.put(exprId.id, scalarSubquery)
+        subqueryMap.put(exprId.id, scalarSubquery)
       case _ =>
     }))
 
-    subqueryMapBuilder
+    subqueryMap
   }
 
   def compileSubquery(plan: LogicalPlan): SparkPlan = {
