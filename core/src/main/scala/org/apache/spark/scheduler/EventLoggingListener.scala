@@ -20,13 +20,14 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.util.Locale
+import java.text.SimpleDateFormat
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.util.{Date, Locale}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
+import org.apache.hadoop.fs.{FSDataOutputStream, FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
@@ -67,6 +68,7 @@ private[spark] class EventLoggingListener(
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
   private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
+  private val cutType = sparkConf.get(EVENT_LOG_CUTTYPE)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
   private val compressionCodec =
@@ -83,12 +85,18 @@ private[spark] class EventLoggingListener(
   private var hadoopDataStream: Option[FSDataOutputStream] = None
 
   private var writer: Option[PrintWriter] = None
+  private val writerRWLock = new ReentrantReadWriteLock()
 
   // For testing. Keep track of all JSON serialized events that have been logged.
   private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
+  private var startAppEvent: Option[SparkListenerApplicationStart] = None
+  private var envUpdateEvent: Option[SparkListenerEnvironmentUpdate] = None
+
   // Visible for tests only.
-  private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+  private[scheduler] var logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
+
+  private var jobCount = 0
 
   /**
    * Creates the log file in the configured log directory.
@@ -135,6 +143,8 @@ private[spark] class EventLoggingListener(
 
   /** Log the event as JSON. */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
+    // get the read lock of writer
+    writerRWLock.readLock().lock()
     val eventJson = JsonProtocol.sparkEventToJson(event)
     // scalastyle:off println
     writer.foreach(_.println(compact(render(eventJson))))
@@ -145,6 +155,39 @@ private[spark] class EventLoggingListener(
     }
     if (testing) {
       loggedEvents += eventJson
+    }
+    writerRWLock.readLock().unlock()
+  }
+
+  /** cut the event log file, reload the new log writer and stop the old writer**/
+  private def logReload(): Unit = {
+    val tlogPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName, cutType)
+    // is the logPath is not change, then exit
+    // if the logPath is change and no job is running, get the write lock of writer,and create a new writer with the new logPath
+    if (tlogPath != logPath && jobCount == 0 && writerRWLock.writeLock().tryLock()) {
+      // create a SparkListenerApplicationEnd event and write to the writer
+      var eventJson = JsonProtocol.sparkEventToJson(SparkListenerApplicationEnd(System.currentTimeMillis()))
+      writer.foreach(_.println(compact(render(eventJson))))
+      writer.foreach(_.flush())
+      // close the old writer
+      stop()
+
+      logPath = tlogPath
+      // start new writer
+      start()
+
+      // write startAppEvent and envUpdateEvent to the new log file
+      val _event = startAppEvent.get.copy()
+      _event.appId = Option(_event.appId.getOrElse("null") + getCutInfo(cutType))
+
+      eventJson = JsonProtocol.sparkEventToJson(_event)
+      writer.foreach(_.println(compact(render(eventJson))))
+      writer.foreach(_.flush())
+      eventJson = JsonProtocol.sparkEventToJson(envUpdateEvent.get)
+      writer.foreach(_.println(compact(render(eventJson))))
+      writer.foreach(_.flush())
+
+      writerRWLock.writeLock().unlock()
     }
   }
 
@@ -159,32 +202,42 @@ private[spark] class EventLoggingListener(
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
     logEvent(redactEvent(event))
+    envUpdateEvent = Some(event)
   }
 
   // Events that trigger a flush
-  override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+  override def onStageCompleted(event: SparkListenerStageCompleted): Unit = logEvent(event, flushLogger = true)
+
+  override def onJobStart(event: SparkListenerJobStart): Unit = {
+    // event.properties.getProperty("spark.jobGroup.id")
+    synchronized{
+      jobCount += 1
+    }
     logEvent(event, flushLogger = true)
   }
 
-  override def onJobStart(event: SparkListenerJobStart): Unit = logEvent(event, flushLogger = true)
-
-  override def onJobEnd(event: SparkListenerJobEnd): Unit = logEvent(event, flushLogger = true)
-
-  override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
-    logEvent(event, flushLogger = true)
+  override def onJobEnd(event: SparkListenerJobEnd): Unit = {
+    synchronized{
+      jobCount -= 1
+      logEvent(event, flushLogger = true)
+      logReload()
+    }
   }
 
-  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
-    logEvent(event, flushLogger = true)
-  }
+  override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = logEvent(event, flushLogger = true)
 
-  override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
-    logEvent(event, flushLogger = true)
-  }
+  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = logEvent(event, flushLogger = true)
+
+  override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = logEvent(event, flushLogger = true)
 
   override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
-    logEvent(event, flushLogger = true)
+    val _event = event.copy()
+    _event.appId = Option(event.appId.getOrElse("null") + getCutInfo(cutType))
+
+    logEvent(_event, flushLogger = true)
+    startAppEvent = Some(event)
   }
+
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
     logEvent(event, flushLogger = true)
@@ -334,14 +387,27 @@ private[spark] object EventLoggingListener extends Logging {
       logBaseDir: URI,
       appId: String,
       appAttemptId: Option[String],
-      compressionCodecName: Option[String] = None): String = {
-    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
+      compressionCodecName: Option[String] = None,
+      cutType: String = "none"): String = {
+      val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId) + getCutInfo(cutType)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
       base + "_" + sanitize(appAttemptId.get) + codec
     } else {
       base + codec
     }
+  }
+
+  def getCutInfo(cutType: String = "none"): String = {
+    var cutString = ""
+    if(cutType == "month"){
+      cutString = "_" + new SimpleDateFormat("yyyy-MM").format(new Date)
+    }else if(cutType == "day"){
+      cutString = "_" +  new SimpleDateFormat("yyyy-MM-dd").format(new Date)
+    }else if(cutType == "hour"){
+      cutString = "_" + new SimpleDateFormat("yyyy-MM-dd-HH").format(new Date)
+    }
+    return cutString
   }
 
   private def sanitize(str: String): String = {
