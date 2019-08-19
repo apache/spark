@@ -43,10 +43,11 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
 
   protected def getPaths(map: CaseInsensitiveStringMap): Seq[String] = {
     val objectMapper = new ObjectMapper()
-    val paths = Option(map.get("paths")).map { pathStr =>
+    Option(map.get("paths")).map { pathStr =>
       objectMapper.readValue(pathStr, classOf[Array[String]]).toSeq
-    }.getOrElse(Seq.empty)
-    paths ++ Option(map.get("path")).toSeq
+    }.getOrElse {
+      Option(map.get("path")).toSeq
+    }
   }
 
   protected def getTableName(paths: Seq[String]): String = {
