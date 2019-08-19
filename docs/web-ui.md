@@ -76,7 +76,7 @@ res3: Long = 3
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-After running above example, we can found two RDDs listed in the Storage tab. Basic information like
+After running the above example, we can find two RDDs listed in the Storage tab. Basic information like
 storage level, number of partitions and memory overhead are provided. Note that the newly persisted RDDs
 or DataFrames are not shown in the tab before they are materialized, to monitor a specific RDD or DataFrame,
 make sure an action operation has been triggered.
@@ -89,7 +89,8 @@ make sure an action operation has been triggered.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-Cliking the RDD name 'rdd' displays the details of data persistance, such as the data distribution on the cluster.
+You can click the RDD name 'rdd' for obtaining the details of data persistance, such as the data
+distribution on the cluster.
 
 
 ## Environment Tab
