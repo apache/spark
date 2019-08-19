@@ -196,14 +196,11 @@ a.anchorjs-link:hover { text-decoration: none; }
   width: 210px;
   float: left;
   position: fixed;
-  overflow-y: scroll;
-  top: 0;
-  bottom: 0;
 }
 
 .left-menu {
   padding: 0px;
-  width: 399px;
+  width: 199px;
 }
 
 .left-menu h3 {
