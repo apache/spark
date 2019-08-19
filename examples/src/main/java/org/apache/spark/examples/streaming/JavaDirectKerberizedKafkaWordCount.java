@@ -72,7 +72,7 @@ import org.apache.spark.streaming.Durations;
  *     storeKey=true
  *     useTicketCache=false
  *     serviceName="kafka"
- *     principal="kafka/server@example";
+ *     principal="kafka/host@EXAMPLE.COM";
  *   };
  * kafka_driver_jaas.conf (used by yarn client) and kafka_jaas.conf are basically the same
  * except for some differences at 'keyTab'. In kafka_driver_jaas.conf, 'keyTab' should be
