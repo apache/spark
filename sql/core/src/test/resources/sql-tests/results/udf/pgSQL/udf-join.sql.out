@@ -530,7 +530,7 @@ struct<xxx:string,i:int,j:int,t:string,i:int,k:int>
 
 
 -- !query 33
-SELECT udf('') AS `xxx`, udf(i), udf(k), udf(t)
+SELECT udf('') AS `xxx`, udf(i) AS i, udf(k), udf(t) AS t
   FROM J1_TBL CROSS JOIN J2_TBL
 -- !query 33 schema
 struct<>
@@ -540,10 +540,10 @@ Reference 'i' is ambiguous, could be: default.j1_tbl.i, default.j2_tbl.i.; line 
 
 
 -- !query 34
-SELECT udf('') AS `xxx`, udf(t1.i), udf(k), udf(t)
+SELECT udf('') AS `xxx`, udf(t1.i) AS i, udf(k), udf(t)
   FROM J1_TBL t1 CROSS JOIN J2_TBL t2
 -- !query 34 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
+struct<xxx:string,i:int,CAST(udf(cast(k as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string>
 -- !query 34 output
 	0	-1	zero
 	0	-3	zero
@@ -647,11 +647,11 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(k as str
 
 
 -- !query 35
-SELECT udf(udf('')) AS `xxx`, udf(udf(ii)), udf(udf(tt)), udf(udf(kk))
+SELECT udf(udf('')) AS `xxx`, udf(udf(ii)) AS ii, udf(udf(tt)) AS tt, udf(udf(kk))
   FROM (J1_TBL CROSS JOIN J2_TBL)
     AS tx (ii, jj, tt, ii2, kk)
 -- !query 35 schema
-struct<xxx:string,CAST(udf(cast(cast(udf(cast(ii as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(tt as string)) as string) as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(kk as string)) as int) as string)) AS INT):int>
+struct<xxx:string,ii:int,tt:string,CAST(udf(cast(cast(udf(cast(kk as string)) as int) as string)) AS INT):int>
 -- !query 35 output
 	0	zero	-1
 	0	zero	-3
@@ -1654,10 +1654,10 @@ struct<xxx:string,CAST(udf(cast(cast(udf(cast(i as string)) as int) as string)) 
 
 
 -- !query 37
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i) AS i, udf(j), udf(t) AS t, udf(k)
   FROM J1_TBL INNER JOIN J2_TBL USING (i)
 -- !query 37 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,i:int,CAST(udf(cast(j as string)) AS INT):int,t:string,CAST(udf(cast(k as string)) AS INT):int>
 -- !query 37 output
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1669,10 +1669,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 38
-SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j) AS j, udf(t), udf(k) AS k
   FROM J1_TBL JOIN J2_TBL USING (i)
 -- !query 38 schema
-struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as string)) AS INT):int,CAST(udf(cast(t as string)) AS STRING):string,CAST(udf(cast(k as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,j:int,CAST(udf(cast(t as string)) AS STRING):string,k:int>
 -- !query 38 output
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1715,10 +1715,10 @@ struct<xxx:string,CAST(udf(cast(i as string)) AS INT):int,CAST(udf(cast(j as str
 
 
 -- !query 41
-SELECT udf('') AS `xxx`, udf(udf(udf(a))), udf(b), udf(c), udf(d)
+SELECT udf('') AS `xxx`, udf(udf(udf(a))) AS a, udf(b), udf(c), udf(d)
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d)
 -- !query 41 schema
-struct<xxx:string,CAST(udf(cast(cast(udf(cast(cast(udf(cast(a as string)) as int) as string)) as int) as string)) AS INT):int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
+struct<xxx:string,a:int,CAST(udf(cast(b as string)) AS INT):int,CAST(udf(cast(c as string)) AS STRING):string,CAST(udf(cast(d as string)) AS INT):int>
 -- !query 41 output
 	0	NULL	zero	NULL
 	1	4	one	-1
@@ -1730,10 +1730,10 @@ struct<xxx:string,CAST(udf(cast(cast(udf(cast(cast(udf(cast(a as string)) as int
 
 
 -- !query 42
-SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)), udf(udf(udf(d)))
+SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)) AS c, udf(udf(udf(d))) AS d
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a)
 -- !query 42 schema
-struct<xxx:string,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(b as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(c as string)) as string) as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(cast(udf(cast(d as string)) as int) as string)) as int) as string)) AS INT):int>
+struct<xxx:string,CAST(udf(cast(cast(udf(cast(a as string)) as int) as string)) AS INT):int,CAST(udf(cast(cast(udf(cast(b as string)) as int) as string)) AS INT):int,c:string,d:int>
 -- !query 42 output
 	0	NULL	zero	NULL
 	2	3	two	2

@@ -106,14 +106,14 @@ SELECT udf('') AS `xxx`, *
   FROM J1_TBL CROSS JOIN J2_TBL;
 
 -- ambiguous column
-SELECT udf('') AS `xxx`, udf(i), udf(k), udf(t)
+SELECT udf('') AS `xxx`, udf(i) AS i, udf(k), udf(t) AS t
   FROM J1_TBL CROSS JOIN J2_TBL;
 
 -- resolve previous ambiguity by specifying the table name
-SELECT udf('') AS `xxx`, udf(t1.i), udf(k), udf(t)
+SELECT udf('') AS `xxx`, udf(t1.i) AS i, udf(k), udf(t)
   FROM J1_TBL t1 CROSS JOIN J2_TBL t2;
 
-SELECT udf(udf('')) AS `xxx`, udf(udf(ii)), udf(udf(tt)), udf(udf(kk))
+SELECT udf(udf('')) AS `xxx`, udf(udf(ii)) AS ii, udf(udf(tt)) AS tt, udf(udf(kk))
   FROM (J1_TBL CROSS JOIN J2_TBL)
     AS tx (ii, jj, tt, ii2, kk);
 
@@ -139,11 +139,11 @@ SELECT udf('') AS `xxx`, udf(udf(j1_tbl.i)), udf(j), udf(t), udf(a.i), udf(a.k),
 --
 
 -- Inner equi-join on specified column
-SELECT udf('') AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf('') AS `xxx`, udf(i) AS i, udf(j), udf(t) AS t, udf(k)
   FROM J1_TBL INNER JOIN J2_TBL USING (i);
 
 -- Same as above, slightly different syntax
-SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
+SELECT udf(udf('')) AS `xxx`, udf(i), udf(j) AS j, udf(t), udf(k) AS k
   FROM J1_TBL JOIN J2_TBL USING (i);
 
 SELECT udf('') AS `xxx`, *
@@ -164,10 +164,10 @@ SELECT udf('') AS `xxx`, *
 SELECT udf(udf('')) AS `xxx`, udf(i), udf(j), udf(t), udf(k)
   FROM J1_TBL NATURAL JOIN J2_TBL;
 
-SELECT udf('') AS `xxx`, udf(udf(udf(a))), udf(b), udf(c), udf(d)
+SELECT udf('') AS `xxx`, udf(udf(udf(a))) AS a, udf(b), udf(c), udf(d)
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (a, d);
 
-SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)), udf(udf(udf(d)))
+SELECT udf('') AS `xxx`, udf(udf(a)), udf(udf(b)), udf(udf(c)) AS c, udf(udf(udf(d))) AS d
   FROM J1_TBL t1 (a, b, c) NATURAL JOIN J2_TBL t2 (d, a);
 
 -- [SPARK-28377] Fully support correlation names in the FROM clause
