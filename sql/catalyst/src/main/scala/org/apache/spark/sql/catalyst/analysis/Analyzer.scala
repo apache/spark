@@ -2018,6 +2018,70 @@ class Analyzer(
         throw new AnalysisException("Only one generator allowed per select clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
+      case Aggregate(_, aggList, _) if aggList.exists(hasNestedGenerator) =>
+        val nestedGenerator = aggList.find(hasNestedGenerator).get
+        throw new AnalysisException("Generators are not supported when it's nested in " +
+          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+
+      case Aggregate(_, aggList, _) if aggList.count(hasGenerator) > 1 =>
+        val generators = aggList.filter(hasGenerator).map(trimAlias)
+        throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
+          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
+
+      case agg @ Aggregate(groupList, aggList, child) =>
+        // Holds the resolved generator, if one exists in the project list.
+        var generatorVisited = false
+
+        var temp_alias_cnt = 0
+        def genTempAlias(expr: Expression): String = {
+          temp_alias_cnt += 1
+          s"_tmp_generator_extract_${expr.hashCode().abs}_${temp_alias_cnt}"
+        }
+
+        val projectExprs = Array.ofDim[NamedExpression](aggList.length)
+        val newAggList = aggList
+          .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+          .zipWithIndex
+          .flatMap {
+            case (AliasedGenerator(generator, names, outer), idx) if generator.childrenResolved =>
+              // It's a sanity check, this should not happen as the previous case will throw
+              // exception earlier.
+              assert(!generatorVisited, "More than one generator found in aggregate.")
+              generatorVisited = true
+
+              val aliasedGenChildren: Seq[NamedExpression] = generator.children.map {
+                e => Alias(e, genTempAlias(e))()
+              }
+              val newGenerator = {
+                val g = generator.withNewChildren(aliasedGenChildren.map(_.toAttribute))
+                  .asInstanceOf[Generator]
+                if (outer) GeneratorOuter(g) else g
+              }
+              val newAliasedGenerator = if (names.length == 1) {
+                Alias(newGenerator, names(0))()
+              } else {
+                MultiAlias(newGenerator, names)
+              }
+              projectExprs(idx) = newAliasedGenerator
+              aliasedGenChildren
+            case (other, idx) =>
+              projectExprs(idx) = if (other.isInstanceOf[UnresolvedAlias]) {
+                val aliasFunc = other.asInstanceOf[UnresolvedAlias]
+                  .aliasFunc.getOrElse(genTempAlias _)
+                UnresolvedAttribute(aliasFunc(other))
+              } else {
+                other.toAttribute
+              }
+              other :: Nil
+          }
+
+        if (generatorVisited) {
+          val newAgg = Aggregate(groupList, newAggList, child)
+          Project(projectExprs.toList, newAgg)
+        } else {
+          agg
+        }
+
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
         var resolvedGenerator: Generate = null
