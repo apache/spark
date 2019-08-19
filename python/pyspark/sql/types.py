@@ -102,6 +102,13 @@ class DataType(object):
         json = self.json()
         return dt.fromJson(json).toDDL()
 
+    @Since(3.0)
+    @static_method
+    def fromDDL(self, ddl):
+        """
+        Returns a StructType containing the schema matching the DDL.
+        """
+        return _parse_datatype_string(ddl)
 
 # This singleton pattern does not work with pickle, you will get
 # another object after pickle and unpickle
@@ -828,6 +835,9 @@ def _parse_datatype_string(s):
                 return from_ddl_datatype("struct<%s>" % s.strip())
             except:
                 raise e
+
+
+DataType.fromDDL.__doc__ = _parse_datatype_string.__doc__
 
 
 def _parse_datatype_json_string(json_string):
