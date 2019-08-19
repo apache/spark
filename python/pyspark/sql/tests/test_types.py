@@ -536,6 +536,26 @@ class TypesTests(ReusedSQLTestCase):
         self.assertEqual(_infer_type(2**61), LongType())
         self.assertEqual(_infer_type(2**71), LongType())
 
+    def test_repr(self):
+        schema_expected = StructType([
+            StructField("string", StringType(), False),
+            StructField("long", LongType(), True),
+            StructField("decimal", DecimalType(10,2), True),
+            StructField("timestamp", TimestampType(), False),
+            StructField("array1", ArrayType(StructType([
+                StructField("item1", LongType(), True),
+                StructField("array2", ArrayType(StructType([
+                    StructField("item2", LongType(), False),
+                    StructField("array2", ArrayType(StructType([
+                        StructField("item3", LongType(), True),
+                        StructField("item4", StringType(), False),
+                    ]), True), False),
+                ]), True), True),
+            ]), False), True)
+        ])
+        schema_actual = eval(repr(schema_expected))
+        self.assertEqual(schema_expected, schema_actual)
+
     def test_merge_type(self):
         self.assertEqual(_merge_type(LongType(), NullType()), LongType())
         self.assertEqual(_merge_type(NullType(), LongType()), LongType())
