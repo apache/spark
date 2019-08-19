@@ -78,7 +78,7 @@ res3: Long = 3
 
 After running the above example, we can find two RDDs listed in the Storage tab. Basic information like
 storage level, number of partitions and memory overhead are provided. Note that the newly persisted RDDs
-or DataFrames are not shown in the tab before they are materialized, to monitor a specific RDD or DataFrame,
+or DataFrames are not shown in the tab before they are materialized. To monitor a specific RDD or DataFrame,
 make sure an action operation has been triggered.
 
 <p style="text-align: center;">
