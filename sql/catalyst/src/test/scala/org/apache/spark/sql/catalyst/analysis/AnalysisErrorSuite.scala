@@ -165,12 +165,12 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "DISTINCT specified, but hex is not an aggregate function" :: Nil)
+    "hex does not support the modifier DISTINCT" :: Nil)
 
   errorTest(
     "distinct window function",
     CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
-    "DISTINCT specified, but percent_rank is not an aggregate function" :: Nil)
+    "percent_rank does not support the modifier DISTINCT" :: Nil)
 
   errorTest(
     "nested aggregate functions",

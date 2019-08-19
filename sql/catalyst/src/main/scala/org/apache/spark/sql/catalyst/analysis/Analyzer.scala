@@ -1647,8 +1647,7 @@ class Analyzer(
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
                   if (isDistinct) {
-                    failAnalysis(
-                      s"DISTINCT specified, but ${wf.prettyName} is not an aggregate function")
+                    failAnalysis(s"${wf.prettyName} does not support the modifier DISTINCT")
                   } else {
                     wf
                   }
@@ -1657,8 +1656,7 @@ class Analyzer(
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct) {
-                    failAnalysis(
-                      s"DISTINCT specified, but ${other.prettyName} is not an aggregate function")
+                    failAnalysis(s"${other.prettyName} does not support the modifier DISTINCT")
                   } else {
                     other
                   }
