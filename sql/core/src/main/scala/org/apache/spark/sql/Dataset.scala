@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Evolving, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
+import org.apache.spark.sql.catalyst.json.{JSONOptions, JacksonGenerator}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
@@ -184,10 +184,25 @@ private[sql] object Dataset {
  */
 @Stable
 class Dataset[T] private[sql](
-    @transient val sparkSession: SparkSession,
+    @transient val _sparkSession: SparkSession,
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
+
+  def sparkSession: SparkSession = {
+    if (_sparkSession == null) {
+      throw new SparkException(
+        "This Dataset lacks a SparkSession. It could happen in the following cases: \n(1) Dataset " +
+          "transformations and actions are NOT invoked by the driver, but inside of other " +
+          "transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid " +
+          "because the values transformation and count action cannot be performed inside of the " +
+          "dataset1.map transformation. For more information, see SPARK-28702.\n(2) When a Spark " +
+          "Streaming job recovers from checkpoint, this exception will be hit if a reference to " +
+          "an RDD not defined by the streaming job is used in DStream operations. For more " +
+          "information, See SPARK-13758.")
+    }
+    _sparkSession
+  }
 
   // A globally unique id of this Dataset.
   private val id = Dataset.curId.getAndIncrement()
