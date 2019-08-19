@@ -17,22 +17,112 @@
 
 package org.apache.spark.status
 
+import java.io.{File, FileInputStream, FileOutputStream, ObjectOutputStream}
 import java.util.Date
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, CountDownLatch}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
+import com.esotericsoftware.kryo.Kryo.DefaultInstantiatorStrategy
+import com.esotericsoftware.kryo.io.{Input, Output}
+import org.objenesis.strategy.{SerializingInstantiatorStrategy, StdInstantiatorStrategy}
+
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CPUS_PER_TASK
+import org.apache.spark.internal.config.{CPUS_PER_TASK, EVENT_LOG_DIR}
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.scheduler._
+import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.kvstore.InMemoryStore
+
+case class InMemoryStoreSnapshot(
+    store: InMemoryStore,
+    eventsNum: Int,
+    finished: Boolean)
+
+private[spark] class InMemoryStoreCheckpoint(
+    store: InMemoryStore,
+    conf: SparkConf) extends Logging {
+  var lastRecordEventsNum: Int = 0
+  var finished: Boolean = false
+
+  // used to count the number of processed events in a live AppStatusListener
+  private var processedEventsNum = 0
+  // TODO(wuyi) config
+  private val batchSize = conf.get(IMS_CHECKPOINT_BATCH_SIZE)
+  private var latch = new CountDownLatch(0)
+  @volatile var isDone = true
+  // use event log file dir directly ?
+  private val dir = Utils.resolveURI(conf.get(EVENT_LOG_DIR).stripSuffix("/")).getPath
+  private val executor = ThreadUtils.newDaemonSingleThreadExecutor(
+    "inmemorystore-checkpoint-thread")
+  var appInfo: v1.ApplicationInfo = _
+  private var cnt = 0
+
+  private val checkpointTask = new Runnable {
+    override def run(): Unit = doCheckpoint()
+  }
+
+  def await(): Unit = latch.await()
+
+  def eventInc(finish: Boolean = false): Unit = {
+    processedEventsNum += 1
+    val shouldCheckpoint = !finished && (processedEventsNum - lastRecordEventsNum >=
+      batchSize || finish)
+    if (shouldCheckpoint) {
+      latch = new CountDownLatch(1)
+      lastRecordEventsNum = processedEventsNum
+      if (finish) {
+        finished = true
+        doCheckpoint()
+        executor.shutdown()
+      } else {
+        executor.submit(checkpointTask)
+      }
+    }
+  }
+
+  private def doCheckpoint(): Unit = {
+    cnt += 1
+    // TODO(wuyi) rewrite
+    logInfo(s"Do checkpoint, cnt=$cnt, processedEventsNum = $processedEventsNum")
+    isDone = false
+    assert(appInfo != null, "appInfo is nnnnnnnnnnnn")
+    // TODO(wuyi) multiple attempts ? appInto is null ?
+    val file = new File(dir, s"ims_${appInfo.id}.ckp")
+    val fileOut = new FileOutputStream(file)
+//    val serializer = new KryoSerializer(conf)
+//    val out = serializer.newInstance().serializeStream(fileOut)
+//    out.writeObject[InMemoryStoreSnapshot](
+//      InMemoryStoreSnapshot(store, lastRecordEventsNum, finished))
+//    out.flush()
+//    out.close()
+    logInfo(s"be stageNume: ${store.count(classOf[StageDataWrapper])}")
+    val kryo = new KryoSerializer(conf).newKryo()
+    kryo.setInstantiatorStrategy(new StdInstantiatorStrategy())
+    val output = new Output(fileOut)
+    kryo.writeObject(output, InMemoryStoreSnapshot(store, lastRecordEventsNum, finished))
+    output.close()
+
+    val fileIn = new FileInputStream(file)
+//    val kryo2 = new KryoSerializer(conf).newKryo()
+    val input = new Input(fileIn)
+    val imsSnapshot = kryo.readObject(input, classOf[InMemoryStoreSnapshot])
+    input.close()
+    logInfo(s"af stageNume: ${imsSnapshot.store.count(classOf[StageDataWrapper])}")
+    logInfo(s"Loaded InMemoryStoreSnapshot(ims, eventsSkipNum=${imsSnapshot.eventsNum}," +
+      s" finished=${imsSnapshot.finished}) from ${file.getPath}.")
+    latch.countDown()
+    isDone = true
+  }
+}
 
 /**
  * A Spark listener that writes application information to a data store. The types written to the
@@ -85,6 +175,12 @@ private[spark] class AppStatusListener(
   /** The last time when flushing `LiveEntity`s. This is to avoid flushing too frequently. */
   private var lastFlushTimeNs = System.nanoTime()
 
+  private val imsCheckpoint = if (live && conf.get(IMS_CHECKPOINT_ENABLED)) {
+    Some(new InMemoryStoreCheckpoint(kvstore.store.asInstanceOf[InMemoryStore], conf))
+  } else {
+    None
+  }
+
   kvstore.addTrigger(classOf[ExecutorSummaryWrapper], conf.get(MAX_RETAINED_DEAD_EXECUTORS))
     { count => cleanupExecutors(count) }
 
@@ -104,7 +200,10 @@ private[spark] class AppStatusListener(
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case SparkListenerLogStart(version) => sparkVersion = version
+    case SparkListenerLogStart(version) =>
+      sparkVersion = version
+      imsCheckpoint.foreach(_.eventInc())
+
     case _ =>
   }
 
@@ -143,6 +242,8 @@ private[spark] class AppStatusListener(
         update(d, System.nanoTime())
       }
     }
+    imsCheckpoint.foreach(_.appInfo = appInfo)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
@@ -164,7 +265,9 @@ private[spark] class AppStatusListener(
     coresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toInt)
       .getOrElse(coresPerTask)
 
+    imsCheckpoint.foreach(_.await())
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
@@ -187,7 +290,9 @@ private[spark] class AppStatusListener(
       None,
       None,
       Seq(attempt))
+    imsCheckpoint.foreach(_.await())
     kvstore.write(new ApplicationInfoWrapper(appInfo))
+    imsCheckpoint.foreach(_.eventInc(true))
   }
 
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
@@ -201,6 +306,7 @@ private[spark] class AppStatusListener(
     exec.executorLogs = event.executorInfo.logUrlMap
     exec.attributes = event.executorInfo.attributes
     liveUpdate(exec, System.nanoTime())
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
@@ -250,6 +356,7 @@ private[spark] class AppStatusListener(
         deadExecutors.put(event.executorId, exec)
       }
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   /** Was the specified executor active for any currently live stages? */
@@ -261,6 +368,7 @@ private[spark] class AppStatusListener(
 
   override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
     updateBlackListStatus(event.executorId, true)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onExecutorBlacklistedForStage(
@@ -273,6 +381,7 @@ private[spark] class AppStatusListener(
     liveExecutors.get(event.executorId).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onNodeBlacklistedForStage(event: SparkListenerNodeBlacklistedForStage): Unit = {
@@ -286,6 +395,7 @@ private[spark] class AppStatusListener(
     liveExecutors.values.filter(_.hostname == event.hostId).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   private def addBlackListedStageTo(exec: LiveExecutor, stageId: Int, now: Long): Unit = {
@@ -305,14 +415,17 @@ private[spark] class AppStatusListener(
 
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
     updateBlackListStatus(event.executorId, false)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = {
     updateNodeBlackList(event.hostId, true)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit = {
     updateNodeBlackList(event.hostId, false)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   private def updateBlackListStatus(execId: String, blacklisted: Boolean): Unit = {
@@ -390,6 +503,7 @@ private[spark] class AppStatusListener(
         newRDDOperationCluster(graph.rootCluster))
       kvstore.write(uigraph)
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   private def newRDDOperationCluster(cluster: RDDOperationCluster): RDDOperationClusterWrapper = {
@@ -462,6 +576,7 @@ private[spark] class AppStatusListener(
         kvstore.write(appSummary)
       }
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -499,6 +614,7 @@ private[spark] class AppStatusListener(
     }
 
     liveUpdate(stage, now)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = {
@@ -535,6 +651,7 @@ private[spark] class AppStatusListener(
       exec.totalTasks += 1
       maybeUpdate(exec, now)
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = {
@@ -543,6 +660,7 @@ private[spark] class AppStatusListener(
     liveTasks.get(event.taskInfo.taskId).foreach { task =>
       maybeUpdate(task, System.nanoTime())
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
@@ -691,6 +809,7 @@ private[spark] class AppStatusListener(
         maybeUpdate(exec, now)
       }
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
@@ -753,6 +872,7 @@ private[spark] class AppStatusListener(
 
     // remove any dead executors that were not running for any currently active stages
     deadExecutors.retain((execId, exec) => isExecutorActiveForLiveStages(exec))
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   private def removeBlackListedStageFrom(exec: LiveExecutor, stageId: Int, now: Long) = {
@@ -772,9 +892,11 @@ private[spark] class AppStatusListener(
     exec.isActive = true
     exec.maxMemory = event.maxMem
     liveUpdate(exec, System.nanoTime())
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
+    imsCheckpoint.foreach(_.eventInc())
     // Nothing to do here. Covered by onExecutorRemoved.
   }
 
@@ -811,6 +933,7 @@ private[spark] class AppStatusListener(
     }
 
     kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
@@ -851,6 +974,7 @@ private[spark] class AppStatusListener(
       // Re-get the current system time because `flush` may be slow and `now` is stale.
       lastFlushTimeNs = System.nanoTime()
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onStageExecutorMetrics(executorMetrics: SparkListenerStageExecutorMetrics): Unit = {
@@ -865,6 +989,7 @@ private[spark] class AppStatusListener(
           update(exec, now)
         }
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
@@ -874,6 +999,7 @@ private[spark] class AppStatusListener(
       case broadcast: BroadcastBlockId => updateBroadcastBlock(event, broadcast)
       case _ =>
     }
+    imsCheckpoint.foreach(_.eventInc())
   }
 
   /** Go through all `LiveEntity`s and use `entityFlushFunc(entity)` to flush them. */
@@ -1086,12 +1212,14 @@ private[spark] class AppStatusListener(
   }
 
   private def update(entity: LiveEntity, now: Long, last: Boolean = false): Unit = {
+    imsCheckpoint.foreach(_.await())
     entity.write(kvstore, now, checkTriggers = last)
   }
 
   /** Update a live entity only if it hasn't been updated in the last configured period. */
   private def maybeUpdate(entity: LiveEntity, now: Long): Unit = {
-    if (live && liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs) {
+    if (live && liveUpdatePeriodNs >= 0 && now - entity.lastWriteTime > liveUpdatePeriodNs &&
+      (imsCheckpoint.isEmpty || imsCheckpoint.map(_.isDone).get)) {
       update(entity, now)
     }
   }

@@ -48,7 +48,7 @@ import org.apache.spark.util.kvstore._
  * The configured triggers are run on a separate thread by default; they can be forced to run on
  * the calling thread by setting the `ASYNC_TRACKING_ENABLED` configuration to `false`.
  */
-private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) extends KVStore {
+private[spark] class ElementTrackingStore(val store: KVStore, conf: SparkConf) extends KVStore {
 
   private class LatchedTriggers(val triggers: Seq[Trigger[_]]) {
     private val pending = new AtomicBoolean(false)
