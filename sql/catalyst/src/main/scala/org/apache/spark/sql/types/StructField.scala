@@ -49,7 +49,7 @@ case class StructField(
   }
 
   // override the default toString to be compatible with legacy parquet files.
-  override def toString: String = s"StructField($name,$dataType,$nullable)"
+  override def toString: String = s"""StructField("$name",$dataType,$nullable)"""
 
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
