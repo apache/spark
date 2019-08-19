@@ -77,6 +77,14 @@ class FunctionsTests(ReusedSQLTestCase):
             df.count()
             df.collect()
 
+    def test_col_functions(self):
+        from pyspark.sql.functions import C
+        rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
+        df = self.spark.read.json(rdd)
+        self.assertEqual(2, df.select(C('foo')).count())
+        self.assertEqual(2, df.select(C['foo']).count())
+        self.assertEqual(2, df.select(C.foo).count())
+
     def test_corr(self):
         import math
         df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()

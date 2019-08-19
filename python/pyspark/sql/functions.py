@@ -127,8 +127,6 @@ _lit_doc = """
     """
 _functions = {
     'lit': _lit_doc,
-    'col': 'Returns a :class:`Column` based on the given column name.',
-    'column': 'Returns a :class:`Column` based on the given column name.',
     'asc': 'Returns a sort expression based on the ascending order of the given column name.',
     'desc': 'Returns a sort expression based on the descending order of the given column name.',
 }
@@ -136,7 +134,6 @@ _functions = {
 _functions_over_column = {
     'sqrt': 'Computes the square root of the specified float value.',
     'abs': 'Computes the absolute value.',
-
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
     'count': 'Aggregate function: returns the number of items in a group.',
@@ -313,6 +310,47 @@ for _name, _message in _functions_deprecated.items():
 for _name, _doc in _functions_2_4.items():
     globals()[_name] = since(2.4)(_create_function(_name, _doc))
 del _name, _doc
+
+
+class column_function(object):
+    """
+    Returns a :class:`Column` based on the given column name.
+
+    >>> __name__("firstName")
+    Column<firstName>
+
+    >>> __name__["firstName"]
+    Column<firstName>
+
+    >>> __name__.firstName
+    Column<firstName>
+
+    The attribute access syntax `col.firstName` works for valid names except those starting with
+    a double underscore (__), such as __str__.  In such cases, use col["__str__"] to clarify you want
+    the column and not the built-in __str__ function.
+    """
+    __slots__=("__orig__", "__name__")
+    def __init__(self, orig):
+        self.__orig__ = orig
+        self.__name__ = orig.__name__
+        self.__doc__ = column_function.__doc__.replace("__name__", self.__name__)
+    def __getitem__(self, name):
+        return self.__orig__(name)
+    def __getattribute__(self, name):
+        if (name.startswith("__")):
+            return object.__getattribute__(self, name)
+        else:
+            return self.__orig__(name)
+    def __call__(self, name):
+        return self.__orig__(name)
+    def __repr__(self):
+        return "<column_function pyspark.sql.functions." + self.__name__ + ">"
+    def __str__(self):
+        return "<column_function pyspark.sql.functions." + self.__name__ + ">"
+
+column = since(1.3)(column_function(_create_function("column")))
+col = since(1.3)(column_function(_create_function("col")))
+C = since(3.0)(column_function(_create_function("col")))
 
 
 @since(2.1)
