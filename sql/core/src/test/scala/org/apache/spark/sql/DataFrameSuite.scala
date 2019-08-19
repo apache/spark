@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExc
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
-import org.apache.spark.sql.test.SQLTestData.{NullStrings, TestData2}
+import org.apache.spark.sql.test.SQLTestData.{DecimalData, NullStrings, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -157,6 +157,10 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-28224: Aggregate sum big decimal overflow") {
+    val largeDecimals = spark.sparkContext.parallelize(
+      DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
+        DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
+
     Seq(true, false).foreach { nullOnOverflow =>
       withSQLConf((SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, nullOnOverflow.toString)) {
         val structDf = largeDecimals.select("a").agg(sum("a"))
