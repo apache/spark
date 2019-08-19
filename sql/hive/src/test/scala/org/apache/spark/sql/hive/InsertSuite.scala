@@ -735,6 +735,39 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+  test("Throw exception on unsafe cast with strict casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t select 1L, 2")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0D, 3")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 3 column(s)"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 1 column(s)"))
+      }
+    }
+  }
+
   test("insert overwrite to dir with multi inserts") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
