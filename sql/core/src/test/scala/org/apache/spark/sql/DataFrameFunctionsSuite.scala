@@ -2730,31 +2730,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       null
     ).toDF("i")
 
+    // aggregate(i, 0, (acc, x) -> acc + x)
+    val resA = Seq(
+      Row(25),
+      Row(31),
+      Row(0),
+      Row(null))
+
+    // aggregate(i, 0, (acc, x) -> acc + x, acc -> acc * 10)
+    val resB = Seq(
+      Row(250),
+      Row(310),
+      Row(0),
+      Row(null))
+
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"),
-        Seq(
-          Row(25),
-          Row(31),
-          Row(0),
-          Row(null)))
-      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> acc * 10)"),
-        Seq(
-          Row(250),
-          Row(310),
-          Row(0),
-          Row(null)))
-      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)),
-        Seq(
-          Row(25),
-          Row(31),
-          Row(0),
-          Row(null)))
-      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10)),
-        Seq(
-          Row(250),
-          Row(310),
-          Row(0),
-          Row(null)))
+      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"), resA)
+      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> acc * 10)"), resB)
+      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)), resA)
+      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x, _ * 10)), resB)
+      checkAnswer(df.select(aggregate(col("i"), lit(0),
+        new JFunc2 {
+          def call(acc: Column, x: Column): Column = acc + x
+        })), resA)
+      checkAnswer(df.select(aggregate(col("i"), lit(0),
+        new JFunc2 {
+          def call(acc: Column, x: Column): Column = acc + x
+        },
+        new JFunc {
+          def call(x: Column): Column = x * 10
+        })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2772,34 +2777,40 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       null
     ).toDF("i")
 
+    // aggregate(i, 0, (acc, x) -> acc + x)
+    val resA = Seq(
+      Row(25),
+      Row(null),
+      Row(0),
+      Row(null))
+
+    // aggregate(i, 0, (acc, x) -> acc + x, acc -> coalesce(acc, 0) * 10)
+    val resB = Seq(
+      Row(250),
+      Row(0),
+      Row(0),
+      Row(null))
+
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"),
-        Seq(
-          Row(25),
-          Row(null),
-          Row(0),
-          Row(null)))
+      checkAnswer(df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x)"), resA)
       checkAnswer(
         df.selectExpr("aggregate(i, 0, (acc, x) -> acc + x, acc -> coalesce(acc, 0) * 10)"),
-        Seq(
-          Row(250),
-          Row(0),
-          Row(0),
-          Row(null)))
-      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)),
-        Seq(
-          Row(25),
-          Row(null),
-          Row(0),
-          Row(null)))
+        resB)
+      checkAnswer(df.select(aggregate(col("i"), lit(0), (acc, x) => acc + x)), resA)
       checkAnswer(
         df.select(
           aggregate(col("i"), lit(0), (acc, x) => acc + x, acc => coalesce(acc, lit(0)) * 10)),
-        Seq(
-          Row(250),
-          Row(0),
-          Row(0),
-          Row(null)))
+        resB)
+      checkAnswer(df.select(aggregate(col("i"), lit(0),
+        new JFunc2 {
+          def call(acc: Column, x: Column): Column = acc + x
+        })), resA)
+      checkAnswer(df.select(aggregate(col("i"), lit(0),
+        new JFunc2 {
+          def call(acc: Column, x: Column): Column = acc + x
+        }, new JFunc {
+          def call(acc: Column): Column = coalesce(acc, lit(0)) * 10
+        })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2817,35 +2828,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (null, "d")
     ).toDF("ss", "s")
 
+    val resA = Seq(
+      Row("acab"),
+      Row(null),
+      Row("c"),
+      Row(null))
+
+    val resB = Seq(
+      Row("acab"),
+      Row(""),
+      Row("c"),
+      Row(null))
+
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x))"),
-        Seq(
-          Row("acab"),
-          Row(null),
-          Row("c"),
-          Row(null)))
+      checkAnswer(df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x))"), resA)
       checkAnswer(
         df.selectExpr("aggregate(ss, s, (acc, x) -> concat(acc, x), acc -> coalesce(acc , ''))"),
-        Seq(
-          Row("acab"),
-          Row(""),
-          Row("c"),
-          Row(null)))
-      checkAnswer(df.select(aggregate(col("ss"), col("s"), (acc, x) => concat(acc, x))),
-        Seq(
-          Row("acab"),
-          Row(null),
-          Row("c"),
-          Row(null)))
+        resB)
+      checkAnswer(df.select(aggregate(col("ss"), col("s"), (acc, x) => concat(acc, x))), resA)
       checkAnswer(
         df.select(
           aggregate(col("ss"), col("s"), (acc, x) => concat(acc, x),
-            acc => coalesce(acc, lit("")))),
-        Seq(
-          Row("acab"),
-          Row(""),
-          Row("c"),
-          Row(null)))
+            acc => coalesce(acc, lit("")))), resB)
+      checkAnswer(df.select(aggregate(col("ss"), col("s"), new JFunc2 {
+        def call(acc: Column, x: Column): Column = concat(acc, x)
+      })), resA)
+      checkAnswer(df.select(aggregate(col("ss"), col("s"), new JFunc2 {
+        def call(acc: Column, x: Column): Column = concat(acc, x)
+      }, new JFunc {
+        def call(acc: Column): Column = coalesce(acc, lit(""))
+      })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2883,6 +2895,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
+    val ex3b = intercept[AnalysisException] {
+      df.select(aggregate(col("i"), lit(0), new JFunc2 {
+        def call(acc: Column, x: Column): Column = x
+      }))
+    }
+    assert(ex3b.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("aggregate(s, 0, (acc, x) -> x)")
     }
@@ -2892,6 +2911,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(aggregate(col("s"), lit(0), (acc, x) => x))
     }
     assert(ex4a.getMessage.contains("data type mismatch: argument 3 requires int type"))
+    val ex4b = intercept[AnalysisException] {
+      df.select(aggregate(col("s"), lit(0), new JFunc2 {
+        def call(acc: Column, x: Column): Column = x
+      }))
+    }
+    assert(ex4b.getMessage.contains("data type mismatch: argument 3 requires int type"))
 
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("aggregate(a, 0, (acc, x) -> x)")
