@@ -163,10 +163,11 @@ including JVM, Spark, and system properties.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-We can see that this environment page has five parts, it is a useful place to check whether your properties have
-been set correctly. The first part 'Runtime Information' simply contains the
-[runtime properties](configuration.html#runtime-environment) like versions of Java and Scala.
-The second part 'Spark Properties' lists the [application properties](configuration.html#runtime-environment) like
+This environment page has five parts, it is a useful place to check whether your properties have
+been set correctly.
+The first part 'Runtime Information' simply contains the [runtime properties](configuration.html#runtime-environment)
+like versions of Java and Scala.
+The second part 'Spark Properties' lists the [application properties](configuration.html#application-properties) like
 'spark.app.name' and 'spark.driver.memory'.
 
 <p style="text-align: center;">
@@ -176,8 +177,8 @@ The second part 'Spark Properties' lists the [application properties](configurat
        width="100%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
-Clicking the 'Hadoop Properties' link displays properties relative to Hadoop and Yarn. Note that properties like
-"spark.hadoop.*" are shown in 'Spark Properties'.
+Clicking the 'Hadoop Properties' link displays properties relative to Hadoop and YARN. Note that properties like
+['spark.hadoop.*'](configuration.html#execution-behavior) are shown not in this part but in 'Spark Properties'.
 
 <p style="text-align: center;">
   <img src="img/webui-env-sys.png"
