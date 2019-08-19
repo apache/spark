@@ -106,13 +106,13 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
 }
 
 /**
- * An exception thrown if the RPC is canceled.
+ * An exception thrown if the RPC is aborted.
  */
 class RpcAbortException(message: String) extends Exception(message)
 
 /**
- * A wrapper for `Future` but add cancel method.
- * This is used in long run RPC and provide an approach to cancel the RPC.
+ * A wrapper for [[Future]] but add abort method.
+ * This is used in long run RPC and provide an approach to abort the RPC.
  */
 private[spark] class AbortableRpcFuture[T: ClassTag](
     future: Future[T],
