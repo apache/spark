@@ -186,8 +186,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftJdbcTest {
       }
     }
 
-    // TODO: enable this test case after SPARK-28463 and SPARK-26969
-    ignore(s"$version get decimal type") {
+    test(s"$version get decimal type") {
       testExecuteStatementWithProtocolVersion(version,
         "SELECT cast(1 as decimal(18, 2)) as c") { rs =>
         assert(rs.next())

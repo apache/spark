@@ -1056,6 +1056,48 @@ class JDBCSuite extends QueryTest
     }
   }
 
+  test("Replace CatalogUtils.maskCredentials with SQLConf.get.redactOptions") {
+    val password = "testPass"
+    val tableName = "tab1"
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (
+           | url '$urlWithUserAndPass',
+           | dbtable 'TEST.PEOPLE',
+           | user 'testUser',
+           | password '$password')
+         """.stripMargin)
+
+      val storageProps = sql(s"DESC FORMATTED $tableName")
+        .filter("col_name = 'Storage Properties'")
+        .select("data_type").collect()
+      assert(storageProps.length === 1)
+      storageProps.foreach { r =>
+        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+      }
+
+      val information = sql(s"SHOW TABLE EXTENDED LIKE '$tableName'")
+        .select("information").collect()
+      assert(information.length === 1)
+      information.foreach { r =>
+        assert(r.getString(0).contains(s"url=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+        assert(r.getString(0).contains(s"password=${Utils.REDACTION_REPLACEMENT_TEXT}"))
+      }
+
+      val createTabStmt = sql(s"SHOW CREATE TABLE $tableName")
+        .select("createtab_stmt").collect()
+      assert(createTabStmt.length === 1)
+      createTabStmt.foreach { r =>
+        assert(r.getString(0).contains(s"`url` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+        assert(r.getString(0).contains(s"`password` '${Utils.REDACTION_REPLACEMENT_TEXT}'"))
+      }
+    }
+  }
+
   test("SPARK 12941: The data type mapping for StringType to Oracle") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracleDialect.getJDBCType(StringType).

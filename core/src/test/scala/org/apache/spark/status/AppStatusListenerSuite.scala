@@ -698,8 +698,8 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val level = StorageLevel.MEMORY_AND_DISK
 
     // Submit a stage and make sure the RDDs are recorded.
-    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, Nil)
-    val rdd2Info = new RDDInfo(rdd2b1.rddId, "rdd2", 1, level, Nil)
+    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, false, Nil)
+    val rdd2Info = new RDDInfo(rdd2b1.rddId, "rdd2", 1, level, false, Nil)
     val stage = new StageInfo(1, 0, "stage1", 4, Seq(rdd1Info, rdd2Info), Nil, "details1")
     listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
 
@@ -1543,7 +1543,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val level = StorageLevel.MEMORY_AND_DISK
 
     // Submit a stage and make sure the RDDs are recorded.
-    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, Nil)
+    val rdd1Info = new RDDInfo(rdd1b1.rddId, "rdd1", 2, level, false, Nil)
     val stage = new StageInfo(1, 0, "stage1", 4, Seq(rdd1Info), Nil, "details1")
     listener.onStageSubmitted(SparkListenerStageSubmitted(stage, new Properties()))
 

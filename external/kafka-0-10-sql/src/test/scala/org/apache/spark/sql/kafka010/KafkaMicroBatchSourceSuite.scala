@@ -34,6 +34,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
@@ -1336,14 +1337,16 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
       (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
         SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
-      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map(optionKey -> optionValue)), optionKey, answer)
       assert(offset === answer)
     }
 
     for ((optionKey, answer) <- Seq(
       (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
       (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
-      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map.empty), optionKey, answer)
       assert(offset === answer)
     }
   }

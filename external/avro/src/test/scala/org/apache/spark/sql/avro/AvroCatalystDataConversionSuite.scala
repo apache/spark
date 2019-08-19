@@ -19,7 +19,7 @@ package org.apache.spark.sql.avro
 
 import org.apache.avro.Schema
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -38,12 +38,12 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
 
   private def checkResult(data: Literal, schema: String, expected: Any): Unit = {
     checkEvaluation(
-      AvroDataToCatalyst(CatalystDataToAvro(data), schema, Map.empty),
+      AvroDataToCatalyst(CatalystDataToAvro(data, None), schema, Map.empty),
       prepareExpectedResult(expected))
   }
 
   protected def checkUnsupportedRead(data: Literal, schema: String): Unit = {
-    val binary = CatalystDataToAvro(data)
+    val binary = CatalystDataToAvro(data, None)
     intercept[Exception] {
       AvroDataToCatalyst(binary, schema, Map("mode" -> "FAILFAST")).eval()
     }
@@ -208,5 +208,42 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
       val avroSchema = SchemaConverters.toAvroType(expectedSchema).toString
       checkUnsupportedRead(input, avroSchema)
     }
+  }
+
+  test("user-specified output schema") {
+    val data = Literal("SPADES")
+    val jsonFormatSchema =
+      """
+        |{ "type": "enum",
+        |  "name": "Suit",
+        |  "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]
+        |}
+      """.stripMargin
+
+    val message = intercept[SparkException] {
+      AvroDataToCatalyst(
+        CatalystDataToAvro(
+          data,
+          None),
+        jsonFormatSchema,
+        options = Map.empty).eval()
+    }.getMessage
+    assert(message.contains("Malformed records are detected in record parsing."))
+
+    checkEvaluation(
+      AvroDataToCatalyst(
+        CatalystDataToAvro(
+          data,
+          Some(jsonFormatSchema)),
+        jsonFormatSchema,
+        options = Map.empty),
+      data.eval())
+  }
+
+  test("invalid user-specified output schema") {
+    val message = intercept[IncompatibleSchemaException] {
+      CatalystDataToAvro(Literal("SPADES"), Some("\"long\"")).eval()
+    }.getMessage
+    assert(message ==  "Cannot convert Catalyst type StringType to Avro type \"long\".")
   }
 }
