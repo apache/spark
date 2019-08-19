@@ -1,4 +1,4 @@
-# R on Apache Spark!
+# R on Apache Spark :D
 
 SparkR is an R package that provides a light-weight frontend to use Spark from R.
 
