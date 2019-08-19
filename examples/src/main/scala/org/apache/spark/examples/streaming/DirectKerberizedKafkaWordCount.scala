@@ -35,23 +35,36 @@ import org.apache.spark.streaming.kafka010._
  *   <topics> is a list of one or more kafka topics to consume from
  *
  * Example:
- *    $ bin/run-example --files ${path}/kafka_jaas.conf \
- *    --driver-java-options "-Djava.security.auth.login.config=${path}/kafka_jaas.conf" \
- *    --conf \
- *    "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
- *    streaming.DirectKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
- *    consumer-group topic1,topic2
+ *   Yarn client:
+ *    $ bin/run-example --files ${jaas_path}/kafka_jaas.conf,${keytab_path}/kafka.service.keytab \
+ *      --driver-java-options "-Djava.security.auth.login.config=${path}/kafka_driver_jaas.conf" \
+ *      --conf \
+ *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
+ *      --master yarn
+ *      streaming.DirectKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
+ *      consumer-group topic1,topic2
+ *   Yarn cluster:
+ *    $ bin/run-example --files ${jaas_path}/kafka_jaas.conf,${keytab_path}/kafka.service.keytab \
+ *      --driver-java-options "-Djava.security.auth.login.config=./kafka_jaas.conf" \
+ *      --conf \
+ *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
+ *      --master yarn --deploy-mode cluster
+ *      streaming.DirectKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
+ *      consumer-group topic1,topic2
  *
  * kafka_jaas.conf can manually create, template as:
  *   KafkaClient {
  *     com.sun.security.auth.module.Krb5LoginModule required
- *     keyTab="${path_of_keytab}/kafka.service.keytab"
+ *     keyTab="./kafka.service.keytab"
  *     useKeyTab=true
  *     storeKey=true
  *     useTicketCache=false
  *     serviceName="kafka"
- *     principal="kafka/server@example";
+ *     principal="kafka/host@EXAMPLE.COM";
  *   };
+ * kafka_driver_jaas.conf (used by yarn client) and kafka_jaas.conf are basically the same
+ * except for some differences at 'keyTab'. In kafka_driver_jaas.conf, 'keyTab' should be
+ * "${keytab_path}/kafka.service.keytab".
  *
  * Note: This file uses SASL_PLAINTEXT for simplicity;however,
  * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Consider using SASL_SSL.
