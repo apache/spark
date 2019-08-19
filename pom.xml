@@ -2327,7 +2327,7 @@
             <scalaVersion>${scala.version}</scalaVersion>
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
-            <recompileMode>incremental</recompileMode>
+            <recompileMode>all</recompileMode>
             <useZincServer>false</useZincServer>
             <args>
               <arg>-unchecked</arg>
