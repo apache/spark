@@ -713,6 +713,27 @@ class TypesTests(ReusedSQLTestCase):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
+    def test_to_ddl(self):
+        schemaExpected=StructType([
+            StructField("string",StringType(),True),
+            StructField("long",LongType(),True),
+            StructField("decimal",DecimalType(10,2),True),
+            StructField("timestamp",TimestampType(),True),
+            StructField("array1",ArrayType(StructType([
+                StructField("item1",LongType(),True),
+                StructField("array2",ArrayType(StructType([
+                    StructField("item2",LongType(),True),
+                    StructField("array2",ArrayType(StructType([
+                        StructField("item3",LongType(),True),
+                        StructField("item4",StringType(),True),
+                    ]),True),True),
+                ]),True),True),
+            ]),True),True)
+        ])
+        ddl=schemaExpected.toDDL()
+        schemaActual=_parse_datatype_string(ddl)
+        self.assertEqual(schemaExpected, schemaActual)
+
 
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055

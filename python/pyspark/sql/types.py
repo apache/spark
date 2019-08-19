@@ -33,7 +33,7 @@ if sys.version >= "3":
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
 
-from pyspark import SparkContext
+from pyspark import SparkContext, since
 from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
@@ -91,6 +91,16 @@ class DataType(object):
         Converts an internal SQL object into a native Python object.
         """
         return obj
+
+    @Since(3.0)
+    def toDDL(self):
+        """
+        Returns a string containing a schema in DDL format.
+        """
+        sc = SparkContext._active_spark_context
+        dt = sc._jvm.__getattr__("org.apache.spark.sql.types.DataType$").__getattr__("MODULE$")
+        json = self.json()
+        return dt.fromJson(json).toDDL()
 
 
 # This singleton pattern does not work with pickle, you will get
