@@ -173,16 +173,6 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("Aggregate sum integers") {
-    val structDf = largeAndSmallInts.select("a").agg(sum("a"))
-    checkAnswer(structDf, Row(BigInt("6442450941")))
-  }
-
-  test("Aggregate sum double") {
-    val structDf = salary.select("salary").agg(sum("salary"))
-    checkAnswer(structDf, Row(3000.0d))
-  }
-
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {
     val df = Seq(("1,2"), ("4"), ("7,8,9")).toDF("csv")
     val e = intercept[AnalysisException] {
