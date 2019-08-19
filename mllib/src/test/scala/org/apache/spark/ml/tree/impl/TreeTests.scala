@@ -246,20 +246,20 @@ private[ml] object TreeTests extends SparkFunSuite {
     Vectors.dense(2, 1, 9),
     Vectors.dense(0, 2, 6))
 
-  /**
-   * A tree structure used in tree-based transformation.
-   *
-   *                         root
-   *                      /         \
-   *             x1 in [0, 2]   otherwise
-   *                    /            \
-   *               node1           leaf2
-   *               /    \
-   *          x0 <= 0  x0 > 0
-   *             /       \
-   *          leaf0      leaf1
-   */
   val root0 = {
+    /**
+     * A tree structure used in tree-based transformation.
+     *
+     *                         root
+     *                      /         \
+     *             x1 in [0, 2]   otherwise
+     *                    /            \
+     *               node1           leaf2
+     *               /    \
+     *          x0 <= 0  x0 > 0
+     *             /       \
+     *          leaf0      leaf1
+     */
     val leaf0 = new LeafNode(0.0, Double.NaN, null)
     val leaf1 = new LeafNode(1.0, Double.NaN, null)
     val leaf2 = new LeafNode(0.0, Double.NaN, null)
@@ -274,20 +274,20 @@ private[ml] object TreeTests extends SparkFunSuite {
    */
   val leafIndices0 = Array(2.0, 0.0, 1.0, 2.0, 0.0)
 
-  /**
-   * A tree structure used in tree-based transformation.
-   *
-   *                          root
-   *                      /         \
-   *                 x2 <= 1      x2 > 1
-   *                    /            \
-   *                 leaf0          node1
-   *                               /    \
-   *                    x1 in [0, 1]   otherwise
-   *                             /       \
-   *                         leaf1     leaf2
-   */
   val root1 = {
+    /**
+     * A tree structure used in tree-based transformation.
+     *
+     *                          root
+     *                      /         \
+     *                 x2 <= 1      x2 > 1
+     *                    /            \
+     *                 leaf0          node1
+     *                               /    \
+     *                    x1 in [0, 1]   otherwise
+     *                             /       \
+     *                         leaf1     leaf2
+     */
     val leaf0 = new LeafNode(0.0, Double.NaN, null)
     val leaf1 = new LeafNode(1.0, Double.NaN, null)
     val leaf2 = new LeafNode(0.0, Double.NaN, null)
