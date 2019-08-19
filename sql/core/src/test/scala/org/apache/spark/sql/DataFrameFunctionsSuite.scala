@@ -2561,19 +2561,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    val resA = Seq(
+      Row(false),
+      Row(true),
+      Row(true),
+      Row(null))
+
     def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(true),
-          Row(null)))
-      checkAnswer(df.select(forall(col("i"), x => x % 2 === 0)),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(true),
-          Row(null)))
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"), resA)
+      checkAnswer(df.select(forall(col("i"), x => x % 2 === 0)), resA)
+      checkAnswer(df.select(forall(col("i"), new JFunc {
+        def call(x: Column): Column = x % 2 === 0
+      })), resA)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2592,35 +2591,33 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("i")
 
+    // forall(i, x -> x % 2 == 0 or x is null)
+    val resA = Seq(
+      Row(false),
+      Row(true),
+      Row(true),
+      Row(true),
+      Row(null))
+
+    // forall(i, x -> x % 2 == 0)
+    val resB = Seq(
+      Row(false),
+      Row(null),
+      Row(true),
+      Row(true),
+      Row(null))
+
     def testArrayOfPrimitiveTypeContainsNull(): Unit = {
-      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0 or x is null)"),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(true),
-          Row(true),
-          Row(null)))
-      checkAnswer(df.select(forall(col("i"), x => (x % 2 === 0) || x.isNull)),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(true),
-          Row(true),
-          Row(null)))
-      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
-        Seq(
-          Row(false),
-          Row(null),
-          Row(true),
-          Row(true),
-          Row(null)))
-      checkAnswer(df.select(forall(col("i"), x => x % 2 === 0)),
-        Seq(
-          Row(false),
-          Row(null),
-          Row(true),
-          Row(true),
-          Row(null)))
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0 or x is null)"), resA)
+      checkAnswer(df.select(forall(col("i"), x => (x % 2 === 0) || x.isNull)), resA)
+      checkAnswer(df.select(forall(col("i"), new JFunc {
+        def call(x: Column): Column = (x % 2 === 0 ) || x.isNull
+      })), resA)
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"), resB)
+      checkAnswer(df.select(forall(col("i"), x => x % 2 === 0)), resB)
+      checkAnswer(df.select(forall(col("i"), new JFunc {
+        def call(x: Column): Column = (x % 2 === 0 )
+      })), resB)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2638,19 +2635,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       null
     ).toDF("s")
 
+    // forall(s, x -> x is null)
+    val resA = Seq(
+      Row(false),
+      Row(true),
+      Row(true),
+      Row(null))
+
     def testNonPrimitiveType(): Unit = {
-      checkAnswer(df.selectExpr("forall(s, x -> x is null)"),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(true),
-          Row(null)))
-      checkAnswer(df.select(forall(col("s"), _.isNull)),
-        Seq(
-          Row(false),
-          Row(true),
-          Row(true),
-          Row(null)))
+      checkAnswer(df.selectExpr("forall(s, x -> x is null)"), resA)
+      checkAnswer(df.select(forall(col("s"), _.isNull)), resA)
+      checkAnswer(df.select(forall(col("s"), new JFunc {
+        def call(x: Column): Column = x.isNull
+      })), resA)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -2683,6 +2680,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex2a.getMessage.contains("data type mismatch: argument 1 requires array type"))
 
+    val ex2b = intercept[AnalysisException] {
+      df.select(forall(col("i"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex2b.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("forall(s, x -> x)")
     }
@@ -2693,6 +2697,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
 
+    val ex3b = intercept[AnalysisException] {
+      df.select(forall(col("s"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex3b.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("forall(a, x -> x)")
     }
@@ -2702,6 +2713,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(forall(col("a"), x => x))
     }
     assert(ex4a.getMessage.contains("cannot resolve '`a`'"))
+
+    val ex4b = intercept[AnalysisException] {
+      df.select(forall(col("a"), new JFunc {
+        def call(x: Column): Column = x
+      }))
+    }
+    assert(ex4b.getMessage.contains("cannot resolve '`a`'"))
   }
 
   test("aggregate function - array for primitive type not containing null") {
