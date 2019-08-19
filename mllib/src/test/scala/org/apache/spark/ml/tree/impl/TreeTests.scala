@@ -271,7 +271,7 @@ private[ml] object TreeTests extends SparkFunSuite {
   }
 
   /**
-   * The leaf indices of vectors after transformation by root0 in leafData.
+   * The leaf indices of vectors after transformation by root0.
    */
   val leafIndices0 = Array(2.0, 0.0, 1.0, 2.0, 0.0)
 
@@ -299,7 +299,7 @@ private[ml] object TreeTests extends SparkFunSuite {
   }
 
   /**
-   * The leaf indices of vectors after transformation by root1 in leafData.
+   * The leaf indices of vectors after transformation by root1.
    */
   val leafIndices1 = Array(1.0, 0.0, 1.0, 1.0, 2.0)
 
