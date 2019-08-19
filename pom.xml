@@ -2328,7 +2328,7 @@
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
             <recompileMode>all</recompileMode>
-            <useZincServer>false</useZincServer>
+            <!-- <useZincServer>true</useZincServer> -->
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
