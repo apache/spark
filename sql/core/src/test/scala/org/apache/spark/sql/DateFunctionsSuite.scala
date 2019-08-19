@@ -26,10 +26,10 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class DateFunctionsSuite extends QueryTest with SharedSQLContext {
+class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("function current_date") {

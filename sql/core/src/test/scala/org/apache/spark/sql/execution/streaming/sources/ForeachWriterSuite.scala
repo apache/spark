@@ -28,9 +28,9 @@ import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class ForeachWriterSuite extends StreamTest with SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 

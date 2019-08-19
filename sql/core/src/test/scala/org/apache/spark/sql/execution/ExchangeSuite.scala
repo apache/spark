@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityB
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
+class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
 
   test("shuffling UnsafeRows in exchange") {
