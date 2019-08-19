@@ -281,13 +281,19 @@ object QueryPlan extends PredicateHelper {
    */
   def normalizeExpressions[T <: Expression](e: T, input: AttributeSeq): T = {
     e.transformUp {
-      case s: PlanExpression[_] => s.canonicalize(input)
+      case s: PlanExpression[QueryPlan[_] @unchecked] =>
+        // Normalize the outer references in the subquery plan.
+        val normalizedPlan = s.plan.transformAllExpressions {
+          case OuterReference(r) => OuterReference(QueryPlan.normalizeExpressions(r, input))
+        }
+        s.withNewPlan(normalizedPlan)
+
       case ar: AttributeReference =>
         val ordinal = input.indexOf(ar.exprId)
         if (ordinal == -1) {
           ar
         } else {
-          ar.withExprId(ExprId(ordinal)).canonicalized
+          ar.withExprId(ExprId(ordinal))
         }
     }.canonicalized.asInstanceOf[T]
   }
