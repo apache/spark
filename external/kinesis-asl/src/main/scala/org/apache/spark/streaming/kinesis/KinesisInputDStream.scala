@@ -278,29 +278,33 @@ object KinesisInputDStream {
       this
     }
 
+    // scalastyle:off line.size.limit
     /**
-      * Sets the CloudWatch metrics level. Defaults to
-      * [[KinesisClientLibConfiguration.DEFAULT_METRICS_LEVEL]] if no custom value is specified.
-      *
-      * @param metricsLevel [[MetricsLevel]] to specify the CloudWatch metrics level
-      * @return Reference to this [[KinesisInputDStream.Builder]]
-      * @see [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
-      */
+     * Sets the CloudWatch metrics level. Defaults to
+     * [[KinesisClientLibConfiguration.DEFAULT_METRICS_LEVEL]] if no custom value is specified.
+     *
+     * @param metricsLevel [[MetricsLevel]] to specify the CloudWatch metrics level
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     * @see [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
+     */
+    // scalastyle:on line.size.limit
     def metricsLevel(metricsLevel: MetricsLevel): Builder = {
       this.metricsLevel = Option(metricsLevel)
       this
     }
 
+    // scalastyle:off line.size.limit
     /**
-      * Sets the enabled CloudWatch metrics dimensions. Defaults to
-      * [[KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS]]
-      * if no custom value is specified.
-      *
-      * @param metricsEnabledDimensions [[Set[String]]] to specify
-      *                                 the enabled CloudWatch metrics dimensions
-      * @return Reference to this [[KinesisInputDStream.Builder]]
-      * @see [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
-      */
+     * Sets the enabled CloudWatch metrics dimensions. Defaults to
+     * [[KinesisClientLibConfiguration.DEFAULT_METRICS_ENABLED_DIMENSIONS]]
+     * if no custom value is specified.
+     *
+     * @param metricsEnabledDimensions [[Set[String]]] to specify
+     *                                 the enabled CloudWatch metrics dimensions
+     * @return Reference to this [[KinesisInputDStream.Builder]]
+     * @see [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
+     */
+    // scalastyle:off line.size.limit
     def metricsEnabledDimensions(metricsEnabledDimensions: Set[String]): Builder = {
       this.metricsEnabledDimensions = Option(metricsEnabledDimensions)
       this
