@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, LookupCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2._
 import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util.loadTable
 import org.apache.spark.sql.catalyst._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, DescribeTableStatement, InsertIntoStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -912,72 +912,65 @@ class Analyzer(
   object ResolveAlterTable extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case alter @ AlterTableAddColumnsStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
+      case alter @ AlterTableAddColumnsStatement(tableName, cols) =>
         val changes = cols.map { col =>
           TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
         }
+        resolveV2Alter(tableName, changes).getOrElse(alter)
 
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          changes)
-
-      case alter @ AlterTableAlterColumnStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), colName, dataType, comment) =>
+      case alter @ AlterTableAlterColumnStatement(tableName, colName, dataType, comment) =>
         val typeChange = dataType.map { newDataType =>
           TableChange.updateColumnType(colName.toArray, newDataType, true)
         }
-
         val commentChange = comment.map { newComment =>
           TableChange.updateColumnComment(colName.toArray, newComment)
         }
+        resolveV2Alter(tableName, typeChange.toSeq ++ commentChange.toSeq).getOrElse(alter)
 
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          typeChange.toSeq ++ commentChange.toSeq)
+      case alter @ AlterTableRenameColumnStatement(tableName, col, newName) =>
+        resolveV2Alter(tableName, Seq(TableChange.renameColumn(col.toArray, newName)))
+          .getOrElse(alter)
 
-      case alter @ AlterTableRenameColumnStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), col, newName) =>
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          Seq(TableChange.renameColumn(col.toArray, newName)))
-
-      case alter @ AlterTableDropColumnsStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
+      case alter @ AlterTableDropColumnsStatement(tableName, cols) =>
         val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          changes)
+        resolveV2Alter(tableName, changes).getOrElse(alter)
 
-      case alter @ AlterTableSetPropertiesStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), props) =>
-        val changes = props.map {
-          case (key, value) =>
-            TableChange.setProperty(key, value)
+      case alter @ AlterTableSetPropertiesStatement(tableName, props) =>
+        val changes = props.map { case (key, value) =>
+          TableChange.setProperty(key, value)
         }
+        resolveV2Alter(tableName, changes.toSeq).getOrElse(alter)
 
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          changes.toSeq)
+      case alter @ AlterTableUnsetPropertiesStatement(tableName, keys, _) =>
+        resolveV2Alter(tableName, keys.map(key => TableChange.removeProperty(key))).getOrElse(alter)
 
-      case alter @ AlterTableUnsetPropertiesStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), keys, _) =>
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          keys.map(key => TableChange.removeProperty(key)))
+      case alter @ AlterTableSetLocationStatement(tableName, newLoc) =>
+        resolveV2Alter(tableName, Seq(TableChange.setProperty("location", newLoc))).getOrElse(alter)
 
-      case alter @ AlterTableSetLocationStatement(
-          CatalogObjectIdentifier(Some(v2Catalog), ident), newLoc) =>
-        AlterTable(
-          v2Catalog.asTableCatalog, ident,
-          UnresolvedRelation(alter.tableName),
-          Seq(TableChange.setProperty("location", newLoc)))
+    }
+
+    /**
+     * Checks if the provided tableName contains a catalog identifier. If so, leaves it to
+     * `ResolveTables` to resolve the V2 relation. We would also like to support the
+     * V2SessionCatalog for V2 DataSources that plug in through that interface. In that case, we
+     * need to leave V1 tables (UnresolvedTable) to V1 code paths, but handle V2 tables through
+     * the V2 Alter table code path.
+     */
+    private def resolveV2Alter(
+        tableName: Seq[String],
+        changes: Seq[TableChange]): Option[AlterTable] = tableName match {
+      case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
+        Some(AlterTable(v2Catalog.asTableCatalog, ident, UnresolvedRelation(tableName), changes))
+      case CatalogObjectIdentifier(None, ident) if ident.namespace().length <= 1 =>
+        sessionCatalog.flatMap(loadTable(_, ident)).map {
+          // Leave unresolved tables (V1 tables) to V1 code paths
+          case unresolved: UnresolvedTable => return None
+          case resolved: Table =>
+            val relation = DataSourceV2Relation.create(resolved)
+            AlterTable(sessionCatalog.get.asTableCatalog, ident, relation, changes)
+        }
+      case _ =>
+        None
     }
   }
   /**
