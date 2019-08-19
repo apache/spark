@@ -156,11 +156,8 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("GBTClassifier: Predictor, Classifier methods") {
-    val rawPredictionCol = "rawPrediction"
-    val predictionCol = "prediction"
     val labelCol = "label"
     val featuresCol = "features"
-    val probabilityCol = "probability"
 
     val gbt = new GBTClassifier().setSeed(123)
     val trainingDataset = trainData.toDF(labelCol, featuresCol)
@@ -253,47 +250,15 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("model support predict leaf index") {
-    val leaf0_0 = new LeafNode(0.0, Double.NaN, null)
-    val leaf1_0 = new LeafNode(1.0, Double.NaN, null)
-    val leaf2_0 = new LeafNode(0.0, Double.NaN, null)
-    val node1_0 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0_0, leaf1_0,
-      new ContinuousSplit(0, 0.0), null)
-    val node0_0 = new InternalNode(0.0, Double.NaN, Double.NaN, node1_0, leaf2_0,
-      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
-
-    val leaf0_1 = new LeafNode(0.0, Double.NaN, null)
-    val leaf1_1 = new LeafNode(1.0, Double.NaN, null)
-    val leaf2_1 = new LeafNode(0.0, Double.NaN, null)
-    val node1_1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf1_1, leaf2_1,
-      new CategoricalSplit(1, Array(0.0, 1.0), 3), null)
-    val node0_1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0_1, node1_1,
-      new ContinuousSplit(2, 1.0), null)
-
-    /**
-     *                          tree_0                            tree_1
-     *                       root=node0_0                    root=node0_1
-     *                      /         \                       /         \
-     *             x1 in [0, 2]   otherwise               x3 <= 1      x3 > 1
-     *                    /            \                    /            \
-     *               node1_0         leaf2_0           leaf_0_1        node1_1
-     *               /    \                                             /    \
-     *          x0 <= 0  x0 > 0                               x1 in [0, 1]   otherwise
-     *             /       \                                          /       \
-     *         leaf0_0   leaf1_0                                  leaf1_1   leaf2_1
-     */
-    val model0 = new DecisionTreeRegressionModel("dtc", node0_0, 3)
-    val model1 = new DecisionTreeRegressionModel("dtc", node0_1, 3)
+    val model0 = new DecisionTreeRegressionModel("dtc", TreeTests.root0, 3)
+    val model1 = new DecisionTreeRegressionModel("dtc", TreeTests.root1, 3)
     val model = new GBTClassificationModel("gbtc", Array(model0, model1), Array(1.0, 1.0), 3, 2)
     model.setLeafCol("predictedLeafId")
       .setRawPredictionCol("")
       .setPredictionCol("")
       .setProbabilityCol("")
 
-    val data = Array((Vectors.dense(2, 1), Vectors.dense(0, 1, 3)),
-      (Vectors.dense(0, 0), Vectors.dense(-1, 2, 1)),
-      (Vectors.dense(1, 1), Vectors.dense(1, 0, 2)),
-      (Vectors.dense(2, 1), Vectors.dense(2, 1, 9)),
-      (Vectors.dense(0, 2), Vectors.dense(0, 2, 6)))
+    val data = TreeTests.getTwoTreesLeafData
 
     data.foreach { case (leafId, vec) =>
       assert(leafId === model.predictLeaf(vec))

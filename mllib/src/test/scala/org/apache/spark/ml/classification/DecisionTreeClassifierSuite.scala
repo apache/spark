@@ -316,36 +316,13 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("model support predict leaf index") {
-    val leaf0 = new LeafNode(0.0, Double.NaN, null)
-    val leaf1 = new LeafNode(1.0, Double.NaN, null)
-    val leaf2 = new LeafNode(0.0, Double.NaN, null)
-    val node1 = new InternalNode(0.0, Double.NaN, Double.NaN, leaf0, leaf1,
-      new ContinuousSplit(0, 0.0), null)
-    val node0 = new InternalNode(0.0, Double.NaN, Double.NaN, node1, leaf2,
-      new CategoricalSplit(1, Array(0.0, 2.0), 3), null)
-
-    /**
-     *                       root=node0
-     *                      /         \
-     *             x1 in [0, 2]   otherwise
-     *                    /            \
-     *               node1           leaf2
-     *               /    \
-     *          x0 <= 0  x0 > 0
-     *             /       \
-     *          leaf0      leaf1
-     */
-    val model = new DecisionTreeClassificationModel("dtc", node0, 3, 2)
+    val model = new DecisionTreeClassificationModel("dtc", TreeTests.root0, 3, 2)
     model.setLeafCol("predictedLeafId")
       .setRawPredictionCol("")
       .setPredictionCol("")
       .setProbabilityCol("")
 
-    val data = Array((2.0, Vectors.dense(0, 1, 3)),
-      (0.0, Vectors.dense(-1, 2, 1)),
-      (1.0, Vectors.dense(1, 0, 2)),
-      (2.0, Vectors.dense(2, 1, 9)),
-      (0.0, Vectors.dense(0, 2, 6)))
+    val data = TreeTests.getSingleTreeLeafData
 
     data.foreach { case (leafId, vec) =>
       assert(leafId === model.predictLeaf(vec))
