@@ -56,11 +56,14 @@ import org.apache.spark.streaming.Durations;
  *      streaming.JavaDirectKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
  *      consumer-group topic1,topic2
  *   Yarn cluster:
- *    $ bin/run-example --files ${jaas_path}/kafka_jaas.conf,${keytab_path}/kafka.service.keytab \
- *      --driver-java-options "-Djava.security.auth.login.config=./kafka_jaas.conf" \
+ *    $ bin/run-example --files \
+ *      ${jaas_path}/kafka_jaas.conf,${keytab_path}/kafka.service.keytab,${krb5_path}/krb5.conf \
+ *      --driver-java-options \
+ *      "-Djava.security.auth.login.config=./kafka_jaas.conf \
+ *      -Djava.security.krb5.conf=./krb5.conf" \
  *      --conf \
  *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
- *      --master yarn --deploy-mode cluster
+ *      --master yarn --deploy-mode cluster \
  *      streaming.JavaDirectKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
  *      consumer-group topic1,topic2
  *
