@@ -329,7 +329,6 @@ class column_function(object):
     a double underscore (__), such as __str__.  In such cases, use col["__str__"] to clarify you want
     the column and not the built-in __str__ function.
     """
-    __slots__=("__orig__", "__name__")
     def __init__(self, orig):
         self.__orig__ = orig
         self.__name__ = orig.__name__
