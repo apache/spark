@@ -1,6 +1,6 @@
 Package: SparkR
 Type: Package
-Version: 2.4.4
+Version: 2.4.5
 Title: R Front End for 'Apache Spark'
 Description: Provides an R Front end for 'Apache Spark' <https://spark.apache.org>.
 Authors@R: c(person("Shivaram", "Venkataraman", role = c("aut", "cre"),
