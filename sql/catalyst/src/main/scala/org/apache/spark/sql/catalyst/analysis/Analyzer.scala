@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.types._
@@ -2525,7 +2525,8 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case append @ AppendData(table, query, isByName)
           if table.resolved && query.resolved && !append.outputResolved =>
-        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+        val projection =
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           append.copy(query = projection)
@@ -2535,7 +2536,8 @@ class Analyzer(
 
       case overwrite @ OverwriteByExpression(table, _, query, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
-        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+        val projection =
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2545,88 +2547,14 @@ class Analyzer(
 
       case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
-        val projection = resolveOutputColumns(table.name, table.output, query, isByName)
+        val projection =
+          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
 
         if (projection != query) {
           overwrite.copy(query = projection)
         } else {
           overwrite
         }
-    }
-
-    def resolveOutputColumns(
-        tableName: String,
-        expected: Seq[Attribute],
-        query: LogicalPlan,
-        byName: Boolean): LogicalPlan = {
-
-      if (expected.size < query.output.size) {
-        throw new AnalysisException(
-          s"""Cannot write to '$tableName', too many data columns:
-             |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}""".stripMargin)
-      }
-
-      val errors = new mutable.ArrayBuffer[String]()
-      val resolved: Seq[NamedExpression] = if (byName) {
-        expected.flatMap { tableAttr =>
-          query.resolveQuoted(tableAttr.name, resolver) match {
-            case Some(queryExpr) =>
-              checkField(tableAttr, queryExpr, byName, err => errors += err)
-            case None =>
-              errors += s"Cannot find data for output column '${tableAttr.name}'"
-              None
-          }
-        }
-
-      } else {
-        if (expected.size > query.output.size) {
-          throw new AnalysisException(
-            s"""Cannot write to '$tableName', not enough data columns:
-               |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-               |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
-                .stripMargin)
-        }
-
-        query.output.zip(expected).flatMap {
-          case (queryExpr, tableAttr) =>
-            checkField(tableAttr, queryExpr, byName, err => errors += err)
-        }
-      }
-
-      if (errors.nonEmpty) {
-        throw new AnalysisException(
-          s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
-      }
-
-      Project(resolved, query)
-    }
-
-    private def checkField(
-        tableAttr: Attribute,
-        queryExpr: NamedExpression,
-        byName: Boolean,
-        addError: String => Unit): Option[NamedExpression] = {
-
-      // run the type check first to ensure type errors are present
-      val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, byName, resolver, tableAttr.name, addError)
-
-      if (queryExpr.nullable && !tableAttr.nullable) {
-        addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
-        None
-
-      } else if (!canWrite) {
-        None
-
-      } else {
-        // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
-        Some(Alias(
-          UpCast(queryExpr, tableAttr.dataType), tableAttr.name
-        )(
-          explicitMetadata = Option(tableAttr.metadata)
-        ))
-      }
     }
   }
 

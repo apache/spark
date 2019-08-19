@@ -1642,6 +1642,24 @@ object SQLConf {
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
+  object StoreAssignmentPolicy extends Enumeration {
+    val LEGACY, STRICT = Value
+  }
+
+  val STORE_ASSIGNMENT_POLICY =
+    buildConf("spark.sql.storeAssignmentPolicy")
+      .doc("When inserting a value into a column with different data type, Spark will perform " +
+        "type coercion. Currently we support 2 policies for the type coercion rules: legacy and " +
+        "strict. With legacy policy, Spark allows casting any value to any data type. " +
+        "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
+        "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
+        "in type coercion, e.g. `int` and `long`, `float` -> `double` are not allowed."
+      )
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(StoreAssignmentPolicy.values.map(_.toString))
+      .createWithDefault(StoreAssignmentPolicy.LEGACY.toString)
+
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
       .internal()
@@ -2355,6 +2373,9 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

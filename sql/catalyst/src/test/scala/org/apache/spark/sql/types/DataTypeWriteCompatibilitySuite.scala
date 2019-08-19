@@ -385,7 +385,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       desc: String,
       byName: Boolean = true): Unit = {
     assert(
-      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
+      DataType.canWrite(writeType, readType, byName, true, analysis.caseSensitiveResolution, name,
         errMsg => fail(s"Should not produce errors but was called with: $errMsg")), desc)
   }
 
@@ -410,7 +410,7 @@ class DataTypeWriteCompatibilitySuite extends SparkFunSuite {
       (checkErrors: Seq[String] => Unit): Unit = {
     val errs = new mutable.ArrayBuffer[String]()
     assert(
-      DataType.canWrite(writeType, readType, byName, analysis.caseSensitiveResolution, name,
+      DataType.canWrite(writeType, readType, byName, true, analysis.caseSensitiveResolution, name,
         errMsg => errs += errMsg) === false, desc)
     assert(errs.size === numErrs, s"Should produce $numErrs error messages")
     checkErrors(errs)

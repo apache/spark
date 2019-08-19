@@ -369,14 +369,15 @@ object DataType {
       write: DataType,
       read: DataType,
       byName: Boolean,
+      useStrictRules: Boolean,
       resolver: Resolver,
       context: String,
       addError: String => Unit): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
-        val typesCompatible = canWrite(
-          wArr.elementType, rArr.elementType, byName, resolver, context + ".element", addError)
+        val typesCompatible = canWrite(wArr.elementType, rArr.elementType, byName, useStrictRules,
+          resolver, context + ".element", addError)
 
         if (wArr.containsNull && !rArr.containsNull) {
           addError(s"Cannot write nullable elements to array of non-nulls: '$context'")
@@ -391,9 +392,9 @@ object DataType {
 
         // run compatibility check first to produce all error messages
         val keyCompatible = canWrite(
-          wMap.keyType, rMap.keyType, byName, resolver, context + ".key", addError)
-        val valueCompatible = canWrite(
-          wMap.valueType, rMap.valueType, byName, resolver, context + ".value", addError)
+          wMap.keyType, rMap.keyType, byName, useStrictRules, resolver, context + ".key", addError)
+        val valueCompatible = canWrite(wMap.valueType, rMap.valueType, byName, useStrictRules,
+          resolver, context + ".value", addError)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
           addError(s"Cannot write nullable values to map of non-nulls: '$context'")
@@ -408,8 +409,8 @@ object DataType {
           case ((rField, wField), i) =>
             val nameMatch = resolver(wField.name, rField.name) || isSparkGeneratedName(wField.name)
             val fieldContext = s"$context.${rField.name}"
-            val typesCompatible = canWrite(
-              wField.dataType, rField.dataType, byName, resolver, fieldContext, addError)
+            val typesCompatible = canWrite(wField.dataType, rField.dataType, byName, useStrictRules,
+              resolver, fieldContext, addError)
 
             if (byName && !nameMatch) {
               addError(s"Struct '$context' $i-th field name does not match " +
@@ -441,6 +442,9 @@ object DataType {
 
         fieldCompatible
 
+      case (w, r) if !useStrictRules => true
+
+      // Below are cases when `useStrictRules` is true.
       case (w: AtomicType, r: AtomicType) =>
         if (!Cast.canUpCast(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")
