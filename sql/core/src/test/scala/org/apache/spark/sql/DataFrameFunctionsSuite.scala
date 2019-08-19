@@ -2932,19 +2932,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Map(5 -> 1L), null)
     ).toDF("m1", "m2")
 
-    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)"),
-      Seq(
-        Row(Map(8 -> true, 3 -> false, 6 -> true)),
-        Row(Map(10 -> null, 8 -> false, 4 -> null)),
-        Row(Map(5 -> null)),
-        Row(null)))
+    val resA = Seq(
+      Row(Map(8 -> true, 3 -> false, 6 -> true)),
+      Row(Map(10 -> null, 8 -> false, 4 -> null)),
+      Row(Map(5 -> null)),
+      Row(null))
 
-    checkAnswer(df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => k === v1 + v2)),
-      Seq(
-        Row(Map(8 -> true, 3 -> false, 6 -> true)),
-        Row(Map(10 -> null, 8 -> false, 4 -> null)),
-        Row(Map(5 -> null)),
-        Row(null)))
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> k == v1 + v2)"), resA)
+    checkAnswer(df.select(map_zip_with(df("m1"), df("m2"), (k, v1, v2) => k === v1 + v2)), resA)
+    checkAnswer(df.select(map_zip_with(df("m1"), df("m2"), new JFunc3 {
+      def call(k: Column, v1: Column, v2: Column): Column = k === v1 + v2
+    })), resA)
   }
 
   test("map_zip_with function - map of non-primitive types") {
@@ -2955,19 +2953,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (Map("a" -> "d"), null)
     ).toDF("m1", "m2")
 
-    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> (v1, v2))"),
-      Seq(
-        Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
-        Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
-        Row(Map("a" -> Row("d", null))),
-        Row(null)))
+    val resA = Seq(
+      Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
+      Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
+      Row(Map("a" -> Row("d", null))),
+      Row(null))
 
+    checkAnswer(df.selectExpr("map_zip_with(m1, m2, (k, v1, v2) -> (v1, v2))"), resA)
     checkAnswer(df.select(map_zip_with(col("m1"), col("m2"), (k, v1, v2) => struct(v1, v2))),
-      Seq(
-        Row(Map("z" -> Row("a", "c"), "y" -> Row("b", null), "x" -> Row("c", "a"))),
-        Row(Map("b" -> Row("a", null), "c" -> Row("d", "a"), "d" -> Row(null, "k"))),
-        Row(Map("a" -> Row("d", null))),
-        Row(null)))
+      resA)
+    checkAnswer(df.select(map_zip_with(col("m1"), col("m2"), new JFunc3 {
+      def call(k: Column, v1: Column, v2: Column): Column = struct(v1, v2)
+    })), resA)
   }
 
   test("map_zip_with function - invalid") {
@@ -2992,6 +2989,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     assert(ex2a.getMessage.contains("The input to function map_zip_with should have " +
       "been two maps with compatible key types"))
 
+    val ex2b = intercept[AnalysisException] {
+      df.select(map_zip_with(df("mis"), col("mmi"), new JFunc3 {
+        def call(x: Column, y: Column, z: Column): Column = concat(x, y, z)
+      }))
+    }
+    assert(ex2b.getMessage.contains("The input to function map_zip_with should have " +
+      "been two maps with compatible key types"))
+
     val ex3 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(i, mis, (x, y, z) -> concat(x, y, z))")
     }
@@ -3002,6 +3007,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("type mismatch: argument 1 requires map type"))
 
+    val ex3b = intercept[AnalysisException] {
+      df.select(map_zip_with(df("i"), col("mmi"), new JFunc3 {
+        def call(x: Column, y: Column, z: Column): Column = concat(x, y, z)
+      }))
+    }
+    assert(ex3b.getMessage.contains("type mismatch: argument 1 requires map type"))
+
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(mis, i, (x, y, z) -> concat(x, y, z))")
     }
@@ -3011,6 +3023,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(map_zip_with(col("mis"), col("i"), (x, y, z) => concat(x, y, z)))
     }
     assert(ex4a.getMessage.contains("type mismatch: argument 2 requires map type"))
+
+    val ex4b = intercept[AnalysisException] {
+      df.select(map_zip_with(df("mis"), col("i"), new JFunc3 {
+        def call(x: Column, y: Column, z: Column): Column = concat(x, y, z)
+      }))
+    }
+    assert(ex4b.getMessage.contains("type mismatch: argument 2 requires map type"))
 
     val ex5 = intercept[AnalysisException] {
       df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
