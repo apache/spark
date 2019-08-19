@@ -1600,10 +1600,11 @@ if __name__ == "__main__":
     else:
         sys.stderr.write("Skipping kafka-0-8 tests as the optional kafka-0-8 profile was "
                          "not compiled into a JAR. To run these tests, "
-                         "you need to build Spark with "
-                         "'build/sbt -Pkafka-0-8 assembly/package streaming-kafka-0-8-assembly/assembly' or "
+                         "you need to build Spark with 'build/sbt -Pkafka-0-8 assembly/package "
+                         "streaming-kafka-0-8-assembly/assembly' or "
                          "'build/mvn -DskipTests -Pkafka-0-8 package' before running this test. "
-                         "Note that kafka-0-8 is not compatible with Scala version 2.12 and higher.")
+                         "Note that kafka-0-8 is not compatible with Scala version 2.12 and "
+                         "higher.")
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
