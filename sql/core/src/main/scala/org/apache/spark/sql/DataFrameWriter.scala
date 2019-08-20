@@ -367,10 +367,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       )
     }
 
-    df.sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
+    val session = df.sparkSession
+    val provider = DataSource.lookupDataSource(source, session.sessionState.conf)
+    val canUseV2 = canUseV2Source(session, provider)
+    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
+
+    session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         insertInto(catalog, ident)
-      // TODO(SPARK-28667): Support the V2SessionCatalog
+
+      case CatalogObjectIdentifier(None, ident)
+          if canUseV2 && sessionCatalogOpt.isDefined && ident.namespace().length <= 1 =>
+        insertInto(sessionCatalogOpt.get, ident)
+
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
       case other =>
@@ -382,7 +391,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-    val table = DataSourceV2Relation.create(catalog.asTableCatalog.loadTable(ident))
+    val table = catalog.asTableCatalog.loadTable(ident) match {
+      case _: UnresolvedTable =>
+        return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
+      case t =>
+        DataSourceV2Relation.create(t)
+    }
 
     val command = modeForDSV2 match {
       case SaveMode.Append =>

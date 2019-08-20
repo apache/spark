@@ -774,11 +774,16 @@ class Analyzer(
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoStatement(
-          UnresolvedRelation(CatalogObjectIdentifier(Some(tableCatalog), ident)), _, _, _, _)
+          UnresolvedRelation(CatalogObjectIdentifier(maybeCatalog, ident)), _, _, _, _)
           if i.query.resolved =>
-        loadTable(tableCatalog, ident)
-            .map(DataSourceV2Relation.create)
-            .map(relation => {
+        maybeCatalog.orElse(sessionCatalog).flatMap(loadTable(_, ident))
+          .map {
+            case unresolved: UnresolvedTable =>
+              // V1 table
+              InsertIntoTable(
+                i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
+            case v2Table: Table =>
+              val relation = DataSourceV2Relation.create(v2Table)
               // ifPartitionNotExists is append with validation, but validation is not supported
               if (i.ifPartitionNotExists) {
                 throw new AnalysisException(
@@ -801,8 +806,8 @@ class Analyzer(
                 OverwriteByExpression.byPosition(
                   relation, query, staticDeleteExpression(relation, staticPartitions))
               }
-            })
-            .getOrElse(i)
+          }
+          .getOrElse(i)
 
       case i @ InsertIntoStatement(UnresolvedRelation(AsTableIdentifier(_)), _, _, _, _)
           if i.query.resolved =>
