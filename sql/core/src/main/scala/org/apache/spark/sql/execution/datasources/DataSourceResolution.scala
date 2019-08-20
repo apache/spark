@@ -183,7 +183,7 @@ case class DataSourceResolution(
   object V1Provider {
     def unapply(provider: String): Option[String] = {
       DataSource.lookupDataSourceV2(provider, conf) match {
-        // Currently file source v2 can't work with tables.
+        // TODO(SPARK-28396): Currently file source v2 can't work with tables.
         case Some(_: FileDataSourceV2) => Some(provider)
         case Some(_) => None
         case _ => Some(provider)

@@ -713,8 +713,9 @@ object DataSource extends Logging {
   }
 
   /**
-   * Return a [[TableProvider]] instance for the given provider. It returns None if the provider
-   * is not Data Source V2, or it's configured to fallback to Data Source V1 code path.
+   * Returns an optional [[TableProvider]] instance for the given provider. It returns None if
+   * there is no corresponding Data Source V2 implementation, or the provider is configured to
+   * fallback to Data Source V1 code path.
    */
   def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
     val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
