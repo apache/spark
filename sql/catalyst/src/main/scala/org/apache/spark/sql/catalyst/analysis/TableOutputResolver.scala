@@ -95,8 +95,7 @@ object TableOutputResolver {
     } else {
       // run the type check first to ensure type errors are present
       val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, byName, useStrictRules,
-        conf.resolver, tableAttr.name, addError)
+        queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name, addError)
       if (queryExpr.nullable && !tableAttr.nullable) {
         addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
         None
@@ -105,12 +104,9 @@ object TableOutputResolver {
         None
 
       } else {
-        // always add an UpCast. it will be removed in the optimizer if it is unnecessary.
         Some(Alias(
-          UpCast(queryExpr, tableAttr.dataType), tableAttr.name
-        )(
-          explicitMetadata = Option(tableAttr.metadata)
-        ))
+          Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
+          tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
       }
     }
   }

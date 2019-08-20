@@ -1653,7 +1653,7 @@ object SQLConf {
         "strict. With legacy policy, Spark allows casting any value to any data type. " +
         "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
         "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
-        "in type coercion, e.g. `int` and `long`, `float` -> `double` are not allowed."
+        "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."
       )
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
