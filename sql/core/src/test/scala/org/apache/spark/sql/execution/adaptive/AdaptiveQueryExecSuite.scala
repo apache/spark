@@ -23,9 +23,9 @@ import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class AdaptiveQueryExecSuite extends QueryTest with SharedSQLContext {
+class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()

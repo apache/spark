@@ -21,9 +21,9 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataSourceV2DataFrameSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataSourceV2DataFrameSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   before {

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
@@ -42,7 +42,7 @@ import org.apache.spark.sql.types._
  * - OrcFilterSuite uses 'org.apache.orc.storage.ql.io.sarg' package.
  * - HiveOrcFilterSuite uses 'org.apache.hadoop.hive.ql.io.sarg' package.
  */
-class OrcFilterSuite extends OrcTest with SharedSQLContext {
+class OrcFilterSuite extends OrcTest with SharedSparkSession {
 
   protected def checkFilterPredicate(
       df: DataFrame,

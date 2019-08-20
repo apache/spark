@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.api.r
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class SQLUtilsSuite extends SharedSQLContext {
+class SQLUtilsSuite extends SharedSparkSession {
 
   import testImplicits._
 
