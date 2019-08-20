@@ -403,8 +403,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
       .save()
     checkAnswer(
       createKafkaReader(topic, includeHeaders = true).selectExpr(
-        "CAST(value as STRING) value",
-        "CAST(headers as ARRAY<STRUCT<key:STRING,value:BINARY>>) headers"
+        "CAST(value as STRING) value", "headers"
       ),
       Row("1", Seq(Row("a", "b".getBytes(UTF_8)))) ::
         Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8)))) ::
