@@ -163,7 +163,7 @@ including JVM, Spark, and system properties.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-This environment page has five parts, it is a useful place to check whether your properties have
+This environment page has five parts. It is a useful place to check whether your properties have
 been set correctly.
 The first part 'Runtime Information' simply contains the [runtime properties](configuration.html#runtime-environment)
 like versions of Java and Scala.
