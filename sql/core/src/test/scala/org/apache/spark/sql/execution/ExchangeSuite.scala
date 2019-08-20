@@ -120,11 +120,9 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
     assert(exchange5 sameResult exchange4)
   }
 
-  test ("Columnar exchange works") {
+  test("Columnar exchange works") {
     val df = spark.range(10)
     val plan = df.queryExecution.executedPlan
-    assert(plan sameResult plan)
-
     val exchange = ColumnarExchange(plan)
     val reused = ReusedExchangeExec(plan.output, exchange)
 
