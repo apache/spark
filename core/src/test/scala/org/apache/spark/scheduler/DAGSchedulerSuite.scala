@@ -2741,6 +2741,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0, 0, "ignored"),
       null))
 
+    // The second shuffle map stage need to rerun, the job will abort for the indeterminate
+    // stage rerun.
+    // TODO: After we support re-generate shuffle file(SPARK-25341), this test will be extended.
     assert(failure != null && failure.getMessage
       .contains("Spark cannot rollback the ShuffleMapStage 1"))
   }
@@ -2853,7 +2856,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(latch.await(10, TimeUnit.SECONDS))
   }
 
-  test("SPARK-28699: abort stage for parent stage is indeterminate stage") {
+  test("SPARK-28699: abort stage if parent stage is indeterminate stage") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
 
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
