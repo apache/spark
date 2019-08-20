@@ -22,8 +22,8 @@ import scala.util.Random
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +35,7 @@ class RanRowBased extends RuntimeException
 
 case class ColumnarExchange(child: SparkPlan) extends Exchange {
 
-  override def supportsColumnar = true
+  override def supportsColumnar: Boolean = true
 
   override protected def doExecute(): RDD[InternalRow] = throw new RanRowBased
 
