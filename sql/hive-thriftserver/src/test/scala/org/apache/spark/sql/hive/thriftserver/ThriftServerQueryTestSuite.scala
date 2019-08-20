@@ -35,6 +35,7 @@ import org.apache.spark.sql.types._
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
+ * Note that this TestSuite does not support maven.
  *
  * TODO:
  *   1. Support UDF testing.
@@ -60,7 +61,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
       case cause: Throwable =>
         throw cause
     }.get
-    logInfo(s"HiveThriftServer2 started successfully")
+    logInfo("HiveThriftServer2 started successfully")
   }
 
   override def afterAll(): Unit = {
@@ -135,7 +136,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
         // each query has 3 segments, plus the header
         assert(segments.size == outputs.size * 3 + 1,
           s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
-            s"Try regenerate the result files.")
+            "Try regenerate the result files.")
         Seq.tabulate(outputs.size) { i =>
           val sql = segments(i * 3 + 1).trim
           val originalOut = segments(i * 3 + 3)
@@ -204,18 +205,23 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   }
 
   override def listTestCases(): Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-      val absPath = file.getAbsolutePath
-      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+    // Maven can not get the correct baseResourcePath
+    if (baseResourcePath.exists()) {
+      listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+        val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+        val absPath = file.getAbsolutePath
+        val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
-      if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-        Seq.empty
-      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
-        PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-      } else {
-        RegularTestCase(testCaseName, absPath, resultFile) :: Nil
+        if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
+          Seq.empty
+        } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+          PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+        } else {
+          RegularTestCase(testCaseName, absPath, resultFile) :: Nil
+        }
       }
+    } else {
+      Seq.empty[TestCase]
     }
   }
 
