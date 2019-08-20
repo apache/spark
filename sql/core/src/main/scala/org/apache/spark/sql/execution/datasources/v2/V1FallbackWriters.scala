@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
@@ -27,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources.{AlwaysTrue, CreatableRelationProvider, Filter, InsertableRelation}
-import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -37,11 +39,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Rows in the output data set are appended.
  */
 case class AppendDataExecV1(
-    writeBuilder: V1WriteBuilder,
+    table: SupportsWrite,
+    writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan) extends V1FallbackWriters {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    writeWithV1(writeBuilder.buildForV1Write())
+    writeWithV1(newWriteBuilder().buildForV1Write())
   }
 }
 
@@ -57,9 +60,9 @@ case class AppendDataExecV1(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExecV1(
-    table: Table,
-    writeBuilder: V1WriteBuilder,
+    table: SupportsWrite,
     deleteWhere: Array[Filter],
+    writeOptions: CaseInsensitiveStringMap,
     plan: LogicalPlan) extends V1FallbackWriters {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
@@ -67,7 +70,7 @@ case class OverwriteByExpressionExecV1(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    writeBuilder match {
+    newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
         writeWithV1(builder.truncate().asV1Builder.buildForV1Write())
 
@@ -92,14 +95,23 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
         s"The returned writer ${other} was no longer a V1WriteBuilder.")
     }
   }
+
+  protected def newWriteBuilder(): V1WriteBuilder = {
+    val writeBuilder = table.newWriteBuilder(writeOptions)
+      .withInputDataSchema(plan.schema)
+      .withQueryId(UUID.randomUUID().toString)
+    writeBuilder.asV1Builder
+  }
 }
 
 /**
  * A trait that allows Tables that use V1 Writer interfaces to append data.
  */
 trait SupportsV1Write extends SparkPlan {
+  def table: SupportsWrite
   // TODO: We should be able to work on SparkPlans at this point.
   def plan: LogicalPlan
+  def writeOptions: CaseInsensitiveStringMap
 
   protected def writeWithV1(relation: InsertableRelation): RDD[InternalRow] = {
     relation.insert(Dataset.ofRows(sqlContext.sparkSession, plan), overwrite = false)

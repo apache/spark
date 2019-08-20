@@ -90,7 +90,7 @@ case class CreateTableAsSelectExec(
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
-            case v2 => doWrite(v2.buildForBatch())
+            case v2 => writeWithV2(v2.buildForBatch())
           }
 
         case _ =>
@@ -184,7 +184,7 @@ case class ReplaceTableAsSelectExec(
 
           writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
-            case v2 => doWrite(v2.buildForBatch())
+            case v2 => writeWithV2(v2.buildForBatch())
           }
 
         case _ =>
@@ -246,11 +246,11 @@ case class AtomicReplaceTableAsSelectExec(
  */
 case class AppendDataExec(
     table: SupportsWrite,
-    writeBuilder: WriteBuilder,
-    query: SparkPlan) extends V2TableWriteExec {
+    writeOptions: CaseInsensitiveStringMap,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    doWrite(writeBuilder.buildForBatch())
+    writeWithV2(newWriteBuilder().buildForBatch())
   }
 }
 
@@ -266,21 +266,21 @@ case class AppendDataExec(
  */
 case class OverwriteByExpressionExec(
     table: SupportsWrite,
-    writeBuilder: WriteBuilder,
     deleteWhere: Array[Filter],
-    query: SparkPlan) extends V2TableWriteExec {
+    writeOptions: CaseInsensitiveStringMap,
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
     filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    writeBuilder match {
+    newWriteBuilder() match {
       case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        doWrite(builder.truncate().buildForBatch())
+        writeWithV2(builder.truncate().buildForBatch())
 
       case builder: SupportsOverwrite =>
-        doWrite(builder.overwrite(deleteWhere).buildForBatch())
+        writeWithV2(builder.overwrite(deleteWhere).buildForBatch())
 
       case _ =>
         throw new SparkException(s"Table does not support overwrite by expression: $table")
@@ -300,15 +300,12 @@ case class OverwriteByExpressionExec(
 case class OverwritePartitionsDynamicExec(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
-    query: SparkPlan) extends V2TableWriteExec {
+    query: SparkPlan) extends V2TableWriteExec with BatchWriteHelper {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val writeBuilder = table.newWriteBuilder(writeOptions)
-      .withInputDataSchema(query.schema)
-      .withQueryId(UUID.randomUUID().toString)
-    writeBuilder match {
+    newWriteBuilder() match {
       case builder: SupportsDynamicOverwrite =>
-        doWrite(builder.overwriteDynamicPartitions().buildForBatch())
+        writeWithV2(builder.overwriteDynamicPartitions().buildForBatch())
 
       case _ =>
         throw new SparkException(s"Table does not support dynamic partition overwrite: $table")
@@ -323,7 +320,22 @@ case class WriteToDataSourceV2Exec(
   def writeOptions: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()
 
   override protected def doExecute(): RDD[InternalRow] = {
-    doWrite(batchWrite)
+    writeWithV2(batchWrite)
+  }
+}
+
+/**
+ * Helper for physical plans that build batch writes.
+ */
+trait BatchWriteHelper {
+  def table: SupportsWrite
+  def query: SparkPlan
+  def writeOptions: CaseInsensitiveStringMap
+
+  def newWriteBuilder(): WriteBuilder = {
+    table.newWriteBuilder(writeOptions)
+      .withInputDataSchema(query.schema)
+      .withQueryId(UUID.randomUUID().toString)
   }
 }
 
@@ -338,7 +350,7 @@ trait V2TableWriteExec extends UnaryExecNode {
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
 
-  protected def doWrite(batchWrite: BatchWrite): RDD[InternalRow] = {
+  protected def writeWithV2(batchWrite: BatchWrite): RDD[InternalRow] = {
     val writerFactory = batchWrite.createBatchWriterFactory()
     val useCommitCoordinator = batchWrite.useCommitCoordinator
     val rdd = query.execute()
@@ -470,7 +482,7 @@ private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1W
 
           val writtenRows = writeBuilder match {
             case v1: V1WriteBuilder => writeWithV1(v1.buildForV1Write())
-            case v2 => doWrite(v2.buildForBatch())
+            case v2 => writeWithV2(v2.buildForBatch())
           }
           stagedTable.commitStagedChanges()
           writtenRows

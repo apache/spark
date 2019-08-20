@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.v2.TableCapability
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.sources.v2.writer.V1WriteBuilder
@@ -212,15 +213,11 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      val table = r.table.asWritable
-      val writer = table.newWriteBuilder(r.options)
-        .withInputDataSchema(query.schema)
-        .withQueryId(UUID.randomUUID().toString)
-      writer match {
-        case v1: V1WriteBuilder =>
-          AppendDataExecV1(v1, query) :: Nil
+      r.table.asWritable match {
+        case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+          AppendDataExecV1(v1, r.options, query) :: Nil
         case v2 =>
-          AppendDataExec(table, v2, planLater(query)) :: Nil
+          AppendDataExec(v2, r.options, planLater(query)) :: Nil
       }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
@@ -229,15 +226,11 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
           throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
-      val table = r.table.asWritable
-      val writer = table.newWriteBuilder(r.options)
-        .withInputDataSchema(query.schema)
-        .withQueryId(UUID.randomUUID().toString)
-      writer match {
-        case v1: V1WriteBuilder =>
-          OverwriteByExpressionExecV1(table, v1, filters, query) :: Nil
+      r.table.asWritable match {
+        case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+          OverwriteByExpressionExecV1(v1, filters, r.options, query) :: Nil
         case v2 =>
-          OverwriteByExpressionExec(table, v2, filters, planLater(query)) :: Nil
+          OverwriteByExpressionExec(v2, filters, r.options, planLater(query)) :: Nil
       }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>

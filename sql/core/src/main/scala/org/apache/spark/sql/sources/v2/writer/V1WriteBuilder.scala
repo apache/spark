@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources.v2.writer
 
 import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql.sources.InsertableRelation
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamingWrite
 
 /**
  * A trait that should be implemented by V1 DataSources that would like to leverage the DataSource
@@ -44,4 +45,9 @@ trait V1WriteBuilder extends WriteBuilder {
    * @since 3.0.0
    */
   def buildForV1Write(): InsertableRelation
+
+  // These methods cannot be implemented by a V1WriteBuilder.
+  override final def buildForBatch(): BatchWrite = super.buildForBatch()
+
+  override final def buildForStreaming(): StreamingWrite = super.buildForStreaming()
 }
