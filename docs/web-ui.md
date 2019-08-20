@@ -89,7 +89,7 @@ make sure an action operation has been triggered.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-You can click the RDD name 'rdd' for obtaining the details of data persistance, such as the data
+You can click the RDD name 'rdd' for obtaining the details of data persistence, such as the data
 distribution on the cluster.
 
 
