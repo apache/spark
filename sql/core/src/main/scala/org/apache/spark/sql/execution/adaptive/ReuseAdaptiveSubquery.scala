@@ -17,20 +17,29 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.ListQuery
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{ExecSubqueryExpression, SparkPlan}
+import scala.collection.concurrent.TrieMap
 
-case class PlanAdaptiveSubqueries(
-    subqueryMap: scala.collection.Map[Long, ExecSubqueryExpression]) extends Rule[SparkPlan] {
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
+import org.apache.spark.sql.internal.SQLConf
+
+case class ReuseAdaptiveSubquery(
+    conf: SQLConf,
+    reuseMap: TrieMap[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.subqueryReuseEnabled) {
+      return plan
+    }
+
     plan.transformAllExpressions {
-      case expressions.ScalarSubquery(_, _, exprId) =>
-        subqueryMap(exprId.id)
-      case expressions.InSubquery(_, ListQuery(_, _, exprId, _)) =>
-        subqueryMap(exprId.id)
+      case sub: ExecSubqueryExpression =>
+        val newPlan = reuseMap.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
+        if (newPlan.ne(sub.plan)) {
+          sub.withNewPlan(ReusedSubqueryExec(newPlan))
+        } else {
+          sub
+        }
     }
   }
 }
