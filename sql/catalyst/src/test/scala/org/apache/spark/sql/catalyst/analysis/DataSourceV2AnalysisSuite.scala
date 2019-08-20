@@ -190,11 +190,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     val y = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table,
-      Project(Seq(
-        Alias(Cast(toLower(X), FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
-        query))
+    val expectedPlan = byName(table, Project(Seq(X.withName("x"), y), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan, caseSensitive = false)
@@ -211,11 +207,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     val x = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table,
-      Project(Seq(
-        Alias(Cast(x, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
-        query))
+    val expectedPlan = byName(table, Project(Seq(x, y), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan)
