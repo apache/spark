@@ -44,7 +44,7 @@ object TableOutputResolver {
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
       expected.flatMap { tableAttr =>
-        query.resolveQuoted(tableAttr.name, conf.resolver) match {
+        query.resolve(Seq(tableAttr.name), conf.resolver) match {
           case Some(queryExpr) =>
             checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
           case None =>
