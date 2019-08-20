@@ -223,7 +223,36 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       assert(isListenerActive(listener1) === false)
       assert(isListenerActive(listener2))
     } finally {
-      addedListeners().foreach(spark.streams.removeListener)
+      spark.streams.removeAllListeners()
+    }
+  }
+
+  test("removing all listeners") {
+    def isListenerActive(listener: EventCollector): Boolean = {
+      listener.reset()
+      testStream(MemoryStream[Int].toDS)(
+        StartStream(),
+        StopStream
+      )
+      listener.startEvent != null
+    }
+
+    try {
+      val listener1 = new EventCollector
+      val listener2 = new EventCollector
+
+      spark.streams.addListener(listener1)
+      assert(isListenerActive(listener1))
+      assert(isListenerActive(listener2) === false)
+      spark.streams.addListener(listener2)
+      assert(isListenerActive(listener1))
+      assert(isListenerActive(listener2))
+      spark.streams.removeAllListeners()
+      assert(isListenerActive(listener1) === false)
+      assert(isListenerActive(listener2) === false)
+      assert(addedListeners().isEmpty)
+    } finally {
+      spark.streams.removeAllListeners()
     }
   }
 

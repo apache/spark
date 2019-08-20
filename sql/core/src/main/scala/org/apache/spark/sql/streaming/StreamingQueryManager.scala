@@ -199,6 +199,15 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     listenerBus.removeListener(listener)
   }
 
+  /**
+   * Deregister all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
+   *
+   * @since 3.0.0
+   */
+  def removeAllListeners(): Unit = {
+    listenerBus.removeAllListeners()
+  }
+
   /** Post a listener event */
   private[sql] def postListenerEvent(event: StreamingQueryListener.Event): Unit = {
     listenerBus.post(event)
