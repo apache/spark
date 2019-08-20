@@ -149,7 +149,7 @@ class DataSourceV2DataFrameSessionCatalogSuite extends SessionCatalogTests {
     df.write.format(v2Format).mode("ignore").saveAsTable(t1)
     verifyTable(t1, Seq(("c", "d")).toDF("id", "data"))
   }
-  
+
   override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val dfw = insert.write.format(v2Format)
     if (mode != null) {
@@ -219,7 +219,7 @@ private[v2] trait SessionCatalogTests
   import testImplicits._
 
   protected val v2Format: String = classOf[InMemoryTableProvider].getName
-    
+
   private def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
   }
