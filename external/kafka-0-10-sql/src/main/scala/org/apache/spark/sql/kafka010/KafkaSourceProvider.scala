@@ -69,7 +69,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val caseInsensitiveParameters = CaseInsensitiveMap(parameters)
     validateStreamOptions(caseInsensitiveParameters)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    val includeHeaders = parameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
+    val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
     (shortName(), KafkaOffsetReader.kafkaSchema(includeHeaders))
   }
 
@@ -133,7 +133,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       caseInsensitiveParameters, ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
-    val includeHeaders = parameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
+    val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
 
     new KafkaRelation(
       sqlContext,
@@ -507,7 +507,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffset.retryintervalms"
   private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumer.polltimeoutms"
   private val GROUP_ID_PREFIX = "groupidprefix"
-  private[kafka010] val INCLUDE_HEADERS = "includeHeaders"
+  private[kafka010] val INCLUDE_HEADERS = "includeheaders"
 
   val TOPIC_OPTION_KEY = "topic"
 
