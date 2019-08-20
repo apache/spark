@@ -399,7 +399,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     }
 
     val newQuery = TableOutputResolver.resolveOutputColumns(
-      tblName, insert.table.output, insert.query, byName = false, conf)
+      tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
