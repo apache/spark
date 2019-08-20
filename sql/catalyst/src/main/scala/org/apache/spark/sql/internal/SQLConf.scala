@@ -2374,8 +2374,11 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
-  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
-    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
+  def useStrictStoreAssignmentPolicy: Boolean =
+    getConf(STORE_ASSIGNMENT_POLICY) == StoreAssignmentPolicy.STRICT.toString()
+
+  def useLegacyStoreAssignmentPolicy: Boolean =
+    getConf(STORE_ASSIGNMENT_POLICY) == StoreAssignmentPolicy.STRICT.toString()
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

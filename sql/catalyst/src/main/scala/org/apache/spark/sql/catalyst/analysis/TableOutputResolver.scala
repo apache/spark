@@ -20,10 +20,9 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedExpression, UpCast}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.DataType
 
 object TableOutputResolver {
@@ -83,9 +82,7 @@ object TableOutputResolver {
       conf: SQLConf,
       addError: String => Unit): Option[NamedExpression] = {
 
-    val useStrictRules = conf.storeAssignmentPolicy == StoreAssignmentPolicy.STRICT
-
-    if (!useStrictRules) {
+    if (!conf.useStrictStoreAssignmentPolicy) {
       // Renaming is needed for handling the following cases like
       // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
       // 2) Target tables have column metadata
