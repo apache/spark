@@ -774,6 +774,10 @@ class Analyzer(
   object ResolveInsertInto extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoStatement(
+          UnresolvedRelation(AsTemporaryViewIdentifier(ident)), _, _, _, _)
+          if catalog.isTemporaryTable(ident) =>
+        InsertIntoTable(i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
+      case i @ InsertIntoStatement(
           UnresolvedRelation(CatalogObjectIdentifier(maybeCatalog, ident)), _, _, _, _)
           if i.query.resolved =>
         maybeCatalog.orElse(sessionCatalog).flatMap(loadTable(_, ident))
