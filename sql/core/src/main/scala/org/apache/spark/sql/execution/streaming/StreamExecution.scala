@@ -96,7 +96,8 @@ abstract class StreamExecution(
 
   val resolvedCheckpointRoot = {
     val checkpointPath = new Path(checkpointRoot)
-    val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    val checkpointFileManager = CheckpointFileManager.create(checkpointPath,
+      sparkSession.sessionState.newHadoopConf())
     if (sparkSession.conf.get(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
         && StreamExecution.containsSpecialCharsInPath(checkpointPath)) {
       // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
@@ -106,7 +107,7 @@ abstract class StreamExecution(
         new Path(new Path(checkpointPath.toUri.toString).toUri.toString).toUri.toString
       val legacyCheckpointDirExists =
         try {
-          fs.exists(new Path(legacyCheckpointDir))
+          checkpointFileManager.exists(new Path(legacyCheckpointDir))
         } catch {
           case NonFatal(e) =>
             // We may not have access to this directory. Don't fail the query if that happens.
@@ -133,9 +134,8 @@ abstract class StreamExecution(
             .stripMargin)
       }
     }
-    val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    fs.mkdirs(checkpointDir)
-    checkpointDir.toString
+    checkpointFileManager.mkdirs(checkpointPath)
+    checkpointPath.toString
   }
   logInfo(s"Checkpoint root $checkpointRoot resolved to $resolvedCheckpointRoot.")
 
@@ -388,8 +388,9 @@ abstract class StreamExecution(
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
             logInfo(s"Deleting checkpoint $checkpointPath.")
-            val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-            fs.delete(checkpointPath, true)
+            val manager = CheckpointFileManager.create(checkpointPath,
+              sparkSession.sessionState.newHadoopConf())
+            manager.delete(checkpointPath)
           } catch {
             case NonFatal(e) =>
               // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
