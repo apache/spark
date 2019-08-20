@@ -985,7 +985,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         } else {
           CreateTable(tableDescWithPartitionColNames, mode, Some(q))
         }
-      case None => CreateTable(tableDesc, mode, None)
+      case None =>
+        // When creating partitioned table, we must specify data type for the partition columns.
+        if (Option(ctx.partitionColumnNames).isDefined) {
+          val errorMessage = "Must specify a data type for each partition column while creating " +
+            "Hive partitioned table."
+          operationNotAllowed(errorMessage, ctx)
+        }
+
+        CreateTable(tableDesc, mode, None)
     }
   }
 
