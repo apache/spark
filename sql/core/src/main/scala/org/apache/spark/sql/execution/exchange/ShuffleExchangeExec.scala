@@ -268,7 +268,7 @@ object ShuffleExchangeExec {
             // the fields can sort fully with prefix like SortExec. So we disable radix sort here
             // to avoid getting unstable sort, and result to a correctness bug.
             // See more details in SPARK-28699.
-            false /* canUseRadixSort */)
+            false)
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
       } else {
