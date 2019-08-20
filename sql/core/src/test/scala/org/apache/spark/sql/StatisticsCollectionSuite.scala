@@ -750,4 +750,31 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
   }
+
+  test("External partitioned data source table does not support fallback to HDFS " +
+    "for size estimation") {
+    Seq(true).foreach { fallBackToHDFS =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFS") {
+        withTempDir { dir =>
+          withTable("spark_25474") {
+            sql("CREATE TABLE spark_25474(a bigint, b bigint) USING parquet " +
+              s"PARTITIONED BY(a) LOCATION '${dir.toURI}'")
+
+            withTempDir { partitionDir =>
+              spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+              sql(s"ALTER TABLE spark_25474 ADD PARTITION (a=1) LOCATION '$partitionDir'")
+              assert(getCatalogTable("spark_25474").stats.isEmpty)
+              val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
+              assert(spark.table("spark_25474").count() === 5)
+              if (fallBackToHDFS) {
+                assert(relation.stats.sizeInBytes === 0)
+              } else {
+                assert(relation.stats.sizeInBytes === conf.defaultSizeInBytes)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
