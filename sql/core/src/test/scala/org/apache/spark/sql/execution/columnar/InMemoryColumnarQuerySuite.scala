@@ -27,13 +27,13 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{ColumnarToRowExec, FilterExec, InputAdapter, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel._
 import org.apache.spark.util.Utils
 
-class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
+class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()

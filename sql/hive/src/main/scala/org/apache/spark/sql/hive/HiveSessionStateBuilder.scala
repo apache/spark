@@ -75,7 +75,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
-        DataSourceResolution(conf, this) +:
+        DataSourceResolution(conf, this.catalogManager) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -94,8 +94,6 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         V2WriteSupportCheck +:
         V2StreamingScanSupportCheck +:
         customCheckRules
-
-    override protected def lookupCatalog(name: String): CatalogPlugin = session.catalog(name)
   }
 
   /**

@@ -37,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister}
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -251,19 +252,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("save")
 
     val session = df.sparkSession
-    val useV1Sources =
-      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
     val cls = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val shouldUseV1Source = cls.newInstance() match {
-      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
-      case _ => useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT))
-    }
+    val canUseV2 = canUseV2Source(session, cls) && partitioningColumns.isEmpty
 
     // In Data Source V2 project, partitioning is still under development.
     // Here we fallback to V1 if partitioning columns are specified.
     // TODO(SPARK-26778): use V2 implementations when partitioning feature is supported.
-    if (!shouldUseV1Source && classOf[TableProvider].isAssignableFrom(cls) &&
-      partitioningColumns.isEmpty) {
+    if (canUseV2) {
       val provider = cls.getConstructor().newInstance().asInstanceOf[TableProvider]
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, session.sessionState.conf)
@@ -493,13 +488,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
     val session = df.sparkSession
+    val provider = DataSource.lookupDataSource(source, session.sessionState.conf)
+    val canUseV2 = canUseV2Source(session, provider)
+    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
-        // TODO(SPARK-28666): This should go through V2SessionCatalog
+
+      case CatalogObjectIdentifier(None, ident)
+          if canUseV2 && sessionCatalogOpt.isDefined && ident.namespace().length <= 1 =>
+        // We pass in the modeForDSV1, as using the V2 session catalog should maintain compatibility
+        // for now.
+        saveAsTable(sessionCatalogOpt.get.asTableCatalog, ident, modeForDSV1)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)
@@ -525,6 +527,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     val command = (mode, tableOpt) match {
+      case (_, Some(table: UnresolvedTable)) =>
+        return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
+
       case (SaveMode.Append, Some(table)) =>
         AppendData.byName(DataSourceV2Relation.create(table), df.logicalPlan)
 
@@ -829,6 +834,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def modeForDSV1 = mode.getOrElse(SaveMode.ErrorIfExists)
 
   private def modeForDSV2 = mode.getOrElse(SaveMode.Append)
+
+  private def canUseV2Source(session: SparkSession, providerClass: Class[_]): Boolean = {
+    val useV1Sources =
+      session.sessionState.conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",")
+    val shouldUseV1Source = providerClass.newInstance() match {
+      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => true
+      case _ => useV1Sources.contains(providerClass.getCanonicalName.toLowerCase(Locale.ROOT))
+    }
+    !shouldUseV1Source && classOf[TableProvider].isAssignableFrom(providerClass)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

@@ -18,10 +18,10 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class ExplainSuite extends QueryTest with SharedSQLContext {
+class ExplainSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   /**

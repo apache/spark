@@ -22,31 +22,28 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, Filter, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, SubqueryAlias}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand}
-import org.apache.spark.sql.execution.datasources.v2.{CatalogTableAsV2, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
-import org.apache.spark.sql.util.SchemaUtils
 
 case class DataSourceResolution(
     conf: SQLConf,
-    lookup: LookupCatalog)
-  extends Rule[LogicalPlan] with CastSupport {
+    catalogManager: CatalogManager)
+  extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
-  import lookup._
 
-  lazy val v2SessionCatalog: CatalogPlugin = lookup.sessionCatalog
-      .getOrElse(throw new AnalysisException("No v2 session catalog implementation is available"))
+  def v2SessionCatalog: CatalogPlugin = sessionCatalog.getOrElse(
+    throw new AnalysisException("No v2 session catalog implementation is available"))
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
@@ -183,8 +180,6 @@ case class DataSourceResolution(
       val aliased = delete.tableAlias.map(SubqueryAlias(_, relation)).getOrElse(relation)
       DeleteFromTable(aliased, delete.condition)
 
-    case DataSourceV2Relation(CatalogTableAsV2(catalogTable), _, _) =>
-      UnresolvedCatalogRelation(catalogTable)
   }
 
   object V1WriteProvider {

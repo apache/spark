@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, 
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
+class DataFrameCallbackSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
   import functions._
 
