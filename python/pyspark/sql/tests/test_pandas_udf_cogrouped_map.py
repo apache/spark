@@ -96,11 +96,11 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
             'v2': [90, 100, 110]
         })
 
-        left_df = self.spark\
+        left_gdf = self.spark\
             .createDataFrame(left)\
             .groupby(col('id') % 2 == 0)
 
-        right_df = self.spark \
+        right_gdf = self.spark \
             .createDataFrame(right) \
             .groupby(col('id') % 2 == 0)
 
@@ -108,8 +108,8 @@ class CoGroupedMapPandasUDFTests(ReusedSQLTestCase):
         def merge_pandas(l, r):
             return pd.merge(l[['k', 'v']], r[['k', 'v2']], on=['k'])
 
-        result = left_df \
-            .cogroup(right_df) \
+        result = left_gdf \
+            .cogroup(right_gdf) \
             .apply(merge_pandas) \
             .sort(['k']) \
             .toPandas()

@@ -44,7 +44,7 @@ class CoGroupedData(object):
         as a `DataFrame`.
 
         The user-defined function should take two `pandas.DataFrame` and return another
-        `pandas.DataFrame`. For each side of the cogroup, all columns are passed together
+        ``pandas.DataFrame``. For each side of the cogroup, all columns are passed together
         as a `pandas.DataFrame` to the user-function and the returned `pandas.DataFrame`
         are combined as a :class:`DataFrame`.
 

@@ -356,33 +356,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         return "ArrowStreamPandasSerializer"
 
 
-class InterleavedArrowReader(object):
-
-    def __init__(self, stream):
-        self._stream = stream
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        dataframes_in_group = read_int(self._stream)
-        if dataframes_in_group == 2:
-            return self._read_df(), self._read_df()
-        elif dataframes_in_group == 0:
-            raise StopIteration
-        else:
-            raise ValueError(
-                'Received Invalid number of dataframes in group {0}'.format(dataframes_in_group))
-
-    def next(self):
-        return self.__next__()
-
-    def _read_df(self):
-        import pyarrow as pa
-        reader = pa.ipc.open_stream(self._stream)
-        return [b for b in reader]
-
-
 class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
     """
     Serializer used by Python worker to evaluate Pandas UDFs
@@ -428,21 +401,31 @@ class ArrowStreamPandasUDFSerializer(ArrowStreamPandasSerializer):
         return "ArrowStreamPandasUDFSerializer"
 
 
-class PandasCogroupSerializer(ArrowStreamPandasUDFSerializer):
+class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def __init__(self, timezone, safecheck, assign_cols_by_name):
-        super(PandasCogroupSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
+        super(CogroupUDFSerializer, self).__init__(timezone, safecheck, assign_cols_by_name)
 
     def load_stream(self, stream):
         """
         Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and return as a two
         lists of pandas.Series.
         """
-        reader = InterleavedArrowReader(stream)
-        for batch1, batch2 in reader:
-            import pyarrow as pa
-            yield ([self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
-                   [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()])
+        import pyarrow as pa
+        dataframes_in_group = None
+
+        while dataframes_in_group is None or dataframes_in_group > 0:
+            dataframes_in_group = read_int(stream)
+
+            if dataframes_in_group == 2:
+                batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
+                yield ([self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                       [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()])
+
+            elif dataframes_in_group != 0:
+                raise ValueError(
+                    'Received Invalid number of dataframes in group {0}'.format(dataframes_in_group))
 
 
 class BatchedSerializer(Serializer):

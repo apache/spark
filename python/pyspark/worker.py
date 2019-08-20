@@ -39,7 +39,7 @@ from pyspark.resourceinformation import ResourceInformation
 from pyspark.rdd import PythonEvalType
 from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowStreamPandasUDFSerializer, PandasCogroupSerializer
+    BatchedSerializer, ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
 from pyspark.sql.types import to_arrow_type, StructType
 from pyspark.util import _get_argspec, fail_on_stopiteration
 from pyspark import shuffle
@@ -314,7 +314,7 @@ def read_udfs(pickleSer, infile, eval_type):
         # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
         # pandas Series. See SPARK-27240.
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-            ser = PandasCogroupSerializer(timezone, safecheck, assign_cols_by_name)
+            ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
         else:
             df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
                              eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or
@@ -418,8 +418,8 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
         parsed_offsets = extract_key_value_indexes()
-        keys = ["a[%d]" % o for o in parsed_offsets[0][0]]
-        vals = ["a[%d]" % o for o in parsed_offsets[0][1]]
+        keys = ["a[%d]" % (o,) for o in parsed_offsets[0][0]]
+        vals = ["a[%d]" % (o, ) for o in parsed_offsets[0][1]]
         mapper_str = "lambda a: f([%s], [%s])" % (", ".join(keys), ", ".join(vals))
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
         # We assume there is only one UDF here because cogrouped map doesn't
@@ -429,10 +429,10 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
         parsed_offsets = extract_key_value_indexes()
-        df1_keys = ["a[0][%d]" % o for o in parsed_offsets[0][0]]
-        df1_vals = ["a[0][%d]" % o for o in parsed_offsets[0][1]]
-        df2_keys = ["a[1][%d]" % o for o in parsed_offsets[1][0]]
-        df2_vals = ["a[1][%d]" % o for o in parsed_offsets[1][1]]
+        df1_keys = ["a[0][%d]" % (o, ) for o in parsed_offsets[0][0]]
+        df1_vals = ["a[0][%d]" % (o, )for o in parsed_offsets[0][1]]
+        df2_keys = ["a[1][%d]" % (o, ) for o in parsed_offsets[1][0]]
+        df2_vals = ["a[1][%d]" % (o, ) for o in parsed_offsets[1][1]]
         mapper_str = "lambda a: f([%s], [%s], [%s], [%s])" % (
             ", ".join(df1_keys), ", ".join(df1_vals), ", ".join(df2_keys), ", ".join(df2_vals))
     else:
