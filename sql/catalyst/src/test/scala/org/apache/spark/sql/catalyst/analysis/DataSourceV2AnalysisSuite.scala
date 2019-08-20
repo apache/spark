@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.net.URI
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
 
 class V2AppendDataAnalysisSuite extends DataSourceV2AnalysisSuite {
@@ -112,6 +115,20 @@ case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
 }
 
 abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
+
+  override def getAnalyzer(caseSensitive: Boolean): Analyzer = {
+    val conf = new SQLConf()
+      .copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
+      .copy(SQLConf.STORE_ASSIGNMENT_POLICY -> StoreAssignmentPolicy.STRICT)
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
+    new Analyzer(catalog, conf) {
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
+    }
+  }
+
   val table = TestRelation(StructType(Seq(
     StructField("x", FloatType),
     StructField("y", FloatType))).toAttributes)
@@ -206,14 +223,11 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
   }
 
   test("byName: fail nullable data written to required columns") {
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.STRICT.toString) {
-      val parsedPlan = byName(requiredTable, table)
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot write nullable values to non-null column", "'x'", "'y'"))
-    }
+    val parsedPlan = byName(requiredTable, table)
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write nullable values to non-null column", "'x'", "'y'"))
   }
 
   test("byName: allow required data written to nullable columns") {
@@ -249,15 +263,12 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
   }
 
   test("byName: fail canWrite check") {
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.STRICT.toString) {
-      val parsedPlan = byName(table, widerTable)
+    val parsedPlan = byName(table, widerTable)
 
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write", "'table-name'",
-        "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
-    }
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write", "'table-name'",
+      "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
   }
 
   test("byName: insert safe cast") {
@@ -300,26 +311,14 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
       StructField("x", DoubleType),
       StructField("b", FloatType))).toAttributes)
 
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.STRICT.toString) {
-      val parsedPlan = byName(xRequiredTable, query)
+    val parsedPlan = byName(xRequiredTable, query)
 
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot safely cast", "'x'", "DoubleType to FloatType",
-        "Cannot write nullable values to non-null column", "'x'",
-        "Cannot find data for output column", "'y'"))
-    }
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.LEGACY.toString) {
-      val parsedPlan = byName(xRequiredTable, query)
-
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot find data for output column", "'y'"))
-    }
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot safely cast", "'x'", "DoubleType to FloatType",
+      "Cannot write nullable values to non-null column", "'x'",
+      "Cannot find data for output column", "'y'"))
   }
 
   test("byPosition: basic behavior") {
@@ -364,14 +363,11 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
   }
 
   test("byPosition: fail nullable data written to required columns") {
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.STRICT.toString) {
-      val parsedPlan = byPosition(requiredTable, table)
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot write nullable values to non-null column", "'x'", "'y'"))
-    }
+    val parsedPlan = byPosition(requiredTable, table)
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write nullable values to non-null column", "'x'", "'y'"))
   }
 
   test("byPosition: allow required data written to nullable columns") {
@@ -409,19 +405,16 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
   }
 
   test("byPosition: fail canWrite check") {
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.STRICT.toString) {
-      val widerTable = TestRelation(StructType(Seq(
-        StructField("a", DoubleType),
-        StructField("b", DoubleType))).toAttributes)
+    val widerTable = TestRelation(StructType(Seq(
+      StructField("a", DoubleType),
+      StructField("b", DoubleType))).toAttributes)
 
-      val parsedPlan = byPosition(table, widerTable)
+    val parsedPlan = byPosition(table, widerTable)
 
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write", "'table-name'",
-        "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
-    }
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write", "'table-name'",
+      "Cannot safely cast", "'x'", "'y'", "DoubleType to FloatType"))
   }
 
   test("byPosition: insert safe cast") {
@@ -460,24 +453,21 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
   }
 
   test("byPosition: multiple field errors are reported") {
-    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key ->
-      SQLConf.StoreAssignmentPolicy.STRICT.toString) {
-      val xRequiredTable = TestRelation(StructType(Seq(
-        StructField("x", FloatType, nullable = false),
-        StructField("y", DoubleType))).toAttributes)
+    val xRequiredTable = TestRelation(StructType(Seq(
+      StructField("x", FloatType, nullable = false),
+      StructField("y", DoubleType))).toAttributes)
 
-      val query = TestRelation(StructType(Seq(
-        StructField("x", DoubleType),
-        StructField("b", FloatType))).toAttributes)
+    val query = TestRelation(StructType(Seq(
+      StructField("x", DoubleType),
+      StructField("b", FloatType))).toAttributes)
 
-      val parsedPlan = byPosition(xRequiredTable, query)
+    val parsedPlan = byPosition(xRequiredTable, query)
 
-      assertNotResolved(parsedPlan)
-      assertAnalysisError(parsedPlan, Seq(
-        "Cannot write incompatible data to table", "'table-name'",
-        "Cannot write nullable values to non-null column", "'x'",
-        "Cannot safely cast", "'x'", "DoubleType to FloatType"))
-    }
+    assertNotResolved(parsedPlan)
+    assertAnalysisError(parsedPlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write nullable values to non-null column", "'x'",
+      "Cannot safely cast", "'x'", "DoubleType to FloatType"))
   }
 
   test("bypass output column resolution") {
