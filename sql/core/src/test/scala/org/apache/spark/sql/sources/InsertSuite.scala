@@ -568,7 +568,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
           "columns as the target table: target table has 2 column(s)" +
           " but the inserted data has 3 column(s)"))
 
-        // Calling` saveAsTable` to an existing table with append mode results in table insertion.
+        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
         msg = intercept[AnalysisException] {
           Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
@@ -581,6 +581,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
           "columns as the target table: target table has 2 column(s)" +
           " but the inserted data has 1 column(s)"))
 
+        // Insert into table successfully.
         sql("insert into t select 1, 2.0D")
         checkAnswer(sql("select * from t"), Row(1, 2.0D))
       }
