@@ -23,19 +23,23 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   private val orc2 = classOf[OrcDataSourceV2].getName
+  private val v2Source = classOf[FakeV2Provider].getName
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
@@ -490,8 +494,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
     sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
 
-    // use the catalog name to force loading with the v2 catalog
-    checkAnswer(sparkSession.sql(s"TABLE session.table_name"), sparkSession.table("source"))
+    checkAnswer(sparkSession.sql(s"TABLE default.table_name"), sparkSession.table("source"))
+    // The fact that the following line doesn't throw an exception means, the session catalog
+    // can load the table.
+    val t = sparkSession.catalog("session").asTableCatalog
+      .loadTable(Identifier.of(Array.empty, "table_name"))
+    assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
   }
 
   test("DropTable: basic") {
@@ -1695,5 +1703,218 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
           Row(4, "keep", 2)))
       }
     }
+  }
+
+  test("tableCreation: partition column case insensitive resolution") {
+    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val sessionCatalog = spark.catalog("session").asTableCatalog
+
+    def checkPartitioning(cat: TableCatalog, partition: String): Unit = {
+      val table = cat.loadTable(Identifier.of(Array.empty, "tbl"))
+      val partitions = table.partitioning().map(_.references())
+      assert(partitions.length === 1)
+      val fieldNames = partitions.flatMap(_.map(_.fieldNames()))
+      assert(fieldNames === Array(Array(partition)))
+    }
+
+    sql(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkPartitioning(sessionCatalog, "a")
+    sql(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkPartitioning(testCatalog, "a")
+    sql(s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+    checkPartitioning(sessionCatalog, "b")
+    sql(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+    checkPartitioning(testCatalog, "b")
+  }
+
+  test("tableCreation: partition column case sensitive resolution") {
+    def checkFailure(statement: String): Unit = {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val e = intercept[AnalysisException] {
+          sql(statement)
+        }
+        assert(e.getMessage.contains("Couldn't find column"))
+      }
+    }
+
+    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+    checkFailure(
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
+  }
+
+  test("tableCreation: duplicate column names in the table definition") {
+    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: duplicate nested column names in the table definition") {
+    val errorMsg = "Found duplicate column(s) in the table definition of `t`"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: bucket column names not in table definition") {
+    val errorMsg = "Couldn't find column c in"
+    testCreateAnalysisError(
+      s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+    testCreateAnalysisError(
+      s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+    testCreateAnalysisError(
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source " +
+        "CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+    testCreateAnalysisError(
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source " +
+        "CLUSTERED BY (c) INTO 4 BUCKETS",
+      errorMsg
+    )
+  }
+
+  test("tableCreation: column repeated in partition columns") {
+    val errorMsg = "Found duplicate column(s) in the partitioning"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("tableCreation: column repeated in bucket columns") {
+    val errorMsg = "Found duplicate column(s) in the bucket definition"
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        testCreateAnalysisError(
+          s"CREATE TABLE t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+        testCreateAnalysisError(
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
+            s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
+          errorMsg
+        )
+      }
+    }
+  }
+
+  test("DeleteFrom: basic") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t WHERE id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom: alias") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      sql(s"DELETE FROM $t tbl WHERE tbl.id = 2")
+      checkAnswer(spark.table(t), Seq(
+        Row(3, "c", 3)))
+    }
+  }
+
+  test("DeleteFrom: fail if has subquery") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      sql(s"INSERT INTO $t VALUES (2L, 'a', 2), (2L, 'b', 3), (3L, 'c', 3)")
+      val exc = intercept[AnalysisException] {
+        sql(s"DELETE FROM $t WHERE id IN (SELECT id FROM $t)")
+      }
+
+      assert(spark.table(t).count === 3)
+      assert(exc.getMessage.contains("Delete by condition with subquery is not supported"))
+    }
+  }
+
+  private def testCreateAnalysisError(sqlStatement: String, expectedError: String): Unit = {
+    val errMsg = intercept[AnalysisException] {
+      sql(sqlStatement)
+    }.getMessage
+    assert(errMsg.contains(expectedError))
+  }
+}
+
+
+/** Used as a V2 DataSource for V2SessionCatalog DDL */
+class FakeV2Provider extends TableProvider {
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    throw new UnsupportedOperationException("Unnecessary for DDL tests")
   }
 }

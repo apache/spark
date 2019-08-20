@@ -234,13 +234,13 @@ SELECT POSITION('5' IN '1234567890') = '5' AS `5`;
 
 -- [SPARK-28077] Add support string functions: OVERLAY
 -- T312 character overlay function
--- SELECT OVERLAY('abcdef' PLACING '45' FROM 4) AS "abc45f";
+SELECT OVERLAY('abcdef' PLACING '45' FROM 4) AS `abc45f`;
 
--- SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5) AS "yabadaba";
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5) AS `yabadaba`;
 
--- SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5 FOR 0) AS "yabadabadoo";
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5 FOR 0) AS `yabadabadoo`;
 
--- SELECT OVERLAY('babosa' PLACING 'ubb' FROM 2 FOR 4) AS "bubba";
+SELECT OVERLAY('babosa' PLACING 'ubb' FROM 2 FOR 4) AS `bubba`;
 
 --
 -- test LIKE

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -102,7 +102,7 @@ import org.apache.spark.sql.types.StructType
  * Therefore, UDF test cases should have single input and output files but executed by three
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
-class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
+class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
 
   import IntegratedUDFTestUtils._
 

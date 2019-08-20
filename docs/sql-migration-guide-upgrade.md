@@ -149,6 +149,8 @@ license: |
 
   - Since Spark 3.0, if files or subdirectories disappear during recursive directory listing (i.e. they appear in an intermediate listing but then cannot be read or listed during later phases of the recursive directory listing, due to either concurrent file deletions or object store consistency issues) then the listing will fail with an exception unless `spark.sql.files.ignoreMissingFiles` is `true` (default `false`). In previous versions, these missing files or subdirectories would be ignored. Note that this change of behavior only applies during initial table file listing (or during `REFRESH TABLE`), not during query execution: the net change is that `spark.sql.files.ignoreMissingFiles` is now obeyed during table file listing / query planning, not only at query execution time.
 
+  - Since Spark 3.0, `createDataFrame(..., verifySchema=True)` validates `LongType` as well in PySpark. Previously, `LongType` was not verified and resulted in `None` in case the value overflows. To restore this behavior, `verifySchema` can be set to `False` to disable the validation.
+
   - Since Spark 3.0, substitution order of nested WITH clauses is changed and an inner CTE definition takes precedence over an outer. In version 2.4 and earlier, `WITH t AS (SELECT 1), t2 AS (WITH t AS (SELECT 2) SELECT * FROM t) SELECT * FROM t2` returns `1` while in version 3.0 it returns `2`. The previous behaviour can be restored by setting `spark.sql.legacy.ctePrecedence.enabled` to `true`.
 
   - Since Spark 3.0, the `add_months` function does not adjust the resulting date to a last day of month if the original date is a last day of months. For example, `select add_months(DATE'2019-02-28', 1)` results `2019-03-28`. In Spark version 2.4 and earlier, the resulting date is adjusted when the original date is a last day of months. For example, adding a month to `2019-02-28` results in `2019-03-31`.
@@ -158,6 +160,95 @@ license: |
   - The result of `java.lang.Math`'s `log`, `log1p`, `exp`, `expm1`, and `pow` may vary across platforms. In Spark 3.0, the result of the equivalent SQL functions (including related SQL functions like `LOG10`) return values consistent with `java.lang.StrictMath`. In virtually all cases this makes no difference in the return value, and the difference is very small, but may not exactly match `java.lang.Math` on x86 platforms in cases like, for example, `log(3.0)`, whose value varies between `Math.log()` and `StrictMath.log()`.
 
   - Since Spark 3.0, Dataset query fails if it contains ambiguous column reference that is caused by self join. A typical example: `val df1 = ...; val df2 = df1.filter(...);`, then `df1.join(df2, df1("a") > df2("a"))` returns an empty result which is quite confusing. This is because Spark cannot resolve Dataset column references that point to tables being self joined, and `df1("a")` is exactly the same as `df2("a")` in Spark. To restore the behavior before Spark 3.0, you can set `spark.sql.analyzer.failAmbiguousSelfJoin` to `false`.
+
+  - Since Spark 3.0, `Cast` function processes string literals such as 'Infinity', '+Infinity', '-Infinity', 'NaN', 'Inf', '+Inf', '-Inf' in case insensitive manner when casting the literals to `Double` or `Float` type to ensure greater compatibility with other database systems. This behaviour change is illustrated in the table below:
+    <table class="table">
+        <tr>
+          <th>
+            <b>Operation</b>
+          </th>
+          <th>
+            <b>Result prior to Spark 3.0</b>
+          </th>
+          <th>
+            <b>Result starting Spark 3.0</b>
+          </th>
+        </tr>
+        <tr>
+          <td>
+            CAST('infinity' AS DOUBLE)<br>
+            CAST('+infinity' AS DOUBLE)<br>
+            CAST('inf' AS DOUBLE)<br>
+            CAST('+inf' AS DOUBLE)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Double.PositiveInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('-infinity' AS DOUBLE)<br>
+            CAST('-inf' AS DOUBLE)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Double.NegativeInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('infinity' AS FLOAT)<br>
+            CAST('+infinity' AS FLOAT)<br>
+            CAST('inf' AS FLOAT)<br>
+            CAST('+inf' AS FLOAT)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Float.PositiveInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('-infinity' AS FLOAT)<br>
+            CAST('-inf' AS FLOAT)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Float.NegativeInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('nan' AS DOUBLE)
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Double.NaN
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('nan' AS FLOAT)
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Float.NaN
+          </td>
+        </tr>
+    </table>
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 

@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.types._
 
 /**
@@ -650,8 +651,14 @@ class Analyzer(
           if catalog.isTemporaryTable(ident) =>
         u // temporary views take precedence over catalog table names
 
-      case u @ UnresolvedRelation(CatalogObjectIdentifier(Some(catalogPlugin), ident)) =>
-        loadTable(catalogPlugin, ident).map(DataSourceV2Relation.create).getOrElse(u)
+      case u @ UnresolvedRelation(CatalogObjectIdentifier(maybeCatalog, ident)) =>
+        maybeCatalog.orElse(sessionCatalog)
+          .flatMap(loadTable(_, ident))
+          .map {
+            case unresolved: UnresolvedTable => u
+            case resolved => DataSourceV2Relation.create(resolved)
+          }
+          .getOrElse(u)
     }
   }
 
@@ -1640,7 +1647,8 @@ class Analyzer(
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
                   if (isDistinct) {
-                    failAnalysis(s"${wf.prettyName} does not support the modifier DISTINCT")
+                    failAnalysis(
+                      s"DISTINCT specified, but ${wf.prettyName} is not an aggregate function")
                   } else {
                     wf
                   }
@@ -1649,7 +1657,8 @@ class Analyzer(
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct) {
-                    failAnalysis(s"${other.prettyName} does not support the modifier DISTINCT")
+                    failAnalysis(
+                      s"DISTINCT specified, but ${other.prettyName} is not an aggregate function")
                   } else {
                     other
                   }
@@ -1761,6 +1770,8 @@ class Analyzer(
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
+      case d: DeleteFromTable if d.childrenResolved =>
+        resolveSubQueries(d, d.children)
     }
   }
 
@@ -1799,15 +1810,18 @@ class Analyzer(
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       // Collect all Windowed Aggregate Expressions.
-      val windowedAggExprs = exprs.flatMap { expr =>
+      val windowedAggExprs: Set[Expression] = exprs.flatMap { expr =>
         expr.collect {
           case WindowExpression(ae: AggregateExpression, _) => ae
+          case WindowExpression(e: PythonUDF, _) if PythonUDF.isGroupedAggPandasUDF(e) => e
         }
       }.toSet
 
       // Find the first Aggregate Expression that is not Windowed.
       exprs.exists(_.collectFirst {
         case ae: AggregateExpression if !windowedAggExprs.contains(ae) => ae
+        case e: PythonUDF if PythonUDF.isGroupedAggPandasUDF(e) &&
+          !windowedAggExprs.contains(e) => e
       }.isDefined)
     }
   }

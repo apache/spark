@@ -194,6 +194,25 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+ <td><code>spark.resources.coordinate.enable</code></td>
+  <td>true</td>
+  <td>
+    Whether to coordinate resources automatically among workers/drivers(client only) 
+    in Standalone. If false, the user is responsible for configuring different resources
+    for workers/drivers that run on the same host.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.resources.dir</code></td>
+  <td>SPARK_HOME</td>
+  <td>
+    Directory used to coordinate resources among workers/drivers(client only) in Standalone.
+    Default is SPARK_HOME. Make sure to use the same directory for worker and drivers in
+    client mode that run on the same host. Don't clean up this directory while workers/drivers
+    are still alive to avoid the most likely resources conflict. 
+  </td>
+</tr>
+<tr>
  <td><code>spark.driver.resource.{resourceName}.amount</code></td>
   <td>0</td>
   <td>
@@ -209,7 +228,9 @@ of the most common options to set are:
   <td>
     A script for the driver to run to discover a particular resource type. This should
     write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
-    name and an array of addresses.
+    name and an array of addresses. For a client-submitted driver in Standalone, discovery
+    script must assign different resource addresses to this driver comparing to workers' and
+    other dirvers' when <code>spark.resources.coordinate.enable</code> is off.
   </td>
 </tr>
 <tr>
@@ -2014,6 +2035,50 @@ Apart from these, the following properties are also available, and may be useful
   <td>4</td>
   <td>
     Number of consecutive stage attempts allowed before a stage is aborted.
+  </td>
+</tr>
+</table>
+
+### Barrier Execution Mode
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.barrier.sync.timeout</code></td>
+  <td>365d</td>
+  <td>
+    The timeout in seconds for each <code>barrier()</code> call from a barrier task. If the
+    coordinator didn't receive all the sync messages from barrier tasks within the
+    configured time, throw a SparkException to fail all the tasks. The default value is set
+    to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.interval</code></td>
+  <td>15s</td>
+  <td>
+    Time in seconds to wait between a max concurrent tasks check failure and the next
+    check. A max concurrent tasks check ensures the cluster can launch more concurrent
+    tasks than required by a barrier stage on job submitted. The check can fail in case
+    a cluster has just started and not enough executors have registered, so we wait for a
+    little while and try to perform the check again. If the check fails more than a
+    configured max failure times for a job then fail current job submission. Note this
+    config only applies to jobs that contain one or more barrier stages, we won't perform
+    the check on non-barrier jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures</code></td>
+  <td>40</td>
+  <td>
+    Number of max concurrent tasks check failures allowed before fail a job submission.
+    A max concurrent tasks check ensures the cluster can launch more concurrent tasks than
+    required by a barrier stage on job submitted. The check can fail in case a cluster
+    has just started and not enough executors have registered, so we wait for a little
+    while and try to perform the check again. If the check fails more than a configured
+    max failure times for a job then fail current job submission. Note this config only
+    applies to jobs that contain one or more barrier stages, we won't perform the check on
+    non-barrier jobs.
   </td>
 </tr>
 </table>

@@ -178,7 +178,6 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri(request, "/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
     <script src={prependBaseUri(request, "/static/table.js")}></script>
-    <script src={prependBaseUri(request, "/static/additional-metrics.js")}></script>
     <script src={prependBaseUri(request, "/static/timeline-view.js")}></script>
     <script src={prependBaseUri(request, "/static/log-view.js")}></script>
     <script src={prependBaseUri(request, "/static/webui.js")}></script>
@@ -426,6 +425,9 @@ private[spark] object UIUtils extends Logging {
               {
                 g.rootCluster.getCachedNodes.map { n =>
                   <div class="cached-rdd">{n.id}</div>
+                } ++
+                g.rootCluster.getBarrierClusters.map { c =>
+                  <div class="barrier-rdd">{c.id}</div>
                 }
               }
             </div>

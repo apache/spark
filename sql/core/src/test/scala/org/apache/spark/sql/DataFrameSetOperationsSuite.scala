@@ -22,11 +22,11 @@ import java.sql.{Date, Timestamp}
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.test.SQLTestData.NullStrings
 import org.apache.spark.sql.types._
 
-class DataFrameSetOperationsSuite extends QueryTest with SharedSQLContext {
+class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("except") {

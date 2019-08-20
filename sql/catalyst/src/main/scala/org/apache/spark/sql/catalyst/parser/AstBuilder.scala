@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -336,6 +336,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+  }
+
+  override def visitDeleteFromTable(
+      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
+
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableAlias = if (ctx.tableAlias() != null) {
+      val ident = ctx.tableAlias().strictIdentifier()
+      if (ident != null) { Some(ident.getText) } else { None }
+    } else {
+      None
+    }
+
+    DeleteFromStatement(tableId, tableAlias, expression(ctx.whereClause().booleanExpression()))
   }
 
   /**
@@ -1396,15 +1410,23 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
     ctx.field.getText.toUpperCase(Locale.ROOT) match {
-      case "YEAR" =>
+      case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" =>
+        Millennium(expression(ctx.source))
+      case "CENTURY" | "CENTURIES" | "C" | "CENT" =>
+        Century(expression(ctx.source))
+      case "DECADE" | "DECADES" | "DEC" | "DECS" =>
+        Decade(expression(ctx.source))
+      case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
         Year(expression(ctx.source))
-      case "QUARTER" =>
+      case "ISOYEAR" =>
+        IsoYear(expression(ctx.source))
+      case "QUARTER" | "QTR" =>
         Quarter(expression(ctx.source))
-      case "MONTH" =>
+      case "MONTH" | "MON" | "MONS" | "MONTHS" =>
         Month(expression(ctx.source))
-      case "WEEK" =>
+      case "WEEK" | "W" | "WEEKS" =>
         WeekOfYear(expression(ctx.source))
-      case "DAY" =>
+      case "DAY" | "D" | "DAYS" =>
         DayOfMonth(expression(ctx.source))
       case "DAYOFWEEK" =>
         DayOfWeek(expression(ctx.source))
@@ -1414,12 +1436,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         Add(WeekDay(expression(ctx.source)), Literal(1))
       case "DOY" =>
         DayOfYear(expression(ctx.source))
-      case "HOUR" =>
+      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" =>
         Hour(expression(ctx.source))
-      case "MINUTE" =>
+      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" =>
         Minute(expression(ctx.source))
-      case "SECOND" =>
+      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
         Second(expression(ctx.source))
+      case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+        Milliseconds(expression(ctx.source))
+      case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+        Microseconds(expression(ctx.source))
+      case "EPOCH" =>
+        Epoch(expression(ctx.source))
       case other =>
         throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
     }

@@ -90,7 +90,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite with SQLHelper {
   }
 }
 
-class CheckpointFileManagerSuite extends SparkFunSuite with SharedSparkSession {
+class CheckpointFileManagerSuite extends SharedSparkSession {
 
   test("CheckpointFileManager.create() should pick up user-specified class from conf") {
     withSQLConf(
