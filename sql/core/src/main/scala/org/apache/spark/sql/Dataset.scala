@@ -192,11 +192,10 @@ class Dataset[T] private[sql](
   @transient lazy val sparkSession: SparkSession = {
     if (_sparkSession == null) {
       throw new SparkException(
-      "This Dataset lacks a SparkSession. It could happen in the following cases: \n(1) Dataset " +
-      "transformations and actions are NOT invoked by the driver, but inside of other " +
-      "transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid " +
-      "because the values transformation and count action cannot be performed inside of the " +
-      "dataset1.map transformation. For more information, see SPARK-28702.")
+      "Dataset transformations and actions can only be invoked by the driver, not inside of" +
+        " other transformations; for example, dataset1.map(x => dataset2.values.count() * x)" +
+        " is invalid because the values transformation and count action cannot be performed" +
+        " inside of the dataset1.map transformation. For more information, see SPARK-28702.")
     }
     _sparkSession
   }
