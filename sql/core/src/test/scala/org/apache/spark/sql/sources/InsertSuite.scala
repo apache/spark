@@ -568,12 +568,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
           "columns as the target table: target table has 2 column(s)" +
           " but the inserted data has 3 column(s)"))
 
-        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
-        msg = intercept[AnalysisException] {
-          Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
-        }.getMessage
-        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
-
         msg = intercept[AnalysisException] {
           sql("insert into t select 1")
         }.getMessage

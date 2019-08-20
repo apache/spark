@@ -192,7 +192,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
           tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
-          byName = false, conf)))
+          byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
