@@ -198,6 +198,45 @@
     -->
     <profile>
       <id>hadoop-3.2</id>
+      <properties>
+        <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
+        <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
+      </properties>
+
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>add-scala-sources</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${extra.source.dir}</source>
+                  </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-scala-test-sources</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${extra.testsource.dir}</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
       <dependencies>
         <!--
         There's now a hadoop-cloud-storage which transitively pulls in the store JARs,

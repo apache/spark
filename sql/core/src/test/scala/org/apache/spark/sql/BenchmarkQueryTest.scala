@@ -17,16 +17,14 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-abstract class BenchmarkQueryTest extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
+abstract class BenchmarkQueryTest extends QueryTest with SharedSparkSession {
 
   // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
   // the max iteration of analyzer/optimizer batches.

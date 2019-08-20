@@ -36,12 +36,12 @@ import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.TableCapability._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.partitioning.{ClusteredDistribution, Distribution, Partitioning}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class DataSourceV2Suite extends QueryTest with SharedSQLContext {
+class DataSourceV2Suite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
