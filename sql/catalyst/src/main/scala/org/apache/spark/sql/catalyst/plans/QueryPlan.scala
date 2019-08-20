@@ -181,14 +181,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   override def verboseString(maxFields: Int): String = simpleString(maxFields)
 
   override def simpleStringWithNodeId(): String = {
-    val operatorId = getTagValue(QueryPlan.opidTag).map(id => s"$id").getOrElse("unknown")
+    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
     s"$nodeName ($operatorId)".trim
   }
 
   def verboseStringWithOperatorId(): String = {
     val codegenIdStr =
-      getTagValue(QueryPlan.codegenTag).map(id => s"[codegen id : $id]").getOrElse("")
-    val operatorId = getTagValue(QueryPlan.opidTag).map(id => s"$id").getOrElse("unknown")
+      getTagValue(QueryPlan.CODEGEN_ID_TAG).map(id => s"[codegen id : $id]").getOrElse("")
+    val operatorId = getTagValue(QueryPlan.OP_ID_TAG).map(id => s"$id").getOrElse("unknown")
     s"""
        |($operatorId) $nodeName $codegenIdStr
      """.stripMargin
@@ -292,7 +292,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   final def sameResult(other: PlanType): Boolean = this.canonicalized == other.canonicalized
 
   /**
-   * Returns a `hashCode` for the calculation performed by this plan. Unlike the standard
+   * Returns a `hashCode` for the calculation performed by
+   * this plan. Unlike the standard
    * `hashCode`, an attempt has been made to eliminate cosmetic differences.
    */
   final def semanticHash(): Int = canonicalized.hashCode()
@@ -304,8 +305,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 }
 
 object QueryPlan extends PredicateHelper {
-  val opidTag = TreeNodeTag[Int]("operatorId")
-  val codegenTag = new TreeNodeTag[Int]("wholeStageCodegenId")
+  val OP_ID_TAG = TreeNodeTag[Int]("operatorId")
+  val CODEGEN_ID_TAG = new TreeNodeTag[Int]("wholeStageCodegenId")
 
   /**
    * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`

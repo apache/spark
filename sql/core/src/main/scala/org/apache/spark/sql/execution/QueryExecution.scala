@@ -133,7 +133,7 @@ class QueryExecution(
   def simpleString(formatted: Boolean): String = withRedaction {
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
-    if (SQLConf.get.sqlExplainLegacyFormat == false || formatted) {
+    if (formatted) {
       ExplainUtils.processPlan(executedPlan, concat.append)
     } else {
       QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)

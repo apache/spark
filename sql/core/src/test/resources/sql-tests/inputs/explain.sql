@@ -91,31 +91,6 @@ EXPLAIN FORMATTED
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key;
 
-SET spark.sql.explain.legacy.format = false;
-
--- single table
-EXPLAIN 
-  SELECT key, max(val) 
-  FROM   explain_temp1 
-  WHERE  key > 0 
-  GROUP  BY key 
-  ORDER  BY key; 
-
--- Join
-EXPLAIN 
-  SELECT * 
-  FROM   explain_temp1 a, 
-         explain_temp2 b 
-  WHERE  a.key = b.key; 
-
-SET spark.sql.explain.legacy.format = true;
--- Make sure switching the config swiches the explain mode.
-EXPLAIN 
-  SELECT key, max(val) 
-  FROM   VALUES (1,1), (1,2) AS t1(key, val)
-  WHERE  key> 0 
-  GROUP  BY key;
-   
 -- cleanup
 DROP TABLE explain_temp1;
 DROP TABLE explain_temp2;

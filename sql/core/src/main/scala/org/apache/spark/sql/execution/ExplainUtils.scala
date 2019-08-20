@@ -28,14 +28,25 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 object ExplainUtils {
   /**
    * Given a input physical plan, performs the following tasks.
-   *   1. Generate the plan -> operator id map.
-   *   2. Generate the plan -> codegen id map
+   *   1. Computes the operator id for current operator and records it in the operaror
+   *      by setting a tag.
+   *   2. Computes the whole stage codegen id for current operator and records it in the
+   *      operator by setting a tag.
    *   3. Generate the two part explain output for this plan.
    *      1. First part explains the operator tree with each operator tagged with an unique
    *         identifier.
    *      2. Second part explans each operator in a verbose manner.
    *
    * Note : This function skips over subqueries. They are handled by its caller.
+   *
+   * @param plan Input query plan to process
+   * @param append function used to append the explain output
+   * @startOperationID The start value of operation id. The subsequent operations will
+   *                  be assigned higher value.
+   *
+   * @return The last generated operation id for this input plan. This is to ensure we
+   *         always assign incrementing unique id to each operator.
+   *
    */
   private def processPlanSkippingSubqueries[T <: QueryPlan[T]](
       plan: => QueryPlan[T],
@@ -51,7 +62,7 @@ object ExplainUtils {
     var currentOperatorID = startOperatorID
     try {
       currentOperatorID = generateOperatorIDs(plan, currentOperatorID, operationIDs)
-      generateWholeStageCodegenIdMap(plan)
+      generateWholeStageCodegenIds(plan)
 
       QueryPlan.append(
         plan,
@@ -109,13 +120,20 @@ object ExplainUtils {
   }
 
   /**
-   * Traverses the supplied input plan in a bottem-up fashion to produce the following two maps :
-   *    1. operator -> operator identifier
-   *    2. operator identifier -> operator
+   * Traverses the supplied input plan in a bottem-up fashion does the following :
+   *    1. produces a map : operator identifier -> operator
+   *    2. Records the operator id via setting a tag in the operator.
    * Note :
    *    1. Operator such as WholeStageCodegenExec and InputAdapter are skipped as they don't
    *       appear in the explain output.
-   *    2. operator identifier starts at startIdx + 1
+   *    2. operator identifier starts at startOperatorID + 1
+   * @param plan Input query plan to process
+   * @startOperationID The start value of operation id. The subsequent operations will
+   *                  be assigned higher value.
+   * @operatorIDs A output parameter that contains a map of operator id and query plan. This
+   *             is used by caller to print the detail portion of the plan.
+   * @return The last generated operation id for this input plan. This is to ensure we
+   *         always assign incrementing unique id to each operator.
    */
   private def generateOperatorIDs(
       plan: QueryPlan[_],
@@ -130,9 +148,9 @@ object ExplainUtils {
       case p: WholeStageCodegenExec =>
       case p: InputAdapter =>
       case other: QueryPlan[_] =>
-        if (!other.getTagValue(QueryPlan.opidTag).isDefined) {
+        if (!other.getTagValue(QueryPlan.OP_ID_TAG).isDefined) {
           currentOperationID += 1
-          other.setTagValue(QueryPlan.opidTag, currentOperationID)
+          other.setTagValue(QueryPlan.OP_ID_TAG, currentOperationID)
           operatorIDs += ((currentOperationID, other))
         }
         other.innerChildren.foreach { plan =>
@@ -143,11 +161,12 @@ object ExplainUtils {
     }
     currentOperationID
   }
+
   /**
-   * Traverses the supplied input plan in a top-down fashion to produce the following map:
-   *    1. operator -> whole stage codegen id
+   * Traverses the supplied input plan in a top-down fashion and records the
+   * whole stage code gen id in the plan via setting a tag.
    */
-  private def generateWholeStageCodegenIdMap(plan: QueryPlan[_]): Unit = {
+  private def generateWholeStageCodegenIds(plan: QueryPlan[_]): Unit = {
     // Skip the subqueries as they are not printed as part of main query block.
     if (plan.isInstanceOf[BaseSubqueryExec]) {
       return
@@ -158,10 +177,10 @@ object ExplainUtils {
       case p: InputAdapter => currentCodegenId = -1
       case other: QueryPlan[_] =>
         if (currentCodegenId != -1) {
-          other.setTagValue(QueryPlan.codegenTag, currentCodegenId)
+          other.setTagValue(QueryPlan.CODEGEN_ID_TAG, currentCodegenId)
         }
         other.innerChildren.foreach { plan =>
-          generateWholeStageCodegenIdMap(plan)
+          generateWholeStageCodegenIds(plan)
         }
     }
   }
@@ -172,7 +191,7 @@ object ExplainUtils {
    *  2. Hosting expression
    *  3. Subquery plan
    */
-  private def getSubqueries[T <: QueryPlan[T]](
+  private def getSubqueries(
       plan: => QueryPlan[_],
       subqueries: ArrayBuffer[(SparkPlan, Expression, SparkPlan)]): Unit = {
     plan.foreach {
@@ -190,22 +209,26 @@ object ExplainUtils {
   }
 
   /**
-   * Returns the operator identifier for the supplied plan by performing a lookup
-   * against an list of plan to operator identifier maps.
+   * Returns the operator identifier for the supplied plan by retrieving the
+   * `operationId` tag value.`
    */
   def getOpId(plan: QueryPlan[_]): String = {
-    plan.getTagValue(QueryPlan.opidTag).map(v => s"$v").getOrElse("unknown")
+    plan.getTagValue(QueryPlan.OP_ID_TAG).map(v => s"$v").getOrElse("unknown")
   }
 
+  /**
+   * Returns the operator identifier for the supplied plan by retrieving the
+   * `codegenId` tag value.`
+   */
   def getCodegenId(plan: QueryPlan[_]): String = {
-    plan.getTagValue(QueryPlan.codegenTag).map(v => s"[codegen id : $v]").getOrElse("")
+    plan.getTagValue(QueryPlan.CODEGEN_ID_TAG).map(v => s"[codegen id : $v]").getOrElse("")
   }
 
   def removeTags(plan: QueryPlan[_]): Unit = {
     plan foreach {
       case plan: QueryPlan[_] =>
-        plan.removeTag(QueryPlan.opidTag)
-        plan.removeTag(QueryPlan.codegenTag)
+        plan.removeTag(QueryPlan.OP_ID_TAG)
+        plan.removeTag(QueryPlan.CODEGEN_ID_TAG)
         plan.innerChildren.foreach { p =>
           removeTags(p)
         }
