@@ -1561,8 +1561,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val unioned = source1.union(source2)
 
       def addMultiTextFileData(
-                                source1Content: String,
-                                source2Content: String): StreamAction = {
+          source1Content: String,
+          source2Content: String): StreamAction = {
         val actions = Seq(
           AddTextFileData(source1Content, sourceDir1, tmp),
           AddTextFileData(source2Content, sourceDir2, tmp)
