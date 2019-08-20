@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  *
  * The input dataframes are first Cogrouped.  Rows from each side of the cogroup are passed to the
  * Python worker via Arrow.  As each side of the cogroup may have a different schema we send every
- * group in it's own Arrow stream.
+ * group in its own Arrow stream.
  * The Python worker turns the resulting record batches to `pandas.DataFrame`s, invokes the
  * user-defined function, and passes the resulting `pandas.DataFrame`
  * as an Arrow record batch. Finally, each record batch is turned to

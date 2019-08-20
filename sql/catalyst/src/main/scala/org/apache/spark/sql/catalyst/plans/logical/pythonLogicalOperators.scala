@@ -56,12 +56,12 @@ case class MapInPandas(
  * This is used by DataFrame.groupby().cogroup().apply().
  */
 case class FlatMapCoGroupsInPandas(
-                                    leftAttributes: Seq[Attribute],
-                                    rightAttributes: Seq[Attribute],
-                                    functionExpr: Expression,
-                                    output: Seq[Attribute],
-                                    left: LogicalPlan,
-                                    right: LogicalPlan) extends BinaryNode {
+    leftAttributes: Seq[Attribute],
+    rightAttributes: Seq[Attribute],
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    left: LogicalPlan,
+    right: LogicalPlan) extends BinaryNode {
 
   override val producedAttributes = AttributeSet(output)
 }
