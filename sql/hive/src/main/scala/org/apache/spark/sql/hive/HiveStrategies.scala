@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.IOException
 import java.util.Locale
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
@@ -109,6 +108,22 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
       }
 
       c.copy(tableDesc = withSchema)
+  }
+}
+
+class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case relation: HiveTableRelation
+        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      val table = relation.tableMeta
+      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+        CommandUtils.getSizeInBytesFallBackToHdfs(session, table)
+      } else {
+        session.sessionState.conf.defaultSizeInBytes
+      }
+
+      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+      relation.copy(tableMeta = withStats)
   }
 }
 

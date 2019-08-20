@@ -220,10 +220,20 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
-    val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
+  private def maybeWithTableStats(tableMeta: CatalogTable): CatalogTable = {
+    if (tableMeta.stats.isEmpty && sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+      val sizeInBytes = CommandUtils.getSizeInBytesFallBackToHdfs(sparkSession, tableMeta)
+      tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+    } else {
+      tableMeta
+    }
+  }
+
+  private def readDataSourceTable(tableMeta: CatalogTable): LogicalPlan = {
+    val qualifiedTableName = QualifiedTableName(tableMeta.database, tableMeta.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     catalog.getCachedPlan(qualifiedTableName, () => {
+      val table = maybeWithTableStats(tableMeta)
       val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
       val dataSource =
         DataSource(
@@ -617,37 +627,5 @@ object DataSourceStrategy {
     val handledFilters = pushedFilters.toSet -- unhandledFilters
 
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
-  }
-}
-
-
-/**
- * Defines default table statistics if table statistics are not available.
- */
-class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-
-  private val conf = session.sessionState.conf
-
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    // For the data source table, we only recalculate the table statistics
-    // when the table stats are not available and it will use CatalogFileIndex.
-    case logical @ LogicalRelation(_, _, Some(table), _)
-      if DDLUtils.isDatasourceTable(table) && table.stats.isEmpty &&
-        conf.fallBackToHdfsForStatsEnabled && conf.manageFilesourcePartitions &&
-        table.tracksPartitionsInCatalog && table.partitionColumnNames.nonEmpty =>
-      val sizeInBytes = CommandUtils.getSizeInBytesFallBackToHdfs(session, table)
-      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      logical.copy(catalogTable = Some(withStats))
-
-    case relation: HiveTableRelation
-      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      val table = relation.tableMeta
-      val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled) {
-        CommandUtils.getSizeInBytesFallBackToHdfs(session, table)
-      } else {
-        conf.defaultSizeInBytes
-      }
-      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      relation.copy(tableMeta = withStats)
   }
 }

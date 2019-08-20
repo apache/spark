@@ -24,12 +24,13 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
@@ -713,6 +714,36 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
                 CommandUtils.getSizeInBytesFallBackToHdfs(spark, getCatalogTable("spark_25474")))
             } else {
               assert(relation.stats.sizeInBytes === defaultSizeInBytes)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("Partitioned data source table stats should be cached") {
+    Seq(false, true).foreach { fallBackToHDFS =>
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHDFS") {
+        withTempDir { dir =>
+          withTable("spark_25474") {
+            sql("CREATE TABLE spark_25474(a int, b int) USING parquet " +
+              s"PARTITIONED BY(a) LOCATION '${dir.toURI}'")
+            sql("INSERT INTO TABLE spark_25474 PARTITION(a=1) SELECT 2")
+
+            assert(getCatalogTable("spark_25474").stats.isEmpty)
+            val relation = spark.table("spark_25474").queryExecution.analyzed.children.head
+            if (fallBackToHDFS) {
+              val dataSize =
+                CommandUtils.getSizeInBytesFallBackToHdfs(spark, getCatalogTable("spark_25474"))
+              assert(relation.stats.sizeInBytes === dataSize)
+
+              val qualifiedTableName =
+                QualifiedTableName(spark.sessionState.catalog.getCurrentDatabase, "spark_25474")
+              val logicalRelation = spark.sessionState.catalog.getCachedTable(qualifiedTableName)
+                .asInstanceOf[LogicalRelation]
+              assert(logicalRelation.catalogTable.get.stats.get.sizeInBytes === dataSize)
+            } else {
+              assert(relation.stats.sizeInBytes === conf.defaultSizeInBytes)
             }
           }
         }
