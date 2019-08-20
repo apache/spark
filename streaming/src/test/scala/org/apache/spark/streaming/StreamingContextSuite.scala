@@ -36,10 +36,11 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
@@ -839,6 +840,31 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
     // is running.
     assert(latch.await(60, TimeUnit.SECONDS))
+  }
+
+  test("SPARK-22955 graceful shutdown shouldn't lead to job generation error") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.streaming.clock", classOf[ManualClock].getName)
+    conf.set("spark.streaming.gracefulStopTimeout", "60s")
+
+    ssc = new StreamingContext(conf, Milliseconds(100))
+
+    new InputDStream[Int](ssc) {
+      @volatile private var stopped = false
+      override def start(): Unit = {}
+      override def stop(): Unit = stopped = true
+      override def compute(validTime: Time): Option[RDD[Int]] = {
+        if (stopped) throw new IllegalStateException("Already stopped")
+        Some(ssc.sc.emptyRDD[Int])
+      }
+    }.register()
+
+    ssc.start()
+    // start generating of batches constantly without any delay
+    ssc.scheduler.clock.asInstanceOf[ManualClock].setTime(Long.MaxValue)
+    ssc.stop(stopSparkContext = true, stopGracefully = true)
+    // exception shouldn't be thrown
+    ssc.awaitTermination()
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {
