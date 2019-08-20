@@ -114,7 +114,7 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
     if (x == x.toInt) {
       x.toInt
     } else {
-      throw new ArithmeticException(s"Casting $x to Int causes overflow.")
+      throw new ArithmeticException(s"Casting $x to int causes overflow.")
     }
 }
 
@@ -129,7 +129,7 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
     if (x < intUpperBound && x > intLowerBound) {
       x.toInt
     } else {
-      throw new ArithmeticException(exceptionMessage(x, "Int"))
+      throw new ArithmeticException(exceptionMessage(x, "int"))
     }
   }
 
@@ -137,7 +137,7 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
     if (x <= Long.MaxValue && x >= Long.MinValue) {
       x.toLong
     } else {
-      throw new ArithmeticException(exceptionMessage(x, "Long"))
+      throw new ArithmeticException(exceptionMessage(x, "long"))
     }
   }
 }
@@ -153,7 +153,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
     if (x < intUpperBound && x > intLowerBound) {
       x.toInt
     } else {
-      throw new ArithmeticException(exceptionMessage(x, "Int"))
+      throw new ArithmeticException(exceptionMessage(x, "int"))
     }
   }
 
@@ -161,7 +161,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
     if (x <= Long.MaxValue && x >= Long.MinValue) {
       x.toLong
     } else {
-      throw new ArithmeticException(exceptionMessage(x, "Long"))
+      throw new ArithmeticException(exceptionMessage(x, "long"))
     }
   }
 }
@@ -179,7 +179,7 @@ object DecimalExactNumeric extends DecimalIsConflicted {
     if (x < intUpperBound && x > intLowerBound) {
       x.toInt
     } else {
-      throw new ArithmeticException(exceptionMessage(x, "Int"))
+      throw new ArithmeticException(exceptionMessage(x, "int"))
     }
   }
 
@@ -187,7 +187,7 @@ object DecimalExactNumeric extends DecimalIsConflicted {
     if (x < longUpperBound && x > longLowerBound) {
       x.toLong
     } else {
-      throw new ArithmeticException(exceptionMessage(x, "Long"))
+      throw new ArithmeticException(exceptionMessage(x, "long"))
     }
   }
 }

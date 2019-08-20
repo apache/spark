@@ -510,7 +510,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if (!failOnIntegerOverflow || longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          throw new ArithmeticException(s"Casting $t to Short causes overflow.")
+          throw new ArithmeticException(s"Casting $t to short causes overflow.")
         }
       })
     case x: NumericType if failOnIntegerOverflow =>
@@ -519,12 +519,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw new ArithmeticException(s"Casting $b to Short causes overflow.")
+            throw new ArithmeticException(s"Casting $b to short causes overflow.")
         }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {
-          throw new ArithmeticException(s"Casting $b to Short causes overflow.")
+          throw new ArithmeticException(s"Casting $b to short causes overflow.")
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -549,7 +549,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if (!failOnIntegerOverflow || longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          throw new ArithmeticException(s"Casting $t to Byte causes overflow.")
+          throw new ArithmeticException(s"Casting $t to byte causes overflow.")
         }
       })
     case x: NumericType if failOnIntegerOverflow =>
@@ -558,12 +558,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw new ArithmeticException(s"Casting $b to Byte causes overflow.")
+            throw new ArithmeticException(s"Casting $b to byte causes overflow.")
         }
         if (intValue == intValue.toByte) {
           intValue.toByte
         } else {
-          throw new ArithmeticException(s"Casting $b to Byte causes overflow.")
+          throw new ArithmeticException(s"Casting $b to byte causes overflow.")
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
@@ -1235,25 +1235,25 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castTimestampToIntegerCode(
       ctx: CodegenContext,
-      intType: String): CastFunction = {
+      integralType: String): CastFunction = {
     if (failOnIntegerOverflow) {
       val longValue = ctx.freshName("longValue")
       (c, evPrim, evNull) =>
         code"""
           long $longValue = ${timestampToLongCode(c)};
-          if ($longValue == ($intType) $longValue) {
-            $evPrim = ($intType) $longValue;
+          if ($longValue == ($integralType) $longValue) {
+            $evPrim = ($integralType) $longValue;
           } else {
-            throw new ArithmeticException("Casting $c to ${intType.capitalize} causes overflow");
+            throw new ArithmeticException("Casting $c to $integralType causes overflow");
           }
         """
     } else {
-      (c, evPrim, evNull) => code"$evPrim = ($intType) ${timestampToLongCode(c)};"
+      (c, evPrim, evNull) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
     }
   }
 
-  private[this] def lowerAndUpperBound(intType: String): (Double, Double) = {
-    intType.toLowerCase(Locale.ROOT) match {
+  private[this] def lowerAndUpperBound(integralType: String): (Double, Double) = {
+    integralType.toLowerCase(Locale.ROOT) match {
       case "int" => (Int.MinValue - 1.0, Int.MaxValue.toLong + 1.0)
       case "short" => (Short.MinValue - 1.0, Short.MaxValue + 1.0)
       case "byte" => (Byte.MinValue - 1.0, Byte.MaxValue + 1.0)
@@ -1262,46 +1262,46 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castDecimalToIntegerCode(
       ctx: CodegenContext,
-      intType: String): CastFunction = {
-    val capitalizedIntType = intType.capitalize
+      integralType: String): CastFunction = {
+    val capitalizedIntegralType = integralType.capitalize
     if (failOnIntegerOverflow) {
       val doubleValue = ctx.freshName("doubleValue")
-      val (min, max) = lowerAndUpperBound(intType)
+      val (min, max) = lowerAndUpperBound(integralType)
       (c, evPrim, evNull) =>
         code"""
           double $doubleValue = $c.toDouble();
           if ($doubleValue > $min && $doubleValue < $max) {
-            $evPrim = $c.to$capitalizedIntType();
+            $evPrim = $c.to$capitalizedIntegralType();
           } else {
-            throw new ArithmeticException("Casting $c to $capitalizedIntType causes overflow");
+            throw new ArithmeticException("Casting $c to $integralType causes overflow");
           }
         """
     } else {
-      (c, evPrim, evNull) => code"$evPrim = $c.to$capitalizedIntType();"
+      (c, evPrim, evNull) => code"$evPrim = $c.to$capitalizedIntegralType();"
     }
   }
 
-  private[this] def castIntegerToIntegerExactCode(intType: String): CastFunction = {
+  private[this] def castIntegerToIntegerExactCode(integralType: String): CastFunction = {
     assert(failOnIntegerOverflow)
     (c, evPrim, evNull) =>
       code"""
-        if ($c == ($intType) $c) {
-          $evPrim = ($intType) $c;
+        if ($c == ($integralType) $c) {
+          $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting $c to ${intType.capitalize} causes overflow");
+          throw new ArithmeticException("Casting $c to $integralType causes overflow");
         }
       """
   }
 
-  private[this] def castFractionToIntegerExactCode(intType: String): CastFunction = {
+  private[this] def castFractionToIntegerExactCode(integralType: String): CastFunction = {
     assert(failOnIntegerOverflow)
-    val (min, max) = lowerAndUpperBound(intType)
+    val (min, max) = lowerAndUpperBound(integralType)
     (c, evPrim, evNull) =>
       code"""
         if ($c > $min && $c < $max) {
-          $evPrim = ($intType) $c;
+          $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting $c to ${intType.capitalize} causes overflow");
+          throw new ArithmeticException("Casting $c to $integralType causes overflow");
         }
       """
   }
@@ -1414,7 +1414,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           try {
             $evPrim = $c.toJavaBigInteger().longValueExact();
           } catch (ArithmeticException e) {
-            throw new ArithmeticException("Casting $c to Long causes overflow");
+            throw new ArithmeticException("Casting $c to long causes overflow");
           }
         """
     case DecimalType() =>
@@ -1425,7 +1425,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if ($c >= ${Long.MinValue}L && $c <= ${Long.MaxValue}L) {
             $evPrim = (long) $c;
           } else {
-            throw new ArithmeticException("Casting $c to Long causes overflow");
+            throw new ArithmeticException("Casting $c to long causes overflow");
           }
         """
     case x: NumericType =>
