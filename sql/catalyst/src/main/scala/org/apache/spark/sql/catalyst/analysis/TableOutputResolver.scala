@@ -23,6 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.DataType
 
 object TableOutputResolver {
@@ -82,29 +83,34 @@ object TableOutputResolver {
       conf: SQLConf,
       addError: String => Unit): Option[NamedExpression] = {
 
-    if (!conf.useStrictStoreAssignmentPolicy) {
-      // Renaming is needed for handling the following cases like
-      // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-      // 2) Target tables have column metadata
-      Some(Alias(
-        Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
-        tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
-    } else {
-      // run the type check first to ensure type errors are present
-      val canWrite = DataType.canWrite(
-        queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name, addError)
-      if (queryExpr.nullable && !tableAttr.nullable) {
-        addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
-        None
-
-      } else if (!canWrite) {
-        None
-
-      } else {
+    conf.storeAssignmentPolicy match {
+      case StoreAssignmentPolicy.LEGACY =>
+        // Renaming is needed for handling the following cases like
+        // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+        // 2) Target tables have column metadata
         Some(Alias(
           Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
           tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
-      }
+
+      case StoreAssignmentPolicy.STRICT =>
+        // run the type check first to ensure type errors are present
+        val canWrite = DataType.canWrite(
+          queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name, addError)
+        if (queryExpr.nullable && !tableAttr.nullable) {
+          addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
+          None
+
+        } else if (!canWrite) {
+          None
+
+        } else {
+          Some(Alias(
+            Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
+            tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
+        }
+
+      case other =>
+        throw new AnalysisException(s"Unsupported store assignment policy: $other")
     }
   }
 }

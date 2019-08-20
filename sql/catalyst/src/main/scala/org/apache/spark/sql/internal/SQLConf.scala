@@ -27,8 +27,8 @@ import scala.collection.immutable
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkContext, TaskContext}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -2374,11 +2375,8 @@ class SQLConf extends Serializable with Logging {
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
-  def useStrictStoreAssignmentPolicy: Boolean =
-    getConf(STORE_ASSIGNMENT_POLICY) == StoreAssignmentPolicy.STRICT.toString()
-
-  def useLegacyStoreAssignmentPolicy: Boolean =
-    getConf(STORE_ASSIGNMENT_POLICY) == StoreAssignmentPolicy.STRICT.toString()
+  def storeAssignmentPolicy: StoreAssignmentPolicy.Value =
+    StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
