@@ -415,6 +415,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
         BigDecimal("99999999999999999999999999999999999000"))
+      // overflow during promote precision
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+        null)
     }
     withSQLConf(SQLConf.LEGACY_INTEGRALDIVIDE_RETURN_LONG.key -> "true") {
       checkEvaluation(IntegralDivide(Literal(Decimal(1)), Literal(Decimal(2))), 0L)
@@ -425,6 +429,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
         Literal(Decimal("99999999999999999999999999999999999")), Literal(Decimal(0.001)))),
         687399551400672280L)
+      // overflow during promote precision
+      checkEvaluation(DecimalPrecision.decimalAndDecimal.apply(IntegralDivide(
+        Literal(Decimal("99999999999999999999999999999999999999")), Literal(Decimal(0.00001)))),
+        null)
     }
   }
 
