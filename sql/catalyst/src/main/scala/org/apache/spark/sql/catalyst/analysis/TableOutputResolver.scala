@@ -73,7 +73,11 @@ object TableOutputResolver {
         s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
     }
 
-    Project(resolved, query)
+    if (resolved == query.output) {
+      query
+    } else {
+      Project(resolved, query)
+    }
   }
 
   private def checkField(
@@ -85,12 +89,18 @@ object TableOutputResolver {
 
     conf.storeAssignmentPolicy match {
       case StoreAssignmentPolicy.LEGACY =>
-        // Renaming is needed for handling the following cases like
-        // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-        // 2) Target tables have column metadata
-        Some(Alias(
-          Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
-          tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
+        if (tableAttr.dataType.sameType(queryExpr.dataType) &&
+          tableAttr.name == queryExpr.name &&
+          tableAttr.metadata == queryExpr.metadata) {
+          Some(queryExpr)
+        } else {
+          // Renaming is needed for handling the following cases like
+          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+          // 2) Target tables have column metadata
+          Some(Alias(
+            Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
+            tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
+        }
 
       case StoreAssignmentPolicy.STRICT =>
         // run the type check first to ensure type errors are present
