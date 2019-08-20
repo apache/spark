@@ -1262,6 +1262,7 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-16995: flat mapping on Dataset containing a column created with lit/expr") {
     val df = Seq("1").toDF("a")
+
     import df.sparkSession.implicits._
 
     checkDataset(
