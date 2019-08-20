@@ -22,15 +22,19 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
-class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.functions._
   import testImplicits._
+
+  private def catalog(name: String): CatalogPlugin = {
+    spark.sessionState.catalogManager.catalog(name)
+  }
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
@@ -42,7 +46,8 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
   }
 
   after {
-    spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
+    spark.sessionState.catalogManager.reset()
+    spark.sessionState.conf.clear()
   }
 
   test("Append: basic append") {
@@ -223,7 +228,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -241,7 +246,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -259,7 +264,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -273,7 +278,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
   test("Create: asText") {
     spark.table("source").writeTo("testcat.table_name").asText.create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -283,7 +288,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
   test("Create: asCsv") {
     spark.table("source").writeTo("testcat.table_name").asCsv.create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -293,7 +298,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
   test("Create: asJson") {
     spark.table("source").writeTo("testcat.table_name").asJson.create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -303,7 +308,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
   test("Create: asParquet") {
     spark.table("source").writeTo("testcat.table_name").asParquet.create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -313,7 +318,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
   test("Create: asOrc") {
     spark.table("source").writeTo("testcat.table_name").asOrc.create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -327,7 +332,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -346,7 +351,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
         .partitionedBy(years($"ts"))
         .create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -361,7 +366,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
         .partitionedBy(months($"ts"))
         .create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -376,7 +381,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
         .partitionedBy(days($"ts"))
         .create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -391,7 +396,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
         .partitionedBy(hours($"ts"))
         .create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -405,7 +410,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
         .partitionedBy(bucket(4, $"id"))
         .create()
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
@@ -423,7 +428,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
 
     assert(exc.getMessage.contains("table_name"))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // table should not have been changed
@@ -442,7 +447,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
@@ -459,7 +464,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
 
-    val replaced = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
@@ -480,7 +485,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
@@ -497,7 +502,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
 
-    val replaced = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
@@ -525,7 +530,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
 
-    val replaced = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
@@ -546,7 +551,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
@@ -563,7 +568,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSQLContext with Before
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
 
-    val replaced = spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
+    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
         .loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
