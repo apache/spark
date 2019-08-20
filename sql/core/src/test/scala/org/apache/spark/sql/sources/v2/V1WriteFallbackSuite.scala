@@ -25,18 +25,19 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter, InsertableRelation}
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
 import org.apache.spark.sql.sources.v2.writer.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class V1WriteFallbackSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
-  private val format = classOf[InMemoryV1Provider].getName
+  private val v2Format = classOf[InMemoryV1Provider].getName
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -50,24 +51,46 @@ class V1WriteFallbackSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   test("append fallback") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
-    df.write.mode("append").option("name", "t1").format(format).save()
+    df.write.mode("append").option("name", "t1").format(v2Format).save()
     checkAnswer(InMemoryV1Provider.getTableData(spark, "t1"), df)
-    df.write.mode("append").option("name", "t1").format(format).save()
+    df.write.mode("append").option("name", "t1").format(v2Format).save()
     checkAnswer(InMemoryV1Provider.getTableData(spark, "t1"), df.union(df))
   }
 
   test("overwrite by truncate fallback") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
-    df.write.mode("append").option("name", "t1").format(format).save()
+    df.write.mode("append").option("name", "t1").format(v2Format).save()
 
     val df2 = Seq((10, "k"), (20, "l"), (30, "m")).toDF("a", "b")
-    df2.write.mode("overwrite").option("name", "t1").format(format).save()
+    df2.write.mode("overwrite").option("name", "t1").format(v2Format).save()
     checkAnswer(InMemoryV1Provider.getTableData(spark, "t1"), df2)
   }
 }
 
-object InMemoryV1Provider {
-  private val tables: mutable.Map[String, InMemoryTableWithV1Fallback] = mutable.Map.empty
+class V1WriteFallbackSessionCatalogSuite
+  extends SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+  override protected val v2Format = classOf[InMemoryV1Provider].getName
+  override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName
+
+  override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(InMemoryV1Provider.getTableData(spark, s"default.$tableName"), expected)
+  }
+}
+
+class V1FallbackTableCatalog extends TestV2SessionCatalogBase[InMemoryTableWithV1Fallback] {
+  override def newTable(
+      name: String,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): InMemoryTableWithV1Fallback = {
+    val t = new InMemoryTableWithV1Fallback(name, schema, partitions, properties)
+    InMemoryV1Provider.tables.put(name, t)
+    t
+  }
+}
+
+private object InMemoryV1Provider {
+  val tables: mutable.Map[String, InMemoryTableWithV1Fallback] = mutable.Map.empty
 
   def getTableData(spark: SparkSession, name: String): DataFrame = {
     val t = tables.getOrElse(name, throw new IllegalArgumentException(s"Table $name doesn't exist"))
@@ -108,6 +131,7 @@ class InMemoryTableWithV1Fallback(
 
   override def capabilities: util.Set[TableCapability] = Set(
     TableCapability.BATCH_WRITE,
+    TableCapability.V1_BATCH_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.TRUNCATE).asJava
 
@@ -122,7 +146,8 @@ class InMemoryTableWithV1Fallback(
   }
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)
-    extends V1WriteBuilder
+    extends WriteBuilder
+    with V1WriteBuilder
     with SupportsTruncate
     with SupportsOverwrite {
 

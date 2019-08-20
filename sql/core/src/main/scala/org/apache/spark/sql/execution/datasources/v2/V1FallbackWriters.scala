@@ -88,6 +88,9 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
   override def output: Seq[Attribute] = Nil
   override final def children: Seq[SparkPlan] = Nil
 
+  def table: SupportsWrite
+  def writeOptions: CaseInsensitiveStringMap
+
   protected implicit class toV1WriteBuilder(builder: WriteBuilder) {
     def asV1Builder: V1WriteBuilder = builder match {
       case v1: V1WriteBuilder => v1
@@ -108,10 +111,8 @@ sealed trait V1FallbackWriters extends SupportsV1Write {
  * A trait that allows Tables that use V1 Writer interfaces to append data.
  */
 trait SupportsV1Write extends SparkPlan {
-  def table: SupportsWrite
   // TODO: We should be able to work on SparkPlans at this point.
   def plan: LogicalPlan
-  def writeOptions: CaseInsensitiveStringMap
 
   protected def writeWithV1(relation: InsertableRelation): RDD[InternalRow] = {
     relation.insert(Dataset.ofRows(sqlContext.sparkSession, plan), overwrite = false)
