@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.util.{Properties, Timer, TimerTask}
 
+import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
 
 import org.apache.spark.annotation.{Experimental, Since}
@@ -117,12 +118,30 @@ class BarrierTaskContext private[spark] (
     timer.schedule(timerTask, 60000, 60000)
 
     try {
-      barrierCoordinator.askSync[Unit](
+      val abortableRpcFuture = barrierCoordinator.askAbortable[Unit](
         message = RequestToSync(numTasks, stageId, stageAttemptNumber, taskAttemptId,
           barrierEpoch),
         // Set a fixed timeout for RPC here, so users shall get a SparkException thrown by
         // BarrierCoordinator on timeout, instead of RPCTimeoutException from the RPC framework.
         timeout = new RpcTimeout(365.days, "barrierTimeout"))
+
+      // Wait the RPC future to be completed, but every 1 second it will jump out waiting
+      // and check whether current spark task is killed. If killed, then throw
+      // a `TaskKilledException`, otherwise continue wait RPC until it completes.
+      while(!abortableRpcFuture.toFuture.isCompleted) {
+        if (taskContext.isInterrupted()) {
+          val reason = taskContext.getKillReason().get
+          abortableRpcFuture.abort(reason)
+          throw new TaskKilledException(reason)
+        }
+        // wait RPC future for at most 1 second
+        try {
+          ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
+        } catch {
+          case _: TimeoutException => Unit // await future time reach 1 second.
+        }
+      }
+
       barrierEpoch += 1
       logInfo(s"Task $taskAttemptId from Stage $stageId(Attempt $stageAttemptNumber) finished " +
         "global sync successfully, waited for " +

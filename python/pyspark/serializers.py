@@ -420,12 +420,15 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
             if dataframes_in_group == 2:
                 batch1 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
                 batch2 = [batch for batch in ArrowStreamSerializer.load_stream(self, stream)]
-                yield ([self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
-                       [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()])
+                yield (
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch1).itercolumns()],
+                    [self.arrow_to_pandas(c) for c in pa.Table.from_batches(batch2).itercolumns()]
+                )
 
             elif dataframes_in_group != 0:
                 raise ValueError(
-                    'Received Invalid number of dataframes in group {0}'.format(dataframes_in_group))
+                    'Received Invalid number of dataframes in group {0}'
+                        .format(dataframes_in_group))
 
 
 class BatchedSerializer(Serializer):

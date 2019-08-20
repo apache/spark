@@ -3,8 +3,6 @@
 
 
 -- !query 0
--- This test file was converted from udaf.sql.
-
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
 (1), (2), (3), (4)
 as t1(int_col1)

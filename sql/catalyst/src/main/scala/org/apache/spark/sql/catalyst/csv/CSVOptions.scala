@@ -146,10 +146,10 @@ class CSVOptions(
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  val dateFormat: String = parameters.getOrElse("dateFormat", "yyyy-MM-dd")
+  val dateFormat: String = parameters.getOrElse("dateFormat", "uuuu-MM-dd")
 
   val timestampFormat: String =
-    parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
+    parameters.getOrElse("timestampFormat", "uuuu-MM-dd'T'HH:mm:ss.SSSXXX")
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 

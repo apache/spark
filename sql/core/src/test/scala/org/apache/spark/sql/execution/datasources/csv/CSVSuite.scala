@@ -39,10 +39,10 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
+class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"

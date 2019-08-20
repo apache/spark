@@ -29,11 +29,11 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
+class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null

@@ -1,0 +1,27 @@
+name: master
+
+on:
+  push:
+    branches:
+    - master
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [ '1.8', '11' ]
+    name: Build Spark with JDK ${{ matrix.java }}
+
+    steps:
+    - uses: actions/checkout@master
+    - name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v1
+      with:
+        version: ${{ matrix.java }}
+    - name: Build with Maven
+      run: |
+        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests package

@@ -37,7 +37,6 @@ SELECT double('-10e-400');
 
 -- special inputs
 SELECT double('NaN');
--- [SPARK-28060] Double type can not accept some special inputs
 SELECT double('nan');
 SELECT double('   NAN  ');
 SELECT double('infinity');
@@ -49,7 +48,6 @@ SELECT double('NaN x');
 SELECT double(' INFINITY    x');
 
 SELECT double('Infinity') + 100.0;
--- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
 SELECT double('Infinity') / double('Infinity');
 SELECT double('NaN') / double('NaN');
 -- [SPARK-28315] Decimal can not accept NaN as input
@@ -190,7 +188,7 @@ SELECT tanh(double('1'));
 SELECT asinh(double('1'));
 SELECT acosh(double('2'));
 SELECT atanh(double('0.5'));
--- [SPARK-27768] Infinity, -Infinity, NaN should be recognized in a case insensitive manner
+
 -- test Inf/NaN cases for hyperbolic functions
 SELECT sinh(double('Infinity'));
 SELECT sinh(double('-Infinity'));

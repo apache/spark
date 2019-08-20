@@ -198,7 +198,7 @@ statement
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        tableIdentifier partitionSpec? describeColName?                #describeTable
+        multipartIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
@@ -214,6 +214,7 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
+    | DELETE FROM multipartIdentifier tableAlias whereClause           #deleteFromTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -294,8 +295,8 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
-    | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
+    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?                         #insertOverwriteTable
+    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)?                                #insertIntoTable
     | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
@@ -672,6 +673,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
@@ -1346,6 +1348,7 @@ nonReserved
     | UNBOUNDED
     | UNCACHE
     | UNIQUE
+    | UNKNOWN
     | UNLOCK
     | UNSET
     | USE
@@ -1611,6 +1614,7 @@ UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';
 UNION: 'UNION';
 UNIQUE: 'UNIQUE';
+UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
 UNSET: 'UNSET';
 USE: 'USE';

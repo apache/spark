@@ -142,7 +142,7 @@ class MessageCapturingCommitProtocol(jobId: String, path: String)
 }
 
 
-class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
   import testImplicits._
 
   private val userSchema = new StructType().add("s", StringType)
@@ -267,7 +267,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         plan = qe.analyzed
 
       }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
     }
 
     spark.listenerManager.register(listener)

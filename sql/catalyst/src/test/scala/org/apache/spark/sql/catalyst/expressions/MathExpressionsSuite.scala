@@ -200,7 +200,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("asinh") {
-    testUnary(Asinh, (x: Double) => math.log(x + math.sqrt(x * x + 1.0)))
+    testUnary(Asinh, (x: Double) => StrictMath.log(x + math.sqrt(x * x + 1.0)))
     checkConsistencyBetweenInterpretedAndCodegen(Asinh, DoubleType)
 
     checkEvaluation(Asinh(Double.NegativeInfinity), Double.NegativeInfinity)
@@ -228,7 +228,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("acosh") {
-    testUnary(Acosh, (x: Double) => math.log(x + math.sqrt(x * x - 1.0)))
+    testUnary(Acosh, (x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)))
     checkConsistencyBetweenInterpretedAndCodegen(Cosh, DoubleType)
 
     val nullLit = Literal.create(null, NullType)
@@ -267,7 +267,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("atanh") {
-    testUnary(Atanh, (x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)))
+    // SPARK-28519: more accurate express for 1/2 * ln((1 + x) / (1 - x))
+    testUnary(Atanh, (x: Double) => 0.5 * (StrictMath.log1p(x) - StrictMath.log1p(-x)))
     checkConsistencyBetweenInterpretedAndCodegen(Atanh, DoubleType)
 
     val nullLit = Literal.create(null, NullType)
@@ -372,12 +373,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("exp") {
-    testUnary(Exp, math.exp)
+    testUnary(Exp, StrictMath.exp)
     checkConsistencyBetweenInterpretedAndCodegen(Exp, DoubleType)
   }
 
   test("expm1") {
-    testUnary(Expm1, math.expm1)
+    testUnary(Expm1, StrictMath.expm1)
     checkConsistencyBetweenInterpretedAndCodegen(Expm1, DoubleType)
   }
 
@@ -387,20 +388,20 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("log") {
-    testUnary(Log, math.log, (1 to 20).map(_ * 0.1))
-    testUnary(Log, math.log, (-5 to 0).map(_ * 0.1), expectNull = true)
+    testUnary(Log, StrictMath.log, (1 to 20).map(_ * 0.1))
+    testUnary(Log, StrictMath.log, (-5 to 0).map(_ * 0.1), expectNull = true)
     checkConsistencyBetweenInterpretedAndCodegen(Log, DoubleType)
   }
 
   test("log10") {
-    testUnary(Log10, math.log10, (1 to 20).map(_ * 0.1))
-    testUnary(Log10, math.log10, (-5 to 0).map(_ * 0.1), expectNull = true)
+    testUnary(Log10, StrictMath.log10, (1 to 20).map(_ * 0.1))
+    testUnary(Log10, StrictMath.log10, (-5 to 0).map(_ * 0.1), expectNull = true)
     checkConsistencyBetweenInterpretedAndCodegen(Log10, DoubleType)
   }
 
   test("log1p") {
-    testUnary(Log1p, math.log1p, (0 to 20).map(_ * 0.1))
-    testUnary(Log1p, math.log1p, (-10 to -1).map(_ * 1.0), expectNull = true)
+    testUnary(Log1p, StrictMath.log1p, (0 to 20).map(_ * 0.1))
+    testUnary(Log1p, StrictMath.log1p, (-10 to -1).map(_ * 1.0), expectNull = true)
     checkConsistencyBetweenInterpretedAndCodegen(Log1p, DoubleType)
   }
 
@@ -427,7 +428,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("log2") {
-    def f: (Double) => Double = (x: Double) => math.log(x) / math.log(2)
+    def f: (Double) => Double = (x: Double) => StrictMath.log(x) / StrictMath.log(2)
     testUnary(Log2, f, (1 to 20).map(_ * 0.1))
     testUnary(Log2, f, (-5 to 0).map(_ * 1.0), expectNull = true)
     checkConsistencyBetweenInterpretedAndCodegen(Log2, DoubleType)
@@ -444,8 +445,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("pow") {
-    testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
-    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
+    testBinary(Pow, StrictMath.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
+    testBinary(Pow, StrictMath.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
     checkConsistencyBetweenInterpretedAndCodegen(Pow, DoubleType, DoubleType)
   }
 
@@ -569,7 +570,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("binary log") {
-    val f = (c1: Double, c2: Double) => math.log(c2) / math.log(c1)
+    val f = (c1: Double, c2: Double) => StrictMath.log(c2) / StrictMath.log(c1)
     val domain = (1 to 20).map(v => (v * 0.1, v * 0.2))
 
     domain.foreach { case (v1, v2) =>

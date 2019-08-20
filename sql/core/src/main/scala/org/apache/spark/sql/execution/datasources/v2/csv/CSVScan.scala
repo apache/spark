@@ -24,7 +24,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
-import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
+import org.apache.spark.sql.execution.datasources.csv.{CSVDataSource, MultiLineCSVDataSource}
 import org.apache.spark.sql.execution.datasources.v2.TextBasedFileScan
 import org.apache.spark.sql.sources.v2.reader.PartitionReaderFactory
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -48,6 +48,15 @@ case class CSVScan(
 
   override def isSplitable(path: Path): Boolean = {
     CSVDataSource(parsedOptions).isSplitable && super.isSplitable(path)
+  }
+
+  override def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
+    if (!super.isSplitable(path)) {
+      super.getFileUnSplittableReason(path)
+    } else {
+      "the csv datasource is set multiLine mode"
+    }
   }
 
   override def createReaderFactory(): PartitionReaderFactory = {

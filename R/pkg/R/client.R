@@ -64,7 +64,9 @@ checkJavaVersion <- function() {
   javaBin <- "java"
   javaHome <- Sys.getenv("JAVA_HOME")
   javaReqs <- utils::packageDescription(utils::packageName(), fields = c("SystemRequirements"))
-  sparkJavaVersion <- as.numeric(tail(strsplit(javaReqs, "[(=)]")[[1]], n = 1L))
+  sparkJavaVersions <- strsplit(javaReqs, "[(,)]")[[1]]
+  minJavaVersion <- as.numeric(strsplit(sparkJavaVersions[[2]], ">= ")[[1]][[2]])
+  maxJavaVersion <- as.numeric(strsplit(sparkJavaVersions[[3]], "< ")[[1]][[2]])
   if (javaHome != "") {
     javaBin <- file.path(javaHome, "bin", javaBin)
   }
@@ -91,12 +93,19 @@ checkJavaVersion <- function() {
       }, javaVersionOut)
 
   javaVersionStr <- strsplit(javaVersionFilter[[1]], "[\"]")[[1L]][2]
-  # javaVersionStr is of the form 1.8.0_92.
-  # Extract 8 from it to compare to sparkJavaVersion
-  javaVersionNum <- as.integer(strsplit(javaVersionStr, "[.]")[[1L]][2])
-  if (javaVersionNum != sparkJavaVersion) {
-    stop(paste("Java version", sparkJavaVersion, "is required for this package; found version:",
-               javaVersionStr))
+  # javaVersionStr is of the form 1.8.0_92/9.0.x/11.0.x.
+  # We are using 8, 9, 10, 11 for sparkJavaVersion.
+  versions <- strsplit(javaVersionStr, "[.]")[[1L]]
+  if ("1" == versions[1]) {
+    javaVersionNum <- as.integer(versions[2])
+  } else {
+    javaVersionNum <- as.integer(versions[1])
+  }
+  if (javaVersionNum < minJavaVersion || javaVersionNum >= maxJavaVersion) {
+    stop(paste0("Java version, greater than or equal to ", minJavaVersion,
+                " and less than ", maxJavaVersion,
+                ", is required for this package; found version: ",
+                javaVersionStr))
   }
   return(javaVersionNum)
 }
