@@ -427,8 +427,7 @@ class CogroupUDFSerializer(ArrowStreamPandasUDFSerializer):
 
             elif dataframes_in_group != 0:
                 raise ValueError(
-                    'Received Invalid number of dataframes in group {0}'
-                        .format(dataframes_in_group))
+                    'Invalid number of dataframes in group {0}'.format(dataframes_in_group))
 
 
 class BatchedSerializer(Serializer):
