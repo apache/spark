@@ -184,22 +184,19 @@ private[sql] object Dataset {
  */
 @Stable
 class Dataset[T] private[sql](
-    @transient val _sparkSession: SparkSession,
+    @transient private val _sparkSession: SparkSession,
     @DeveloperApi @Unstable @transient val queryExecution: QueryExecution,
     @DeveloperApi @Unstable @transient val encoder: Encoder[T])
   extends Serializable {
 
-  def sparkSession: SparkSession = {
+  @transient lazy val sparkSession: SparkSession = {
     if (_sparkSession == null) {
       throw new SparkException(
       "This Dataset lacks a SparkSession. It could happen in the following cases: \n(1) Dataset " +
       "transformations and actions are NOT invoked by the driver, but inside of other " +
       "transformations; for example, dataset1.map(x => dataset2.values.count() * x) is invalid " +
       "because the values transformation and count action cannot be performed inside of the " +
-      "dataset1.map transformation. For more information, see SPARK-28702.\n(2) When a Spark " +
-      "Streaming job recovers from checkpoint, this exception will be hit if a reference to " +
-      "an RDD not defined by the streaming job is used in DStream operations. For more " +
-      "information, See SPARK-13758.")
+      "dataset1.map transformation. For more information, see SPARK-28702.")
     }
     _sparkSession
   }

@@ -354,8 +354,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    val sparkSession = df.sparkSession
-    import sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     assertNotBucketed("insertInto")
@@ -486,8 +485,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def saveAsTable(tableName: String): Unit = {
-    val sparkSession = df.sparkSession
-    import sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
+    import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     val session = df.sparkSession
