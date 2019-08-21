@@ -18,5 +18,26 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+### Description
+Return the list of columns in a table. If the table does not exist, an exception is thrown.
 
-**This page is under construction**
+### Syntax
+{% highlight sql %}
+SHOW COLUMNS {IN | FROM} [db.]table {IN | FROM} database
+{% endhighlight %}
+**Note**
+- You can list the columns of a table in a database other than current database in one of following
+ways
+  - By qualifying the table name with a database name other than current database.
+  - By specifying the database name in the database parameter.
+- Keywords IN and FROM are interchangeable.
+
+### Examples
+{% highlight sql %}
+-- List the columns of table employee in current database.
+SHOW COLUMNS IN employee
+-- List the columns of table employee in salesdb database.
+SHOW COLUMNS IN salesdb.employee
+-- List the columns of table employee in salesdb database
+SHOW COLUMNS IN employee IN salesdb
+{% endhighlight %}
