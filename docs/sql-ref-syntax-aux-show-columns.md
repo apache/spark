@@ -30,7 +30,7 @@ SHOW COLUMNS {IN | FROM} [db.]table {IN | FROM} database
 ways:
   - By qualifying the table name with a database name other than current database.
   - By specifying the database name in the database parameter.
-- Keywords IN and FROM are interchangeable.
+- Keywords `IN` and `FROM` are interchangeable.
 
 ### Examples
 {% highlight sql %}
