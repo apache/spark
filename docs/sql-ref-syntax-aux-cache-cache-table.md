@@ -19,4 +19,34 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+CACHE TABLE statement can be used to cache the contents of the table in memory using the RDD cache. This enables subsequent queries to avoid scanning the original files as much as possible.
+
+### Syntax
+{% highlight sql %}
+CACHE [LAZY] TABLE [db_name.]table_name
+  [OPTIONS (table_property_list)] [[AS] query]
+
+table_property_list:
+    : (table_property_key1 [[=]table_property_value1], table_property_key2 [[=]table_property_value2], ...)
+
+{% endhighlight %}
+
+### Example
+{% highlight sql %}
+CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testData
+{% endhighlight %}
+
+### Parameters
+
+#### ***LAZY***:
+Cache the table lazily instead of eagerly scanning the entire table.
+
+#### ***table_name***:
+The name of an existing table.
+
+#### ***table_property_list***:
+Table property key value pairs.
+
+#### ***query***:
+A SELECT statement.
