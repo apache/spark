@@ -19,10 +19,10 @@ license: |
   limitations under the License.
 ---
 ### Description
-DESCRIBE TABLE statement is used to return the metadata information of a
+`DESCRIBE TABLE` statement is used to return the metadata information of a
 table. The basic metadata information includes column name, column type
-and column comment. If EXTENDED mode is specified then additional
-metadata such as parent database, owner, created and last access time etc.
+and column comment. If `EXTENDED` mode is specified then additional
+metadata such as parent database, owner, created and last access time.
 are returned. Optionally a partition spec or column name can be specified
 to return the metadata pertaining to the partition or column respectively.
 
@@ -35,10 +35,10 @@ tableIdentifier:= [db.][table]
 parition-spec:= PARTITION (part_col1 = value1, part_col2 = value2, ...) 
 desc-col:= [db.][table.]column-name
 {% endhighlight %}
-**Note**<br>
-* FORMATTED and EXTENDED are interchangeble and mean the same thing.
-* DESC and DESCRIBE are interchangeble and mean the same thing.
-* TABLE is optional.
+**Note**
+* `FORMATTED` and `EXTENDED` are interchangeble and mean the same thing.
+* `DESC` and `DESCRIBE` are interchangeble and mean the same thing.
+* `TABLE` is optional.
 
 ### Examples
 {% highlight sql %}
@@ -62,7 +62,7 @@ DESCRIBE salesdb.customer address;
 {% endhighlight %}
 
 ### Current Restriction
-* DESC COLUMN does not support nested column names.
+* `DESC COLUMN` does not support nested column names.
 
 ### Related Statements
 - [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
