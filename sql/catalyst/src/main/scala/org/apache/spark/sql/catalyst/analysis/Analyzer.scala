@@ -2028,29 +2028,26 @@ class Analyzer(
         throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
-      case agg @ Aggregate(groupList, aggList, child) =>
+      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
+        case AliasedGenerator(generator, _, _) => generator.childrenResolved
+        case other => other.resolved
+      } =>
         // Holds the resolved generator, if one exists in the project list.
         var generatorVisited = false
-
-        var temp_alias_cnt = 0
-        def genTempAlias(expr: Expression): String = {
-          temp_alias_cnt += 1
-          s"_tmp_generator_extract_${expr.hashCode().abs}_${temp_alias_cnt}"
-        }
 
         val projectExprs = Array.ofDim[NamedExpression](aggList.length)
         val newAggList = aggList
           .map(CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
           .zipWithIndex
           .flatMap {
-            case (AliasedGenerator(generator, names, outer), idx) if generator.childrenResolved =>
+            case (AliasedGenerator(generator, names, outer), idx) =>
               // It's a sanity check, this should not happen as the previous case will throw
               // exception earlier.
               assert(!generatorVisited, "More than one generator found in aggregate.")
               generatorVisited = true
 
-              val aliasedGenChildren: Seq[NamedExpression] = generator.children.map {
-                e => Alias(e, genTempAlias(e))()
+              val aliasedGenChildren: Seq[NamedExpression] = generator.children.zipWithIndex.map {
+                case (e, idx) => Alias(e, s"_gen_input_${idx}")()
               }
               val newGenerator = {
                 val g = generator.withNewChildren(aliasedGenChildren.map(_.toAttribute))
@@ -2065,13 +2062,7 @@ class Analyzer(
               projectExprs(idx) = newAliasedGenerator
               aliasedGenChildren
             case (other, idx) =>
-              projectExprs(idx) = if (other.isInstanceOf[UnresolvedAlias]) {
-                val aliasFunc = other.asInstanceOf[UnresolvedAlias]
-                  .aliasFunc.getOrElse(genTempAlias _)
-                UnresolvedAttribute(aliasFunc(other))
-              } else {
-                other.toAttribute
-              }
+              projectExprs(idx) = other.toAttribute
               other :: Nil
           }
 
