@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-The DESCRIBE QUERY statement is used to return the metadata of output
+The `DESCRIBE QUERY` statement is used to return the metadata of output
 of a query. 
 
 ### Syntax
@@ -32,7 +32,7 @@ query:= {cte | select-query | inline-table | TABLE table-name}
 **Note**
 * For detailed syntax of query parameter please refer to [select-statement](sql-ref-syntax-qry-select.html)
   and the examples below.
-* DESC and DESCRIBE are interchangeble and mean the same thing.
+* `DESC` and `DESCRIBE` are interchangeble and mean the same thing.
 
 ### Examples
 {% highlight sql %}
