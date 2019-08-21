@@ -293,9 +293,6 @@ private[ml] trait TreeRegressorParams extends HasVarianceImpurity
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
 
-  /** @group setParam */
-  final def setVarianceCol(value: String): this.type = set(varianceCol, value)
-
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
