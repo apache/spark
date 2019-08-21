@@ -168,7 +168,7 @@ been set correctly.
 The first part 'Runtime Information' simply contains the [runtime properties](configuration.html#runtime-environment)
 like versions of Java and Scala.
 The second part 'Spark Properties' lists the [application properties](configuration.html#application-properties) like
-'spark.app.name' and 'spark.driver.memory'.
+['spark.app.name'](configuration.html#application-properties) and 'spark.driver.memory'.
 
 <p style="text-align: center;">
   <img src="img/webui-env-hadoop.png"
@@ -197,7 +197,7 @@ Clicking the 'Hadoop Properties' link displays properties relative to Hadoop and
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-The last part 'Classpath Entries' illustrates the classes loaded from different sources, which is very useful
+The last part 'Classpath Entries' lists the classes loaded from different sources, which is very useful
 to resolve class conflicts.
 
 ## Executors Tab
