@@ -232,7 +232,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
         assert(table.partitioning.isEmpty)
         assert(table.properties == Map("provider" -> "foo").asJava)
         assert(table.schema == new StructType()
-          .add("id", LongType, nullable = false)
+          .add("id", LongType)
           .add("data", StringType))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -258,8 +258,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
         assert(replacedTable.name == identifier)
         assert(replacedTable.partitioning.isEmpty)
         assert(replacedTable.properties == Map("provider" -> "foo").asJava)
-        assert(replacedTable.schema == new StructType()
-          .add("id", LongType, nullable = false))
+        assert(replacedTable.schema == new StructType().add("id", LongType))
 
         val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
         checkAnswer(
@@ -391,7 +390,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> orc2).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -408,7 +407,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -428,7 +427,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     assert(table2.partitioning.isEmpty)
     assert(table2.properties == Map("provider" -> "foo").asJava)
     assert(table2.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -446,7 +445,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -477,7 +476,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -498,6 +497,32 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
+  }
+
+  test("CreateTableAsSelect: nullable schema") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT 1 i")
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.schema == new StructType().add("i", "int"))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Row(1))
+
+        sql(s"INSERT INTO $identifier SELECT CAST(null AS INT)")
+        val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq(Row(1), Row(null)))
+    }
   }
 
   test("DropTable: basic") {
