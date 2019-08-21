@@ -305,4 +305,30 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT example_format('%o', 93);" -> "135"
     )
   }
+
+  test("SPARK-28840 test --jars command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'A', 10);" -> "A\t10"
+    )
+  }
+
+  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile", "--conf",
+        s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'A', 10);" -> "A\t10",
+      s"CREATE TEMPORARY FUNCTION example_max AS '${classOf[UDAFExampleMax].getName}';" -> "",
+      "SELECT example_max(1);" -> "1"
+    )
+  }
 }

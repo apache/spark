@@ -111,6 +111,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
+    // Hive 2.0.0 onwards HiveConf.getClassLoader returns the UDFClassLoader (created by Hive).
+    // Because of this spark cannot find the jars as class loader got changed
+    // Hive changed the class loader because of HIVE-11878, so it is required to use old
+    // classLoader as sparks loaded all the jars in this classLoader
+    conf.setClassLoader(Thread.currentThread().getContextClassLoader)
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
