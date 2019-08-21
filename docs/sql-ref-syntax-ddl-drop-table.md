@@ -19,4 +19,20 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Drop a table and delete the directory associated with the table from the file system if this is not an
+EXTERNAL table. If the table to drop does not exist, an exception is thrown.
+
+### Syntax
+{% highlight sql %}
+DROP TABLE [IF EXISTS] [database_name.]table_name
+{% endhighlight %}
+
+ ### Example
+{% highlight sql %}
+DROP TABLE USERDB.TABLE1
+DROP TABLE TABLE1
+DROP TABLE IF EXISTS USERDB.TABLE1
+DROP TABLE IF EXISTS TABLE1
+{% endhighlight %}
+
