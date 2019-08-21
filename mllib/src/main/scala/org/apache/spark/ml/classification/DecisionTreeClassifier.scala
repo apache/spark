@@ -56,10 +56,6 @@ class DecisionTreeClassifier @Since("1.4.0") (
   // Override parameter setters from parent trait for Java API compatibility.
 
   /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
-
-  /** @group setParam */
   @Since("1.4.0")
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
@@ -214,19 +210,15 @@ class DecisionTreeClassificationModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
-  /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
-
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
+    val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
-      super.transform(dataset)
-        .withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
     } else {
-      super.transform(dataset)
+      outputData
     }
   }
 

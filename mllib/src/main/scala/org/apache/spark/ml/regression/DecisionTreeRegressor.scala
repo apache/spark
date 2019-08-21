@@ -100,10 +100,6 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("1.6.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group setParam */
-  @Since("2.0.0")
-  def setVarianceCol(value: String): this.type = set(varianceCol, value)
-
   /**
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
@@ -186,9 +182,6 @@ class DecisionTreeRegressionModel private[ml] (
   extends PredictionModel[Vector, DecisionTreeRegressionModel]
   with DecisionTreeModel with DecisionTreeRegressorParams with MLWritable with Serializable {
 
-  /** @group setParam */
-  def setVarianceCol(value: String): this.type = set(varianceCol, value)
-
   require(rootNode != null,
     "DecisionTreeRegressionModel given null rootNode, but it requires a non-null rootNode.")
 
@@ -208,10 +201,6 @@ class DecisionTreeRegressionModel private[ml] (
   protected def predictVariance(features: Vector): Double = {
     rootNode.predictImpl(features).impurityStats.calculate()
   }
-
-  /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {

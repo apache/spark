@@ -67,10 +67,6 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   // Parameters from TreeRegressorParams:
 
   /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
-
-  /** @group setParam */
   @Since("1.4.0")
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
@@ -248,10 +244,6 @@ class GBTRegressionModel private[ml](
 
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
-
-  /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)

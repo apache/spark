@@ -138,6 +138,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     minWeightFractionPerNode -> 0.0, minInfoGain -> 0.0, maxMemoryInMB -> 256,
     cacheNodeIds -> false, checkpointInterval -> 10)
 
+  /** @group setParam */
+  final def setLeafCol(value: String): this.type = set(leafCol, value)
+
   /** @group getParam */
   final def getLeafCol: String = $(leafCol)
 
@@ -289,6 +292,9 @@ private[ml] trait TreeRegressorParams extends HasVarianceImpurity
 
 private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
   with TreeRegressorParams with HasVarianceCol {
+
+  /** @group setParam */
+  final def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def validateAndTransformSchema(
       schema: StructType,

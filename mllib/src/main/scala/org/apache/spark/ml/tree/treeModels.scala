@@ -94,8 +94,8 @@ private[spark] trait DecisionTreeModel {
   }
 
   /**
-   * @return the index of leaf given a input vector.
-   *         The leave are indexed from zero by pre-order.
+   * @return The index of the leaf corresponding to the feature vector.
+   *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Double = {
     leafIndices(rootNode.predictImpl(features)).toDouble
@@ -139,8 +139,8 @@ private[ml] trait TreeEnsembleModel[M <: DecisionTreeModel] {
   lazy val totalNumNodes: Int = trees.map(_.numNodes).sum
 
   /**
-   * @return the indices of leave of all trees given a input vector.
-   *         The leave are indexed from zero by pre-order in each tree.
+   * @return The indices of the leaves corresponding to the feature vector.
+   *         Leaves are indexed in pre-order from 0.
    */
   def predictLeaf(features: Vector): Vector = {
     val indices = trees.map(_.predictLeaf(features))

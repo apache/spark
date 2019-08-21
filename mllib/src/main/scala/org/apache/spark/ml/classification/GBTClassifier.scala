@@ -68,10 +68,6 @@ class GBTClassifier @Since("1.4.0") (
   // Parameters from TreeClassifierParams:
 
   /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
-
-  /** @group setParam */
   @Since("1.4.0")
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
@@ -290,19 +286,15 @@ class GBTClassificationModel private[ml](
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
-  /** @group setParam */
-  @Since("3.0.0")
-  def setLeafCol(value: String): this.type = set(leafCol, value)
-
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
+    val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
       val leafUDF = udf { features: Vector => predictLeaf(features) }
-      super.transform(dataset)
-        .withColumn($(leafCol), leafUDF(col($(featuresCol))))
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
     } else {
-      super.transform(dataset)
+      outputData
     }
   }
 
