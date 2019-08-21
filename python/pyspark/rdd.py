@@ -2452,6 +2452,7 @@ class RDD(object):
 
         :param prefetchPartitions: If Spark should pre-fetch the next partition
                                    before it is needed.
+
         >>> rdd = sc.parallelize(range(10))
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

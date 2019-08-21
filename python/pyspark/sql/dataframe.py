@@ -528,6 +528,7 @@ class DataFrame(object):
 
         :param prefetchPartitions: If Spark should pre-fetch the next partition
                                    before it is needed.
+
         >>> list(df.toLocalIterator())
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
