@@ -182,9 +182,12 @@ case class DataSourceResolution(
 
     case ShowTablesStatement(None, pattern) =>
       defaultCatalog match {
-        case Some(_) =>
-          throw new AnalysisException(
-            "The current namespace is not available in v2 catalog yet")
+        case Some(catalog) =>
+          ShowTables(
+            plan.output,
+            catalog.asTableCatalog,
+            catalogManager.currentNamespace,
+            pattern)
         case None =>
           ShowTablesCommand(None, pattern)
       }
@@ -192,8 +195,8 @@ case class DataSourceResolution(
     case plan @ ShowTablesStatement(Some(namespace), pattern) =>
       val CatalogNamespace(maybeCatalog, ns) = namespace
       maybeCatalog match {
-        case Some(v2Catalog) =>
-          ShowTables(plan.output, v2Catalog.asTableCatalog, ns, pattern)
+        case Some(catalog) =>
+          ShowTables(plan.output, catalog.asTableCatalog, ns, pattern)
         case None =>
           if (namespace.length != 1) {
             throw new AnalysisException(

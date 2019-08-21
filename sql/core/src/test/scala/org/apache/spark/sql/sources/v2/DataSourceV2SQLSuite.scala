@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
@@ -1775,15 +1775,11 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   }
 
   test("ShowTables: namespace is not specified and default v2 catalog is set") {
-    val sparkSession = spark.newSession()
-    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
-    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
 
-    val exception = intercept[AnalysisException] {
-      runShowTablesSql("SHOW TABLES", Seq(), Some(sparkSession))
-    }
-
-    assert(exception.getMessage.contains("current namespace is not available in v2 catalog"))
+    // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
+    runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
   }
 
   test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
@@ -1801,7 +1797,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   private def runShowTablesSql(
       sqlText: String,
       expected: Seq[Row],
-      sparkSession: Option[SparkSession] = None,
       expectV2Catalog: Boolean = true): Unit = {
     val schema = if (expectV2Catalog) {
       new StructType()
@@ -1814,17 +1809,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
         .add("isTemporary", BooleanType, nullable = false)
     }
 
-    val actual = runSqlWithSchemaCheck(sparkSession.getOrElse(spark), sqlText, schema)
-    assert(expected === actual)
-  }
-
-  private def runSqlWithSchemaCheck(
-      sparkSession: SparkSession,
-      sqlText: String,
-      schema: StructType): Seq[Row] = {
-    val df = sparkSession.sql(sqlText)
-    assert(df.schema == schema)
-    df.collect()
+    val df = spark.sql(sqlText)
+    assert(df.schema === schema)
+    assert(expected === df.collect())
   }
 
   test("tableCreation: partition column case insensitive resolution") {
