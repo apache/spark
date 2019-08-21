@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The INSERT INTO statement can be used to insert new rows into a table. The inserted rows can be specified by value expressions, or resulted from a query.
+The `INSERT INTO` statement inserts new rows into a table. The inserted rows can be specified by value expressions, or resulted from a query.
 
 ### Syntax
 {% highlight sql %}
@@ -58,10 +58,8 @@ The name of an existing table.
 #### ***partition_spec***:
 Partition column specification.
 
-**Note:** When the partition values are not provided, these columns are referred to as dynamic partition columns and such inserts are called dynamic partition inserts, also called multi-partition inserts. Please refer to [Dynamic Partition Inserts](sql-ref-syntax-dml-dynamic-partition-insert.html).
-
 #### ***value_clause***:
 Specify the values to be inserted.
 
 #### ***query***:
-A query (SELECT statement) that provides the rows to be inserted.
+A `SELECT` statement that provides the rows to be inserted.

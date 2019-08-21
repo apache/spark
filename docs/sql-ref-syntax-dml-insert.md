@@ -24,4 +24,3 @@ The INSERT statements:
 * [INSERT OVERWRITE TABLE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
 * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
 * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
-* [Dynamic Partition Inserts](sql-ref-syntax-dml-dynamic-partition-insert.html)

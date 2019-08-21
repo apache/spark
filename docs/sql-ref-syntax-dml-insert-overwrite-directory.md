@@ -20,7 +20,7 @@ license: |
 ---
 ### Description
 
-Insert the query results into a directory using Spark native format. If the specified path exists, it is replaced with the query.
+The `INSERT OVERWRITE DIRECTORY` statement inserts the query results into a directory using Spark native format. If the specified path already exists, its contents are overwritten with the query results.
 
 ### Syntax
 
@@ -45,10 +45,10 @@ INSERT OVERWRITE LOCAL DIRECTORY
 ### Parameters
 
 #### ***directory_path***:
-The destination directory. It can also be specified in OPTIONS using ```path```.  If LOCAL is used, the directory is on the local file system.
+The destination directory. It can also be specified in `OPTIONS` using `path`. The `LOCAL` keyword is used to specify that the directory is on the local file system.
 
 #### ***file_format***:
-The file format to use for the insert. It could be TEXT, CSV, JSON, JDBC, PARQUET, ORC, HIVE, DELTA, and LIBSVM, or a fully qualified class name of a custom implementation of org.apache.spark.sql.sources.DataSourceRegister.
+The file format to use for the insert. Valid options are `TEXT`, `CSV`, `JSON`, `JDBC`, `PARQUET`, `ORC`, `HIVE`, `DELTA`, `LIBSVM`, or a fully qualified class name of a custom implementation of `org.apache.spark.sql.sources.DataSourceRegister`.
 
 #### ***query***:
-A query (SELECT statement) that provides the rows to be inserted.
+A `SELECT` statement that provides the rows to be inserted.

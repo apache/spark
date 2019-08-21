@@ -21,8 +21,7 @@ license: |
 
 ### Description
 
-Insert the query results into a directory using Hive SerDe. If the specified path exists, it is replaced with the output of the query. This command is supported only when Hive support is enabled.
-
+`INSERT OVERWRITE DIRECTORY` inserts the query results into a directory using Hive `SerDe`. If the specified path already exists, its contents are overwritten with the query results. Hive support must be enabled to use this command.
 ### Syntax
 {% highlight sql %}
 INSERT OVERWRITE [LOCAL] DIRECTORY directory_path
@@ -44,13 +43,13 @@ INSERT OVERWRITE [LOCAL] DIRECTORY directory_path
 ### Parameters
 
 #### ***directory_path***:
-The destination directory. If LOCAL is used, the directory is on the local file system.
+The destination directory. It can also be specified in `OPTIONS` using `path`. The `LOCAL` keyword is used to specify that the directory is on the local file system.
 
 #### ***row_format***:
-Use the `SERDE` clause to specify a custom SerDe for this insert. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character, and so on.
+The `SERDE` clause specifies a custom `SerDe` for this insert. Alternatively, use the `DELIMITED` clause to use the native `SerDe` and specify the delimiter, escape character, null character, and so on.
 
 #### ***file_format***:
-The file format for this insert. One of TEXTFILE, SEQUENCEFILE, RCFILE, ORC, PARQUET, and AVRO. Alternatively, you can specify your own input and output format through INPUTFORMAT and OUTPUTFORMAT. Only TEXTFILE, SEQUENCEFILE, and RCFILE can be used with ROW FORMAT SERDE, and only TEXTFILE can be used with ROW FORMAT DELIMITED.
+The file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. Alternatively, you can specify your own input and output format through `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE``, while ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
 
 #### ***query***:
-A query (SELECT statement) that provides the rows to be inserted.
+A `SELECT` statement that provides the rows to be inserted.
