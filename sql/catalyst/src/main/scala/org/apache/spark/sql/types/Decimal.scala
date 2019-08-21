@@ -232,11 +232,63 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  /**
+   * @return the Long value that is equal to the rounded decimal.
+   * @throws ArithmeticException if checkOverflow is true and
+   *                             the decimal too big to fit in Long type.
+   */
+  def toLong(checkOverflow: Boolean): Long = {
+    if (!checkOverflow) {
+      toLong
+    } else {
+      roundToLong()
+    }
+  }
+
   def toInt: Int = toLong.toInt
+
+  /**
+   * @return the Int value that is equal to the rounded decimal.
+   * @throws ArithmeticException if checkOverflow is true and
+   *                             the decimal too big to fit in Int type.
+   */
+  def toInt(checkOverflow: Boolean): Int = {
+    if (!checkOverflow) {
+      toInt
+    } else {
+      roundToInt()
+    }
+  }
 
   def toShort: Short = toLong.toShort
 
+  /**
+   * @return the Short value that is equal to the rounded decimal.
+   * @throws ArithmeticException if checkOverflow is true and
+   *                             the decimal is too big to fit in Short type.
+   */
+  def toShort(checkOverflow: Boolean): Short = {
+    if (!checkOverflow) {
+      toShort
+    } else {
+      roundToShort()
+    }
+  }
+
   def toByte: Byte = toLong.toByte
+
+  /**
+   * @return the Byte value that is equal to the rounded decimal.
+   * @throws ArithmeticException if checkOverflow is true and
+   *                             the decimal is too big to fit in Byte type.
+   */
+  def toByte(checkOverflow: Boolean): Byte = {
+    if (!checkOverflow) {
+      toByte
+    } else {
+      roundToByte()
+    }
+  }
 
   private def overflowException(dataType: String) =
     throw new ArithmeticException(s"Casting $this to $dataType causes overflow.")
@@ -245,7 +297,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return the Byte value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Byte type.
    */
-  def roundToByte(): Byte = {
+  private def roundToByte(): Byte = {
     if (decimalVal.eq(null)) {
       val actualLongVal = longVal / POW_10(_scale)
       if (actualLongVal == actualLongVal.toByte) {
@@ -267,7 +319,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return the Short value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal is too big to fit in Short type.
    */
-  def roundToShort(): Short = {
+  private def roundToShort(): Short = {
     if (decimalVal.eq(null)) {
       val actualLongVal = longVal / POW_10(_scale)
       if (actualLongVal == actualLongVal.toShort) {
@@ -289,7 +341,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return the Int value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal too big to fit in Int type.
    */
-  def roundToInt(): Int = {
+  private def roundToInt(): Int = {
     if (decimalVal.eq(null)) {
       val actualLongVal = longVal / POW_10(_scale)
       if (actualLongVal == actualLongVal.toInt) {
@@ -311,7 +363,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * @return the Long value that is equal to the rounded decimal.
    * @throws ArithmeticException if the decimal too big to fit in Long type.
    */
-  def roundToLong(): Long = {
+  private def roundToLong(): Long = {
     if (decimalVal.eq(null)) {
       longVal / POW_10(_scale)
     } else {

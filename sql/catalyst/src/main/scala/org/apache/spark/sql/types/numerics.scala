@@ -187,7 +187,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
 }
 
 object DecimalExactNumeric extends DecimalIsConflicted {
-  override def toInt(x: Decimal): Int = x.roundToInt()
+  override def toInt(x: Decimal): Int = x.toInt(checkOverflow = true)
 
-  override def toLong(x: Decimal): Long = x.roundToLong()
+  override def toLong(x: Decimal): Long = x.toLong(checkOverflow = true)
 }

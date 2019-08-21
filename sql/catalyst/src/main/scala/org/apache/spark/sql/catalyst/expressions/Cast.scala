@@ -1263,12 +1263,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castDecimalToIntegerCode(
       ctx: CodegenContext,
       integralType: String): CastFunction = {
-    val capitalizedIntegralType = integralType.capitalize
-    if (failOnIntegerOverflow) {
-      (c, evPrim, evNull) => code"$evPrim = $c.roundTo$capitalizedIntegralType();"
-    } else {
-      (c, evPrim, evNull) => code"$evPrim = $c.to$capitalizedIntegralType();"
-    }
+    (c, evPrim, evNull) => code"$evPrim = $c.to${integralType.capitalize}($failOnIntegerOverflow);"
   }
 
   private[this] def castIntegerToIntegerExactCode(integralType: String): CastFunction = {
