@@ -477,12 +477,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
       buildCast[Int](_, d => null)
-    case TimestampType =>
-      if (failOnIntegerOverflow) {
+    case TimestampType if failOnIntegerOverflow =>
         buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
-      } else {
+    case TimestampType =>
         buildCast[Long](_, t => timestampToLong(t).toInt)
-      }
     case x: NumericType if failOnIntegerOverflow =>
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
@@ -502,15 +500,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Boolean](_, b => if (b) 1.toShort else 0.toShort)
     case DateType =>
       buildCast[Int](_, d => null)
-    case TimestampType =>
+    case TimestampType if failOnIntegerOverflow =>
       buildCast[Long](_, t => {
         val longValue = timestampToLong(t)
-        if (!failOnIntegerOverflow || longValue == longValue.toShort) {
+        if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
           throw new ArithmeticException(s"Casting $t to short causes overflow.")
         }
       })
+    case TimestampType =>
+      buildCast[Long](_, t => timestampToLong(t).toShort)
     case x: NumericType if failOnIntegerOverflow =>
       b =>
         val intValue = try {
@@ -541,15 +541,17 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Boolean](_, b => if (b) 1.toByte else 0.toByte)
     case DateType =>
       buildCast[Int](_, d => null)
-    case TimestampType =>
+    case TimestampType if failOnIntegerOverflow =>
       buildCast[Long](_, t => {
         val longValue = timestampToLong(t)
-        if (!failOnIntegerOverflow || longValue == longValue.toByte) {
+        if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
           throw new ArithmeticException(s"Casting $t to byte causes overflow.")
         }
       })
+    case TimestampType =>
+      buildCast[Long](_, t => timestampToLong(t).toByte)
     case x: NumericType if failOnIntegerOverflow =>
       b =>
         val intValue = try {
@@ -1250,20 +1252,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
   }
 
-  private[this] def lowerAndUpperBound(
-      fractionType: String,
-      integralType: String): (String, String) = {
-    assert(fractionType == "float" || fractionType == "double")
-    val typeIndicator = fractionType.charAt(0)
-    val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
-      case "long" => (Long.MinValue, Long.MaxValue)
-      case "int" => (Int.MinValue, Int.MaxValue.toLong)
-      case "short" => (Short.MinValue, Short.MaxValue)
-      case "byte" => (Byte.MinValue, Byte.MaxValue)
-    }
-    (min.toString + typeIndicator, max.toString + typeIndicator)
-  }
-
   private[this] def castDecimalToIntegerCode(
       ctx: CodegenContext,
       integralType: String): CastFunction = {
@@ -1280,6 +1268,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           throw new ArithmeticException("Casting $c to $integralType causes overflow");
         }
       """
+  }
+
+  private[this] def lowerAndUpperBound(
+      fractionType: String,
+      integralType: String): (String, String) = {
+    assert(fractionType == "float" || fractionType == "double")
+    val typeIndicator = fractionType.charAt(0)
+    val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
+      case "long" => (Long.MinValue, Long.MaxValue)
+      case "int" => (Int.MinValue, Int.MaxValue.toLong)
+      case "short" => (Short.MinValue, Short.MaxValue)
+      case "byte" => (Byte.MinValue, Byte.MaxValue)
+    }
+    (min.toString + typeIndicator, max.toString + typeIndicator)
   }
 
   private[this] def castFractionToIntegerExactCode(
