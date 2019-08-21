@@ -2020,6 +2020,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   }
 }
 
+
 /** Used as a V2 DataSource for V2SessionCatalog DDL */
 class FakeV2Provider extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {

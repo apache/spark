@@ -42,7 +42,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
   /**
    * Pushes down filters to the data source reader
    *
-   *
    * @return pushed filter and post-scan filters.
    */
   private def pushFilters(
