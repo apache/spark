@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`ANALYZE TABLE` statement can be used to collect statistics about the table. The information can be used by the query optimizer to find a better query execution plan.
+`ANALYZE TABLE` statement can be used to collect statistics about the table to be used by the query optimizer to find a better query execution plan.
 
 ### Syntax
 {% highlight sql %}
@@ -52,12 +52,12 @@ The name of an existing table.
 Partition column specification.
 
 #### ***analyze_option***:
-If no analyze option is specified, `ANALYZE TABLE` statement collect only basic statistics for the table (number of rows, size in bytes).
+If no analyze option is specified, `ANALYZE TABLE` collects the table's number of rows and size in bytes.
 
 - NOSCAN
 
-  Collect only statistics that do not require scanning the whole table (that is, size in bytes).
+  Collect only the table's size in bytes (which does not require scanning the entire table)
 
 - FOR COLUMNS col1 [, col2, ...] `|` FOR ALL COLUMNS
 
-  Collect column statistics for the specified columns or all columns in addition to table statistics.
+  Collect column statistics for each column specified, or alternatively for every column, as well as table statistics.
