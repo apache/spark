@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-The LOAD DATA statement can be used to load data from a file into a table or a partition in the table. The target table must not be temporary. A partition spec must be provided if and only if the target table is partitioned. The LOAD DATA statement is only supported for tables created using the Hive format.
+The `LOAD DATA` statement can be used to load data from a file into a table, or into a partition in the table. The target table must not be temporary. A partition spec must be provided if and only if the target table is partitioned. The LOAD DATA statement is only supported for tables created using the Hive format.
 
 ### Syntax
 {% highlight sql %}
@@ -49,7 +49,7 @@ The name of an existing table.
 One or more partition column name and value pairs.
 
 ##### ***LOCAL***:
-If specified, local file system is used. Otherwise, the default file system is used.
+If specified, it causes the `INPATH` to be resolved against the local file system, instead of the default file system, which is typically distributed storage.
 
 ##### ***OVERWRITE***:
 If specified, existing data in the table is overwritten. Otherwise, new data is appended to the table.
