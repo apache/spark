@@ -372,9 +372,9 @@ case class AdaptiveSparkPlanExec(
    *    LogicalQueryStage(HashAgg - Stage1)
    */
   private def replaceWithQueryStagesInLogicalPlan(
-      logicalPlan: LogicalPlan,
+      plan: LogicalPlan,
       stagesToReplace: Seq[QueryStageExec]): LogicalPlan = {
-    var currentLogicalPlan = logicalPlan
+    var logicalPlan = plan
     stagesToReplace.foreach {
       case stage if currentPhysicalPlan.find(_.eq(stage)).isDefined =>
         val logicalNodeOpt = stage.getTagValue(TEMP_LOGICAL_PLAN_TAG).orElse(stage.logicalLink)
@@ -392,19 +392,19 @@ case class AdaptiveSparkPlanExec(
         setTempTagRecursive(physicalNode.get, logicalNode)
         // Replace the corresponding logical node with LogicalQueryStage
         val newLogicalNode = LogicalQueryStage(logicalNode, physicalNode.get)
-        val newLogicalPlan = currentLogicalPlan.transformDown {
+        val newLogicalPlan = logicalPlan.transformDown {
           case p if p.eq(logicalNode) => newLogicalNode
         }
-        assert(newLogicalPlan != currentLogicalPlan,
+        assert(newLogicalPlan != logicalPlan,
           s"logicalNode: $logicalNode; " +
-            s"logicalPlan: $currentLogicalPlan " +
+            s"logicalPlan: $logicalPlan " +
             s"physicalPlan: $currentPhysicalPlan" +
             s"stage: $stage")
-        currentLogicalPlan = newLogicalPlan
+        logicalPlan = newLogicalPlan
 
       case _ => // Ignore those earlier stages that have been wrapped in later stages.
     }
-    currentLogicalPlan
+    logicalPlan
   }
 
   /**
