@@ -633,10 +633,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     query.processAllAvailable()
     val checkpointDir = new Path(
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
-    val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
-    assert(fs.exists(checkpointDir))
+    val checkpointFileManager = CheckpointFileManager.create(checkpointDir,
+      spark.sessionState.newHadoopConf())
+    assert(checkpointFileManager.exists(checkpointDir))
     query.stop()
-    assert(!fs.exists(checkpointDir))
+    assert(!checkpointFileManager.exists(checkpointDir))
   }
 
   testQuietly("temp checkpoint dir should not be deleted if a query is stopped with an error") {
@@ -656,16 +657,17 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val query = input.toDS.map(_ / 0).writeStream.format("console").start()
     val checkpointDir = new Path(
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
-    val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
-    assert(fs.exists(checkpointDir))
+    val checkpointFileManager = CheckpointFileManager.create(checkpointDir,
+      spark.sessionState.newHadoopConf())
+    assert(checkpointFileManager.exists(checkpointDir))
     input.addData(1)
     intercept[StreamingQueryException] {
       query.awaitTermination()
     }
     if (!checkpointMustBeDeleted) {
-      assert(fs.exists(checkpointDir))
+      assert(checkpointFileManager.exists(checkpointDir))
     } else {
-      assert(!fs.exists(checkpointDir))
+      assert(!checkpointFileManager.exists(checkpointDir))
     }
   }
 
