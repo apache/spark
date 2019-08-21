@@ -2521,6 +2521,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       (Success, makeMapStatus("hostD", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
 
+    // Simulate the scenario of executor lost
+    runEvent(ExecutorLost("exec-hostC", ExecutorKilled))
+
     // The first task of the final stage failed with fetch failure
     runEvent(makeCompletionEvent(
       taskSets(2).tasks(0),
