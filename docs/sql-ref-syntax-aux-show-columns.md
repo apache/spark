@@ -27,7 +27,7 @@ SHOW COLUMNS {IN | FROM} [db.]table {IN | FROM} database
 {% endhighlight %}
 **Note**
 - You can list the columns of a table in a database other than current database in one of following
-ways
+ways:
   - By qualifying the table name with a database name other than current database.
   - By specifying the database name in the database parameter.
 - Keywords IN and FROM are interchangeable.
