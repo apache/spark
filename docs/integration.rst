@@ -447,11 +447,11 @@ They also use :class:`airflow.gcp.hooks.bigtable.BigtableHook` to communicate wi
 Cloud Build
 '''''''''''
 
-:class:`airflow.contrib.operators.gcp_cloud_build_operator.CloudBuildCreateBuildOperator`
+:class:`airflow.gcp.operators.cloud_build.CloudBuildCreateBuildOperator`
      Starts a build with the specified configuration.
 
 
-They also use :class:`airflow.contrib.hooks.gcp_cloud_build_hook.CloudBuildHook` to communicate with Google Cloud Platform.
+They also use :class:`airflow.gcp.hooks.cloud_build.CloudBuildHook` to communicate with Google Cloud Platform.
 
 
 Compute Engine
