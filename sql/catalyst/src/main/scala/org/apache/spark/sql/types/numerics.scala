@@ -124,6 +124,16 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
 
   private val intUpperBound = Int.MaxValue + 1L
   private val intLowerBound = Int.MinValue - 1L
+  // We cannot compare `Long.MAX_VALUE` to a float without losing precision.
+  // In fact, the difference between `Math.nextUp(Long.MAX_VALUE.toFloat)` and
+  // `Long.MAX_VALUE.toFloat` is 1.09951163E12.
+  // To make it simple, we compare the input value with `Long.MaxValue.toFloat` directly.
+  private val longUpperBound = Long.MaxValue.toFloat
+  // We cannot compare `Long.MIN_VALUE` to a float without losing precision.
+  // In fact, the difference between `Math.nextDown(Long.MIN_VALUE.toFloat)` and
+  // `Long.MIN_VALUE.toFloat` is -1.09951163E12.
+  // To make it simple, we compare the input value with `Long.MIN_VALUE.toFloat` directly.
+  private val longLowerBound = Long.MinValue.toFloat
 
   override def toInt(x: Float): Int = {
     if (x < intUpperBound && x > intLowerBound) {
@@ -134,7 +144,7 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
   }
 
   override def toLong(x: Float): Long = {
-    if (x <= Long.MaxValue && x >= Long.MinValue) {
+    if (x <= longUpperBound && x >= longLowerBound) {
       x.toLong
     } else {
       throwException(x, "int")
@@ -148,6 +158,16 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
 
   private val intUpperBound = Int.MaxValue + 1L
   private val intLowerBound = Int.MinValue - 1L
+  // We cannot compare `Long.MAX_VALUE` to a double without losing precision.
+  // In fact, the difference between `Math.nextUp(Long.MAX_VALUE.toDouble)` and
+  // `Long.MAX_VALUE.toDouble` is 2048.
+  // To make it simple, we compare the input value with `Long.MaxValue.toDouble` directly.
+  private val longUpperBound = Long.MaxValue.toDouble
+  // We cannot compare `Long.MIN_VALUE` to a double without losing precision.
+  // In fact, the difference between `Math.nextDown(Long.MIN_VALUE.toDouble)` and
+  // `Long.MIN_VALUE.toDouble` is -2048.
+  // To make it simple, we compare the input value with `Long.MIN_VALUE.toDouble` directly.
+  private val longLowerBound = Long.MinValue.toDouble
 
   override def toInt(x: Double): Int = {
     if (x < intUpperBound && x > intLowerBound) {
@@ -158,7 +178,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
   }
 
   override def toLong(x: Double): Long = {
-    if (x <= Long.MaxValue && x >= Long.MinValue) {
+    if (x <= longUpperBound && x >= longLowerBound) {
       x.toLong
     } else {
       throw new ArithmeticException(throwException(x, "long"))
