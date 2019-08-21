@@ -119,7 +119,7 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
 }
 
 object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
-  private def throwException(x: Float, dataType: String) =
+  private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
 
   private val intUpperBound = Int.MaxValue + 1L
@@ -139,7 +139,7 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
     if (x < intUpperBound && x > intLowerBound) {
       x.toInt
     } else {
-      throwException(x, "int")
+      overflowException(x, "int")
     }
   }
 
@@ -147,14 +147,14 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
     if (x <= longUpperBound && x >= longLowerBound) {
       x.toLong
     } else {
-      throwException(x, "int")
+      overflowException(x, "int")
     }
   }
 }
 
 object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
-  private def throwException(x: Double, dataType: String): String =
-    s"Casting $x to $dataType causes overflow."
+  private def overflowException(x: Double, dataType: String) =
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
 
   private val intUpperBound = Int.MaxValue + 1L
   private val intLowerBound = Int.MinValue - 1L
@@ -173,7 +173,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
     if (x < intUpperBound && x > intLowerBound) {
       x.toInt
     } else {
-      throw new ArithmeticException(throwException(x, "int"))
+      overflowException(x, "int")
     }
   }
 
@@ -181,7 +181,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
     if (x <= longUpperBound && x >= longLowerBound) {
       x.toLong
     } else {
-      throw new ArithmeticException(throwException(x, "long"))
+      overflowException(x, "long")
     }
   }
 }
