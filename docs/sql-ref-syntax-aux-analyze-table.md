@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-ANALYZE TABLE statement can be used to collect statistics about the table. The information can be used by the query optimizer to find a better plan.
+`ANALYZE TABLE` statement can be used to collect statistics about the table. The information can be used by the query optimizer to find a better query execution plan.
 
 ### Syntax
 {% highlight sql %}
@@ -52,7 +52,7 @@ The name of an existing table.
 Partition column specification.
 
 #### ***analyze_option***:
-If no analyze option is specified, ANALYZE TABLE statement collect only basic statistics for the table (number of rows, size in bytes).
+If no analyze option is specified, `ANALYZE TABLE` statement collect only basic statistics for the table (number of rows, size in bytes).
 
 - NOSCAN
 
