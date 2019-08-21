@@ -29,11 +29,11 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.scheduler.{JobFailed, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.kvstore.InMemoryStore
 
-class AllExecutionsPageSuite extends SharedSQLContext with BeforeAndAfter {
+class AllExecutionsPageSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 

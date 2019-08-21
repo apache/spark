@@ -25,21 +25,25 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2DataFrameSessionCatalogSuite
   extends QueryTest
-  with SharedSQLContext
+  with SharedSparkSession
   with BeforeAndAfter {
   import testImplicits._
+
+  private def catalog(name: String): CatalogPlugin = {
+    spark.sessionState.catalogManager.catalog(name)
+  }
 
   private val v2Format = classOf[InMemoryTableProvider].getName
 
@@ -49,7 +53,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
 
   override def afterEach(): Unit = {
     super.afterEach()
-    spark.catalog("session").asInstanceOf[TestV2SessionCatalog].clearTables()
+    catalog("session").asInstanceOf[TestV2SessionCatalog].clearTables()
     spark.conf.set(SQLConf.V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
   }
 
