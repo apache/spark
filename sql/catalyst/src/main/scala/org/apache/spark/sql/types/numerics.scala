@@ -122,21 +122,19 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
   private def overflowException(x: Float, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
 
-  private val intUpperBound = Int.MaxValue + 1L
-  private val intLowerBound = Int.MinValue - 1L
-  // We cannot compare `Long.MAX_VALUE` to a float without losing precision.
-  // In fact, the difference between `Math.nextUp(Long.MAX_VALUE.toFloat)` and
-  // `Long.MAX_VALUE.toFloat` is 1.09951163E12.
-  // To make it simple, we compare the input value with `Long.MaxValue.toFloat` directly.
+  private val intUpperBound = Int.MaxValue.toFloat
+  private val intLowerBound = Int.MinValue.toFloat
   private val longUpperBound = Long.MaxValue.toFloat
-  // We cannot compare `Long.MIN_VALUE` to a float without losing precision.
-  // In fact, the difference between `Math.nextDown(Long.MIN_VALUE.toFloat)` and
-  // `Long.MIN_VALUE.toFloat` is -1.09951163E12.
-  // To make it simple, we compare the input value with `Long.MIN_VALUE.toFloat` directly.
   private val longLowerBound = Long.MinValue.toFloat
 
   override def toInt(x: Float): Int = {
-    if (x < intUpperBound && x > intLowerBound) {
+    // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
+    // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
+    // for negative floating values, it is equivalent to `Math.ceil`.
+    // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
+    // to check if the floating value x is in the range of an integral type after rounding.
+    // This condition applies to converting Float/Double value to any integral types.
+    if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
       overflowException(x, "int")
@@ -144,7 +142,7 @@ object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
   }
 
   override def toLong(x: Float): Long = {
-    if (x <= longUpperBound && x >= longLowerBound) {
+    if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
       overflowException(x, "int")
@@ -156,21 +154,13 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
   private def overflowException(x: Double, dataType: String) =
     throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
 
-  private val intUpperBound = Int.MaxValue + 1L
-  private val intLowerBound = Int.MinValue - 1L
-  // We cannot compare `Long.MAX_VALUE` to a double without losing precision.
-  // In fact, the difference between `Math.nextUp(Long.MAX_VALUE.toDouble)` and
-  // `Long.MAX_VALUE.toDouble` is 2048.
-  // To make it simple, we compare the input value with `Long.MaxValue.toDouble` directly.
+  private val intUpperBound = Int.MaxValue.toDouble
+  private val intLowerBound = Int.MinValue.toDouble
   private val longUpperBound = Long.MaxValue.toDouble
-  // We cannot compare `Long.MIN_VALUE` to a double without losing precision.
-  // In fact, the difference between `Math.nextDown(Long.MIN_VALUE.toDouble)` and
-  // `Long.MIN_VALUE.toDouble` is -2048.
-  // To make it simple, we compare the input value with `Long.MIN_VALUE.toDouble` directly.
   private val longLowerBound = Long.MinValue.toDouble
 
   override def toInt(x: Double): Int = {
-    if (x < intUpperBound && x > intLowerBound) {
+    if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
       x.toInt
     } else {
       overflowException(x, "int")
@@ -178,7 +168,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
   }
 
   override def toLong(x: Double): Long = {
-    if (x <= longUpperBound && x >= longLowerBound) {
+    if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
       x.toLong
     } else {
       overflowException(x, "long")

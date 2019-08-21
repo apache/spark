@@ -462,12 +462,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Int](_, d => null)
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
+    case x: NumericType if failOnIntegerOverflow =>
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: NumericType =>
-      if (failOnIntegerOverflow) {
-        b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
-      } else {
-        b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
-      }
+      b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
 
   // IntConverter
@@ -1252,12 +1250,18 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
   }
 
-  private[this] def lowerAndUpperBound(integralType: String): (Double, Double) = {
-    integralType.toLowerCase(Locale.ROOT) match {
-      case "int" => (Int.MinValue - 1.0, Int.MaxValue.toLong + 1.0)
-      case "short" => (Short.MinValue - 1.0, Short.MaxValue + 1.0)
-      case "byte" => (Byte.MinValue - 1.0, Byte.MaxValue + 1.0)
+  private[this] def lowerAndUpperBound(
+      fractionType: String,
+      integralType: String): (String, String) = {
+    assert(fractionType == "float" || fractionType == "double")
+    val typeIndicator = fractionType.charAt(0)
+    val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
+      case "long" => (Long.MinValue, Long.MaxValue)
+      case "int" => (Int.MinValue, Int.MaxValue.toLong)
+      case "short" => (Short.MinValue, Short.MaxValue)
+      case "byte" => (Byte.MinValue, Byte.MaxValue)
     }
+    (min.toString + typeIndicator, max.toString + typeIndicator)
   }
 
   private[this] def castDecimalToIntegerCode(
@@ -1278,12 +1282,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       """
   }
 
-  private[this] def castFractionToIntegerExactCode(integralType: String): CastFunction = {
+  private[this] def castFractionToIntegerExactCode(
+      fractionType: String,
+      integralType: String): CastFunction = {
     assert(failOnIntegerOverflow)
-    val (min, max) = lowerAndUpperBound(integralType)
+    val (min, max) = lowerAndUpperBound(fractionType, integralType)
+    val mathClass = classOf[Math].getName
+    // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
+    // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
+    // for negative floating values, it is equivalent to `Math.ceil`.
+    // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
+    // to check if the floating value x is in the range of an integral type after rounding.
     (c, evPrim, evNull) =>
       code"""
-        if ($c > $min && $c < $max) {
+        if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
           throw new ArithmeticException("Casting $c to $integralType causes overflow");
@@ -1312,8 +1324,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DecimalType() => castDecimalToIntegerCode(ctx, "byte")
     case _: ShortType | _: IntegerType | _: LongType if failOnIntegerOverflow =>
       castIntegerToIntegerExactCode("byte")
-    case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("byte")
+    case _: FloatType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("float", "byte")
+    case _: DoubleType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("double", "byte")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
@@ -1341,8 +1355,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DecimalType() => castDecimalToIntegerCode(ctx, "short")
     case _: IntegerType | _: LongType if failOnIntegerOverflow =>
       castIntegerToIntegerExactCode("short")
-    case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("short")
+    case _: FloatType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("float", "short")
+    case _: DoubleType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("double", "short")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
@@ -1367,8 +1383,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType => castTimestampToIntegerCode(ctx, "int")
     case DecimalType() => castDecimalToIntegerCode(ctx, "int")
     case _: LongType if failOnIntegerOverflow => castIntegerToIntegerExactCode("int")
-    case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("int")
+    case _: FloatType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("float", "int")
+    case _: DoubleType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("double", "int")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
@@ -1394,15 +1412,10 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
     case DecimalType() => castDecimalToIntegerCode(ctx, "long")
-    case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
-      (c, evPrim, evNull) =>
-        code"""
-          if ($c >= ${Long.MinValue}L && $c <= ${Long.MaxValue}L) {
-            $evPrim = (long) $c;
-          } else {
-            throw new ArithmeticException("Casting $c to long causes overflow");
-          }
-        """
+    case _: FloatType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("float", "long")
+    case _: DoubleType if failOnIntegerOverflow =>
+      castFractionToIntegerExactCode("double", "long")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
