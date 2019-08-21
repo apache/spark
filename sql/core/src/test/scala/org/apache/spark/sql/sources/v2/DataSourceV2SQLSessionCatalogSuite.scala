@@ -18,10 +18,13 @@
 package org.apache.spark.sql.sources.v2
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 
 class DataSourceV2SQLSessionCatalogSuite
-  extends SessionCatalogTests
+  extends SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog]
   with InsertIntoSQLTests {
+
+  import testImplicits._
 
   override protected val catalogAndNamespace = ""
 
@@ -31,6 +34,39 @@ class DataSourceV2SQLSessionCatalogSuite
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  test("insertInto: overwrite partitioned table in dynamic mode") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+        val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
+        doInsert(t1, init)
+
+        val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+        doInsert(t1, df, SaveMode.Overwrite)
+
+        verifyTable(t1, df.union(sql("SELECT 4L, 'keep'")))
+      }
+    }
+  }
+
+  test("insertInto: overwrite partitioned table in dynamic mode by position") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      val t1 = "tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+        val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
+        doInsert(t1, init)
+
+        val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
+        doInsert(t1, dfr, SaveMode.Overwrite)
+
+        val df = Seq((1L, "a"), (2L, "b"), (3L, "c"), (4L, "keep")).toDF("id", "data")
+        verifyTable(t1, df)
+      }
     }
   }
 }
