@@ -19,4 +19,31 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Dropping a user-defined function(UDF). An exception will be thrown if the function does not exist
+ in the system. 
+
+### Syntax
+{% highlight sql %}
+DROP [TEMPORARY] FUNCTION [IF EXISTS] [db_name.]function_name;
+{% endhighlight %}
+
+### Example
+{% highlight sql %}
+DROP TEMPORARY FUNCTION tempfunction;
+DROP FUNCTION testdb.permfunction;
+{% endhighlight %}
+
+### Parameters
+
+### **function_name**
+
+The name of an existing function.
+
+### **TEMPORARY**
+
+If specified, the function created will be local to session. On close of session it will be removed.
+
+### **IF EXISTS**
+
+If specified will not throw any exception if no function exists.
