@@ -2046,11 +2046,14 @@ class Analyzer(
               assert(!generatorVisited, "More than one generator found in aggregate.")
               generatorVisited = true
 
-              val aliasedGenChildren: Seq[NamedExpression] = generator.children.zipWithIndex.map {
-                case (e, idx) => Alias(e, s"_gen_input_${idx}")()
+              val aliasedGenChildren: Seq[Expression] = generator.children.zipWithIndex.map {
+                case (e, idx) => if (e.foldable) e else Alias(e, s"_gen_input_${idx}")()
               }
               val newGenerator = {
-                val g = generator.withNewChildren(aliasedGenChildren.map(_.toAttribute))
+                val g = generator.withNewChildren(aliasedGenChildren.map {
+                  case e: Alias => e.toAttribute
+                  case other => other // foldable expression.
+                })
                   .asInstanceOf[Generator]
                 if (outer) GeneratorOuter(g) else g
               }
