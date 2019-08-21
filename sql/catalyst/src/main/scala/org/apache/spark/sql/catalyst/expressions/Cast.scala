@@ -1265,17 +1265,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       integralType: String): CastFunction = {
     val capitalizedIntegralType = integralType.capitalize
     if (failOnIntegerOverflow) {
-      val doubleValue = ctx.freshName("doubleValue")
-      val (min, max) = lowerAndUpperBound(integralType)
-      (c, evPrim, evNull) =>
-        code"""
-          double $doubleValue = $c.toDouble();
-          if ($doubleValue > $min && $doubleValue < $max) {
-            $evPrim = $c.to$capitalizedIntegralType();
-          } else {
-            throw new ArithmeticException("Casting $c to $integralType causes overflow");
-          }
-        """
+      (c, evPrim, evNull) => code"$evPrim = $c.roundTo$capitalizedIntegralType();"
     } else {
       (c, evPrim, evNull) => code"$evPrim = $c.to$capitalizedIntegralType();"
     }
@@ -1408,17 +1398,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
-    case DecimalType() if failOnIntegerOverflow =>
-      (c, evPrim, evNull) =>
-        code"""
-          try {
-            $evPrim = $c.toJavaBigInteger().longValueExact();
-          } catch (ArithmeticException e) {
-            throw new ArithmeticException("Casting $c to long causes overflow");
-          }
-        """
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLong();"
+    case DecimalType() => castDecimalToIntegerCode(ctx, "long")
     case _: FloatType | _: DoubleType if failOnIntegerOverflow =>
       (c, evPrim, evNull) =>
         code"""

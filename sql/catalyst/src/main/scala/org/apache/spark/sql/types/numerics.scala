@@ -187,27 +187,7 @@ object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrderin
 }
 
 object DecimalExactNumeric extends DecimalIsConflicted {
-  private def exceptionMessage(x: Decimal, dataType: String): String =
-    s"Casting $x to $dataType causes overflow."
+  override def toInt(x: Decimal): Int = x.roundToInt()
 
-  private val intUpperBound = Decimal(Int.MaxValue + 1L)
-  private val intLowerBound = Decimal(Int.MinValue - 1L)
-  private val longUpperBound = Decimal(Long.MaxValue) + Decimal(1L)
-  private val longLowerBound = Decimal(Long.MinValue) - Decimal(1L)
-
-  override def toInt(x: Decimal): Int = {
-    if (x < intUpperBound && x > intLowerBound) {
-      x.toInt
-    } else {
-      throw new ArithmeticException(exceptionMessage(x, "int"))
-    }
-  }
-
-  override def toLong(x: Decimal): Long = {
-    if (x < longUpperBound && x > longLowerBound) {
-      x.toLong
-    } else {
-      throw new ArithmeticException(exceptionMessage(x, "long"))
-    }
-  }
+  override def toLong(x: Decimal): Long = x.roundToLong()
 }

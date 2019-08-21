@@ -238,6 +238,91 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toByte: Byte = toLong.toByte
 
+  private def overflowException(dataType: String) =
+    throw new ArithmeticException(s"Casting $this to $dataType causes overflow.")
+
+  /**
+   * @return the Byte value that is equal to the rounded decimal.
+   * @throws ArithmeticException if the decimal can't fit into Byte type.
+   */
+  def roundToByte(): Byte = {
+    if (decimalVal.eq(null)) {
+      val actualLongVal = longVal / POW_10(_scale)
+      if (actualLongVal == actualLongVal.toByte) {
+        actualLongVal.toByte
+      } else {
+        overflowException("byte")
+      }
+    } else {
+      val doubleVal = decimalVal.toDouble
+      if (Math.floor(doubleVal) <= Byte.MaxValue && Math.ceil(doubleVal) >= Byte.MinValue) {
+        doubleVal.toByte
+      } else {
+        overflowException("byte")
+      }
+    }
+  }
+
+  /**
+   * @return the Short value that is equal to the rounded decimal.
+   * @throws ArithmeticException if the decimal can't fit into Short type.
+   */
+  def roundToShort(): Short = {
+    if (decimalVal.eq(null)) {
+      val actualLongVal = longVal / POW_10(_scale)
+      if (actualLongVal == actualLongVal.toShort) {
+        actualLongVal.toShort
+      } else {
+        overflowException("short")
+      }
+    } else {
+      val doubleVal = decimalVal.toDouble
+      if (Math.floor(doubleVal) <= Short.MaxValue && Math.ceil(doubleVal) >= Short.MinValue) {
+        doubleVal.toShort
+      } else {
+        overflowException("short")
+      }
+    }
+  }
+
+  /**
+   * @return the Int value that is equal to the rounded decimal.
+   * @throws ArithmeticException if the decimal can't fit into Int type.
+   */
+  def roundToInt(): Int = {
+    if (decimalVal.eq(null)) {
+      val actualLongVal = longVal / POW_10(_scale)
+      if (actualLongVal == actualLongVal.toInt) {
+        actualLongVal.toInt
+      } else {
+        overflowException("int")
+      }
+    } else {
+      val doubleVal = decimalVal.toDouble
+      if (Math.floor(doubleVal) <= Int.MaxValue && Math.ceil(doubleVal) >= Int.MinValue) {
+        doubleVal.toInt
+      } else {
+        overflowException("int")
+      }
+    }
+  }
+
+  /**
+   * @return the Long value that is equal to the rounded decimal.
+   * @throws ArithmeticException if the decimal can't fit into Long type.
+   */
+  def roundToLong(): Long = {
+    if (decimalVal.eq(null)) {
+      longVal / POW_10(_scale)
+    } else {
+      try {
+        decimalVal.bigDecimal.toBigInteger.longValueExact()
+      } catch {
+        case _: ArithmeticException => overflowException("long")
+      }
+    }
+  }
+
   /**
    * Update precision and scale while keeping our value the same, and return true if successful.
    *
