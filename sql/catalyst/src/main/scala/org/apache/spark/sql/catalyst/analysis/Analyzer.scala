@@ -2517,7 +2517,7 @@ class Analyzer(
    * Resolves columns of an output table from the data in a logical plan. This rule will:
    *
    * - Reorder columns when the write is by name
-   * - Insert safe casts when data types do not match
+   * - Insert casts when data types do not match
    * - Insert aliases when column names do not match
    * - Detect plans that are not compatible with the output table and throw AnalysisException
    */
