@@ -18,5 +18,23 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+### Description
+You can author metadata associated with a database by setting the `DBPROPERTIES`. Using this command 
+you can set key-value pairs in the `DBPROPERTIES`. The specified property values override any existing
+value with the same property name. Please note that the usage of SCHEMA and DATABASE are interchangable 
+and mean the same thing. An error message is issued if the database does not exist in the system. This
+command is mostly used to record the metadata for a database and can be used for auditing purposes.
 
-**This page is under construction**
+### Syntax
+{% highlight sql %}
+ALTER {DATABASE | SCHEMA} database_name SET DBPROPERTIES (propery_name=property_value, ...)
+{% endhighlight %}
+
+### Example
+{% highlight sql %}
+ALTER DATABASE inventory SET DBPROPERTIES ('Edited-by' = 'John', 'Edit-date' = '01/01/2001')
+{% endhighlight %}
+
+You can use [describe-database](sql-ref-syntax-aux-describe-database.html) command to verify the setting
+of properties.
+
