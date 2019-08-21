@@ -193,9 +193,10 @@ class Dataset[T] private[sql](
     if (_sparkSession == null) {
       throw new SparkException(
       "Dataset transformations and actions can only be invoked by the driver, not inside of" +
-        " other transformations; for example, dataset1.map(x => dataset2.values.count() * x)" +
-        " is invalid because the values transformation and count action cannot be performed" +
-        " inside of the dataset1.map transformation. For more information, see SPARK-28702.")
+        " other Dataset transformations; for example, dataset1.map(x => dataset2.values.count()" +
+        " * x) is invalid because the values transformation and count action cannot be " +
+        "performed inside of the dataset1.map transformation. For more information," +
+        " see SPARK-28702.")
     }
     _sparkSession
   }
