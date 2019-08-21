@@ -19,4 +19,28 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+A view is a virtual table based on the result set of base query. The base query
+can involve joins, expressions, reordered columns, column aliases, and other SQL
+features that can make a query hard to understand or maintain.
+A view is purely a logical construct (an alias for a query) with no physical
+data behind it.
+
+### Syntax
+{% highlight sql %}
+CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
+    [(column_name [COMMENT column_comment], ...) ]
+    create_view_clauses
+    
+    AS SELECT ...;
+    
+    create_view_clauses (order insensitive):
+        [COMMENT view_comment]
+        [TBLPROPERTIES (property_name = property_value, ...)]
+{% endhighlight %}
+
+### Example
+{% highlight sql %}
+CREATE VIEW IF NOT EXISTS v1 AS SELECT * FROM t1;
+CREATE VIEW v1 (c1 COMMENT 'comment for c1', c2) COMMENT 'comment for v1' TBLPROPERTIES (key1=value1, key2=value2) AS SELECT * FROM t1;
+{% endhighlight %}
