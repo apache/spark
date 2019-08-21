@@ -21,7 +21,7 @@ license: |
 
 ### Description
 Returns the list of functions after applying an optional regex pattern.
-Three optional parameters SYSTEM, USER, ALL may be specified to list
+Three optional parameters `SYSTEM`, `USER`, `ALL` may be specified to list
 system functions, user defined function or both user and system defined
 funtions respectively. Given Spark supports hundreds of functions, this
 statement in conjuction with [describe function](sql-ref-syntax-aux-describe-function.html)
@@ -38,8 +38,8 @@ qualified_function_name:= [db.]function_name
   Function name may be optionally qualified with database.
 - ##### ***regex_pattern***:
   A regex pattern that is used as a filtering out unwanted functions.
-  - Only '*' and '|' are allowed as wildcard pattern.
-  - Excluding '*' and '|' the remaining pattern follows the regex semantics.
+  - Only `*` and `|` are allowed as wildcard pattern.
+  - Excluding `*` and `|` the remaining pattern follows the regex semantics.
   - The leading and trailing blanks are trimmed in the input pattern before processing.  
 
 ### Examples
@@ -53,9 +53,9 @@ SHOW SYSTEM FUNCTIONS my_udf;
 -- List a qualified funtion. among system defined functions.
 SHOW SYSTEM FUNCTIONS sales_db.trim;
 -- List all functions starting with `t`
-SHOW FUNCTIONS LIKE `t*`;
+SHOW FUNCTIONS LIKE 't*';
 -- List all functions starting with `t` or `a`
-SHOW FUNCTIONS LIKE `t* | a*`;
+SHOW FUNCTIONS LIKE 't* | a*';
 -- Use normal regex pattern to list function names that has 4 characters
 -- with `t` as the starting character.
 SHOW functions like 't[a-z][a-z][a-z]';
