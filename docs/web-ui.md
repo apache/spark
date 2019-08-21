@@ -103,6 +103,54 @@ The Storage tab displays the persisted RDDs and DataFrames, if any, in the appli
 page shows the storage levels, sizes and partitions of all RDDs, and the details page shows the
 sizes and using executors for all partitions in an RDD or DataFrame.
 
+{% highlight scala %}
+scala> import org.apache.spark.storage.StorageLevel._
+import org.apache.spark.storage.StorageLevel._
+
+scala> val rdd = sc.range(0, 100, 1, 5).setName("rdd")
+rdd: org.apache.spark.rdd.RDD[Long] = rdd MapPartitionsRDD[1] at range at <console>:27
+
+scala> rdd.persist(MEMORY_ONLY_SER)
+res0: rdd.type = rdd MapPartitionsRDD[1] at range at <console>:27
+
+scala> rdd.count
+res1: Long = 100                                                                
+
+scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
+df: org.apache.spark.sql.DataFrame = [count: int, name: string]
+
+scala> df.persist(DISK_ONLY)
+res2: df.type = [count: int, name: string]
+
+scala> df.count
+res3: Long = 3
+{% endhighlight %}
+
+<p style="text-align: center;">
+  <img src="img/webui-storage-tab.png"
+       title="Storage tab"
+       alt="Storage tab"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+After running the above example, we can find two RDDs listed in the Storage tab. Basic information like
+storage level, number of partitions and memory overhead are provided. Note that the newly persisted RDDs
+or DataFrames are not shown in the tab before they are materialized. To monitor a specific RDD or DataFrame,
+make sure an action operation has been triggered.
+
+<p style="text-align: center;">
+  <img src="img/webui-storage-detail.png"
+       title="Storage detail"
+       alt="Storage detail"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+You can click the RDD name 'rdd' for obtaining the details of data persistence, such as the data
+distribution on the cluster.
+
+
 ## Environment Tab
 The Environment tab displays the values for the different environment and configuration variables,
 including JVM, Spark, and system properties.
