@@ -69,8 +69,9 @@ import org.apache.spark.streaming.kafka010._
  * except for some differences at 'keyTab'. In kafka_driver_jaas.conf, 'keyTab' should be
  * "${keytab_path}/kafka.service.keytab".
  *
- * Note: This file uses SASL_PLAINTEXT for simplicity;however,
- * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Consider using SASL_SSL.
+ * Note that this example uses SASL_PLAINTEXT for simplicity; however,
+ * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Please consider
+ * using SASL_SSL in production.
  */
 object DirectKerberizedKafkaWordCount {
   def main(args: Array[String]) {
