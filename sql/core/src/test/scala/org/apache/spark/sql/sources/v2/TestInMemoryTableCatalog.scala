@@ -234,7 +234,8 @@ class InMemoryTable(
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      dataMap --= deletesKeys(filters)
+      val deleteKeys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+      dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
     }
   }
@@ -247,37 +248,43 @@ class InMemoryTable(
   }
 
   override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
-    dataMap --= deletesKeys(filters)
+    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+  }
+}
+
+object InMemoryTable {
+  def filtersToKeys(
+      keys: Iterable[Seq[Any]],
+      partitionNames: Seq[String],
+      filters: Array[Filter]): Iterable[Seq[Any]] = {
+    keys.filter { partValues =>
+      filters.flatMap(splitAnd).forall {
+        case EqualTo(attr, value) =>
+          value == extractValue(attr, partitionNames, partValues)
+        case IsNotNull(attr) =>
+          null != extractValue(attr, partitionNames, partValues)
+        case f =>
+          throw new IllegalArgumentException(s"Unsupported filter type: $f")
+      }
+    }
+  }
+
+  private def extractValue(
+      attr: String,
+      partFieldNames: Seq[String],
+      partValues: Seq[Any]): Any = {
+    partFieldNames.zipWithIndex.find(_._1 == attr) match {
+      case Some((_, partIndex)) =>
+        partValues(partIndex)
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
+    }
   }
 
   private def splitAnd(filter: Filter): Seq[Filter] = {
     filter match {
       case And(left, right) => splitAnd(left) ++ splitAnd(right)
       case _ => filter :: Nil
-    }
-  }
-
-  private def deletesKeys(filters: Array[Filter]): Iterable[Seq[Any]] = {
-    dataMap.synchronized {
-      dataMap.keys.filter { partValues =>
-        filters.flatMap(splitAnd).forall {
-          case EqualTo(attr, value) =>
-            value == extractValue(attr, partValues)
-          case IsNotNull(attr) =>
-            null != extractValue(attr, partValues)
-          case f =>
-            throw new IllegalArgumentException(s"Unsupported filter type: $f")
-        }
-      }
-    }
-  }
-
-  private def extractValue(attr: String, partValues: Seq[Any]): Any = {
-    partFieldNames.zipWithIndex.find(_._1 == attr) match {
-      case Some((_, partIndex)) =>
-        partValues(partIndex)
-      case _ =>
-        throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
     }
   }
 }
