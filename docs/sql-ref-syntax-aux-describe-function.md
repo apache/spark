@@ -21,8 +21,8 @@ license: |
 ### Description
 
 Return the metadata such as qualified function name, implementing class and usage of an existing function.
-Input parameter function name may be optionally qualified. If the function is not qualified then the function is
-resolved from the current database. If EXTENDED option is specified then additionally extended usage information
+Input parameter `function_name` may be optionally qualified. If the function is not qualified then the function is
+resolved from the current database. If the `EXTENDED` option is specified then additionally extended usage information
 including usage examples are returned. 
 
 ### Syntax
