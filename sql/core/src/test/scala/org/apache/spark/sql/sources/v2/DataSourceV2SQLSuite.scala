@@ -48,7 +48,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     spark.conf.set(
         "spark.sql.catalog.testcat_atomic", classOf[TestStagingInMemoryCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
-    spark.conf.set(V2_SESSION_CATALOG.key, classOf[TestV2SessionCatalog].getName)
+    spark.conf.set(V2_SESSION_CATALOG.key, classOf[InMemoryTableSessionCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
