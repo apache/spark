@@ -19,4 +19,21 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Drop all cached entries associated with the table from the RDD cache
+
+### Syntax
+{% highlight sql %}
+UNCACHE TABLE [IF EXISTS] [db_name.]table_name
+{% endhighlight %}
+
+### Example
+{% highlight sql %}
+UNCACHE TABLE t1
+{% endhighlight %}
+
+### Parameters
+
+#### ***table_name***:
+The name of an existing table.
+
