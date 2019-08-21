@@ -19,4 +19,21 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Drops the specified view, which was created by the CREATE VIEW statement. Because a view
+is purely a logical construct with no physical data behind it, DROP VIEW only
+involves changes to metadata in the metastore database, not any data files in HDFS.
+
+### Syntax
+{% highlight sql %}
+DROP VIEW [IF EXISTS] [database_name.]view_name
+{% endhighlight %}
+
+ ### Example
+{% highlight sql %}
+DROP VIEW USERDB.VIEW1
+DROP TABLE VIEW1
+DROP VIEW IF EXISTS USERDB.VIEW1
+DROP VIEW IF EXISTS VIEW1
+{% endhighlight %}
+
