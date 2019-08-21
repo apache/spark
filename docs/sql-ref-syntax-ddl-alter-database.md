@@ -19,9 +19,9 @@ license: |
   limitations under the License.
 ---
 ### Description
-You can author metadata associated with a database by setting the `DBPROPERTIES`. Using this command 
+You can author metadata associated with a database by setting `DBPROPERTIES`. Using this command 
 you can set key-value pairs in the `DBPROPERTIES`. The specified property values override any existing
-value with the same property name. Please note that the usage of SCHEMA and DATABASE are interchangable 
+value with the same property name. Please note that the usage of `SCHEMA` and `DATABASE` are interchangable 
 and mean the same thing. An error message is issued if the database does not exist in the system. This
 command is mostly used to record the metadata for a database and can be used for auditing purposes.
 
