@@ -156,13 +156,9 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(error.contains("within 1 second(s)"))
   }
 
-  test("barrier task killed") {
-    val conf = new SparkConf()
-      .set("spark.barrier.sync.timeout", "1")
-      .set(TEST_NO_STAGE_RETRY, true)
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+
+  def testBarrierTaskKilled(sc: SparkContext, interruptOnCancel: Boolean): Unit = {
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
 
     withTempDir { dir =>
       val killedFlagFile = "barrier.task.killed"
@@ -203,5 +199,17 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
       assert(new File(dir, killedFlagFile).exists(), "Expect barrier task being killed.")
     }
+  }
+
+  test("barrier task killed") {
+    val conf = new SparkConf()
+      .set("spark.barrier.sync.timeout", "1")
+      .set(TEST_NO_STAGE_RETRY, true)
+      .setMaster("local-cluster[4, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+
+    testBarrierTaskKilled(sc, true)
+    testBarrierTaskKilled(sc, false)
   }
 }
