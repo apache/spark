@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-The `LOAD DATA` statement can be used to load data from a file into a table, or into a partition in the table. The target table must not be temporary. A partition spec must be provided if and only if the target table is partitioned. The LOAD DATA statement is only supported for tables created using the Hive format.
+The `LOAD DATA` statement can be used to load data from a file into a table, or into a partition in the table. The target table must not be temporary. A partition spec must be provided if and only if the target table is partitioned. The `LOAD DATA` statement is only supported for tables created using the Hive format.
 
 ### Syntax
 {% highlight sql %}
