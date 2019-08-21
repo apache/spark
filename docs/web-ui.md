@@ -155,6 +155,51 @@ distribution on the cluster.
 The Environment tab displays the values for the different environment and configuration variables,
 including JVM, Spark, and system properties.
 
+<p style="text-align: center;">
+  <img src="img/webui-env-tab.png"
+       title="Env tab"
+       alt="Env tab"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+This environment page has five parts. It is a useful place to check whether your properties have
+been set correctly.
+The first part 'Runtime Information' simply contains the [runtime properties](configuration.html#runtime-environment)
+like versions of Java and Scala.
+The second part 'Spark Properties' lists the [application properties](configuration.html#application-properties) like
+['spark.app.name'](configuration.html#application-properties) and 'spark.driver.memory'.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-hadoop.png"
+       title="Hadoop Properties"
+       alt="Hadoop Properties"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+Clicking the 'Hadoop Properties' link displays properties relative to Hadoop and YARN. Note that properties like
+['spark.hadoop.*'](configuration.html#execution-behavior) are shown not in this part but in 'Spark Properties'.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-sys.png"
+       title="System Properties"
+       alt="System Properties"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+'System Properties' shows more details about the JVM.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-class.png"
+       title="Classpath Entries"
+       alt="Classpath Entries"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+The last part 'Classpath Entries' lists the classes loaded from different sources, which is very useful
+to resolve class conflicts.
+
 ## Executors Tab
 The Executors tab displays summary information about the executors that were created for the
 application, including memory and disk usage and task and shuffle information. The Storage Memory
