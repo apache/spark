@@ -3407,7 +3407,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a tranformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3418,7 +3418,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Returns an array of elements after applying a tranformation to each element
+   * Returns an array of elements after applying a tranformation to each element
    * in the input array.
    *
    * @group collection_funcs
@@ -3429,7 +3429,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Returns whether a predicate holds for one or more elements in the array.
+   * Returns whether a predicate holds for one or more elements in the array.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3439,7 +3439,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Returns whether a predicate holds for every element in the array.
+   * Returns whether a predicate holds for every element in the array.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3449,7 +3449,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Returns an array of elements for which a predicate holds in a given array.
+   * Returns an array of elements for which a predicate holds in a given array.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3459,7 +3459,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Applies a binary operator to an initial state and all elements in the array,
+   * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state. The final state is converted into the final result
    * by applying a finish function.
    *
@@ -3477,7 +3477,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Applies a binary operator to an initial state and all elements in the array,
+   * Applies a binary operator to an initial state and all elements in the array,
    * and reduces this to a single state.
    *
    * @group collection_funcs
@@ -3487,7 +3487,7 @@ object functions {
     aggregate(expr, zero, merge, c => c)
 
   /**
-   * (Scala-specific) Merge two given arrays, element-wise, into a signle array using a function.
+   * Merge two given arrays, element-wise, into a signle array using a function.
    * If one array is shorter, nulls are appended at the end to match the length of the longer
    * array, before applying the function.
    *
@@ -3499,7 +3499,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Applies a function to every key-value pair in a map and returns
+   * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new keys for the pairs.
    *
    * @group collection_funcs
@@ -3510,7 +3510,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Applies a function to every key-value pair in a map and returns
+   * Applies a function to every key-value pair in a map and returns
    * a map with the results of those applications as the new values for the pairs.
    *
    * @group collection_funcs
@@ -3521,7 +3521,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Returns a map whose key-value pairs satisfy a predicate.
+   * Returns a map whose key-value pairs satisfy a predicate.
    *
    * @group collection_funcs
    * @since 3.0.0
@@ -3531,7 +3531,7 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Merge two given maps, key-wise into a single map using a function.
+   * Merge two given maps, key-wise into a single map using a function.
    *
    * @group collection_funcs
    * @since 3.0.0
