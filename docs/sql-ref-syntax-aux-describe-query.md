@@ -19,4 +19,34 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+The DESCRIBE QUERY statement is used to return the metadata of output
+of a query. 
+
+### Syntax
+{% highlight sql %}
+{DESC | DESCRIBE} [QUERY] query 
+
+query:= {cte | select-query | inline-table | TABLE table-name}
+{% endhighlight %}
+**Note**
+* For detailed syntax of query parameter please refer to [select-statement](sql-ref-syntax-qry-select.html)
+  and the examples below.
+* DESC and DESCRIBE are interchangeble and mean the same thing.
+
+### Examples
+{% highlight sql %}
+-- Returns column name, column type and comment info for a simple select query
+DESCRIBE QUERY select * customer;
+-- Returns column name, column type and comment info for a inline table.
+DESC QUERY VALUES(1.00D, 'hello') as test_tab(c1, c2);
+-- Returns column name, column type and comment info for query with set operations.
+DESC QUERY SELECT int_col FROM int_tab UNION ALL select double_col from double_tab
+-- Returns column name, column type and comment info for CTE.
+DESCRIBE QUERY WITH cte AS (SELECT cust_id from customer) SELECT * FROM cte;
+{% endhighlight %}
+
+### Related Statements
+- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
