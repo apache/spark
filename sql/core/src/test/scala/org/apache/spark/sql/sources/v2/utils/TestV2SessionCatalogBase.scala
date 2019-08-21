@@ -28,7 +28,11 @@ import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 
-/** A SessionCatalog that always loads an in memory Table, so we can test write code paths. */
+/**
+ * A V2SessionCatalog implementation that can be extended to generate arbitrary `Table` definitions
+ * for testing DDL as well as write operations (through df.write.saveAsTable, df.write.insertInto
+ * and SQL).
+ */
 private[v2] trait TestV2SessionCatalogBase[T <: Table] extends V2SessionCatalog {
 
   protected val tables: util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()

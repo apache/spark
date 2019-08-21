@@ -46,7 +46,8 @@ trait V1WriteBuilder extends WriteBuilder {
    */
   def buildForV1Write(): InsertableRelation
 
-  // These methods cannot be implemented by a V1WriteBuilder.
+  // These methods cannot be implemented by a V1WriteBuilder. The super class will throw
+  // an Unsupported OperationException
   override final def buildForBatch(): BatchWrite = super.buildForBatch()
 
   override final def buildForStreaming(): StreamingWrite = super.buildForStreaming()
