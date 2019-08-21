@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Drop all cached entries associated with the table from the RDD cache
+Removes the specified table from the in-memory cache.
 
 ### Syntax
 {% highlight sql %}
