@@ -118,9 +118,6 @@ object TableOutputResolver {
         } else {
           outputField
         }
-
-      case other =>
-        throw new AnalysisException(s"Unsupported store assignment policy: $other")
     }
   }
 }
