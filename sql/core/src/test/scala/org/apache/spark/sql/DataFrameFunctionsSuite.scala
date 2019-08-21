@@ -3054,18 +3054,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Map[Array[Int], Boolean](Array(1, 2) -> false)
     ).toDF("y")
 
+    val res1 = Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7)))
+
+    val res2 = Seq(Row(Map("one" -> 1.0, "two" -> 1.4, "three" -> 1.7)))
+    val res2a = Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7)))
+    val res2b = Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7)))
+
+    val res3 = Seq(Row(Map(true -> true, true -> false)))
+    val res3a = Seq(Row(Map(50 -> true, 78 -> false)))
+
+    val res4 = Seq(Row(Map(false -> false)))
+
 
     def testMapOfPrimitiveTypesCombination(): Unit = {
-      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> k + v)"),
-        Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7))))
-
-      checkAnswer(dfExample1.select(transform_keys(col("i"), (k, v) => k + v)),
-        Seq(Row(Map(2 -> 1, 18 -> 9, 16 -> 8, 14 -> 7))))
+      checkAnswer(dfExample1.selectExpr("transform_keys(i, (k, v) -> k + v)"), res1)
+      checkAnswer(dfExample1.select(transform_keys(col("i"), (k, v) => k + v)), res1)
+      checkAnswer(dfExample1.select(transform_keys(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k + v
+      })), res1)
 
       checkAnswer(dfExample2.selectExpr("transform_keys(j, " +
-        "(k, v) -> map_from_arrays(ARRAY(1, 2, 3), ARRAY('one', 'two', 'three'))[k])"),
-        Seq(Row(Map("one" -> 1.0, "two" -> 1.4, "three" -> 1.7))))
-
+        "(k, v) -> map_from_arrays(ARRAY(1, 2, 3), ARRAY('one', 'two', 'three'))[k])"), res2)
       checkAnswer(dfExample2.select(
           transform_keys(
             col("j"),
@@ -3078,40 +3087,63 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
             )
           )
         ),
-        Seq(Row(Map("one" -> 1.0, "two" -> 1.4, "three" -> 1.7))))
+      res2)
+      checkAnswer(dfExample2.select(
+          transform_keys(
+            col("j"),
+            new JFunc2 {
+              def call(k: Column, v: Column): Column = element_at(
+                map_from_arrays(
+                  array(lit(1), lit(2), lit(3)),
+                  array(lit("one"), lit("two"), lit("three"))
+                ),
+                k
+              )
+            }
+          )
+        ),
+      res2)
 
       checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> CAST(v * 2 AS BIGINT) + k)"),
-        Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7))))
-
+        res2a)
       checkAnswer(dfExample2.select(transform_keys(col("j"),
-        (k, v) => (v * 2).cast("bigint") + k)),
-        Seq(Row(Map(3 -> 1.0, 4 -> 1.4, 6 -> 1.7))))
+        (k, v) => (v * 2).cast("bigint") + k)), res2a)
+      checkAnswer(dfExample2.select(transform_keys(col("j"),
+        new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            (v * 2).cast("bigint") + k
+         })), res2a)
 
-      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> k + v)"),
-        Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
+      checkAnswer(dfExample2.selectExpr("transform_keys(j, (k, v) -> k + v)"), res2b)
+      checkAnswer(dfExample2.select(transform_keys(col("j"), (k, v) => k + v)), res2b)
+      checkAnswer(dfExample2.select(transform_keys(col("j"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k + v
+      })), res2b)
 
-      checkAnswer(dfExample2.select(transform_keys(col("j"), (k, v) => k + v)),
-        Seq(Row(Map(2.0 -> 1.0, 3.4 -> 1.4, 4.7 -> 1.7))))
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"), res3)
+      checkAnswer(dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)), res3)
+      checkAnswer(dfExample3.select(transform_keys(col("x"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k % 2 === 0 || v
+      })), res3)
 
-      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) ->  k % 2 = 0 OR v)"),
-        Seq(Row(Map(true -> true, true -> false))))
-
-      checkAnswer(dfExample3.select(transform_keys(col("x"), (k, v) => k % 2 === 0 || v)),
-        Seq(Row(Map(true -> true, true -> false))))
-
-      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"),
-        Seq(Row(Map(50 -> true, 78 -> false))))
-
+      checkAnswer(dfExample3.selectExpr("transform_keys(x, (k, v) -> if(v, 2 * k, 3 * k))"), res3a)
       checkAnswer(dfExample3.select(transform_keys(col("x"),
-        (k, v) => when(v, k * 2).otherwise(k * 3))),
-        Seq(Row(Map(50 -> true, 78 -> false))))
+        (k, v) => when(v, k * 2).otherwise(k * 3))), res3a)
+      checkAnswer(dfExample3.select(transform_keys(col("x"),
+        new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            when(v, k * 2).otherwise(k * 3)
+        })), res3a)
 
       checkAnswer(dfExample4.selectExpr("transform_keys(y, (k, v) -> array_contains(k, 3) AND v)"),
-        Seq(Row(Map(false -> false))))
-
+        res4)
       checkAnswer(dfExample4.select(transform_keys(col("y"),
-        (k, v) => array_contains(k, lit(3)) && v)),
-        Seq(Row(Map(false -> false))))
+        (k, v) => array_contains(k, lit(3)) && v)), res4)
+      checkAnswer(dfExample4.select(transform_keys(col("y"),
+        new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            array_contains(k, lit(3)) && v
+        })), res4)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -3154,6 +3186,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
     assert(ex3a.getMessage.contains("Cannot use null as map key"))
 
+    val ex3b = intercept[Exception] {
+      dfExample1.select(transform_keys(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = v
+      })).show()
+    }
+    assert(ex3b.getMessage.contains("Cannot use null as map key"))
+
     val ex4 = intercept[AnalysisException] {
       dfExample2.selectExpr("transform_keys(j, (k, v) -> k + 1)")
     }
@@ -3182,82 +3221,124 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Map[Int, Array[Int]](1 -> Array(1, 2))
     ).toDF("c")
 
+    val res_1_1 = Seq(Row(Map(1 -> 2, 9 -> 18, 8 -> 16, 7 -> 14)))
+
+    val res_2_1 = Seq(Row(Map(false -> "false", true -> "def")))
+    val res_2_2 = Seq(Row(Map(false -> true, true -> false)))
+
+    val res_3_1 = Seq(Row(Map("a" -> 1, "b" -> 4, "c" -> 9)))
+    val res_3_2 = Seq(Row(Map("a" -> "a:1", "b" -> "b:2", "c" -> "c:3")))
+    val res_3_3 = Seq(Row(Map("a" -> "a1", "b" -> "b2", "c" -> "c3")))
+
+    val res_4_1 = Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7")))
+    val res_4_2 = Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3)))
+
+    val res_5_1 = Seq(Row(Map(1 -> 3)))
+
     def testMapOfPrimitiveTypesCombination(): Unit = {
       checkAnswer(dfExample1.selectExpr("transform_values(i, (k, v) -> k + v)"),
-        Seq(Row(Map(1 -> 2, 9 -> 18, 8 -> 16, 7 -> 14))))
+        res_1_1)
+      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => k + v)),
+        res_1_1)
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k + v
+      })), res_1_1)
+
 
       checkAnswer(dfExample2.selectExpr(
-        "transform_values(x, (k, v) -> if(k, v, CAST(k AS String)))"),
-        Seq(Row(Map(false -> "false", true -> "def"))))
+        "transform_values(x, (k, v) -> if(k, v, CAST(k AS String)))"), res_2_1)
+      checkAnswer(dfExample2.select(
+        transform_values(col("x"), (k, v) => when(k, v).otherwise(k.cast("string")))),
+        res_2_1)
+      checkAnswer(dfExample2.select(
+        transform_values(col("x"), new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            when(k, v).otherwise(k.cast("string"))
+        })), res_2_1)
+
 
       checkAnswer(dfExample2.selectExpr("transform_values(x, (k, v) -> NOT k AND v = 'abc')"),
-        Seq(Row(Map(false -> true, true -> false))))
+        res_2_2)
+      checkAnswer(dfExample2.select(transform_values(col("x"),
+        (k, v) => (!k) && v === "abc")), res_2_2)
+      checkAnswer(dfExample2.select(transform_values(col("x"),
+        new JFunc2 {
+          def call(k: Column, v: Column): Column = (!k) && v === "abc"
+        })), res_2_2)
 
-      checkAnswer(dfExample3.selectExpr("transform_values(y, (k, v) -> v * v)"),
-        Seq(Row(Map("a" -> 1, "b" -> 4, "c" -> 9))))
+
+      checkAnswer(dfExample3.selectExpr("transform_values(y, (k, v) -> v * v)"), res_3_1)
+      checkAnswer(dfExample3.select(transform_values(col("y"), (k, v) => v * v)),
+        res_3_1)
+      checkAnswer(dfExample3.select(transform_values(col("y"), new JFunc2{
+        def call(k: Column, v: Column): Column = v * v
+      })), res_3_1)
+
 
       checkAnswer(dfExample3.selectExpr(
-        "transform_values(y, (k, v) -> k || ':' || CAST(v as String))"),
-        Seq(Row(Map("a" -> "a:1", "b" -> "b:2", "c" -> "c:3"))))
+        "transform_values(y, (k, v) -> k || ':' || CAST(v as String))"), res_3_2)
+      checkAnswer(dfExample3.select(
+        transform_values(col("y"), (k, v) => concat(k, lit(":"), v.cast("string")))),
+        res_3_2)
+      checkAnswer(dfExample3.select(
+        transform_values(col("y"), new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            concat(k, lit(":"), v.cast("string"))
+        })), res_3_2)
+
 
       checkAnswer(
         dfExample3.selectExpr("transform_values(y, (k, v) -> concat(k, cast(v as String)))"),
-        Seq(Row(Map("a" -> "a1", "b" -> "b2", "c" -> "c3"))))
+        res_3_3)
+      checkAnswer(
+        dfExample3.select(transform_values(col("y"), (k, v) => concat(k, v.cast("string")))),
+        res_3_3)
+      checkAnswer(
+        dfExample3.select(transform_values(col("y"), new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            concat(k, v.cast("string"))
+        })), res_3_3)
+
 
       checkAnswer(
         dfExample4.selectExpr(
           "transform_values(" +
             "z,(k, v) -> map_from_arrays(ARRAY(1, 2, 3), " +
             "ARRAY('one', 'two', 'three'))[k] || '_' || CAST(v AS String))"),
-        Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7"))))
-
-      checkAnswer(
-        dfExample4.selectExpr("transform_values(z, (k, v) -> k-v)"),
-        Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3))))
-
-      checkAnswer(
-        dfExample5.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"),
-        Seq(Row(Map(1 -> 3))))
-
-      checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => k + v)),
-        Seq(Row(Map(1 -> 2, 9 -> 18, 8 -> 16, 7 -> 14))))
-
-      checkAnswer(dfExample2.select(
-        transform_values(col("x"), (k, v) => when(k, v).otherwise(k.cast("string")))),
-        Seq(Row(Map(false -> "false", true -> "def"))))
-
-      checkAnswer(dfExample2.select(transform_values(col("x"),
-        (k, v) => (!k) && v === "abc")),
-        Seq(Row(Map(false -> true, true -> false))))
-
-      checkAnswer(dfExample3.select(transform_values(col("y"), (k, v) => v * v)),
-        Seq(Row(Map("a" -> 1, "b" -> 4, "c" -> 9))))
-
-      checkAnswer(dfExample3.select(
-        transform_values(col("y"), (k, v) => concat(k, lit(":"), v.cast("string")))),
-        Seq(Row(Map("a" -> "a:1", "b" -> "b:2", "c" -> "c:3"))))
-
-      checkAnswer(
-        dfExample3.select(transform_values(col("y"), (k, v) => concat(k, v.cast("string")))),
-        Seq(Row(Map("a" -> "a1", "b" -> "b2", "c" -> "c3"))))
-
+          res_4_1)
       val testMap = map_from_arrays(
         array(lit(1), lit(2), lit(3)),
         array(lit("one"), lit("two"), lit("three"))
       )
-
       checkAnswer(
         dfExample4.select(transform_values(col("z"),
           (k, v) => concat(element_at(testMap, k), lit("_"), v.cast("string")))),
-        Seq(Row(Map(1 -> "one_1.0", 2 -> "two_1.4", 3 ->"three_1.7"))))
+          res_4_1)
+      checkAnswer(
+        dfExample4.select(transform_values(col("z"), new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            concat(element_at(testMap, k), lit("_"), v.cast("string"))
+        })), res_4_1)
 
+      checkAnswer(
+        dfExample4.selectExpr("transform_values(z, (k, v) -> k-v)"), res_4_2)
       checkAnswer(
         dfExample4.select(transform_values(col("z"), (k, v) => k - v)),
-        Seq(Row(Map(1 -> 0.0, 2 -> 0.6000000000000001, 3 -> 1.3))))
+        res_4_2)
+      checkAnswer(
+        dfExample4.select(transform_values(col("z"), new JFunc2 {
+          def call(k: Column, v: Column): Column = k - v
+        })), res_4_2)
 
       checkAnswer(
+        dfExample5.selectExpr("transform_values(c, (k, v) -> k + cardinality(v))"), res_5_1)
+      checkAnswer(
         dfExample5.select(transform_values(col("c"), (k, v) => k + size(v))),
-        Seq(Row(Map(1 -> 3))))
+        res_5_1)
+      checkAnswer(
+        dfExample5.select(transform_values(col("c"), new JFunc2 {
+          def call(k: Column, v: Column): Column = k + size(v)
+        })), res_5_1)
     }
 
     // Test with local relation, the Project will be evaluated without codegen
@@ -3323,6 +3404,35 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
       checkAnswer(dfExample1.select(transform_values(col("i"), (k, v) => v.cast("bigint"))),
         Seq(Row(Map.empty[BigInt, BigInt])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"),
+        new JFunc2 {
+        def call(k: Column, v: Column): Column = lit(null).cast("int")})),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = k})),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = v})),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = lit(0)})),
+        Seq(Row(Map.empty[Integer, Integer])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = lit("value")})),
+        Seq(Row(Map.empty[Integer, String])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = lit(true)})),
+        Seq(Row(Map.empty[Integer, Boolean])))
+
+      checkAnswer(dfExample1.select(transform_values(col("i"), new JFunc2 {
+        def call(k: Column, v: Column): Column = v.cast("bigint")})),
+        Seq(Row(Map.empty[BigInt, BigInt])))
     }
 
     testEmpty()
@@ -3355,6 +3465,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(dfExample2.select(
         transform_values(col("b"), (k, v) => when(v.isNull, k + 1).otherwise(k + 2))
         ),
+        Seq(Row(Map(1 -> 3, 2 -> 4, 3 -> 4))))
+
+      checkAnswer(dfExample1.select(transform_values(col("a"),
+        new JFunc2 {
+          def call(k: Column, v: Column): Column = lit(null).cast("int")
+        })),
+        Seq(Row(Map[Int, Integer](1 -> null, 2 -> null, 3 -> null, 4 -> null))))
+
+      checkAnswer(dfExample2.select(
+        transform_values(col("b"), new JFunc2 {
+          def call(k: Column, v: Column): Column =
+            when(v.isNull, k + 1).otherwise(k + 2)
+        })),
         Seq(Row(Map(1 -> 3, 2 -> 4, 3 -> 4))))
     }
 
@@ -3399,6 +3522,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         dfExample3.select(transform_values(col("x"), (k, v) => k + 1))
       }
       assert(ex3a.getMessage.contains(
+        "data type mismatch: argument 1 requires map type"))
+
+      val ex3b = intercept[AnalysisException] {
+        dfExample3.select(transform_values(col("x"), new JFunc2 {
+          def call(k: Column, v: Column): Column = k + 1}))
+      }
+      assert(ex3b.getMessage.contains(
         "data type mismatch: argument 1 requires map type"))
     }
 
