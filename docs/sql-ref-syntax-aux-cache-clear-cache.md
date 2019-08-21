@@ -19,4 +19,16 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Clear the RDD cache associated with a SQLContext.
+
+### Syntax
+{% highlight sql %}
+CLEAR CACHE
+{% endhighlight %}
+
+### Example
+{% highlight sql %}
+CLEAR CACHE
+{% endhighlight %}
+
