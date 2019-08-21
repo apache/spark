@@ -319,7 +319,7 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
       doInsert(t1, df)
     }
 
-    assert(spark.table(t1).count === 0)
+    verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
     assert(exc.getMessage.contains(s"Cannot write to 'default.$t1', not enough data columns"))
   }
 
@@ -332,7 +332,7 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
         doInsert(t1, df)
       }
 
-      assert(spark.table(t1).count === 0)
+      verifyTable(t1, Seq.empty[(Long, String)].toDF("id", "data"))
       assert(exc.getMessage.contains(s"Cannot write to 'default.$t1', too many data columns"))
     }
   }
