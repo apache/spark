@@ -3557,12 +3557,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(null))
     checkAnswer(df1.selectExpr("zip_with(val1, val2, (x, y) -> x + y)"), expectedValue1)
     checkAnswer(df1.select(zip_with(df1("val1"), df1("val2"), (x, y) => x + y)), expectedValue1)
+    checkAnswer(df1.select(zip_with(df1("val1"), df1("val2"), new JFunc2 {
+      def call(x: Column, y: Column): Column = x + y})), expectedValue1)
     val expectedValue2 = Seq(
       Row(Seq(Row(1L, 1), Row(2L, null), Row(null, 3))),
       Row(Seq(Row(4L, 1), Row(11L, 2), Row(null, 3))))
     checkAnswer(df2.selectExpr("zip_with(val1, val2, (x, y) -> (y, x))"), expectedValue2)
     checkAnswer(
       df2.select(zip_with(df2("val1"), df2("val2"), (x, y) => struct(y, x))),
+      expectedValue2
+    )
+    checkAnswer(
+      df2.select(zip_with(df2("val1"), df2("val2"), new JFunc2 {
+        def call(x: Column, y: Column): Column = struct(y, x)})),
       expectedValue2
     )
   }
@@ -3585,6 +3592,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
     checkAnswer(
       df.select(zip_with(col("val1"), col("val2"), (x, y) => struct(y, x))),
+      expectedValue1
+    )
+    checkAnswer(
+      df.select(zip_with(col("val1"), col("val2"), new JFunc2 {
+        def call(x: Column, y: Column): Column = struct(y, x)})),
       expectedValue1
     )
   }
@@ -3612,6 +3624,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(zip_with(df("i"), df("a2"), (acc, x) => x))
     }
     assert(ex3a.getMessage.contains("data type mismatch: argument 1 requires array type"))
+    val ex3b = intercept[AnalysisException] {
+      df.select(zip_with(df("i"), df("a2"), new JFunc2 {
+        def call(acc: Column, x: Column): Column = x}))
+    }
+    assert(ex3b.getMessage.contains("data type mismatch: argument 1 requires array type"))
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("zip_with(a1, a, (acc, x) -> x)")
     }
