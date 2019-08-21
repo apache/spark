@@ -243,7 +243,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return the Byte value that is equal to the rounded decimal.
-   * @throws ArithmeticException if the decimal can't fit into Byte type.
+   * @throws ArithmeticException if the decimal is too big to fit in Byte type.
    */
   def roundToByte(): Byte = {
     if (decimalVal.eq(null)) {
@@ -265,7 +265,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return the Short value that is equal to the rounded decimal.
-   * @throws ArithmeticException if the decimal can't fit into Short type.
+   * @throws ArithmeticException if the decimal is too big to fit in Short type.
    */
   def roundToShort(): Short = {
     if (decimalVal.eq(null)) {
@@ -287,7 +287,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return the Int value that is equal to the rounded decimal.
-   * @throws ArithmeticException if the decimal can't fit into Int type.
+   * @throws ArithmeticException if the decimal too big to fit in Int type.
    */
   def roundToInt(): Int = {
     if (decimalVal.eq(null)) {
@@ -309,7 +309,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   /**
    * @return the Long value that is equal to the rounded decimal.
-   * @throws ArithmeticException if the decimal can't fit into Long type.
+   * @throws ArithmeticException if the decimal too big to fit in Long type.
    */
   def roundToLong(): Long = {
     if (decimalVal.eq(null)) {
