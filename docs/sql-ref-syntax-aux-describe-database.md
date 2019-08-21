@@ -19,4 +19,25 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+**Syntax**
+{% highlight sql %}
+DESCRIBE DATABASE [EXTENDED] db_name 
+{% endhighlight %}
+
+**Example**
+{% highlight sql %}
+DESCRIBE DATABASE EXTENDED tempdb
+{% endhighlight %}
+
+
+
+Return the metadata of an existing database(name, comment and location). If the database does not exist,
+ 
+an exception is thrown.
+
+When `extended` is specified, it also shows the database's properties.
+
+You can use the abbreviation `DESC` for the `DESCRIBE` statement.
+
+  
+
