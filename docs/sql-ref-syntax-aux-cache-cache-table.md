@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-CACHE TABLE statement can be used to cache the contents of the table in memory using the RDD cache. This enables subsequent queries to avoid scanning the original files as much as possible.
+`CACHE TABLE` caches the table's contents in the RDD cache within memory. This reduces scanning of the original files in future queries.
 
 ### Syntax
 {% highlight sql %}
@@ -40,7 +40,7 @@ CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testDat
 ### Parameters
 
 #### ***LAZY***:
-Cache the table lazily instead of eagerly scanning the entire table.
+Only cache the table when it is first used, instead of immediately.
 
 #### ***table_name***:
 The name of an existing table.
