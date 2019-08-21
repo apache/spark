@@ -3986,7 +3986,7 @@ object functions {
       case lit @ Literal(_, IntegerType) =>
         Bucket(lit, e.expr)
       case _ =>
-        throw new AnalysisException(s"Invalid number of buckets: $numBuckets")
+        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
     }
   }
 
