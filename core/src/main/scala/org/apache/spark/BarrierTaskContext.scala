@@ -128,18 +128,22 @@ class BarrierTaskContext private[spark] (
       // Wait the RPC future to be completed, but every 1 second it will jump out waiting
       // and check whether current spark task is killed. If killed, then throw
       // a `TaskKilledException`, otherwise continue wait RPC until it completes.
-      while(!abortableRpcFuture.toFuture.isCompleted) {
-        if (taskContext.isInterrupted()) {
-          val reason = taskContext.getKillReason().get
-          abortableRpcFuture.abort(reason)
-          throw new TaskKilledException(reason)
+      try {
+        while (!abortableRpcFuture.toFuture.isCompleted) {
+          // wait RPC future for at most 1 second
+          try {
+            ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
+          } catch {
+            case _: TimeoutException | _: InterruptedException =>
+              // If `TimeoutException` thrown, waiting RPC future reach 1 second.
+              // If `InterruptedException` thrown, it is possible this task is killed.
+              // So in this two cases, we should check whether task is killed and then
+              // throw `TaskKilledException`
+              taskContext.killTaskIfInterrupted()
+          }
         }
-        // wait RPC future for at most 1 second
-        try {
-          ThreadUtils.awaitResult(abortableRpcFuture.toFuture, 1.second)
-        } catch {
-          case _: TimeoutException => Unit // await future time reach 1 second.
-        }
+      } finally {
+        abortableRpcFuture.abort(taskContext.getKillReason().getOrElse("Unknown reason."))
       }
 
       barrierEpoch += 1

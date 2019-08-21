@@ -312,9 +312,6 @@ class LinearSVCModel private[classification] (
   def setThreshold(value: Double): this.type = set(threshold, value)
   setDefault(threshold, 0.0)
 
-  @Since("2.2.0")
-  def setWeightCol(value: Double): this.type = set(threshold, value)
-
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
   }
