@@ -25,9 +25,10 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
-import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourcesUsed}
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourcesAddresses, formatResourcesDetails}
 import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -37,6 +38,20 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
   override def renderJson(request: HttpServletRequest): JValue = {
     val workerState = workerEndpoint.askSync[WorkerStateResponse](RequestWorkerState)
     JsonProtocol.writeWorkerState(workerState)
+  }
+
+  private def formatWorkerResourcesDetails(workerState: WorkerStateResponse): String = {
+    val totalInfo = workerState.resources
+    val usedInfo = workerState.resourcesUsed
+    val freeInfo = totalInfo.map { case (rName, rInfo) =>
+      val freeAddresses = if (usedInfo.contains(rName)) {
+        rInfo.addresses.diff(usedInfo(rName).addresses)
+      } else {
+        rInfo.addresses
+      }
+      rName -> new ResourceInformation(rName, freeAddresses)
+    }
+    formatResourcesDetails(usedInfo, freeInfo)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -75,7 +90,7 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
             <li><strong>Resources:</strong>
-              {formatResourcesUsed(workerState.resources, workerState.resourcesUsed)}</li>
+              {formatWorkerResourcesDetails(workerState)}</li>
           </ul>
           <p><a href={workerState.masterWebUiUrl}>Back to Master</a></p>
         </div>

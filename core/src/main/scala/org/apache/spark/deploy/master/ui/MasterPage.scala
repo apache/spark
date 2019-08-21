@@ -19,15 +19,15 @@ package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable
 import scala.xml.Node
 
 import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses, formatResourcesUsed}
+import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -69,29 +69,25 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
   }
 
-  private def formatWorkerResources(worker: WorkerInfo): String = {
-    val infoUsed = worker.resourcesInfoUsed
-    val infoFree = worker.resourcesInfoFree
-    infoUsed.map { case (rName, rInfo) =>
-      val used = rInfo.addresses.mkString("[", ", ", "]")
-      val free = infoFree(rName).addresses.mkString("[", ", ", "]")
-      s"$rName: Free: $free / Used: $used"
-    }.mkString(", ")
+  private def formatWorkerResourcesDetails(worker: WorkerInfo): String = {
+    val usedInfo = worker.resourcesInfoUsed[ResourceInformation]
+    val freeInfo = worker.resourcesInfoFree
+    formatResourcesDetails(usedInfo, freeInfo)
   }
 
   private def formatMasterResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
-    val totalInfo = aliveWorkers.map(_.resourcesInfo)
+    val totalInfo = aliveWorkers.map(_.resourcesInfo[MutableResourceInfo])
       .flatMap(_.toIterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
         rName -> rInfoArr.map(_._2).reduce(_ + _)
-      }
-    val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
+      }.map { case (k, v) => (k, v.toResourceInformation) }
+    val usedInfo = aliveWorkers.map(_.resourcesInfoUsed[MutableResourceInfo])
       .flatMap(_.toIterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
       rName -> rInfoArr.map(_._2).reduce(_ + _)
-    }
+    }.map { case (k, v) => (k, v.toResourceInformation) }
     formatResourcesUsed(totalInfo, usedInfo)
   }
 
@@ -266,7 +262,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(worker.memory)}
         ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
-      <td>{formatWorkerResources(worker)}</td>
+      <td>{formatWorkerResourcesDetails(worker)}</td>
     </tr>
   }
 

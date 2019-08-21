@@ -73,8 +73,8 @@ private[deploy] object JsonProtocol {
     ("memory" -> obj.memory) ~
     ("memoryused" -> obj.memoryUsed) ~
     ("memoryfree" -> obj.memoryFree) ~
-    ("resources" -> writeResourcesInfo(obj.resourcesInfo)) ~
-    ("resourcesused" -> writeResourcesInfo(obj.resourcesInfoUsed)) ~
+    ("resources" -> writeResourcesInfo(obj.resourcesInfo[ResourceInformation])) ~
+    ("resourcesused" -> writeResourcesInfo(obj.resourcesInfoUsed[ResourceInformation])) ~
     ("resourcesfree" -> writeResourcesInfo(obj.resourcesInfoFree)) ~
     ("state" -> obj.state.toString) ~
     ("lastheartbeat" -> obj.lastHeartbeat)
@@ -212,8 +212,10 @@ private[deploy] object JsonProtocol {
     ("coresused" -> aliveWorkers.map(_.coresUsed).sum) ~
     ("memory" -> aliveWorkers.map(_.memory).sum) ~
     ("memoryused" -> aliveWorkers.map(_.memoryUsed).sum) ~
-    ("resources" -> aliveWorkers.map(_.resourcesInfo).toList.map(writeResourcesInfo)) ~
-    ("resourcesused" -> aliveWorkers.map(_.resourcesInfoUsed).toList.map(writeResourcesInfo)) ~
+    ("resources" -> aliveWorkers.map(_.resourcesInfo[ResourceInformation])
+      .toList.map(writeResourcesInfo)) ~
+    ("resourcesused" -> aliveWorkers.map(_.resourcesInfoUsed[ResourceInformation])
+      .toList.map(writeResourcesInfo)) ~
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
     ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~

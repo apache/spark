@@ -43,6 +43,37 @@ private[spark] object StandaloneResourceUtils extends Logging {
   val RESOURCES_LOCK_FILE = "__allocated_resources__.lock"
 
   /**
+   * A mutable resource information which provides more efficient modification on addresses.
+   */
+  private[spark] case class MutableResourceInfo(name: String, addresses: mutable.HashSet[String]) {
+
+    def + (other: MutableResourceInfo): this.type = {
+      assert(name == other.name, s"Inconsistent resource name, expected $name, " +
+        s"but got ${other.name}")
+      other.addresses.foreach(this.addresses.add)
+      this
+    }
+
+    def + (other: ResourceInformation): this.type = {
+      assert(name == other.name, s"Inconsistent resource name, expected $name, " +
+        s"but got ${other.name}")
+      other.addresses.foreach(this.addresses.add)
+      this
+    }
+
+    def - (other: ResourceInformation): this.type = {
+      assert(name == other.name, s"Inconsistent resource name, expected $name, " +
+        s"but got ${other.name}")
+      other.addresses.foreach(this.addresses.remove)
+      this
+    }
+
+    def toResourceInformation: ResourceInformation = {
+      new ResourceInformation(name, addresses.toArray)
+    }
+  }
+
+  /**
    * Resource allocation used in Standalone only, which tracks assignments with
    * worker/driver(client only) pid.
    */
@@ -347,6 +378,17 @@ private[spark] object StandaloneResourceUtils extends Logging {
   }
 
   // used for UI
+  def formatResourcesDetails(
+      usedInfo: Map[String, ResourceInformation],
+      freeInfo: Map[String, ResourceInformation]): String = {
+    usedInfo.map { case (rName, rInfo) =>
+      val used = rInfo.addresses.mkString("[", ", ", "]")
+      val free = freeInfo(rName).addresses.mkString("[", ", ", "]")
+      s"$rName: Free: $free / Used: $used"
+    }.mkString(", ")
+  }
+
+  // used for UI
   def formatResourcesAddresses(resources: Map[String, ResourceInformation]): String = {
     resources.map { case (rName, rInfo) =>
       s"$rName: ${rInfo.addresses.mkString("[", ", ", "]")}"
@@ -355,9 +397,9 @@ private[spark] object StandaloneResourceUtils extends Logging {
 
   // used for UI
   def formatResourcesUsed(
-      resources: Map[String, ResourceInformation],
+      resourcesTotal: Map[String, ResourceInformation],
       resourcesUsed: Map[String, ResourceInformation]): String = {
-    resources.map { case (rName, rInfo) =>
+    resourcesTotal.map { case (rName, rInfo) =>
       val used = resourcesUsed(rName).addresses.length
       val total = rInfo.addresses.length
       s"$used / $total $rName"

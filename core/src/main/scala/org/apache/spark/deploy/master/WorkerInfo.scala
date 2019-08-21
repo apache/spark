@@ -18,17 +18,15 @@
 package org.apache.spark.deploy.master
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
+import org.apache.spark.deploy.StandaloneResourceUtils.MutableResourceInfo
 import org.apache.spark.resource.{ResourceAllocator, ResourceInformation, ResourceRequirement}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
   extends ResourceAllocator(name, addresses) {
-
-  def toResourceInformation(): ResourceInformation = {
-    new ResourceInformation(name, addresses.toArray)
-  }
 
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
@@ -69,22 +67,46 @@ private[spark] class WorkerInfo(
     }
   }
 
-  def resourcesInfo: Map[String, ResourceInformation] = {
+  def resourcesInfo[T: ClassTag]: Map[String, T] = {
     resources.map { case (rName, rInfo) =>
-      rName -> rInfo.toResourceInformation()
+      rName -> createResourceInfo(rName, rInfo.addresses, implicitly[ClassTag[T]])
     }
   }
 
   def resourcesInfoFree: Map[String, ResourceInformation] = {
     resources.map { case (rName, rInfo) =>
-      rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
+      rName -> createResourceInfo(rName, rInfo.availableAddrs,
+        implicitly[ClassTag[ResourceInformation]])
     }
   }
 
-  def resourcesInfoUsed: Map[String, ResourceInformation] = {
+  def resourcesInfoUsed[T: ClassTag]: Map[String, T] = {
     resources.map { case (rName, rInfo) =>
-      rName -> new ResourceInformation(rName, rInfo.assignedAddrs.toArray)
+      rName -> createResourceInfo(rName, rInfo.assignedAddrs, implicitly[ClassTag[T]])
     }
+  }
+
+  private def createResourceInfo[T](
+      name: String,
+      addresses: Seq[String],
+      ct: ClassTag[T]): T = {
+    val clazz = ct.runtimeClass
+    val rf = {
+      clazz match {
+        case _ if clazz.equals(classOf[MutableResourceInfo]) =>
+          MutableResourceInfo(name, toMutableAddress(addresses))
+
+        case _ if clazz.equals(classOf[ResourceInformation]) =>
+          new ResourceInformation(name, addresses.toArray)
+      }
+    }
+    rf.asInstanceOf[T]
+  }
+
+  private def toMutableAddress(address: Seq[String]): mutable.HashSet[String] = {
+    val mutableAddress = new mutable.HashSet[String]()
+    address.foreach(mutableAddress.add)
+    mutableAddress
   }
 
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
