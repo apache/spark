@@ -478,9 +478,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       buildCast[Int](_, d => null)
     case TimestampType if failOnIntegerOverflow =>
-        buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
+      buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
     case TimestampType =>
-        buildCast[Long](_, t => timestampToLong(t).toInt)
+      buildCast[Long](_, t => timestampToLong(t).toInt)
     case x: NumericType if failOnIntegerOverflow =>
       b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
