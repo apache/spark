@@ -57,8 +57,7 @@ INSERT OVERWRITE TABLE data_source_tab2 PARTITION (p1 = 'partNew1', p2)
   VALUES (3, 'partNew2')
 
 -- After this INSERT OVERWRITE, the two partitions ('part1', 'part1') and ('part1', 'part2')
--- are dropped,
--- because both partitions are included by (p1 = 'part1', p2).
+-- are dropped, because both partitions are included by (p1 = 'part1', p2).
 -- Then, two partitions ('partNew1', 'partNew2'), ('part1', 'part1') exist after this
 -- operation.
 INSERT OVERWRITE TABLE data_source_tab2 PARTITION (p1 = 'part1', p2)
@@ -74,8 +73,7 @@ INSERT OVERWRITE TABLE hive_serde_tab2 PARTITION (p1 = 'partNew1', p2)
   VALUES (3, 'partNew2')
 
 -- After this INSERT OVERWRITE, only the partitions ('part1', 'part1') is overwritten by the
--- new value.
--- All the three partitions still exist.
+-- new value. All the three partitions still exist.
 INSERT OVERWRITE TABLE hive_serde_tab2 PARTITION (p1 = 'part1', p2)
   VALUES (5, 'part1')
 {% endhighlight %}

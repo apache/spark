@@ -26,7 +26,7 @@ Insert the query results into a directory using Spark native format. If the spec
 
 {% highlight sql %}
 INSERT OVERWRITE [LOCAL] DIRECTORY [directory_path]
-  USING file_format [OPTIONS (key1=val1, key2=val2, ...)] [AS] query
+  USING file_format [OPTIONS (key1=val1 [, key2=val2, ...])] [AS] query
 {% endhighlight %}
 
 ### Examples

@@ -29,7 +29,7 @@ INSERT OVERWRITE [TABLE] [db_name.]table_name [partition_spec [IF NOT EXISTS]]
   valueClause | query
 
 partition_spec:
-    : (part_col_name1[=val1], part_col_name2[=val2], ...)
+    (part_col_name1[=val1] [, part_col_name2[=val2], ...])
 
 value_clause:
     : VALUES values_row [, values_row ...]
