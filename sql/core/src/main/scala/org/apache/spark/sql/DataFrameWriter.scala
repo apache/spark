@@ -251,62 +251,44 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
-    lookupV2Provider() match {
-      // TODO(SPARK-26778): use V2 implementations when partition columns are specified
-      case Some(provider) if partitioningColumns.isEmpty =>
-        saveToV2Source(provider)
+    val maybeV2Provider = lookupV2Provider()
+    // TODO(SPARK-26778): use V2 implementations when partition columns are specified
+    if (maybeV2Provider.isDefined && partitioningColumns.isEmpty) {
+      val provider = maybeV2Provider.get
+      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+        provider, df.sparkSession.sessionState.conf)
+      val options = sessionOptions ++ extraOptions
+      val dsOptions = new CaseInsensitiveStringMap(options.asJava)
 
-      case _ => saveToV1Source()
-    }
-  }
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      provider.getTable(dsOptions) match {
+        case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+          lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+          modeForDSV2 match {
+            case SaveMode.Append =>
+              runCommand(df.sparkSession, "save") {
+                AppendData.byName(relation, df.logicalPlan)
+              }
 
-  private def saveToV2Source(provider: TableProvider): Unit = {
-    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-      provider, df.sparkSession.sessionState.conf)
-    val options = sessionOptions ++ extraOptions
-    val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+            case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
+              // truncate the table
+              runCommand(df.sparkSession, "save") {
+                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+              }
 
-    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    provider.getTable(dsOptions) match {
-      // TODO (SPARK-27815): To not break existing tests, here we treat file source as a special
-      // case, and pass the save mode to file source directly. This hack should be removed.
-      case table: FileTable =>
-        val write = table.newWriteBuilder(dsOptions).asInstanceOf[FileWriteBuilder]
-          .mode(modeForDSV1) // should not change default mode for file source.
-          .withQueryId(UUID.randomUUID().toString)
-          .withInputDataSchema(df.logicalPlan.schema)
-          .buildForBatch()
-        // The returned `Write` can be null, which indicates that we can skip writing.
-        if (write != null) {
-          runCommand(df.sparkSession, "save") {
-            WriteToDataSourceV2(write, df.logicalPlan)
+            case other =>
+              throw new AnalysisException(s"TableProvider implementation $source cannot be " +
+                s"written with $other mode, please use Append or Overwrite " +
+                "modes instead.")
           }
-        }
 
-      case table: SupportsWrite if table.supports(BATCH_WRITE) =>
-        lazy val relation = DataSourceV2Relation.create(table, dsOptions)
-        modeForDSV2 match {
-          case SaveMode.Append =>
-            runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
-
-          case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-            // truncate the table
-            runCommand(df.sparkSession, "save") {
-              OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
-            }
-
-          case other =>
-            throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-              s"written with $other mode, please use Append or Overwrite " +
-              "modes instead.")
-        }
-
-      // Streaming also uses the data source V2 API. So it may be that the data source
-      // implements v2, but has no v2 implementation for batch writes. In that case, we fall
-      // back to saving as though it's a V1 source.
-      case _ => saveToV1Source()
+        // Streaming also uses the data source V2 API. So it may be that the data source implements
+        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
+        // as though it's a V1 source.
+        case _ => saveToV1Source()
+      }
+    } else {
+      saveToV1Source()
     }
   }
 

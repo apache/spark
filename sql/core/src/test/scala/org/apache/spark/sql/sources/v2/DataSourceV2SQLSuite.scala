@@ -37,7 +37,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-  private val v2Format = classOf[FakeV2Provider].getName
+  private val v2Source = classOf[FakeV2Provider].getName
 
   private def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
@@ -128,14 +128,14 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
-    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $v2Format")
+    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $v2Source")
 
     val testCatalog = catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Format).asJava)
+    assert(table.properties == Map("provider" -> v2Source).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -327,7 +327,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   }
 
   test("ReplaceTable: Erases the table contents and changes the metadata.") {
-    spark.sql(s"CREATE TABLE testcat.table_name USING $v2Format AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE testcat.table_name USING $v2Source AS SELECT id, data FROM source")
 
     val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -348,12 +348,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     Seq("testcat", "testcat_atomic").foreach { catalogName =>
       spark.sql(
         s"""
-           |CREATE TABLE $catalogName.created USING $v2Format
+           |CREATE TABLE $catalogName.created USING $v2Source
            |AS SELECT id, data FROM source
          """.stripMargin)
       spark.sql(
         s"""
-           |CREATE TABLE $catalogName.replaced USING $v2Format
+           |CREATE OR REPLACE TABLE $catalogName.replaced USING $v2Source
            |AS SELECT id, data FROM source
          """.stripMargin)
 
@@ -369,33 +369,33 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table does not exist.") {
     Seq("testcat", "testcat_atomic").foreach { catalog =>
-      spark.sql(s"CREATE TABLE $catalog.created USING $v2Format AS SELECT id, data FROM source")
+      spark.sql(s"CREATE TABLE $catalog.created USING $v2Source AS SELECT id, data FROM source")
       intercept[CannotReplaceMissingTableException] {
-        spark.sql(s"REPLACE TABLE $catalog.replaced USING $v2Format AS SELECT id, data FROM source")
+        spark.sql(s"REPLACE TABLE $catalog.replaced USING $v2Source AS SELECT id, data FROM source")
       }
     }
   }
 
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
     import TestInMemoryTableCatalog._
-    spark.sql(s"CREATE TABLE testcat_atomic.created USING $v2Format AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE testcat_atomic.created USING $v2Source AS SELECT id, data FROM source")
     intercept[CannotReplaceMissingTableException] {
       spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
-        s" USING $v2Format" +
+        s" USING $v2Source" +
         s" TBLPROPERTIES (`$SIMULATE_DROP_BEFORE_REPLACE_PROPERTY`=true)" +
         s" AS SELECT id, data FROM source")
     }
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
-    spark.sql(s"CREATE TABLE table_name USING $v2Format AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE table_name USING $v2Source AS SELECT id, data FROM source")
 
     val testCatalog = catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> v2Format).asJava)
+    assert(table.properties == Map("provider" -> v2Source).asJava)
     assert(table.schema == new StructType()
         .add("id", LongType, nullable = false)
         .add("data", StringType))
@@ -1721,13 +1721,13 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
       assert(fieldNames === Array(Array(partition)))
     }
 
-    sql(s"CREATE TABLE tbl (a int, b string) USING $v2Format PARTITIONED BY (A)")
+    sql(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
     checkPartitioning(sessionCatalog, "a")
-    sql(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Format PARTITIONED BY (A)")
+    sql(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
     checkPartitioning(testCatalog, "a")
-    sql(s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Format PARTITIONED BY (B)")
+    sql(s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
     checkPartitioning(sessionCatalog, "b")
-    sql(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Format PARTITIONED BY (B)")
+    sql(s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
     checkPartitioning(testCatalog, "b")
   }
 
@@ -1741,12 +1741,12 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
       }
     }
 
-    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Format PARTITIONED BY (A)")
-    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Format PARTITIONED BY (A)")
+    checkFailure(s"CREATE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
+    checkFailure(s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (A)")
     checkFailure(
-      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Format PARTITIONED BY (B)")
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
     checkFailure(
-      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Format PARTITIONED BY (B)")
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source PARTITIONED BY (B)")
   }
 
   test("tableCreation: duplicate column names in the table definition") {
@@ -1754,19 +1754,19 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         testCreateAnalysisError(
-          s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Format",
+          s"CREATE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Format",
+          s"CREATE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Format",
+          s"CREATE OR REPLACE TABLE t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Format",
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT, $c1 INT) USING $v2Source",
           errorMsg
         )
       }
@@ -1778,19 +1778,19 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         testCreateAnalysisError(
-          s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Format",
+          s"CREATE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Format",
+          s"CREATE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Format",
+          s"CREATE OR REPLACE TABLE t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Format",
+          s"CREATE OR REPLACE TABLE testcat.t (d struct<$c0: INT, $c1: INT>) USING $v2Source",
           errorMsg
         )
       }
@@ -1800,20 +1800,20 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   test("tableCreation: bucket column names not in table definition") {
     val errorMsg = "Couldn't find column c in"
     testCreateAnalysisError(
-      s"CREATE TABLE tbl (a int, b string) USING $v2Format CLUSTERED BY (c) INTO 4 BUCKETS",
+      s"CREATE TABLE tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
     testCreateAnalysisError(
-      s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Format CLUSTERED BY (c) INTO 4 BUCKETS",
+      s"CREATE TABLE testcat.tbl (a int, b string) USING $v2Source CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
     testCreateAnalysisError(
-      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Format " +
+      s"CREATE OR REPLACE TABLE tbl (a int, b string) USING $v2Source " +
         "CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
     testCreateAnalysisError(
-      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Format " +
+      s"CREATE OR REPLACE TABLE testcat.tbl (a int, b string) USING $v2Source " +
         "CLUSTERED BY (c) INTO 4 BUCKETS",
       errorMsg
     )
@@ -1824,19 +1824,19 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         testCreateAnalysisError(
-          s"CREATE TABLE t ($c0 INT) USING $v2Format PARTITIONED BY ($c0, $c1)",
+          s"CREATE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Format PARTITIONED BY ($c0, $c1)",
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Format PARTITIONED BY ($c0, $c1)",
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Format PARTITIONED BY ($c0, $c1)",
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source PARTITIONED BY ($c0, $c1)",
           errorMsg
         )
       }
@@ -1848,22 +1848,22 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         testCreateAnalysisError(
-          s"CREATE TABLE t ($c0 INT) USING $v2Format " +
+          s"CREATE TABLE t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Format " +
+          s"CREATE TABLE testcat.t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Format " +
+          s"CREATE OR REPLACE TABLE t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
         testCreateAnalysisError(
-          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Format " +
+          s"CREATE OR REPLACE TABLE testcat.t ($c0 INT) USING $v2Source " +
             s"CLUSTERED BY ($c0, $c1) INTO 2 BUCKETS",
           errorMsg
         )
