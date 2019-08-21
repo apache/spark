@@ -986,16 +986,10 @@ private[spark] class DAGScheduler(
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
         val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
           (_: Int, value: Int) => value + 1)
-        val retryCount = numCheckFailures - 1
-        val retryMessage = if (retryCount == 0) {
-          ""
-        } else {
-          s" (Retry ${retryCount}/$maxFailureNumTasksCheck failed)"
-        }
 
-        logWarning(s"The job $jobId requires to run a barrier stage " +
-          s"that requires ${e.requiredConcurrentTasks} slots than the total number of " +
-          s"slots(${e.maxConcurrentTasks}) in the cluster currently$retryMessage.")
+        logWarning(s"Barrier stage in job $jobId requires ${e.requiredConcurrentTasks} slots, " +
+          s"but only ${e.maxConcurrentTasks} are available. " +
+          s"Failure ${numCheckFailures} / ${maxFailureNumTasksCheck + 1}")
 
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
