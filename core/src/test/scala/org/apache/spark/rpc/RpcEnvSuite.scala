@@ -191,6 +191,48 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("ask a message abort") {
+    env.setupEndpoint("ask-abort", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case msg: String =>
+          Thread.sleep(10000)
+          context.reply(msg)
+      }
+    })
+
+    val conf = new SparkConf()
+    val shortProp = "spark.rpc.short.timeout"
+    conf.set(Network.RPC_RETRY_WAIT, 0L)
+    conf.set(Network.RPC_NUM_RETRIES, 1)
+    val anotherEnv = createRpcEnv(conf, "remote", 0, clientMode = true)
+    // Use anotherEnv to find out the RpcEndpointRef
+    val rpcEndpointRef = anotherEnv.setupEndpointRef(env.address, "ask-abort")
+    try {
+      val e = intercept[RpcAbortException] {
+        val timeout = new RpcTimeout(10.seconds, shortProp)
+        val abortableRpcFuture = rpcEndpointRef.askAbortable[String](
+          "hello", timeout)
+
+        new Thread {
+          override def run: Unit = {
+            Thread.sleep(100)
+            abortableRpcFuture.abort("TestAbort")
+          }
+        }.start()
+
+        timeout.awaitResult(abortableRpcFuture.toFuture)
+      }
+      // The SparkException cause should be a RpcAbortException with "TestAbort" message
+      assert(e.isInstanceOf[RpcAbortException])
+      assert(e.getMessage.contains("TestAbort"))
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
+  }
+
   test("onStart and onStop") {
     val stopLatch = new CountDownLatch(1)
     val calledMethods = mutable.ArrayBuffer[String]()

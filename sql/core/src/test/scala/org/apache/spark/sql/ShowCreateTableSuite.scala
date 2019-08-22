@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 
-class SimpleShowCreateTableSuite extends ShowCreateTableSuite with SharedSQLContext
+class SimpleShowCreateTableSuite extends ShowCreateTableSuite with SharedSparkSession
 
 abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   import testImplicits._

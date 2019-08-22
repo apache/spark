@@ -103,9 +103,102 @@ The Storage tab displays the persisted RDDs and DataFrames, if any, in the appli
 page shows the storage levels, sizes and partitions of all RDDs, and the details page shows the
 sizes and using executors for all partitions in an RDD or DataFrame.
 
+{% highlight scala %}
+scala> import org.apache.spark.storage.StorageLevel._
+import org.apache.spark.storage.StorageLevel._
+
+scala> val rdd = sc.range(0, 100, 1, 5).setName("rdd")
+rdd: org.apache.spark.rdd.RDD[Long] = rdd MapPartitionsRDD[1] at range at <console>:27
+
+scala> rdd.persist(MEMORY_ONLY_SER)
+res0: rdd.type = rdd MapPartitionsRDD[1] at range at <console>:27
+
+scala> rdd.count
+res1: Long = 100                                                                
+
+scala> val df = Seq((1, "andy"), (2, "bob"), (2, "andy")).toDF("count", "name")
+df: org.apache.spark.sql.DataFrame = [count: int, name: string]
+
+scala> df.persist(DISK_ONLY)
+res2: df.type = [count: int, name: string]
+
+scala> df.count
+res3: Long = 3
+{% endhighlight %}
+
+<p style="text-align: center;">
+  <img src="img/webui-storage-tab.png"
+       title="Storage tab"
+       alt="Storage tab"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+After running the above example, we can find two RDDs listed in the Storage tab. Basic information like
+storage level, number of partitions and memory overhead are provided. Note that the newly persisted RDDs
+or DataFrames are not shown in the tab before they are materialized. To monitor a specific RDD or DataFrame,
+make sure an action operation has been triggered.
+
+<p style="text-align: center;">
+  <img src="img/webui-storage-detail.png"
+       title="Storage detail"
+       alt="Storage detail"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+You can click the RDD name 'rdd' for obtaining the details of data persistence, such as the data
+distribution on the cluster.
+
+
 ## Environment Tab
 The Environment tab displays the values for the different environment and configuration variables,
 including JVM, Spark, and system properties.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-tab.png"
+       title="Env tab"
+       alt="Env tab"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+This environment page has five parts. It is a useful place to check whether your properties have
+been set correctly.
+The first part 'Runtime Information' simply contains the [runtime properties](configuration.html#runtime-environment)
+like versions of Java and Scala.
+The second part 'Spark Properties' lists the [application properties](configuration.html#application-properties) like
+['spark.app.name'](configuration.html#application-properties) and 'spark.driver.memory'.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-hadoop.png"
+       title="Hadoop Properties"
+       alt="Hadoop Properties"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+Clicking the 'Hadoop Properties' link displays properties relative to Hadoop and YARN. Note that properties like
+['spark.hadoop.*'](configuration.html#execution-behavior) are shown not in this part but in 'Spark Properties'.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-sys.png"
+       title="System Properties"
+       alt="System Properties"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+'System Properties' shows more details about the JVM.
+
+<p style="text-align: center;">
+  <img src="img/webui-env-class.png"
+       title="Classpath Entries"
+       alt="Classpath Entries"
+       width="100%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+The last part 'Classpath Entries' lists the classes loaded from different sources, which is very useful
+to resolve class conflicts.
 
 ## Executors Tab
 The Executors tab displays summary information about the executors that were created for the

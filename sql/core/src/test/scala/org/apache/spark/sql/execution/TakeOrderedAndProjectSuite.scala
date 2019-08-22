@@ -22,11 +22,11 @@ import scala.util.Random
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 
-class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
+class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
 
   private var rand: Random = _
   private var seed: Long = 0
