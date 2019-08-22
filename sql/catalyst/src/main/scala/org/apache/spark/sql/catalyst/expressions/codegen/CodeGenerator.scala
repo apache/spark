@@ -1618,35 +1618,35 @@ object CodeGenerator extends Logging {
    * expressions into multiple functions.
    */
   def getLocalInputVariableValues(
-      context: CodegenContext,
+      ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState]): Seq[((String, DataType), Expression)] = {
-    val argMap = mutable.Map[(String, DataType), Expression]()
+      subExprs: Map[Expression, SubExprEliminationState]): Seq[(VariableValue, Expression)] = {
+    val argMap = mutable.Map[VariableValue, Expression]()
+    // Collects local variables only in `argMap`
+    val collectLocalVariable = (ev: ExprValue, expr: Expression) => ev match {
+      case vv: VariableValue => argMap += vv -> expr
+      case _ =>
+    }
+
     val stack = mutable.Stack[Expression](expr)
     while (stack.nonEmpty) {
       stack.pop() match {
         case e if subExprs.contains(e) =>
-          val exprCode = subExprs(e)
-          val SubExprEliminationState(isNull, value) = exprCode
-          if (value.isInstanceOf[VariableValue]) {
-            argMap += (value.code, e.dataType) -> e
-          }
-          if (isNull.isInstanceOf[VariableValue]) {
-            argMap += (isNull.code, BooleanType) -> e
-          }
-          // Since the children possibly has common expressions, we push them here
+          val SubExprEliminationState(isNull, value) = subExprs(e)
+          collectLocalVariable(value, e)
+          collectLocalVariable(isNull, e)
+          // Since the children possibly have common subexprs, we push them here
           stack.pushAll(e.children)
+
         case ref: BoundReference
-            if context.currentVars != null && context.currentVars(ref.ordinal) != null =>
-          val ExprCode(_, isNull, value) = context.currentVars(ref.ordinal)
-          if (value.isInstanceOf[VariableValue]) {
-            argMap += (value.code, ref.dataType) -> ref
-          }
-          if (isNull.isInstanceOf[VariableValue]) {
-            argMap += (isNull.code, BooleanType) -> ref
-          }
+            if ctx.currentVars != null && ctx.currentVars(ref.ordinal) != null =>
+          val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
+          collectLocalVariable(value, ref)
+          collectLocalVariable(isNull, ref)
+
         case ref: BoundReference =>
-          argMap += (context.INPUT_ROW, ObjectType(classOf[InternalRow])) -> ref
+          argMap += JavaCode.variable(ctx.INPUT_ROW, ObjectType(classOf[InternalRow])) -> ref
+
         case e =>
           stack.pushAll(e.children)
       }
