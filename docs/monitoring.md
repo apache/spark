@@ -23,7 +23,7 @@ There are several ways to monitor Spark applications: web UIs, metrics, and exte
 
 # Web Interfaces
 
-Every SparkContext launches a web UI, by default on port 4040, that
+Every SparkContext launches a [Web UI](web-ui.html), by default on port 4040, that
 displays useful information about the application. This includes:
 
 * A list of scheduler stages and tasks

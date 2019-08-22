@@ -19,9 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
+class DataFrameHintSuite extends AnalysisTest with SharedSparkSession {
   import testImplicits._
   lazy val df = spark.range(10)
 

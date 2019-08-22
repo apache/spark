@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalog.v2.expressions.{IdentityTransform, Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.sources.{And, EqualTo, Filter}
+import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
@@ -71,7 +71,6 @@ class TestInMemoryTableCatalog extends TableCatalog {
       throw new TableAlreadyExistsException(ident)
     }
     TestInMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
-
     val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
 
     tables.put(ident, table)
@@ -105,6 +104,20 @@ class TestInMemoryTableCatalog extends TableCatalog {
     Option(tables.remove(ident)).isDefined
   }
 
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    if (tables.containsKey(newIdent)) {
+      throw new TableAlreadyExistsException(newIdent)
+    }
+
+    Option(tables.remove(oldIdent)) match {
+      case Some(table) =>
+        tables.put(newIdent,
+          new InMemoryTable(table.name, table.schema, table.partitioning, table.properties))
+      case _ =>
+        throw new NoSuchTableException(oldIdent)
+    }
+  }
+
   def clearTables(): Unit = {
     tables.clear()
   }
@@ -118,7 +131,7 @@ class InMemoryTable(
     val schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
-  extends Table with SupportsRead with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite with SupportsDelete {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -221,28 +234,9 @@ class InMemoryTable(
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys = dataMap.keys.filter { partValues =>
-        filters.flatMap(splitAnd).forall {
-          case EqualTo(attr, value) =>
-            partFieldNames.zipWithIndex.find(_._1 == attr) match {
-              case Some((_, partIndex)) =>
-                value == partValues(partIndex)
-              case _ =>
-                throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
-            }
-          case f =>
-            throw new IllegalArgumentException(s"Unsupported filter type: $f")
-        }
-      }
+      val deleteKeys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-    }
-
-    private def splitAnd(filter: Filter): Seq[Filter] = {
-      filter match {
-        case And(left, right) => splitAnd(left) ++ splitAnd(right)
-        case _ => filter :: Nil
-      }
     }
   }
 
@@ -250,6 +244,47 @@ class InMemoryTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
+
+  override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
+    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+  }
+}
+
+object InMemoryTable {
+  def filtersToKeys(
+      keys: Iterable[Seq[Any]],
+      partitionNames: Seq[String],
+      filters: Array[Filter]): Iterable[Seq[Any]] = {
+    keys.filter { partValues =>
+      filters.flatMap(splitAnd).forall {
+        case EqualTo(attr, value) =>
+          value == extractValue(attr, partitionNames, partValues)
+        case IsNotNull(attr) =>
+          null != extractValue(attr, partitionNames, partValues)
+        case f =>
+          throw new IllegalArgumentException(s"Unsupported filter type: $f")
+      }
+    }
+  }
+
+  private def extractValue(
+      attr: String,
+      partFieldNames: Seq[String],
+      partValues: Seq[Any]): Any = {
+    partFieldNames.zipWithIndex.find(_._1 == attr) match {
+      case Some((_, partIndex)) =>
+        partValues(partIndex)
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
+    }
+  }
+
+  private def splitAnd(filter: Filter): Seq[Filter] = {
+    filter match {
+      case And(left, right) => splitAnd(left) ++ splitAnd(right)
+      case _ => filter :: Nil
     }
   }
 }

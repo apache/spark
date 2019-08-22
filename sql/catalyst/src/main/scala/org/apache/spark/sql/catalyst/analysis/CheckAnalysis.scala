@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -299,10 +300,10 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
-            val references = partitioning.flatMap(_.references).toSet
+          case create: V2CreateTablePlan =>
+            val references = create.partitioning.flatMap(_.references).toSet
             val badReferences = references.map(_.fieldNames).flatMap { column =>
-              query.schema.findNestedField(column) match {
+              create.tableSchema.findNestedField(column) match {
                 case Some(_) =>
                   None
                 case _ =>
@@ -584,7 +585,7 @@ trait CheckAnalysis extends PredicateHelper {
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project => // Ok
+            case _: Filter | _: Aggregate | _: Project | _: DeleteFromTable => // Ok
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project: $plan")
@@ -593,9 +594,10 @@ trait CheckAnalysis extends PredicateHelper {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter => // Ok
+          case _: Filter | _: DeleteFromTable => // Ok
           case _ =>
-            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in a Filter: $plan")
+            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
+                s" Filter/DeleteFromTable: $plan")
         }
     }
 

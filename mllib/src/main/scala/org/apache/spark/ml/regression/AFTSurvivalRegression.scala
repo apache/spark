@@ -342,7 +342,7 @@ class AFTSurvivalRegressionModel private[ml] (
     // shape parameter for the Weibull distribution of lifetime
     val k = 1 / scale
     val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log(1 - q)) / k)
+      q => lambda * math.exp(math.log(-math.log1p(-q)) / k)
     }
     Vectors.dense(quantiles)
   }

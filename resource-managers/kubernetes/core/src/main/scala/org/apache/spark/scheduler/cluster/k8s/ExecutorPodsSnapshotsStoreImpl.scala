@@ -52,8 +52,8 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
 
   private val SNAPSHOT_LOCK = new Object()
 
-  private val subscribers = mutable.Buffer.empty[SnapshotsSubscriber]
-  private val pollingTasks = mutable.Buffer.empty[Future[_]]
+  private val subscribers = new CopyOnWriteArrayList[SnapshotsSubscriber]()
+  private val pollingTasks = new CopyOnWriteArrayList[Future[_]]
 
   @GuardedBy("SNAPSHOT_LOCK")
   private var currentSnapshot = ExecutorPodsSnapshot()
@@ -66,16 +66,24 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
     SNAPSHOT_LOCK.synchronized {
       newSubscriber.snapshotsBuffer.add(currentSnapshot)
     }
-    subscribers += newSubscriber
-    pollingTasks += subscribersExecutor.scheduleWithFixedDelay(
+    subscribers.add(newSubscriber)
+    pollingTasks.add(subscribersExecutor.scheduleWithFixedDelay(
       () => callSubscriber(newSubscriber),
       0L,
       processBatchIntervalMillis,
-      TimeUnit.MILLISECONDS)
+      TimeUnit.MILLISECONDS))
+  }
+
+  override def notifySubscribers(): Unit = SNAPSHOT_LOCK.synchronized {
+    subscribers.asScala.foreach { s =>
+      subscribersExecutor.submit(new Runnable() {
+        override def run(): Unit = callSubscriber(s)
+      })
+    }
   }
 
   override def stop(): Unit = {
-    pollingTasks.foreach(_.cancel(true))
+    pollingTasks.asScala.foreach(_.cancel(false))
     ThreadUtils.shutdown(subscribersExecutor)
   }
 
@@ -90,7 +98,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
   }
 
   private def addCurrentSnapshotToSubscribers(): Unit = {
-    subscribers.foreach { subscriber =>
+    subscribers.asScala.foreach { subscriber =>
       subscriber.snapshotsBuffer.add(currentSnapshot)
     }
   }

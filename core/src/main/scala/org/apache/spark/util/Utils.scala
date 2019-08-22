@@ -270,6 +270,26 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Create a directory given the abstract pathname
+   * @return true, if the directory is successfully created; otherwise, return false.
+   */
+  def createDirectory(dir: File): Boolean = {
+    try {
+      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
+      // So attempting to create and then check if directory was created or not.
+      dir.mkdirs()
+      if ( !dir.exists() || !dir.isDirectory) {
+        logError(s"Failed to create directory " + dir)
+      }
+      dir.isDirectory
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to create directory " + dir, e)
+        false
+    }
+  }
+
+  /**
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
@@ -2552,6 +2572,28 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
+  }
+
+  /**
+   * Given a process id, return true if the process is still running.
+   */
+  def isProcessRunning(pid: Int): Boolean = {
+    val process = executeCommand(Seq("kill", "-0", pid.toString))
+    process.waitFor(10, TimeUnit.SECONDS)
+    process.exitValue() == 0
+  }
+
+  /**
+   * Returns the pid of this JVM process.
+   */
+  def getProcessId: Int = {
+    val PROCESS = "(\\d+)@(.*)".r
+    val name = getProcessName()
+    name match {
+      case PROCESS(pid, _) => pid.toInt
+      case _ =>
+        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
+    }
   }
 
   /**
