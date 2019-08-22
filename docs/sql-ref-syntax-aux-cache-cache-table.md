@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`CACHE TABLE` caches the table's contents in the RDD cache within memory. This reduces scanning of the original files in future queries.
+`CACHE TABLE` caches the table's contents in the RDD cache within memory or disk. This reduces scanning of the original files in future queries.
 
 ### Syntax
 {% highlight sql %}
