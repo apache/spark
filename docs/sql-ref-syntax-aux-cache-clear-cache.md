@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Clear the RDD cache associated with a SQLContext.
+Clears all cached RDDs and DataFrames associated with a `SparkSession`.
 
 ### Syntax
 {% highlight sql %}
