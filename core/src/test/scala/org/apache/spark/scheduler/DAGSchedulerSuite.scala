@@ -2521,33 +2521,19 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       (Success, makeMapStatus("hostD", 2))))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
 
+    // Simulate the scenario of executor lost
+    runEvent(ExecutorLost("exec-hostC", ExecutorKilled))
+
     // The first task of the final stage failed with fetch failure
     runEvent(makeCompletionEvent(
       taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0, 0, "ignored"),
       null))
 
-    val failedStages = scheduler.failedStages.toSeq
-    assert(failedStages.length == 2)
-    // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
-    assert(failedStages.collect {
-      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
-    }.head.findMissingPartitions() == Seq(0))
-    // The result stage is still waiting for its 2 tasks to complete
-    assert(failedStages.collect {
-      case stage: ResultStage => stage
-    }.head.findMissingPartitions() == Seq(0, 1))
-
-    scheduler.resubmitFailedStages()
-
-    // The first task of the `shuffleMapRdd2` failed with fetch failure
-    runEvent(makeCompletionEvent(
-      taskSets(3).tasks(0),
-      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0, 0, "ignored"),
-      null))
-
-    // The job should fail because Spark can't rollback the shuffle map stage.
-    assert(failure != null && failure.getMessage.contains("Spark cannot rollback"))
+    // The second shuffle map stage need to rerun, the job will abort for the indeterminate
+    // stage rerun.
+    assert(failure != null && failure.getMessage
+      .contains("Spark cannot rollback the ShuffleMapStage 1"))
   }
 
   private def assertResultStageFailToRollback(mapRdd: MyRDD): Unit = {
@@ -2640,6 +2626,36 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
     shuffleMapRdd.checkpoint()
     assertResultStageFailToRollback(shuffleMapRdd)
+  }
+
+  test("SPARK-28699: abort stage if parent stage is indeterminate stage") {
+    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
+
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
+    val shuffleId = shuffleDep.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
+
+    submit(finalRdd, Array(0, 1))
+
+    // Finish the first shuffle map stage.
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+
+    // Simulate the scenario of executor lost
+    runEvent(ExecutorLost("exec-hostA", ExecutorKilled))
+
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
+      null))
+
+    // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd` needs to retry.
+    // The result stage is still waiting for its 2 tasks to complete.
+    // Because of shuffleMapRdd is indeterminate, this job will be abort.
+    assert(failure != null && failure.getMessage
+      .contains("Spark cannot rollback the ShuffleMapStage 0"))
   }
 
   /**
