@@ -19,4 +19,37 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+
+Drop a database and delete the directory associated with the database from the file system. An 
+exception will be thrown if the database does not exist in the system. 
+
+### Syntax
+
+{% highlight sql %}
+DROP (DATABASE|SCHEMA) [IF EXISTS] dbname [RESTRICT|CASCADE];
+{% endhighlight %}
+
+
+### Example
+{% highlight sql %}
+DROP DATABASE inventorydb CASCADE;
+{% endhighlight %}
+
+### Parameters
+
+### **DATABASE** and **SCHEMA**
+
+`DATABASE` and `SCHEMA` mean the same thing, either of them can be used.
+
+### **IF EXISTS**
+
+If specified will not throw any exception if no database exists.
+ 
+###  **RESTRICT**
+
+If specified will restrict dropping a non-empty database and is enabled by default.
+
+### **CASCADE**
+
+If specified will drop all the associated tables and functions.
