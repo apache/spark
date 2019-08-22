@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.UUID
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -29,8 +31,10 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.sources
+import org.apache.spark.sql.sources.v2.TableCapability
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream}
+import org.apache.spark.sql.sources.v2.writer.V1WriteBuilder
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Strategy extends Strategy with PredicateHelper {
@@ -169,10 +173,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(
-            staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+            staging, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(
-            catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
+            catalog, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
       }
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
@@ -191,6 +195,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             staging,
             ident,
             parts,
+            query,
             planLater(query),
             props,
             writeOptions,
@@ -200,6 +205,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             catalog,
             ident,
             parts,
+            query,
             planLater(query),
             props,
             writeOptions,
@@ -207,7 +213,12 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }
 
     case AppendData(r: DataSourceV2Relation, query, _) =>
-      AppendDataExec(r.table.asWritable, r.options, planLater(query)) :: Nil
+      r.table.asWritable match {
+        case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+          AppendDataExecV1(v1, r.options, query) :: Nil
+        case v2 =>
+          AppendDataExec(v2, r.options, planLater(query)) :: Nil
+      }
 
     case OverwriteByExpression(r: DataSourceV2Relation, deleteExpr, query, _) =>
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
@@ -215,9 +226,12 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         filter => DataSourceStrategy.translateFilter(deleteExpr).getOrElse(
           throw new AnalysisException(s"Cannot translate expression to source filter: $filter"))
       }.toArray
-
-      OverwriteByExpressionExec(
-        r.table.asWritable, filters, r.options, planLater(query)) :: Nil
+      r.table.asWritable match {
+        case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+          OverwriteByExpressionExecV1(v1, filters, r.options, query) :: Nil
+        case v2 =>
+          OverwriteByExpressionExec(v2, filters, r.options, planLater(query)) :: Nil
+      }
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _) =>
       OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
