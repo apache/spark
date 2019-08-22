@@ -20,11 +20,9 @@ license: |
 ---
 ### Description
 ​
-Return the metadata of an existing database(name, comment and location). If the database does not exist,
+Return the metadata of an existing database (name, comment and location). If the database does not exist,
 an exception is thrown.
-
-When `extended` is specified, it also shows the database's properties.
- 
+When `EXTENDED` is specified, it also shows the database's properties.
 You can use the abbreviation `DESC` for the `DESCRIBE` statement.
 
 ### Syntax
@@ -34,7 +32,32 @@ You can use the abbreviation `DESC` for the `DESCRIBE` statement.
 
 ### Example
 {% highlight sql %}
+-- Returns Database Name, Description and location for the tempdb DATABASE
+
+DESCRIBE DATABASE tempdb
++-------------------------+--------------------------+
+|database_description_item|database_description_value|
++-------------------------+--------------------------+
+|            Database Name|                    tempdb|
+|              Description|                          |
+|                 Location|      file:/Users/Temp/...|
++-------------------------+--------------------------+
+
+{% endhighlight %}
+
+{% highlight sql %}
+-- Returns Database Name, Description, Location for the tempdb DATABASE, the additional information displayed by the EXTENDED keyword is the database properties. 
+
 DESCRIBE DATABASE EXTENDED tempdb
++-------------------------+--------------------------+
+|database_description_item|database_description_value|
++-------------------------+--------------------------+
+|            Database Name|                    tempdb|
+|              Description|                          |
+|                 Location|      file:/Users/Temp/...|
+|               Properties|                   ((a,a))|
++-------------------------+--------------------------+
+
 {% endhighlight %}
 
 
