@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-`INSERT OVERWRITE DIRECTORY` inserts the query results into a directory using Hive `SerDe`. If the specified path already exists, its contents are overwritten with the query results. Hive support must be enabled to use this command.
+`INSERT OVERWRITE DIRECTORY` with Hive format inserts the query results into a directory using Hive `SerDe`. If the specified path already exists, its contents are overwritten with the query results. Hive support must be enabled to use this command.
 ### Syntax
 {% highlight sql %}
 INSERT OVERWRITE [LOCAL] DIRECTORY directory_path
@@ -49,7 +49,7 @@ The destination directory. It can also be specified in `OPTIONS` using `path`. T
 The `SERDE` clause specifies a custom `SerDe` for this insert. Alternatively, use the `DELIMITED` clause to use the native `SerDe` and specify the delimiter, escape character, null character, and so on.
 
 #### ***file_format***:
-The file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. Alternatively, you can specify your own input and output format through `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE``, while ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
+The file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. Alternatively, you can specify your own input and output format through `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
 
 #### ***query***:
 A `SELECT` statement that provides the rows to be inserted.
