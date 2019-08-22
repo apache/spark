@@ -20,20 +20,33 @@ license: |
 ---
 
 ### Description
-Drops the specified view, which was created by the CREATE VIEW statement. Because a view
-is purely a logical construct with no physical data behind it, DROP VIEW only
-involves changes to metadata in the metastore database, not any data files in HDFS.
+Removes the view, which was created by CREATE VIEW statement. DROP VIEW only involves
+changes in metadata in the metastore database.
 
 ### Syntax
 {% highlight sql %}
-DROP VIEW [IF EXISTS] [database_name.]view_name
+DROP VIEW [IF EXISTS] [dbname.]viewName
 {% endhighlight %}
 
- ### Example
+### Parameter
+
+**dbname**
+
+*Database* name where view present, if not provided it takes the *current Database*.
+
+**viewName**
+
+*View* to be dropped
+
+**IF EXISTS**
+
+If specified will not throw exception if *view* is not present.
+
+### Example
 {% highlight sql %}
-DROP VIEW USERDB.VIEW1
-DROP TABLE VIEW1
-DROP VIEW IF EXISTS USERDB.VIEW1
-DROP VIEW IF EXISTS VIEW1
+DROP VIEW USERDB.USERVIEW
+DROP TABLE USERVIEW
+DROP VIEW IF EXISTS USERDB.USERVIEW
+DROP VIEW IF EXISTS USERVIEW
 {% endhighlight %}
 

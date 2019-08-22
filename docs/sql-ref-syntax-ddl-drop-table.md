@@ -22,7 +22,6 @@ license: |
 ### Description
 Removes the table and corresponding directory associated with table from the file system if current
 table is not an external table.
-If the table to be dropped does not exist, an exception is thrown.
 
 ### Syntax
 {% highlight sql %}
@@ -33,15 +32,15 @@ DROP TABLE [IF EXISTS] [dbname.]tableName
 
 **dbname**
 
-Database name where table present, if not provided it takes the current Database.
+*Database* name where table present, if not provided it takes the current *Database*.
 
 **tableName**
 
-Table to be dropped
+*Table* to be dropped
 
 **IF EXISTS**
 
-If specified will not throw exception if table is not present.
+If specified will not throw exception if *table* is not present.
 
 
 ### Example
