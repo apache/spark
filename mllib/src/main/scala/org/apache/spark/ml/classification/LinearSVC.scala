@@ -313,7 +313,7 @@ class LinearSVCModel private[classification] (
   setDefault(threshold, 0.0)
 
   @Since("2.2.0")
-  @deprecated("This method is deprecated and will be removed in the future.", "2.4.4")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.4.4")
   def setWeightCol(value: Double): this.type = this
 
   private val margin: Vector => Double = (features) => {
