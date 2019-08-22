@@ -80,6 +80,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   private final int fileBufferSize;
   private final boolean transferToEnabled;
+  private final int transferToNumCalls;
   private final int numPartitions;
   private final BlockManager blockManager;
   private final Partitioner partitioner;
@@ -114,6 +115,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
+    this.transferToNumCalls = conf.getInt("spark.file.transferToNumCalls", Integer.MAX_VALUE);
     this.blockManager = blockManager;
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.mapId = mapId;
@@ -238,8 +240,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       FileInputStream in = new FileInputStream(file);
       try (FileChannel inputChannel = in.getChannel()) {
-        Utils.copyFileStreamNIO(
-            inputChannel, outputChannel.channel(), 0L, inputChannel.size());
+        Utils.copyFileStreamNIO(inputChannel,
+          outputChannel.channel(),
+          0L,
+          inputChannel.size(),
+          transferToNumCalls);
         copyThrewException = false;
       } finally {
         Closeables.close(in, copyThrewException);
@@ -257,7 +262,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     try {
       outputStream = writer.openStream();
       try {
-        Utils.copyStream(in, outputStream, false, false);
+        Utils.copyStream(in, outputStream, false, false, Integer.MAX_VALUE);
         copyThrewException = false;
       } finally {
         Closeables.close(outputStream, copyThrewException);

@@ -1407,4 +1407,11 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
+  private[spark] val TRANSFERTO_NUM_CALLS =
+    ConfigBuilder("spark.file.transferToNumCalls")
+      .doc("Number to control the calls Java NIO's transferTo. In some occasional case, Spark's " +
+        "copyFileStreamNIO will run into infinite loop, we should control the calls and jump out " +
+        "of loop int time. This is an internal configuration, user shouldn't configure it normally")
+      .intConf
+      .createWithDefault(Int.MaxValue)
 }

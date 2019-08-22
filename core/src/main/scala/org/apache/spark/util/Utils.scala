@@ -335,7 +335,8 @@ private[spark] object Utils extends Logging {
       in: InputStream,
       out: OutputStream,
       closeStreams: Boolean = false,
-      transferToEnabled: Boolean = false): Long = {
+      transferToEnabled: Boolean = false,
+      numTransferToCalls: Int = Int.MaxValue): Long = {
     tryWithSafeFinally {
       if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
         && transferToEnabled) {
@@ -343,7 +344,7 @@ private[spark] object Utils extends Logging {
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
         val size = inChannel.size()
-        copyFileStreamNIO(inChannel, outChannel, 0, size)
+        copyFileStreamNIO(inChannel, outChannel, 0, size, numTransferToCalls)
         size
       } else {
         var count = 0L
@@ -417,16 +418,19 @@ private[spark] object Utils extends Logging {
       input: FileChannel,
       output: WritableByteChannel,
       startPosition: Long,
-      bytesToCopy: Long): Unit = {
+      bytesToCopy: Long,
+      numTransferToCalls: Int): Unit = {
     val outputInitialState = output match {
       case outputFileChannel: FileChannel =>
         Some((outputFileChannel.position(), outputFileChannel))
       case _ => None
     }
     var count = 0L
+    var num = 0
     // In case transferTo method transferred less data than we have required.
-    while (count < bytesToCopy) {
+    while (count < bytesToCopy && num < numTransferToCalls) {
       count += input.transferTo(count + startPosition, bytesToCopy - count, output)
+      num += 1
     }
     assert(count == bytesToCopy,
       s"request to copy $bytesToCopy bytes, but actually copied $count bytes.")
