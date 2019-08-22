@@ -19,4 +19,31 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+TRUNCATE TABLE statement removes all the rows from a table or partition(s). The table must not be a temporary table, an external table, or a view. 
+User can specify partial partition_spec for truncating multiple partitions at once, omitting partition_spec will truncate all partitions in the table.
+
+### Syntax
+{% highlight sql %}
+TRUNCATE TABLE table_name [PARTITION partition_spec];
+ 
+partition_spec:
+  : (partition_column = partition_col_value, partition_column = partition_col_value, ...)
+{% endhighlight %}
+
+
+### Examples
+{% highlight sql %}
+-- Removes all rows from the table in the partion specified
+TRUNCATE TABLE partition_date2_1 partition(dt=date '2000-01-01', region=2);
+
+-- Removes all rows from the table from all partitions
+TRUNCATE TABLE num_result;
+
+{% endhighlight %}
+
+
+### Related Statements
+- [DROP TABLE](sql-ref-syntax-ddl-drop-table.html)
+- [ALTER TABLE](sql-ref-syntax-ddl-alter-tabley.html)
+
