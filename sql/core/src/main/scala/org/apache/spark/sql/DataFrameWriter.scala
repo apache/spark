@@ -252,8 +252,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("save")
 
     val maybeV2Provider = lookupV2Provider()
-    // TODO(SPARK-26778): use V2 implementations when partition columns are specified
-    if (maybeV2Provider.isDefined && partitioningColumns.isEmpty) {
+    if (maybeV2Provider.isDefined) {
+      if (partitioningColumns.nonEmpty) {
+        throw new AnalysisException(
+          "Cannot write data to TableProvider implementation if partition columns are specified.")
+      }
+
       val provider = maybeV2Provider.get
       val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
         provider, df.sparkSession.sessionState.conf)
