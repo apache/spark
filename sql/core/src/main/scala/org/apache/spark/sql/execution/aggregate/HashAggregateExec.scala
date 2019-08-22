@@ -264,17 +264,29 @@ case class HashAggregateExec(
       aggregateExpressions: Seq[Expression],
       aggEvalCodes: Seq[String],
       subExprs: Map[Expression, SubExprEliminationState],
-      bufferInput: Option[VariableValue] = None): Seq[String] = {
-    aggregateExpressions.zip(aggEvalCodes).map { case (aggExpr, aggEvalCode) =>
+      bufferInput: Option[VariableValue] = None): Option[String] = {
+    val aggExprWithInputVars = aggregateExpressions.map { aggExpr =>
       val inputVars = CodeGenerator.getLocalInputVariableValues(ctx, aggExpr, subExprs)
-      val args = inputVars.map(_._1) ++ bufferInput.map(_ :: Nil).getOrElse(Nil)
       val paramLength = CodeGenerator.calculateParamLength(inputVars.map(_._2)) +
         (if (bufferInput.isDefined) 1 else 0)
 
-      // This method gives up splitting the code if the parameter length goes over the limit
+      // Checks if a parameter length for the `aggExpr` does not go over the JVM limit
       if (CodeGenerator.isValidParamLength(paramLength)) {
+        Some((aggExpr, inputVars))
+      } else {
+        None
+      }
+    }
+
+    // Checks if all the aggregate code can be split into pieces.
+    // If the parameter length of at lease one `aggExpr` goes over the limit,
+    // we totally give up splitting aggregate code.
+    if (aggExprWithInputVars.forall(_.isDefined)) {
+      val splitCodes = aggExprWithInputVars.flatten.zip(aggEvalCodes)
+          .map { case ((aggExpr, inputVars), aggEvalCode) =>
+        val args = inputVars.map(_._1) ++ bufferInput.map(_ :: Nil).getOrElse(Nil)
         val doAggVal = ctx.freshName(s"doAggregateVal_${aggExpr.prettyName}")
-        val argList = args.map(v => s"${v.javaType} ${v.variableName}").mkString(", ")
+        val argList = args.map(v => s"${v.javaType.getName} ${v.variableName}").mkString(", ")
         val doAggValFuncName = ctx.addNewFunction(doAggVal,
           s"""
              | private void $doAggVal($argList) throws java.io.IOException {
@@ -284,8 +296,17 @@ case class HashAggregateExec(
 
         val inputVariables = args.map(_.variableName).mkString(", ")
         s"$doAggValFuncName($inputVariables);"
+      }
+      Some(splitCodes.mkString("\n"))
+    } else {
+      val errMsg = "Failed to split aggregate code into small functions because the parameter " +
+        "length of at least one split function went over the JVM limit: " +
+        CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+      if (Utils.isTesting) {
+        throw new IllegalStateException(errMsg)
       } else {
-        aggEvalCode
+        logInfo(errMsg)
+        None
       }
     }
   }
@@ -301,6 +322,32 @@ case class HashAggregateExec(
         case PartialMerge | Final =>
           e.aggregateFunction.asInstanceOf[DeclarativeAggregate].mergeExpressions
       }
+    }
+
+    lazy val aggregateCodeInSingleFunc = {
+      ctx.currentVars = bufVars ++ input
+      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+      val effectiveCodes = subExprs.codes.mkString("\n")
+      val aggVals = ctx.withSubExprEliminationExprs(subExprs.states) {
+        boundUpdateExpr.map(_.genCode(ctx))
+      }
+      // aggregate buffer should be updated atomically
+      val updates = aggVals.zip(bufVars).map { case (ev, bufVar) =>
+        s"""
+           | ${bufVar.isNull} = ${ev.isNull};
+           | ${bufVar.value} = ${ev.value};
+         """.stripMargin
+      }
+      s"""
+         | // do aggregate
+         | // common sub-expressions
+         | $effectiveCodes
+         | // evaluate aggregate function
+         | ${evaluateVariables(aggVals)}
+         | // update aggregation buffer
+         | ${updates.mkString("\n").trim}
+       """.stripMargin
     }
 
     if (conf.codegenSplitAggregateFunc) {
@@ -337,45 +384,26 @@ case class HashAggregateExec(
          """.stripMargin
       }
 
-      val updateAggValCode = splitAggregateExpressions(
+      splitAggregateExpressions(
         ctx = ctx,
         aggregateExpressions = boundUpdateExpr,
         aggEvalCodes = evalAndUpdateCodes,
-        subExprs = subExprs.states)
+        subExprs = subExprs.states).map { updateAggValCode =>
 
-      s"""
-         | // do aggregate
-         | // copy aggregation buffer to the local
-         | $initLocalBufVar
-         | // common sub-expressions
-         | $effectiveCodes
-         | // evaluate aggregate functions and update aggregation buffers
-         | ${updateAggValCode.mkString("\n")}
-       """.stripMargin
-    } else {
-      ctx.currentVars = bufVars ++ input
-      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-      val effectiveCodes = subExprs.codes.mkString("\n")
-      val aggVals = ctx.withSubExprEliminationExprs(subExprs.states) {
-        boundUpdateExpr.map(_.genCode(ctx))
-      }
-      // aggregate buffer should be updated atomically
-      val updates = aggVals.zip(bufVars).map { case (ev, bufVar) =>
         s"""
-           | ${bufVar.isNull} = ${ev.isNull};
-           | ${bufVar.value} = ${ev.value};
+           | // do aggregate
+           | // copy aggregation buffer to the local
+           | $initLocalBufVar
+           | // common sub-expressions
+           | $effectiveCodes
+           | // evaluate aggregate functions and update aggregation buffers
+           | $updateAggValCode
          """.stripMargin
+      }.getOrElse {
+        aggregateCodeInSingleFunc
       }
-      s"""
-         | // do aggregate
-         | // common sub-expressions
-         | $effectiveCodes
-         | // evaluate aggregate function
-         | ${evaluateVariables(aggVals)}
-         | // update aggregation buffer
-         | ${updates.mkString("\n").trim}
-       """.stripMargin
+    } else {
+      aggregateCodeInSingleFunc
     }
   }
 
@@ -911,6 +939,28 @@ case class HashAggregateExec(
     // generating input columns, we use `currentVars`.
     ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
 
+    lazy val aggregateCodeInSingleFunc = {
+      ctx.INPUT_ROW = unsafeRowBuffer
+      val boundUpdateExpr = bindReferences(updateExpr, inputAttr)
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+      val effectiveCodes = subExprs.codes.mkString("\n")
+      val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+        boundUpdateExpr.map(_.genCode(ctx))
+      }
+      val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
+        val dt = updateExpr(i).dataType
+        CodeGenerator.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
+      }
+      s"""
+         |// common sub-expressions
+         |$effectiveCodes
+         |// evaluate aggregate function
+         |${evaluateVariables(unsafeRowBufferEvals)}
+         |// update unsafe row buffer
+         |${updateUnsafeRowBuffer.mkString("\n").trim}
+       """.stripMargin
+    }
+
     val updateRowInRegularHashMap: String = if (conf.codegenSplitAggregateFunc) {
       // We need to copy the aggregation row buffer to a local row first because each aggregate
       // function directly updates the buffer when it finishes.
@@ -937,42 +987,28 @@ case class HashAggregateExec(
          """.stripMargin
       }
 
-      val updateAggValCode = splitAggregateExpressions(
+      splitAggregateExpressions(
         ctx = ctx,
         aggregateExpressions = boundUpdateExpr,
         aggEvalCodes = evalAndUpdateCodes,
         subExprs = subExprs.states,
         bufferInput = Some(VariableValue(unsafeRowBuffer, classOf[InternalRow])))
+          .map { updateAggValCode =>
 
-      s"""
-         | // do aggregate
-         | // copy aggregation row buffer to the local
-         | $initLocalRowBuffer
-         | // common sub-expressions
-         | $effectiveCodes
-         | // evaluate aggregate functions and update aggregation buffers
-         | ${updateAggValCode.mkString("\n")}
-       """.stripMargin
+        s"""
+           | // do aggregate
+           | // copy aggregation row buffer to the local
+           | $initLocalRowBuffer
+           | // common sub-expressions
+           | $effectiveCodes
+           | // evaluate aggregate functions and update aggregation buffers
+           | $updateAggValCode
+         """.stripMargin
+      }.getOrElse {
+        aggregateCodeInSingleFunc
+      }
     } else {
-      ctx.INPUT_ROW = unsafeRowBuffer
-      val boundUpdateExpr = bindReferences(updateExpr, inputAttr)
-      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
-      val effectiveCodes = subExprs.codes.mkString("\n")
-      val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
-        boundUpdateExpr.map(_.genCode(ctx))
-      }
-      val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
-        val dt = updateExpr(i).dataType
-        CodeGenerator.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
-      }
-      s"""
-         |// common sub-expressions
-         |$effectiveCodes
-         |// evaluate aggregate function
-         |${evaluateVariables(unsafeRowBufferEvals)}
-         |// update unsafe row buffer
-         |${updateUnsafeRowBuffer.mkString("\n").trim}
-       """.stripMargin
+      aggregateCodeInSingleFunc
     }
 
     val updateRowInHashMap: String = if (conf.codegenSplitAggregateFunc) {
@@ -1002,27 +1038,31 @@ case class HashAggregateExec(
            """.stripMargin
         }
 
-        val updateAggValCode = splitAggregateExpressions(
+        splitAggregateExpressions(
           ctx = ctx,
           aggregateExpressions = boundUpdateExpr,
           aggEvalCodes = evalAndUpdateCodes,
           subExprs = subExprs.states,
           bufferInput = Some(VariableValue(fastRowBuffer, classOf[InternalRow])))
+            .map { updateAggValCode =>
 
-        // If fast hash map is on, we first generate code to update row in fast hash map, if the
-        // previous loop up hit fast hash map. Otherwise, update row in regular hash map.
-        s"""
-           |if ($fastRowBuffer != null) {
-           |  // copy aggregation row buffer to the local
-           |  $initLocalRowBuffer
-           |  // common sub-expressions
-           |  $effectiveCodes
-           |  // evaluate aggregate functions and update aggregation buffers
-           |  ${updateAggValCode.mkString("\n")}
-           |} else {
-           |  $updateRowInRegularHashMap
-           |}
-       """.stripMargin
+          // If fast hash map is on, we first generate code to update row in fast hash map, if the
+          // previous loop up hit fast hash map. Otherwise, update row in regular hash map.
+          s"""
+             |if ($fastRowBuffer != null) {
+             |  // copy aggregation row buffer to the local
+             |  $initLocalRowBuffer
+             |  // common sub-expressions
+             |  $effectiveCodes
+             |  // evaluate aggregate functions and update aggregation buffers
+             |  $updateAggValCode
+             |} else {
+             |  $updateRowInRegularHashMap
+             |}
+           """.stripMargin
+        }.getOrElse {
+          updateRowInRegularHashMap
+        }
       } else {
         updateRowInRegularHashMap
       }

@@ -398,4 +398,35 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
       }.isDefined,
       "LocalTableScanExec should be within a WholeStageCodegen domain.")
   }
+
+  test("Give up splitting aggregate code if a parameter length goes over the JVM limit") {
+    withSQLConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true") {
+      withTable("t") {
+        val numCols = 100
+        val colExprs = "id AS key" +: (0 until numCols).map { i => s"id AS _c$i" }
+        spark.range(3).selectExpr(colExprs: _*).write.saveAsTable("t")
+
+        // Defines too many common subexpressions for a parameter length
+        // to go over the JVM limit.
+        val aggExprs = (2 until numCols).map { i =>
+          (0 until i).map(d => s"_c$d")
+            .mkString("SUM(", " + ", ")")
+        }
+
+        // Test case without keys
+        var cause = intercept[Exception] {
+          sql(s"SELECT ${aggExprs.mkString(", ")} FROM t").collect
+        }.getCause
+        assert(cause.isInstanceOf[IllegalStateException])
+        assert(cause.getMessage.contains("Failed to split aggregate code into small functions"))
+
+        // Tet case with keys
+        cause = intercept[Exception] {
+          sql(s"SELECT key, ${aggExprs.mkString(", ")} FROM t GROUP BY key").collect
+        }.getCause
+        assert(cause.isInstanceOf[IllegalStateException])
+        assert(cause.getMessage.contains("Failed to split aggregate code into small functions"))
+      }
+    }
+  }
 }

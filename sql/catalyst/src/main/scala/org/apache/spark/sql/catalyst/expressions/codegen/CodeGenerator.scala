@@ -1645,7 +1645,7 @@ object CodeGenerator extends Logging {
           collectLocalVariable(isNull, ref)
 
         case ref: BoundReference =>
-          argMap += JavaCode.variable(ctx.INPUT_ROW, ObjectType(classOf[InternalRow])) -> ref
+          argMap += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow]) -> ref
 
         case e =>
           stack.pushAll(e.children)
