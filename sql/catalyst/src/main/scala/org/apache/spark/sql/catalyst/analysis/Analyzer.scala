@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
+import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.types._
@@ -2526,7 +2526,8 @@ class Analyzer(
       case append @ AppendData(table, query, isByName)
           if table.resolved && query.resolved && !append.outputResolved =>
         val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
+          TableOutputResolver.resolveOutputColumns(
+            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
 
         if (projection != query) {
           append.copy(query = projection)
@@ -2537,7 +2538,8 @@ class Analyzer(
       case overwrite @ OverwriteByExpression(table, _, query, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
         val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
+          TableOutputResolver.resolveOutputColumns(
+            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2548,7 +2550,8 @@ class Analyzer(
       case overwrite @ OverwritePartitionsDynamic(table, query, isByName)
           if table.resolved && query.resolved && !overwrite.outputResolved =>
         val projection =
-          TableOutputResolver.resolveOutputColumns(table.name, table.output, query, isByName, conf)
+          TableOutputResolver.resolveOutputColumns(
+            table.name, table.output, query, isByName, conf, storeAssignmentPolicy)
 
         if (projection != query) {
           overwrite.copy(query = projection)
@@ -2556,6 +2559,18 @@ class Analyzer(
           overwrite
         }
     }
+  }
+
+  private def storeAssignmentPolicy: StoreAssignmentPolicy.Value = {
+    val policy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.STRICT)
+    // SPARK-28730: LEGACY store assignment policy is disallowed in data source v2.
+    if (policy == StoreAssignmentPolicy.LEGACY) {
+      val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
+      throw new AnalysisException(s"""
+        |"LEGACY" store assignment policy is deprecated in Spark data source V2.
+        |Please set the configuration $configKey to other values.""".stripMargin)
+    }
+    policy
   }
 
   private def commonNaturalJoinProcessing(
