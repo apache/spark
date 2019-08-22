@@ -143,31 +143,6 @@ object ResolveHints {
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
     private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION")
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
-        val hintName = h.name.toUpperCase(Locale.ROOT)
-        val shuffle = hintName match {
-          case "REPARTITION" => true
-          case "COALESCE" => false
-        }
-        val numPartitions = h.parameters match {
-          case Seq(IntegerLiteral(numPartitions)) =>
-            numPartitions
-          case Seq(numPartitions: Int) =>
-            numPartitions
-          case _ =>
-            throw new AnalysisException(s"$hintName Hint expects a partition number as parameter")
-        }
-        Repartition(numPartitions, shuffle, h.child)
-    }
-  }
-
-  /**
-   * @see RepartitionByExpression
-   */
-  object ResolveRepartitionByHints extends Rule[LogicalPlan] {
-    private val REPARTITIONBY_HINT_NAMES = Set("REPARTITIONBY")
-
     private def createRepartitionByExpression(
         numPartitions: Int, parameters: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
       val exprs = parameters.drop(1)
@@ -181,15 +156,26 @@ object ResolveHints {
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case h: UnresolvedHint
-        if REPARTITIONBY_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+      case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
+        val hintName = h.name.toUpperCase(Locale.ROOT)
+        val shuffle = hintName match {
+          case "REPARTITION" => true
+          case "COALESCE" => false
+        }
+
         h.parameters match {
-          case param @ Seq(IntegerLiteral(numPartitions), _*) =>
+          case Seq(IntegerLiteral(numPartitions)) =>
+            Repartition(numPartitions, shuffle, h.child)
+          case Seq(numPartitions: Int) =>
+            Repartition(numPartitions, shuffle, h.child)
+
+          case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
             createRepartitionByExpression(numPartitions, param, h)
-          case param @ Seq(numPartitions: Int, _*) =>
+          case param @ Seq(numPartitions: Int, _*) if shuffle =>
             createRepartitionByExpression(numPartitions, param, h)
+
           case _ =>
-            throw new AnalysisException("RepartitionBy hint expects a partition number " +
+            throw new AnalysisException("Repartition hint expects a partition number " +
               "and columns")
         }
     }

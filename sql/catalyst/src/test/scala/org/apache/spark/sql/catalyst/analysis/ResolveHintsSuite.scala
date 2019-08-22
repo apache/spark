@@ -151,24 +151,42 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
       Repartition(numPartitions = 200, shuffle = true, child = testRelation))
 
-    val errMsgCoal = "COALESCE Hint expects a partition number as parameter"
+    val errMsg = "Repartition hint expects a partition number and columns"
+
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
-      Seq(errMsgCoal))
+      Seq(errMsg))
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq(Literal(10), Literal(false)), table("TaBlE")),
-      Seq(errMsgCoal))
+      Seq(errMsg))
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
-      Seq(errMsgCoal))
+      Seq(errMsg))
 
-    val errMsgRepa = "REPARTITION Hint expects a partition number as parameter"
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
-      Seq(errMsgRepa))
+      Seq(errMsg))
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
-      Seq(errMsgRepa))
+      Seq(errMsg))
+
+    checkAnalysis(
+      UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+
+    checkAnalysis(
+      UnresolvedHint("REPARTITION", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
+      Seq(errMsg))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION",
+        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
+        table("TaBlE")),
+      Seq(errMsg))
   }
 
   test("log warnings for invalid hints") {
@@ -182,26 +200,5 @@ class ResolveHintsSuite extends AnalysisTest {
     assert(logAppender.loggingEvents.exists(
       e => e.getLevel == Level.WARN &&
         e.getRenderedMessage.contains("Unrecognized hint: unknown_hint")))
-  }
-
-  test("test repartition by") {
-    checkAnalysis(
-      UnresolvedHint("RePartitionBy", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
-
-    checkAnalysis(
-      UnresolvedHint("REPARTITIONBY", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
-
-    val errMsg = "RepartitionBy hint expects a partition number and columns"
-    assertAnalysisError(
-      UnresolvedHint("REPARTITIONBY", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
-      Seq(errMsg))
-
-    assertAnalysisError(
-      UnresolvedHint("REPARTITIONBY",
-        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
-        table("TaBlE")),
-      Seq(errMsg))
   }
 }

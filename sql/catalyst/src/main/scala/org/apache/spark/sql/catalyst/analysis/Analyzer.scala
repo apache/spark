@@ -161,7 +161,6 @@ class Analyzer(
     Batch("Hints", fixedPoint,
       new ResolveHints.ResolveJoinStrategyHints(conf),
       ResolveHints.ResolveCoalesceHints,
-      ResolveHints.ResolveRepartitionByHints,
       new ResolveHints.RemoveAllHints(conf)),
     Batch("Simple Sanity Check", Once,
       LookupFunctions),
