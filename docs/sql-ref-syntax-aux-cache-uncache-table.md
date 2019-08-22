@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Removes the specified table from the in-memory cache.
+Removes the specified table from the in-memory or on-disk cache.
 
 ### Syntax
 {% highlight sql %}
