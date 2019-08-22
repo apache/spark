@@ -41,8 +41,8 @@ object ExplainUtils {
    *
    * @param plan Input query plan to process
    * @param append function used to append the explain output
-   * @startOperationID The start value of operation id. The subsequent operations will
-   *                  be assigned higher value.
+   * @param startOperationID The start value of operation id. The subsequent operations will
+   *                         be assigned higher value.
    *
    * @return The last generated operation id for this input plan. This is to ensure we
    *         always assign incrementing unique id to each operator.
@@ -128,10 +128,10 @@ object ExplainUtils {
    *       appear in the explain output.
    *    2. operator identifier starts at startOperatorID + 1
    * @param plan Input query plan to process
-   * @startOperationID The start value of operation id. The subsequent operations will
-   *                  be assigned higher value.
-   * @operatorIDs A output parameter that contains a map of operator id and query plan. This
-   *             is used by caller to print the detail portion of the plan.
+   * @param startOperationID The start value of operation id. The subsequent operations will
+   *                         be assigned higher value.
+   * @param operatorIDs A output parameter that contains a map of operator id and query plan. This
+   *                    is used by caller to print the detail portion of the plan.
    * @return The last generated operation id for this input plan. This is to ensure we
    *         always assign incrementing unique id to each operator.
    */
@@ -227,8 +227,8 @@ object ExplainUtils {
   def removeTags(plan: QueryPlan[_]): Unit = {
     plan foreach {
       case plan: QueryPlan[_] =>
-        plan.removeTag(QueryPlan.OP_ID_TAG)
-        plan.removeTag(QueryPlan.CODEGEN_ID_TAG)
+        plan.resetTagValue(QueryPlan.OP_ID_TAG)
+        plan.resetTagValue(QueryPlan.CODEGEN_ID_TAG)
         plan.innerChildren.foreach { p =>
           removeTags(p)
         }

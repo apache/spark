@@ -3,7 +3,6 @@ CREATE table  explain_temp1 (key int, val int) USING PARQUET;
 CREATE table  explain_temp2 (key int, val int) USING PARQUET;
 CREATE table  explain_temp3 (key int, val int) USING PARQUET;
 
--- Simple explain
 SET spark.sql.codegen.wholeStage = true;
 
 -- single table
@@ -39,6 +38,7 @@ EXPLAIN FORMATTED
   FROM   explain_temp1 a 
          INNER JOIN explain_temp2 b 
                  ON a.key = b.key; 
+
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 

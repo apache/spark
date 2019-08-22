@@ -45,10 +45,6 @@ case class SortMergeJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override def simpleString(maxFields: Int): String = {
-    s"$nodeName $joinType"
-  }
-
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
     s"$nodeName $joinType ($opId)".trim

@@ -292,8 +292,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   final def sameResult(other: PlanType): Boolean = this.canonicalized == other.canonicalized
 
   /**
-   * Returns a `hashCode` for the calculation performed by
-   * this plan. Unlike the standard
+   * Returns a `hashCode` for the calculation performed by this plan. Unlike the standard
    * `hashCode`, an attempt has been made to eliminate cosmetic differences.
    */
   final def semanticHash(): Int = canonicalized.hashCode()
