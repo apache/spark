@@ -497,6 +497,54 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
     }
   }
 
+  test("spark.sql.files.orderByFilePathWhenPartitioning forms rdd partitions by file path") {
+    val table =
+      createTable(
+        files = Seq(
+          "p1=1/file1" -> 2,
+          "p1=1/file2" -> 2,
+          "p1=2/file3" -> 1,
+          "p1=2/file4" -> 2,
+          "p1=2/file5" -> 2,
+          "p1=3/file6" -> 1))
+
+    withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "6",
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1",
+      SQLConf.ORDER_BY_FILE_PATH_WHEN_PARTITIONING.key -> "true") {
+      checkScan(table.select('c1)) { partitions =>
+        // Files should be laid out [(file1, file2), (file3, file4), (file5), (file6)]
+        assert(partitions.size == 4, "when checking partitions")
+        assert(partitions(0).files.size == 2, "when checking partition 1")
+        assert(partitions(1).files.size == 2, "when checking partition 2")
+        assert(partitions(2).files.size == 1, "when checking partition 3")
+        assert(partitions(3).files.size == 1, "when checking partition 4")
+
+        // First partition reads (file1, file2)
+        assert(partitions(0).files(0).start == 0)
+        assert(partitions(0).files(0).length == 2)
+        assert(partitions(0).files(1).start == 0)
+        assert(partitions(0).files(1).length == 2)
+
+        // Second partition reads (file3, file4)
+        assert(partitions(1).files(0).start == 0)
+        assert(partitions(1).files(0).length == 1)
+        assert(partitions(1).files(1).start == 0)
+        assert(partitions(1).files(1).length == 2)
+
+        // Third partition reads (file5)
+        assert(partitions(2).files(0).start == 0)
+        assert(partitions(2).files(0).length == 2)
+
+        // Final partition reads (file6)
+        assert(partitions(3).files(0).start == 0)
+        assert(partitions(3).files(0).length == 1)
+      }
+
+      checkPartitionSchema(StructType(Nil).add("p1", IntegerType))
+      checkDataSchema(StructType(Nil).add("c1", IntegerType))
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =

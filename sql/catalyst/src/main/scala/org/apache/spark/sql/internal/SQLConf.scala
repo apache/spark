@@ -1912,6 +1912,13 @@ object SQLConf {
       .doc("When true, the ArrayExists will follow the three-valued boolean logic.")
       .booleanConf
       .createWithDefault(true)
+
+  val ORDER_BY_FILE_PATH_WHEN_PARTITIONING =
+    buildConf("spark.sql.files.orderByFilePathWhenPartitioning")
+      .doc("When true, will sort split files by path and organize rdd partition by path " +
+        "when creating file source read RDD.")
+      .booleanConf
+      .createWithDefault(false)
 }
 
 /**
@@ -2115,6 +2122,8 @@ class SQLConf extends Serializable with Logging {
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
   def utcTimestampFuncEnabled: Boolean = getConf(UTC_TIMESTAMP_FUNC_ENABLED)
+
+  def orderByFilePathWhenPartitioning: Boolean = getConf(ORDER_BY_FILE_PATH_WHEN_PARTITIONING)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two

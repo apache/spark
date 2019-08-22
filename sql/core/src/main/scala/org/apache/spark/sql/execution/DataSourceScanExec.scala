@@ -465,7 +465,7 @@ case class FileSourceScanExec(
     logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
-    val splitFiles = selectedPartitions.flatMap { partition =>
+    val splitFilesBeforeSort = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
@@ -480,7 +480,16 @@ case class FileSourceScanExec(
           partitionValues = partition.values
         )
       }
-    }.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+    }
+
+    val orderByFilePath = fsRelation.sparkSession.sessionState.conf.orderByFilePathWhenPartitioning
+    val splitFiles = {
+      if (orderByFilePath) {
+        splitFilesBeforeSort.sortBy(_.filePath)
+      } else {
+        splitFilesBeforeSort.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
+      }
+    }
 
     val partitions =
       FilePartition.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)

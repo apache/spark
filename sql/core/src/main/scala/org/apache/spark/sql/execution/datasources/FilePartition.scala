@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -69,15 +71,31 @@ object FilePartition extends Logging {
       currentSize = 0
     }
 
+    val orderByFilePath = sparkSession.sessionState.conf.orderByFilePathWhenPartitioning
     val openCostInBytes = sparkSession.sessionState.conf.filesOpenCostInBytes
-    // Assign files to partitions using "Next Fit Decreasing"
-    partitionedFiles.foreach { file =>
-      if (currentSize + file.length > maxSplitBytes) {
-        closePartition()
+    if (orderByFilePath) {
+      var prevFilePartitionPath: Option[String] = None
+      partitionedFiles.foreach { file =>
+        val currentFilePartitionPath = Some(new Path(file.filePath).getParent.toString)
+        if ((currentSize + file.length > maxSplitBytes) ||
+          (prevFilePartitionPath.isDefined &&
+            currentFilePartitionPath != prevFilePartitionPath)) {
+          closePartition()
+          prevFilePartitionPath = currentFilePartitionPath
+        }
+        currentSize += file.length + openCostInBytes
+        currentFiles += file
       }
-      // Add the given file to the current partition.
-      currentSize += file.length + openCostInBytes
-      currentFiles += file
+    } else {
+      // Assign files to partitions using "Next Fit Decreasing"
+      partitionedFiles.foreach { file =>
+        if (currentSize + file.length > maxSplitBytes) {
+          closePartition()
+        }
+        // Add the given file to the current partition.
+        currentSize += file.length + openCostInBytes
+        currentFiles += file
+      }
     }
     closePartition()
     partitions
