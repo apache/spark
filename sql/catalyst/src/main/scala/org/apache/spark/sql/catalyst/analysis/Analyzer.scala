@@ -2567,7 +2567,7 @@ class Analyzer(
     if (policy == StoreAssignmentPolicy.LEGACY) {
       val configKey = SQLConf.STORE_ASSIGNMENT_POLICY.key
       throw new AnalysisException(s"""
-        |"LEGACY" store assignment policy is deprecated in Spark data source V2.
+        |"LEGACY" store assignment policy is disallowed in Spark data source V2.
         |Please set the configuration $configKey to other values.""".stripMargin)
     }
     policy
