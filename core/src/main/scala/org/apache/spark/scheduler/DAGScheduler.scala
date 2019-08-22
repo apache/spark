@@ -433,8 +433,8 @@ private[spark] class DAGScheduler(
    * submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
-    lazy val numPartitions = rdd.getNumPartitions
-    lazy val maxNumConcurrentTasks = sc.maxNumConcurrentTasks
+    val numPartitions = rdd.getNumPartitions
+    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks
     if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
       throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
     }
@@ -989,7 +989,7 @@ private[spark] class DAGScheduler(
 
         logWarning(s"Barrier stage in job $jobId requires ${e.requiredConcurrentTasks} slots, " +
           s"but only ${e.maxConcurrentTasks} are available. " +
-          s"Failure ${numCheckFailures} / ${maxFailureNumTasksCheck + 1}")
+          s"Will retry up to ${maxFailureNumTasksCheck - numCheckFailures + 1} more times")
 
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
