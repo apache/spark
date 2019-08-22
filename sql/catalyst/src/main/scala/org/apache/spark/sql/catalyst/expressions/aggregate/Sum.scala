@@ -95,14 +95,14 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   }
 
   override lazy val evaluateExpression: Expression = {
-   val res = resultType match {
+   val res = sumDataType match {
       case d: DecimalType => CheckOverflow(sum, d, SQLConf.get.decimalOperationsNullOnOverflow)
       case _ => sum
    }
    if (sumDataType == resultType) {
-      sum
+      res
     } else {
-      Cast(sum, resultType)
+      Cast(res, resultType)
     }
   }
 }
