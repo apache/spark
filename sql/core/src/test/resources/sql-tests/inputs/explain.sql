@@ -36,12 +36,6 @@ EXPLAIN FORMATTED
 EXPLAIN FORMATTED
   SELECT * 
   FROM   explain_temp1 a 
-         INNER JOIN explain_temp2 b 
-                 ON a.key = b.key; 
-
-EXPLAIN FORMATTED
-  SELECT * 
-  FROM   explain_temp1 a 
          LEFT OUTER JOIN explain_temp2 b 
                       ON a.key = b.key;
 

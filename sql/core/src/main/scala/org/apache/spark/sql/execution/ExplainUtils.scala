@@ -227,8 +227,8 @@ object ExplainUtils {
   def removeTags(plan: QueryPlan[_]): Unit = {
     plan foreach {
       case plan: QueryPlan[_] =>
-        plan.resetTagValue(QueryPlan.OP_ID_TAG)
-        plan.resetTagValue(QueryPlan.CODEGEN_ID_TAG)
+        plan.unsetTagValue(QueryPlan.OP_ID_TAG)
+        plan.unsetTagValue(QueryPlan.CODEGEN_ID_TAG)
         plan.innerChildren.foreach { p =>
           removeTags(p)
         }
