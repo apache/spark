@@ -476,7 +476,7 @@ private[spark] class ExecutorMonitor(
     }
 
     def removeShuffle(id: Int): Unit = {
-      if (shuffleIds.remove(id) && shuffleIds.isEmpty) {
+      if (shuffleIds != null && shuffleIds.remove(id) && shuffleIds.isEmpty) {
         hasActiveShuffle = false
         if (isIdle) {
           updateTimeout()
