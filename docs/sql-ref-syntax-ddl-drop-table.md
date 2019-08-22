@@ -20,19 +20,38 @@ license: |
 ---
 
 ### Description
-Drop a table and delete the directory associated with the table from the file system if this is not an
-EXTERNAL table. If the table to drop does not exist, an exception is thrown.
+Removes the table and corresponding directory associated with table from the file system if current
+table is not an external table.
+If the table to be dropped does not exist, an exception is thrown.
 
 ### Syntax
 {% highlight sql %}
-DROP TABLE [IF EXISTS] [database_name.]table_name
+DROP TABLE [IF EXISTS] [dbname.]tableName
 {% endhighlight %}
 
- ### Example
+### Parameter
+
+**dbname**
+
+Database name where table present, if not provided it takes the current Database.
+
+**tableName**
+
+Table to be dropped
+
+**IF EXISTS**
+
+If specified will not throw exception if table is not present.
+
+
+### Example
 {% highlight sql %}
-DROP TABLE USERDB.TABLE1
-DROP TABLE TABLE1
-DROP TABLE IF EXISTS USERDB.TABLE1
-DROP TABLE IF EXISTS TABLE1
+DROP TABLE USERDB.USERTABLE
+DROP TABLE USERTABLE
+DROP TABLE IF EXISTS USERDB.USERTABLE
+DROP TABLE IF EXISTS USERTABLE
 {% endhighlight %}
+
+
+
 
