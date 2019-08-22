@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -489,6 +490,9 @@ trait CheckAnalysis extends PredicateHelper {
               "Internal error: logical hint operator should have been removed during analysis")
 
           case InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
+            failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+          case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
             failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
           case f @ Filter(condition, _)
