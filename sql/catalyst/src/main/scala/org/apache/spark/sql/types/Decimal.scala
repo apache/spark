@@ -400,6 +400,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (that.isZero) null
     else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
 
+  def quot(that: Decimal): Decimal =
+    if (that.isZero) null
+    else Decimal(toJavaBigDecimal.divideToIntegralValue(that.toJavaBigDecimal, MATH_CONTEXT))
+
   def remainder(that: Decimal): Decimal = this % that
 
   def unary_- : Decimal = {
@@ -539,7 +543,7 @@ object Decimal {
 
   /** A [[scala.math.Integral]] evidence parameter for Decimals. */
   private[sql] object DecimalAsIfIntegral extends DecimalIsConflicted with Integral[Decimal] {
-    override def quot(x: Decimal, y: Decimal): Decimal = x / y
+    override def quot(x: Decimal, y: Decimal): Decimal = x quot y
     override def rem(x: Decimal, y: Decimal): Decimal = x % y
   }
 }
