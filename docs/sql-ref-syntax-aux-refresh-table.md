@@ -40,7 +40,7 @@ provided, it refers to a temporary view or a table/view in the current database.
 -- The cached entries of the table will be refreshed  
 -- The table is resolved from the current database as the table name is unqualified.
 REFRESH TABLE tbl1
--- The cached entries of the view will be refreshed or invalided
+-- The cached entries of the view will be refreshed or invalidated
 -- The view is resolved from tempDB database, as the view name is qualified.
 REFRESH TABLE tempDB.view1   
 {% endhighlight %}
