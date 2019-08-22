@@ -158,17 +158,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
   }
 
   /**
-   * Submit the application using the provided parameters.
-   *
-   * This runs in two steps. First, we prepare the launch environment by setting up
-   * the appropriate classpath, system properties, and application arguments for
-   * running the child main class based on the cluster manager and the deploy mode.
-   * Second, we use this launch environment to invoke the main method of the child
-   * main class.
+   * Submit the application using the provided parameters, ensuring to first wrap
+   * in a doAs when --proxy-user is specified.
    */
   @tailrec
   private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
-    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
       if (args.proxyUser != null) {
@@ -177,7 +171,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+              runMain(args, uninitLog)
             }
           })
         } catch {
@@ -195,13 +189,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
             }
         }
       } else {
-        runMain(childArgs, childClasspath, sparkConf, childMainClass, args.verbose)
+        runMain(args, uninitLog)
       }
-    }
-
-    // Let the main class re-initialize the logging system once it starts.
-    if (uninitLog) {
-      Logging.uninitialize()
     }
 
     // In standalone cluster mode, there are two submission gateways:
@@ -809,19 +798,26 @@ object SparkSubmit extends CommandLineUtils with Logging {
   }
 
   /**
-   * Run the main method of the child class using the provided launch environment.
+   * Run the main method of the child class using the submit arguments.
+   *
+   * This runs in two steps. First, we prepare the launch environment by setting up
+   * the appropriate classpath, system properties, and application arguments for
+   * running the child main class based on the cluster manager and the deploy mode.
+   * Second, we use this launch environment to invoke the main method of the child
+   * main class.
    *
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
-  private def runMain(
-      childArgs: Seq[String],
-      childClasspath: Seq[String],
-      sparkConf: SparkConf,
-      childMainClass: String,
-      verbose: Boolean): Unit = {
+  private def runMain(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
+    val (childArgs, childClasspath, sparkConf, childMainClass) = prepareSubmitEnvironment(args)
+    // Let the main class re-initialize the logging system once it starts.
+    if (uninitLog) {
+      Logging.uninitialize()
+    }
+
     // scalastyle:off println
-    if (verbose) {
+    if (args.verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
