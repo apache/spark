@@ -28,6 +28,7 @@ import org.apache.spark.streaming.{Duration, StreamingContext}
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
+// TODO remove this change
 object KinesisUtils {
   /**
    * Create an input stream that pulls messages from a Kinesis stream.

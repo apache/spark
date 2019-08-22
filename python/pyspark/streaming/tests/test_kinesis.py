@@ -23,6 +23,7 @@ from pyspark.testing.streamingutils import should_test_kinesis, kinesis_requirem
     PySparkStreamingTestCase
 
 
+# TODO remove this change
 @unittest.skipIf(not should_test_kinesis, kinesis_requirement_message)
 class KinesisStreamTests(PySparkStreamingTestCase):
 
