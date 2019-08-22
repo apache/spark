@@ -348,7 +348,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
         .tableProperty("allow-unsupported-transforms", "true")
-        .partitionedBy(years($"ts"))
+        .partitionedBy(partitioning.years($"ts"))
         .create()
 
     val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
@@ -363,7 +363,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
         .tableProperty("allow-unsupported-transforms", "true")
-        .partitionedBy(months($"ts"))
+        .partitionedBy(partitioning.months($"ts"))
         .create()
 
     val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
@@ -378,7 +378,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
         .tableProperty("allow-unsupported-transforms", "true")
-        .partitionedBy(days($"ts"))
+        .partitionedBy(partitioning.days($"ts"))
         .create()
 
     val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
@@ -393,7 +393,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .withColumn("ts", lit("2019-06-01 10:00:00.000000").cast("timestamp"))
         .writeTo("testcat.table_name")
         .tableProperty("allow-unsupported-transforms", "true")
-        .partitionedBy(hours($"ts"))
+        .partitionedBy(partitioning.hours($"ts"))
         .create()
 
     val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
@@ -407,7 +407,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     spark.table("source")
         .writeTo("testcat.table_name")
         .tableProperty("allow-unsupported-transforms", "true")
-        .partitionedBy(bucket(4, $"id"))
+        .partitionedBy(partitioning.bucket(4, $"id"))
         .create()
 
     val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
