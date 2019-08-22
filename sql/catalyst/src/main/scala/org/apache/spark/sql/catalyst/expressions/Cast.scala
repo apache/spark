@@ -1233,7 +1233,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c != 0;"
   }
 
-  private[this] def castTimestampToIntegerCode(
+  private[this] def castTimestampToIntegralTypeCode(
       ctx: CodegenContext,
       integralType: String): CastFunction = {
     if (failOnIntegerOverflow) {
@@ -1322,7 +1322,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType => castTimestampToIntegerCode(ctx, "byte")
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte")
     case DecimalType() => castDecimalToIntegerCode(ctx, "byte")
     case _: ShortType | _: IntegerType | _: LongType if failOnIntegerOverflow =>
       castIntegerToIntegerExactCode("byte")
@@ -1353,7 +1353,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType => castTimestampToIntegerCode(ctx, "short")
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "short")
     case DecimalType() => castDecimalToIntegerCode(ctx, "short")
     case _: IntegerType | _: LongType if failOnIntegerOverflow =>
       castIntegerToIntegerExactCode("short")
@@ -1382,7 +1382,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? 1 : 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType => castTimestampToIntegerCode(ctx, "int")
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "int")
     case DecimalType() => castDecimalToIntegerCode(ctx, "int")
     case _: LongType if failOnIntegerOverflow => castIntegerToIntegerExactCode("int")
     case _: FloatType if failOnIntegerOverflow =>

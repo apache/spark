@@ -1077,6 +1077,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
+    assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
     Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
       checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
       checkExceptionInExpression[ArithmeticException](cast(Decimal(value.toString), dt), "overflow")
@@ -1090,6 +1091,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def testLongMaxAndMin(dt: DataType): Unit = {
+    assert(Seq(LongType, IntegerType).contains(dt))
     Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
       checkExceptionInExpression[ArithmeticException](
         cast(value, dt), "overflow")
@@ -1162,8 +1164,8 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
         checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
       }
-      checkEvaluation(cast(2147483647.9D, IntegerType), 2147483647)
-      checkEvaluation(cast(-2147483648.9D, IntegerType), -2147483648)
+      checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
+      checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
     }
   }
 
@@ -1178,10 +1180,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal(value, TimestampType), LongType),
           Math.floorDiv(value, MICROS_PER_SECOND))
       }
-      checkEvaluation(cast(9223372036854775807.9f, LongType), 9223372036854775807L)
-      checkEvaluation(cast(-9223372036854775808.9f, LongType), -9223372036854775808L)
-      checkEvaluation(cast(9223372036854775807.9D, LongType), 9223372036854775807L)
-      checkEvaluation(cast(-9223372036854775808.9D, LongType), -9223372036854775808L)
+      checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
+      checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
+      checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
+      checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
     }
   }
 }
