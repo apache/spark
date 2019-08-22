@@ -253,18 +253,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <!-- TODO Remove this once Hive 2.3.6 released -->
-    <repository>
-      <id>staged</id>
-      <name>staged-releases</name>
-      <url>https://repository.apache.org/content/repositories/staging/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>

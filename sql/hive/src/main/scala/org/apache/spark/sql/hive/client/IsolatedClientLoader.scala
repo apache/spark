@@ -123,8 +123,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         SparkSubmitUtils.buildIvySettings(
-          // TODO Remove this once Hive 2.3.6 released
-          Some("https://repository.apache.org/content/repositories/staging"),
+          Some("http://www.datanucleus.org/downloads/maven2"),
           ivyPath),
         exclusions = version.exclusions)
     }
