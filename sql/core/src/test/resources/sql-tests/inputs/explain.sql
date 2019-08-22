@@ -85,6 +85,11 @@ EXPLAIN FORMATTED
   )
   SELECT * FROM cte1 a, cte1 b WHERE a.key = b.key;
 
+-- A spark plan which has innerChildren other than subquery
+EXPLAIN FORMATTED
+  CREATE VIEW explain_view AS
+    SELECT key, val FROM explain_temp1;
+
 -- cleanup
 DROP TABLE explain_temp1;
 DROP TABLE explain_temp2;
