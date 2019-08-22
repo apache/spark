@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.streaming;
 
-import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.plans.logical.*;
 
 /**
@@ -28,8 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.*;
  *
  * @since 2.2.0
  */
-@Experimental
-@Evolving
 public class GroupStateTimeout {
 
   /**

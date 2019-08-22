@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -124,7 +124,6 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 }
 
 /**
- * :: Experimental ::
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
  * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*' and '^'.
  * Also see the R formula docs here:
@@ -157,7 +156,6 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
  * `StringIndexer`. If the label column does not exist in the DataFrame, the output label column
  * will be created from the specified response variable in the formula.
  */
-@Experimental
 @Since("1.5.0")
 class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
@@ -329,14 +327,12 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[RFormula]]. Fitting is required to determine the factor levels of
  * formula terms.
  *
  * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
-@Experimental
 @Since("1.5.0")
 class RFormulaModel private[feature](
     @Since("1.5.0") override val uid: String,

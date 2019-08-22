@@ -17,12 +17,9 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
 
 /**
- * :: Experimental ::
- *
  * Wrapper class for interacting with per-group state data in `mapGroupsWithState` and
  * `flatMapGroupsWithState` operations on `KeyValueGroupedDataset`.
  *
@@ -190,8 +187,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
  *           Spark SQL types (see `Encoder` for more details).
  * @since 2.2.0
  */
-@Experimental
-@Evolving
 trait GroupState[S] extends LogicalGroupState[S] {
 
   /** Whether state exists or not. */

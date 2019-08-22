@@ -22,8 +22,6 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Unstable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.CatalogManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
@@ -127,8 +125,6 @@ private[sql] object SessionState {
 /**
  * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
-@Experimental
-@Unstable
 class SessionStateBuilder(
     session: SparkSession,
     parentState: Option[SessionState] = None)
@@ -139,7 +135,6 @@ class SessionStateBuilder(
 /**
  * Session shared [[FunctionResourceLoader]].
  */
-@Unstable
 class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoader {
   override def loadResource(resource: FunctionResource): Unit = {
     resource.resourceType match {

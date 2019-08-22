@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -28,13 +28,11 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: Experimental ::
  * Evaluator for binary classification, which expects two input columns: rawPrediction and label.
  * The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label 1)
  * or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
  */
 @Since("1.2.0")
-@Experimental
 class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Evaluator with HasRawPredictionCol with HasLabelCol
     with HasWeightCol with DefaultParamsWritable {

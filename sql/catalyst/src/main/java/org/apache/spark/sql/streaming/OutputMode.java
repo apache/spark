@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.streaming;
 
-import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes;
 
 /**
@@ -26,7 +25,6 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes;
  *
  * @since 2.0.0
  */
-@Evolving
 public class OutputMode {
 
   /**

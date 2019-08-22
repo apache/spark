@@ -40,7 +40,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  *
  * @since 2.0.0
  */
-@Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private val df = ds.toDF()

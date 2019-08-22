@@ -218,8 +218,6 @@ class DataFrame(object):
         Interface for saving the content of the streaming :class:`DataFrame` out into external
         storage.
 
-        .. note:: Evolving.
-
         :return: :class:`DataStreamWriter`
         """
         return DataStreamWriter(self)
@@ -318,8 +316,6 @@ class DataFrame(object):
         :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
-
-        .. note:: Evolving
         """
         return self._jdf.isStreaming()
 
@@ -412,8 +408,6 @@ class DataFrame(object):
         directory set with :meth:`SparkContext.setCheckpointDir`.
 
         :param eager: Whether to checkpoint this DataFrame immediately
-
-        .. note:: Experimental
         """
         jdf = self._jdf.checkpoint(eager)
         return DataFrame(jdf, self.sql_ctx)
@@ -426,8 +420,6 @@ class DataFrame(object):
         executors using the caching subsystem and therefore they are not reliable.
 
         :param eager: Whether to checkpoint this DataFrame immediately
-
-        .. note:: Experimental
         """
         jdf = self._jdf.localCheckpoint(eager)
         return DataFrame(jdf, self.sql_ctx)
@@ -453,8 +445,6 @@ class DataFrame(object):
         :param delayThreshold: the minimum delay to wait to data to arrive late, relative to the
             latest record that has been processed in the form of an interval
             (e.g. "1 minute" or "5 hours").
-
-        .. note:: Evolving
 
         >>> sdf.select('name', sdf.time.cast('timestamp')).withWatermark('time', '10 minutes')
         DataFrame[name: string, time: timestamp]
@@ -2240,8 +2230,6 @@ class DataFrame(object):
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
         and available on driver and worker Python environments.
-
-        .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
             port, auth_secret, jsocket_auth_server = self._jdf.collectAsArrowToPython()

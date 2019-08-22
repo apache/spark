@@ -3798,7 +3798,6 @@ setMethod("getNumPartitions",
 #' isStreaming(df)
 #' }
 #' @note isStreaming since 2.2.0
-#' @note experimental
 setMethod("isStreaming",
           signature(x = "SparkDataFrame"),
           function(x) {
@@ -3864,7 +3863,6 @@ setMethod("isStreaming",
 #' stopQuery(q)
 #' }
 #' @note write.stream since 2.2.0
-#' @note experimental
 setMethod("write.stream",
           signature(df = "SparkDataFrame"),
           function(df, source = NULL, outputMode = NULL, partitionBy = NULL,

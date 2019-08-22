@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.Vectors
@@ -81,7 +81,6 @@ import org.apache.spark.util.collection.OpenHashMap
  *   +----+-----+---------+------+------------------------------------------------------+
  * }}}
  */
-@Experimental
 @Since("2.3.0")
 class FeatureHasher(@Since("2.3.0") override val uid: String) extends Transformer
   with HasInputCols with HasOutputCol with DefaultParamsWritable {

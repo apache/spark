@@ -38,8 +38,6 @@ class StreamingQuery(object):
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
 
-    .. note:: Evolving
-
     .. versionadded:: 2.0
     """
 
@@ -194,8 +192,6 @@ class StreamingQuery(object):
 class StreamingQueryManager(object):
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
-    .. note:: Evolving
-
     .. versionadded:: 2.0
     """
 
@@ -280,8 +276,6 @@ class DataStreamReader(OptionUtils):
     (e.g. file systems, key-value stores, etc). Use :func:`spark.readStream`
     to access this.
 
-    .. note:: Evolving.
-
     .. versionadded:: 2.0
     """
 
@@ -297,8 +291,6 @@ class DataStreamReader(OptionUtils):
     def format(self, source):
         """Specifies the input data source format.
 
-        .. note:: Evolving.
-
         :param source: string, name of the data source, e.g. 'json', 'parquet'.
 
         >>> s = spark.readStream.format("text")
@@ -313,8 +305,6 @@ class DataStreamReader(OptionUtils):
         Some data sources (e.g. JSON) can infer the input schema automatically from data.
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
-
-        .. note:: Evolving.
 
         :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
                        (For example ``col0 INT, col1 DOUBLE``).
@@ -345,8 +335,6 @@ class DataStreamReader(OptionUtils):
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
 
-        .. note:: Evolving.
-
         >>> s = spark.readStream.option("x", 1)
         """
         self._jreader = self._jreader.option(key, to_str(value))
@@ -364,8 +352,6 @@ class DataStreamReader(OptionUtils):
                 the pattern. The syntax follows org.apache.hadoop.fs.GlobFilter.
                 It does not change the behavior of partition discovery.
 
-        .. note:: Evolving.
-
         >>> s = spark.readStream.options(x="1", y=2)
         """
         for k in options:
@@ -375,8 +361,6 @@ class DataStreamReader(OptionUtils):
     @since(2.0)
     def load(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a :class`DataFrame`.
-
-        .. note:: Evolving.
 
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
@@ -420,8 +404,6 @@ class DataStreamReader(OptionUtils):
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
-
-        .. note:: Evolving.
 
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
@@ -512,8 +494,6 @@ class DataStreamReader(OptionUtils):
     def orc(self, path):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
-        .. note:: Evolving.
-
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
         True
@@ -533,8 +513,6 @@ class DataStreamReader(OptionUtils):
             * ``mergeSchema``: sets whether we should merge schemas collected from all \
                 Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
                 The default value is specified in ``spark.sql.parquet.mergeSchema``.
-
-        .. note:: Evolving.
 
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
@@ -558,9 +536,7 @@ class DataStreamReader(OptionUtils):
 
         By default, each line in the text file is a new row in the resulting DataFrame.
 
-        .. note:: Evolving.
-
-        :param paths: string, or list of strings, for input path(s).
+        :param path: string, or list of strings, for input path(s).
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
@@ -590,8 +566,6 @@ class DataStreamReader(OptionUtils):
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
-
-        .. note:: Evolving.
 
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
@@ -717,8 +691,6 @@ class DataStreamWriter(object):
     (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.writeStream`
     to access this.
 
-    .. note:: Evolving.
-
     .. versionadded:: 2.0
     """
 
@@ -745,8 +717,6 @@ class DataStreamWriter(object):
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
-       .. note:: Evolving.
-
         >>> writer = sdf.writeStream.outputMode('append')
         """
         if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
@@ -757,8 +727,6 @@ class DataStreamWriter(object):
     @since(2.0)
     def format(self, source):
         """Specifies the underlying output data source.
-
-        .. note:: Evolving.
 
         :param source: string, name of the data source, which for now can be 'parquet'.
 
@@ -775,8 +743,6 @@ class DataStreamWriter(object):
             * ``timeZone``: sets the string that indicates a timezone to be used to format
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
-
-        .. note:: Evolving.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
@@ -789,8 +755,6 @@ class DataStreamWriter(object):
             * ``timeZone``: sets the string that indicates a timezone to be used to format
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
-
-       .. note:: Evolving.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
@@ -802,8 +766,6 @@ class DataStreamWriter(object):
 
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
-
-        .. note:: Evolving.
 
         :param cols: name of columns
 
@@ -819,8 +781,6 @@ class DataStreamWriter(object):
         :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
 
-        .. note:: Evolving.
-
         :param queryName: unique name for the query
 
         >>> writer = sdf.writeStream.queryName('streaming_query')
@@ -835,8 +795,6 @@ class DataStreamWriter(object):
     def trigger(self, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
-
-        .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
                                Set a trigger that runs a query periodically based on the processing
@@ -1083,8 +1041,6 @@ class DataStreamWriter(object):
         The data source is specified by the ``format`` and a set of ``options``.
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
-
-        .. note:: Evolving.
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
