@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
  * the caller to look up a catalog by name.
  */
-class CatalogManager(conf: SQLConf) extends Logging {
+class CatalogManager(conf: SQLConf, sessionCatalog: TableCatalog) extends Logging {
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
@@ -47,9 +47,18 @@ class CatalogManager(conf: SQLConf) extends Logging {
     }
   }
 
+  private def loadV2SessionCatalog(): CatalogPlugin = {
+    Catalogs.load(CatalogManager.SESSION_CATALOG_NAME, conf) match {
+      case extension: CatalogExtension =>
+        extension.setDelegateCatalog(sessionCatalog)
+        extension
+      case other => other
+    }
+  }
+
   def v2SessionCatalog: Option[CatalogPlugin] = {
     try {
-      Some(catalog(CatalogManager.SESSION_CATALOG_NAME))
+      Some(catalogs.getOrElseUpdate(CatalogManager.SESSION_CATALOG_NAME, loadV2SessionCatalog()))
     } catch {
       case NonFatal(e) =>
         logError("Cannot load v2 session catalog", e)

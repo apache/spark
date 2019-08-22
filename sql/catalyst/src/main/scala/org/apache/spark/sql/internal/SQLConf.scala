@@ -1947,9 +1947,12 @@ object SQLConf {
     .createOptional
 
   val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+      .doc("A catalog implementation which will be used as the session catalog for Spark " +
+        "queries. The implementation must either extend `CatalogExtension`, or implement " +
+        "`CatalogPlugin`. When extending `CatalogExtension`, the default session catalog " +
+        "will be passed in so that the implementation can fallback some functions to it.")
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog")
+      .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")
