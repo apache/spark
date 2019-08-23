@@ -154,7 +154,6 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
       assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
-
       // 'close' shouldn't be called with abort message if close with error has been called
       assert(allEvents(0).size == 3)
     }
@@ -261,7 +260,6 @@ class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAnd
       query.stop()
     }
   }
-
 
   testQuietly("foreach with error not caused by ForeachWriter") {
     withTempDir { checkpointDir =>

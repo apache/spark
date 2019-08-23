@@ -115,7 +115,6 @@ class ForeachDataWriter[T](
   private val opened = writer.open(partitionId, epochId)
   private var closeCalled: Boolean = false
 
-
   override def write(record: InternalRow): Unit = {
     if (!opened) return
 
