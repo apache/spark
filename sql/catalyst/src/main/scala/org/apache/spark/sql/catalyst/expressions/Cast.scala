@@ -1252,7 +1252,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     }
   }
 
-  private[this] def castDecimalToIntegerCode(
+  private[this] def castDecimalToIntegralTypeCode(
       ctx: CodegenContext,
       integralType: String): CastFunction = {
     (c, evPrim, evNull) => code"$evPrim = $c.to${integralType.capitalize}($failOnIntegerOverflow);"
@@ -1284,7 +1284,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     (min.toString + typeIndicator, max.toString + typeIndicator)
   }
 
-  private[this] def castFractionToIntegerExactCode(
+  private[this] def castFractionToIntegralTypeCode(
       fractionType: String,
       integralType: String): CastFunction = {
     assert(failOnIntegerOverflow)
@@ -1323,13 +1323,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte")
-    case DecimalType() => castDecimalToIntegerCode(ctx, "byte")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte")
     case _: ShortType | _: IntegerType | _: LongType if failOnIntegerOverflow =>
       castIntegerToIntegerExactCode("byte")
     case _: FloatType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("float", "byte")
+      castFractionToIntegralTypeCode("float", "byte")
     case _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("double", "byte")
+      castFractionToIntegralTypeCode("double", "byte")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
@@ -1354,13 +1354,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "short")
-    case DecimalType() => castDecimalToIntegerCode(ctx, "short")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short")
     case _: IntegerType | _: LongType if failOnIntegerOverflow =>
       castIntegerToIntegerExactCode("short")
     case _: FloatType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("float", "short")
+      castFractionToIntegralTypeCode("float", "short")
     case _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("double", "short")
+      castFractionToIntegralTypeCode("double", "short")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
@@ -1383,12 +1383,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int")
-    case DecimalType() => castDecimalToIntegerCode(ctx, "int")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int")
     case _: LongType if failOnIntegerOverflow => castIntegerToIntegerExactCode("int")
     case _: FloatType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("float", "int")
+      castFractionToIntegralTypeCode("float", "int")
     case _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("double", "int")
+      castFractionToIntegralTypeCode("double", "int")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
@@ -1413,11 +1413,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
       (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
-    case DecimalType() => castDecimalToIntegerCode(ctx, "long")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "long")
     case _: FloatType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("float", "long")
+      castFractionToIntegralTypeCode("float", "long")
     case _: DoubleType if failOnIntegerOverflow =>
-      castFractionToIntegerExactCode("double", "long")
+      castFractionToIntegralTypeCode("double", "long")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
