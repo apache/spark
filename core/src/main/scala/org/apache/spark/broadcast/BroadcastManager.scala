@@ -17,6 +17,7 @@
 
 package org.apache.spark.broadcast
 
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
@@ -56,7 +57,10 @@ private[spark] class BroadcastManager(
   private val nextBroadcastId = new AtomicLong(0)
 
   private[broadcast] val cachedValues = {
-    new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
+    Collections.synchronizedMap(
+      new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
+        .asInstanceOf[java.util.Map[Any, Any]]
+    )
   }
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {

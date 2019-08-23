@@ -20,6 +20,7 @@ package org.apache.spark.broadcast
 import java.io._
 import java.lang.ref.SoftReference
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.Adler32
 
 import scala.collection.JavaConverters._
@@ -167,7 +168,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       bm.getLocalBytes(pieceId) match {
         case Some(block) =>
           blocks(pid) = block
-          releaseLock(pieceId)
+          releaseBlockManagerLock(pieceId)
         case None =>
           bm.getRemoteBytes(pieceId) match {
             case Some(b) =>
@@ -215,8 +216,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
-    val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
-    broadcastCache.synchronized {
+    TorrentBroadcast.withTorrentBroadcastLock(broadcastId) {
+      // As we just lock based on `broadcastId`, whenever using `broadcastCache`, we should just
+      // touch `broadcastId`.
+      val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
 
       Option(broadcastCache.get(broadcastId)).map(_.asInstanceOf[T]).getOrElse {
         setConf(SparkEnv.get.conf)
@@ -225,7 +228,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           case Some(blockResult) =>
             if (blockResult.data.hasNext) {
               val x = blockResult.data.next().asInstanceOf[T]
-              releaseLock(broadcastId)
+              releaseBlockManagerLock(broadcastId)
 
               if (x != null) {
                 broadcastCache.put(broadcastId, x)
@@ -270,7 +273,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * If running in a task, register the given block's locks for release upon task completion.
    * Otherwise, if not running in a task then immediately release the lock.
    */
-  private def releaseLock(blockId: BlockId): Unit = {
+  private def releaseBlockManagerLock(blockId: BlockId): Unit = {
     val blockManager = SparkEnv.get.blockManager
     Option(TaskContext.get()) match {
       case Some(taskContext) =>
@@ -289,6 +292,42 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
 
 private object TorrentBroadcast extends Logging {
+
+  /** Locks to ensure there is only one thread fetching the same [[TorrentBroadcast]] block. */
+  private val torrentBroadcastLock = new ConcurrentHashMap[BroadcastBlockId, AnyRef]()
+
+  /** Acquire a lock for fetching a [[TorrentBroadcast]] block. */
+  private def acquireTorrentBroadcastLock(broadcastId: BroadcastBlockId): Unit = {
+    while (true) {
+      val lock = torrentBroadcastLock.putIfAbsent(broadcastId, new Object)
+      if (lock == null) return
+      lock.synchronized {
+        while (torrentBroadcastLock.get(broadcastId) eq lock) {
+          lock.wait()
+        }
+      }
+    }
+  }
+
+  /** Release the lock for a [[TorrentBroadcast]]  block. */
+  private def releaseTorrentBroadcastLock(broadcastId: BroadcastBlockId): Unit = {
+    val lock = torrentBroadcastLock.remove(broadcastId)
+    if (lock != null) {
+      lock.synchronized {
+        lock.notifyAll()
+      }
+    }
+  }
+
+  /** Acquire and hold the lock to access `broadcastId` when calling `func`.  */
+  private def withTorrentBroadcastLock[T](broadcastId: BroadcastBlockId)(func: => T): T = {
+    acquireTorrentBroadcastLock(broadcastId)
+    try {
+      func
+    } finally {
+      releaseTorrentBroadcastLock(broadcastId)
+    }
+  }
 
   def blockifyObject[T: ClassTag](
       obj: T,
