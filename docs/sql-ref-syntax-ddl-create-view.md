@@ -31,7 +31,6 @@ data behind it.
 CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
     [(column_name [COMMENT column_comment], ...) ]
     create_view_clauses
-    
     AS SELECT ...;
     
     create_view_clauses (order insensitive):
@@ -39,8 +38,34 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
         [TBLPROPERTIES (property_name = property_value, ...)]
 {% endhighlight %}
 
-### Example
+### Examples
 {% highlight sql %}
-CREATE VIEW IF NOT EXISTS v1 AS SELECT * FROM t1;
-CREATE VIEW v1 (c1 COMMENT 'comment for c1', c2) COMMENT 'comment for v1' TBLPROPERTIES (key1=value1, key2=value2) AS SELECT * FROM t1;
+-- Create a global temporary view `v1` if it does not exist.
+CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS v1 AS SELECT * FROM t1;
+-- Create or replace view `v2` with comments and metadata.
+CREATE OR REPLACE VIEW v2 
+    (c1 COMMENT 'comment for c1', c2) 
+    COMMENT 'comment for v1' 
+    TBLPROPERTIES (key1=value1, key2=value2) 
+    AS SELECT * FROM t1;
 {% endhighlight %}
+
+### Parameters
+#### OR REPLACE
+If a view of same name already exists, it will be replaced.
+#### [GLOBAL] TEMPORARY
+TEMPORARY views are session-scoped and will be dropped when session ends 
+because it skips persisting the definition in the underlying metastore, if any.
+GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.
+#### IF NOT EXISTS
+Creates a view if it does not exists.
+#### COMMENT
+Table-level and column-level comments can be specified in CREATE VIEW statement.
+#### TBLPROPERTIES
+Metadata key-value pairs.
+#### AS SELECT
+A [SELECT](sql-ref-syntax-qry-select.md) statement that constructs the view from base tables or other views.
+
+### Related Statements
+- [ALTER VIEW](sql-ref-syntax-ddl-alter-view.md)
+- [DROP VIEW](sql-ref-syntax-ddl-drop-view.md)
