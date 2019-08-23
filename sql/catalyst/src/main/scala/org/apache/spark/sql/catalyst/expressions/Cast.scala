@@ -258,7 +258,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private val failOnIntegerOverflow = SQLConf.get.failOnIntegerOverflow
+  private val failOnIntegerOverflow = SQLConf.get.failOnIntegralTypeOverflow
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -1258,7 +1258,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     (c, evPrim, evNull) => code"$evPrim = $c.to${integralType.capitalize}($failOnIntegerOverflow);"
   }
 
-  private[this] def castIntegerToIntegerExactCode(integralType: String): CastFunction = {
+  private[this] def castIntegralTypeToIntegralTypeExactCode(integralType: String): CastFunction = {
     assert(failOnIntegerOverflow)
     (c, evPrim, evNull) =>
       code"""
@@ -1325,7 +1325,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte")
     case _: ShortType | _: IntegerType | _: LongType if failOnIntegerOverflow =>
-      castIntegerToIntegerExactCode("byte")
+      castIntegralTypeToIntegralTypeExactCode("byte")
     case _: FloatType if failOnIntegerOverflow =>
       castFractionToIntegralTypeCode("float", "byte")
     case _: DoubleType if failOnIntegerOverflow =>
@@ -1356,7 +1356,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "short")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short")
     case _: IntegerType | _: LongType if failOnIntegerOverflow =>
-      castIntegerToIntegerExactCode("short")
+      castIntegralTypeToIntegralTypeExactCode("short")
     case _: FloatType if failOnIntegerOverflow =>
       castFractionToIntegralTypeCode("float", "short")
     case _: DoubleType if failOnIntegerOverflow =>
@@ -1384,7 +1384,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType => castTimestampToIntegralTypeCode(ctx, "int")
     case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int")
-    case _: LongType if failOnIntegerOverflow => castIntegerToIntegerExactCode("int")
+    case _: LongType if failOnIntegerOverflow => castIntegralTypeToIntegralTypeExactCode("int")
     case _: FloatType if failOnIntegerOverflow =>
       castFractionToIntegralTypeCode("float", "int")
     case _: DoubleType if failOnIntegerOverflow =>

@@ -1805,8 +1805,8 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val FAIL_ON_INTEGER_OVERFLOW =
-    buildConf("spark.sql.failOnIntegerOverFlow")
+  val FAIL_ON_INTEGRAL_TYPE_OVERFLOW =
+    buildConf("spark.sql.failOnIntegralTypeOverflow")
       .doc("If it is set to true, all operations on integral fields throw an " +
         "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
         "result is returned.")
@@ -2321,7 +2321,7 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
-  def failOnIntegerOverflow: Boolean = getConf(FAIL_ON_INTEGER_OVERFLOW)
+  def failOnIntegralTypeOverflow: Boolean = getConf(FAIL_ON_INTEGRAL_TYPE_OVERFLOW)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
