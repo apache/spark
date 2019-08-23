@@ -260,9 +260,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
         Nil
       }
 
-    case r: DescribeTable if r.table.isInstanceOf[DataSourceV2Relation] =>
-      val datasource = r.table.asInstanceOf[DataSourceV2Relation]
-      DescribeTableExec(r.output, datasource.table, r.isExtended) :: Nil
+    case r @ DescribeTable(datasource: DataSourceV2Relation, isExtended) =>
+      DescribeTableExec(r.output, datasource.table, isExtended) :: Nil
 
     case DropTable(catalog, ident, ifExists) =>
       DropTableExec(catalog, ident, ifExists) :: Nil
