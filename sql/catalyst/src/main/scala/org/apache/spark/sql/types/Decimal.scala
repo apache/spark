@@ -368,6 +368,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       longVal / POW_10(_scale)
     } else {
       try {
+        // We cannot store Long.MAX_VALUE as a double without losing precision.
+        // Simply converting the decimal to `BigInteger` and using the method `longValueExact` can
+        // guarantee the precision of the range check.
         decimalVal.bigDecimal.toBigInteger.longValueExact()
       } catch {
         case _: ArithmeticException => overflowException("long")

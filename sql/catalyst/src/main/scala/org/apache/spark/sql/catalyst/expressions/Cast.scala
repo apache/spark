@@ -1278,7 +1278,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val typeIndicator = fractionType.charAt(0)
     val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
       case "long" => (Long.MinValue, Long.MaxValue)
-      case "int" => (Int.MinValue, Int.MaxValue.toLong)
+      case "int" => (Int.MinValue, Int.MaxValue)
       case "short" => (Short.MinValue, Short.MaxValue)
       case "byte" => (Byte.MinValue, Byte.MaxValue)
     }
