@@ -340,7 +340,7 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x)) AND (val#x > 3))
+Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x > 3))
      
 (4) Project [codegen id : 1]
 Output    : [key#x, val#x]
@@ -348,7 +348,7 @@ Input     : [key#x, val#x]
      
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (11)
 +- Exchange (10)
    +- * HashAggregate (9)
@@ -366,7 +366,7 @@ Input: [key#x, val#x]
      
 (7) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x)) AND (val#x = 2))
+Condition : (((isnotnull(key#x) AND isnotnull(val#x)) AND (key#x = Subquery scalar-subquery#x, [id=#x])) AND (val#x = 2))
      
 (8) Project [codegen id : 1]
 Output    : [key#x]
@@ -381,7 +381,7 @@ Input: [max#x]
 (11) HashAggregate [codegen id : 2]
 Input: [max#x]
      
-Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x
+Subquery:2 Hosting operator id = 7 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (18)
 +- Exchange (17)
    +- * HashAggregate (16)
@@ -443,11 +443,11 @@ Input: [key#x, val#x]
      
 (3) Filter [codegen id : 1]
 Input     : [key#x, val#x]
-Condition : ((key#x = Subquery scalar-subquery#x) OR (key#x = Subquery scalar-subquery#x))
+Condition : ((key#x = Subquery scalar-subquery#x, [id=#x]) OR (key#x = Subquery scalar-subquery#x, [id=#x]))
      
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (10)
 +- Exchange (9)
    +- * HashAggregate (8)
@@ -480,7 +480,7 @@ Input: [max#x]
 (10) HashAggregate [codegen id : 2]
 Input: [max#x]
      
-Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+Subquery:2 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (17)
 +- Exchange (16)
    +- * HashAggregate (15)
@@ -534,12 +534,12 @@ Output: []
 Input: []
      
 (3) Project [codegen id : 1]
-Output    : [(Subquery scalar-subquery#x + ReusedSubquery Subquery scalar-subquery#x) AS (scalarsubquery() + scalarsubquery())#x]
+Output    : [(Subquery scalar-subquery#x, [id=#x] + ReusedSubquery Subquery scalar-subquery#x, [id=#x]) AS (scalarsubquery() + scalarsubquery())#x]
 Input     : []
      
 ===== Subqueries =====
 
-Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x
+Subquery:1 Hosting operator id = 3 Hosting Expression = Subquery scalar-subquery#x, [id=#x]
 * HashAggregate (8)
 +- Exchange (7)
    +- * HashAggregate (6)
@@ -562,7 +562,7 @@ Input: [sum#x, count#xL]
 (8) HashAggregate [codegen id : 2]
 Input: [sum#x, count#xL]
      
-Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x
+Subquery:2 Hosting operator id = 3 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
 
 
 -- !query 12

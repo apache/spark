@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
@@ -71,22 +72,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   val id: Int = SparkPlan.newPlanId()
-
-  /**
-   * ONE line description of this node.
-   */
-  override def simpleString(planLabelMap: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
-    s"$nodeName (${operatorIdStr(planLabelMap)})".trim
-  }
-
-  protected def wholestageCodegenIdStr(codegenId: Option[Int]): String = {
-    codegenId.map("[codegen id : " + _ + "]").getOrElse("")
-  }
-
-  protected def operatorIdStr(
-      planToOperatorID: mutable.LinkedHashMap[QueryPlan[_], Int]): String = {
-    planToOperatorID.get(this).map(v => s"$v").getOrElse("unknown")
-  }
 
   // sqlContext will be null when SparkPlan nodes are created without the active sessions.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
