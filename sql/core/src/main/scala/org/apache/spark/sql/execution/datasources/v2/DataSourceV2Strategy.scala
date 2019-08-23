@@ -173,10 +173,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicCreateTableAsSelectExec(
-            staging, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
+            staging, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
         case _ =>
           CreateTableAsSelectExec(
-            catalog, ident, parts, query, planLater(query), props, writeOptions, ifNotExists) :: Nil
+            catalog, ident, parts, planLater(query), props, writeOptions, ifNotExists) :: Nil
       }
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
@@ -195,7 +195,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             staging,
             ident,
             parts,
-            query,
             planLater(query),
             props,
             writeOptions,
@@ -205,7 +204,6 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
             catalog,
             ident,
             parts,
-            query,
             planLater(query),
             props,
             writeOptions,
@@ -215,7 +213,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
     case AppendData(r: DataSourceV2Relation, query, _) =>
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          AppendDataExecV1(v1, r.options, query) :: Nil
+          AppendDataExecV1(v1, r.options, planLater(query)) :: Nil
         case v2 =>
           AppendDataExec(v2, r.options, planLater(query)) :: Nil
       }
@@ -228,7 +226,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       }.toArray
       r.table.asWritable match {
         case v1 if v1.supports(TableCapability.V1_BATCH_WRITE) =>
-          OverwriteByExpressionExecV1(v1, filters, r.options, query) :: Nil
+          OverwriteByExpressionExecV1(v1, filters, r.options, planLater(query)) :: Nil
         case v2 =>
           OverwriteByExpressionExec(v2, filters, r.options, planLater(query)) :: Nil
       }
