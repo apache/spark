@@ -304,7 +304,7 @@ object KinesisInputDStream {
      * @return Reference to this [[KinesisInputDStream.Builder]]
      * @see [[https://docs.aws.amazon.com/streams/latest/dev/monitoring-with-kcl.html#metric-levels]]
      */
-    // scalastyle:off line.size.limit
+    // scalastyle:on line.size.limit
     def metricsEnabledDimensions(metricsEnabledDimensions: Set[String]): Builder = {
       this.metricsEnabledDimensions = Option(metricsEnabledDimensions)
       this
