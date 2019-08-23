@@ -400,7 +400,7 @@ select date_part('not_supported', c) from t
 struct<>
 -- !query 49 output
 org.apache.spark.sql.AnalysisException
-Literals of type 'NOT_SUPPORTED' are currently not supported.;; line 1 pos 7
+Literals of type 'not_supported' are currently not supported.;; line 1 pos 7
 
 
 -- !query 50
