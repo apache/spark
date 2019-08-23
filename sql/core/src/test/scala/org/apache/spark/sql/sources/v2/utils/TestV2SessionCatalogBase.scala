@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{Identifier, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.sources.v2.Table
@@ -74,6 +74,11 @@ private[v2] trait TestV2SessionCatalogBase[T <: Table] extends V2SessionCatalog 
     val fullIdent = fullIdentifier(ident)
     tables.put(fullIdent, t)
     t
+  }
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    println("Alter table called")
+    super.alterTable(ident, changes: _*)
   }
 
   def clearTables(): Unit = {
