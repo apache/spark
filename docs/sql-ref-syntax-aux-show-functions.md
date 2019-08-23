@@ -37,7 +37,7 @@ qualified_function_name:= [db.]function_name
 - ##### ***qualified_function_name***:
   Function name may be optionally qualified with database.
 - ##### ***regex_pattern***:
-  A regex pattern that is used as a filtering out unwanted functions.
+  A regex pattern that is used to filter out unwanted functions.
   - Only `*` and `|` are allowed as wildcard pattern.
   - Excluding `*` and `|` the remaining pattern follows the regex semantics.
   - The leading and trailing blanks are trimmed in the input pattern before processing.  
