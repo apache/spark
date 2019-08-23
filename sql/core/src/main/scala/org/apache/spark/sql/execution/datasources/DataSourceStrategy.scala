@@ -220,20 +220,10 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def maybeWithTableStats(tableMeta: CatalogTable): CatalogTable = {
-    if (tableMeta.stats.isEmpty && sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-      val sizeInBytes = CommandUtils.getSizeInBytesFallBackToHdfs(sparkSession, tableMeta)
-      tableMeta.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-    } else {
-      tableMeta
-    }
-  }
-
-  private def readDataSourceTable(tableMeta: CatalogTable): LogicalPlan = {
-    val qualifiedTableName = QualifiedTableName(tableMeta.database, tableMeta.identifier.table)
+  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+    val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
     catalog.getCachedPlan(qualifiedTableName, () => {
-      val table = maybeWithTableStats(tableMeta)
       val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
       val dataSource =
         DataSource(
