@@ -355,9 +355,12 @@ private[spark] class ExecutorMonitor(
   override def rddCleaned(rddId: Int): Unit = { }
 
   override def shuffleCleaned(shuffleId: Int): Unit = {
-    // Because this is called in a completely separate thread, we post a custom event to the
-    // listener bus so that the internal state is safely updated.
-    listenerBus.post(ShuffleCleanedEvent(shuffleId))
+    // Do not post this event because it is only needed for tracking feature.
+    if (shuffleTrackingEnabled) {
+      // Because this is called in a completely separate thread, we post a custom event to the
+      // listener bus so that the internal state is safely updated.
+      listenerBus.post(ShuffleCleanedEvent(shuffleId))
+    }
   }
 
   override def broadcastCleaned(broadcastId: Long): Unit = { }
@@ -476,7 +479,7 @@ private[spark] class ExecutorMonitor(
     }
 
     def removeShuffle(id: Int): Unit = {
-      if (shuffleIds != null && shuffleIds.remove(id) && shuffleIds.isEmpty) {
+      if (shuffleIds.remove(id) && shuffleIds.isEmpty) {
         hasActiveShuffle = false
         if (isIdle) {
           updateTimeout()
