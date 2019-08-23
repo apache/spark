@@ -110,14 +110,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   protected val isTestWithConfigSets: Boolean = true
 
   protected val baseResourcePath = {
-    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
-    // relative path. Otherwise, we use classloader's getResource to find the location.
-    if (regenerateGoldenFiles) {
-      java.nio.file.Paths.get("src", "test", "resources", "sql-tests").toFile
-    } else {
-      val res = getClass.getClassLoader.getResource("sql-tests")
-      new File(res.getFile)
-    }
+    // We use hard-coded relative path for 2 reasons:
+    //   1. Maven can't get correct resource directory when resources in other jars.
+    //   2. We test subclasses in the hive-thriftserver module.
+    java.nio.file.Paths.get("..", "core", "src", "test", "resources", "sql-tests").toFile
   }
 
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath

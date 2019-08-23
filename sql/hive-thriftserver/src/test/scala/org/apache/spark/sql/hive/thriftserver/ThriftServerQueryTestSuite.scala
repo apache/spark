@@ -46,7 +46,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   private var hiveServer2: HiveThriftServer2 = _
 
-  override def beforeEach(): Unit = {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     // Chooses a random port between 10000 and 19999
     var listeningPort = 10000 + Random.nextInt(10000)
 
@@ -63,9 +64,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     logInfo("HiveThriftServer2 started successfully")
   }
 
-  override def afterEach(): Unit = {
-    hiveServer2.stop()
-    hiveServer2 = null
+  override def afterAll(): Unit = {
+    try {
+      hiveServer2.stop()
+    } finally {
+      super.afterAll()
+    }
   }
 
   override val isTestWithConfigSets = false
@@ -201,23 +205,18 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
   }
 
   override def listTestCases(): Seq[TestCase] = {
-    // Maven can not get the correct baseResourcePath
-    if (baseResourcePath.exists()) {
-      listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-        val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
-        val absPath = file.getAbsolutePath
-        val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+      val absPath = file.getAbsolutePath
+      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
 
-        if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
-          Seq.empty
-        } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
-          PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
-        } else {
-          RegularTestCase(testCaseName, absPath, resultFile) :: Nil
-        }
+      if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}udf")) {
+        Seq.empty
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}pgSQL")) {
+        PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else {
+        RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }
-    } else {
-      Seq.empty[TestCase]
     }
   }
 
@@ -310,7 +309,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
          |CREATE TEMPORARY VIEW aggtest
          |  (a int, b float)
          |USING csv
-         |OPTIONS (path '${testFile("test-data/postgresql/agg.data")}',
+         |OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/agg.data',
          |  header 'false', delimiter '\t')
       """.stripMargin)
     statement.execute(
@@ -320,7 +319,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
          |    thousand int, twothousand int, fivethous int, tenthous int, odd int, even int,
          |    stringu1 string, stringu2 string, string4 string)
          |USING csv
-         |OPTIONS (path '${testFile("test-data/postgresql/onek.data")}',
+         |OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/onek.data',
          |  header 'false', delimiter '\t')
       """.stripMargin)
     statement.execute(
@@ -330,7 +329,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
          |    thousand int, twothousand int, fivethous int, tenthous int, odd int, even int,
          |    stringu1 string, stringu2 string, string4 string)
          |USING csv
-         |  OPTIONS (path '${testFile("test-data/postgresql/tenk.data")}',
+         |  OPTIONS (path '${baseResourcePath.getParent}/test-data/postgresql/tenk.data',
          |  header 'false', delimiter '\t')
       """.stripMargin)
   }
