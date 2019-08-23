@@ -344,17 +344,4 @@ object CommandUtils extends Logging {
   private def isDataPath(path: Path, stagingDir: String): Boolean = {
     !path.getName.startsWith(stagingDir) && DataSourceUtils.isDataPath(path)
   }
-
-  def getSizeInBytesFallBackToHdfs(session: SparkSession, table: CatalogTable): Long = {
-    try {
-      val hadoopConf = session.sessionState.newHadoopConf()
-      val tablePath = new Path(table.location)
-      val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-      fs.getContentSummary(tablePath).getLength
-    } catch {
-      case NonFatal(e) =>
-        logWarning("Failed to get table size from HDFS. Using the default data size.", e)
-        session.sessionState.conf.defaultSizeInBytes
-    }
-  }
 }

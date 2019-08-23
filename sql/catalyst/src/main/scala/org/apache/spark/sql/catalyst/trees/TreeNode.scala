@@ -102,6 +102,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     tags.get(tag).map(_.asInstanceOf[T])
   }
 
+  def unsetTagValue[T](tag: TreeNodeTag[T]): Unit = {
+    tags -= tag
+  }
+
   /**
    * Returns a Seq of the children of this node.
    * Children should not change. Immutability required for containsChild optimization

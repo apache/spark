@@ -85,6 +85,8 @@ To test, use beeline to connect to the JDBC/ODBC server in http mode with:
 
     beeline> !connect jdbc:hive2://<host>:<port>/<database>?hive.server2.transport.mode=http;hive.server2.thrift.http.path=<http_endpoint>
 
+If you closed a session and do CTAS, you must set `fs.%s.impl.disable.cache` to true in `hive-site.xml`.
+See more details in [[SPARK-21067]](https://issues.apache.org/jira/browse/SPARK-21067).
 
 ## Running the Spark SQL CLI
 

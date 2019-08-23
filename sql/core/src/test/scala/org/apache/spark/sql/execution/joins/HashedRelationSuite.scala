@@ -28,13 +28,13 @@ import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
 
-class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
+class HashedRelationSuite extends SharedSparkSession {
 
   val mm = new TaskMemoryManager(
     new UnifiedMemoryManager(

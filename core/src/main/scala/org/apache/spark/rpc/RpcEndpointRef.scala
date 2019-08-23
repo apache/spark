@@ -47,6 +47,17 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   def send(message: Any): Unit
 
   /**
+   * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a
+   * [[AbortableRpcFuture]] to receive the reply within the specified timeout.
+   * The [[AbortableRpcFuture]] instance wraps [[Future]] with additional `abort` method.
+   *
+   * This method only sends the message once and never retries.
+   */
+  def askAbortable[T: ClassTag](message: Any, timeout: RpcTimeout): AbortableRpcFuture[T] = {
+    throw new UnsupportedOperationException()
+  }
+
+  /**
    * Send a message to the corresponding [[RpcEndpoint.receiveAndReply)]] and return a [[Future]] to
    * receive the reply within the specified timeout.
    *
@@ -92,4 +103,22 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
     timeout.awaitResult(future)
   }
 
+}
+
+/**
+ * An exception thrown if the RPC is aborted.
+ */
+class RpcAbortException(message: String) extends Exception(message)
+
+/**
+ * A wrapper for [[Future]] but add abort method.
+ * This is used in long run RPC and provide an approach to abort the RPC.
+ */
+private[spark] class AbortableRpcFuture[T: ClassTag](
+    future: Future[T],
+    onAbort: String => Unit) {
+
+  def abort(reason: String): Unit = onAbort(reason)
+
+  def toFuture: Future[T] = future
 }

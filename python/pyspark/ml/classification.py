@@ -22,8 +22,9 @@ from multiprocessing.pool import ThreadPool
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
-from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
-    GBTParams, HasVarianceImpurity, RandomForestParams, TreeEnsembleModel
+from pyspark.ml.regression import DecisionTreeModel, DecisionTreeParams, \
+    DecisionTreeRegressionModel, GBTParams, HasVarianceImpurity, RandomForestParams, \
+    TreeEnsembleModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper

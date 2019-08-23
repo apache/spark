@@ -445,6 +445,8 @@ case class ArrayExists(
       false
     }
   }
+
+  override def prettyName: String = "exists"
 }
 
 /**
@@ -512,6 +514,8 @@ case class ArrayForAll(
       forall
     }
   }
+
+  override def prettyName: String = "forall"
 }
 
 /**
