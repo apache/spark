@@ -1741,6 +1741,19 @@ private[v2] trait InsertIntoSQLTests extends QueryTest with SharedSparkSession w
     }
   }
 
+  test("InsertInto: when the table doesn't exist") {
+    val t1 = s"${catalogAndNamespace}tbl"
+    val t2 = s"${catalogAndNamespace}tbl2"
+    withTableAndData(t1) { _ =>
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
+      }
+      assert(e.getMessage.contains(t2))
+      assert(e.getMessage.contains("Table not found"))
+    }
+  }
+
   test("InsertInto: append to partitioned table - static clause") {
     val t1 = s"${catalogAndNamespace}tbl"
     withTableAndData(t1) { view =>
