@@ -42,8 +42,8 @@ The name of an existing function.
 
 ### **TEMPORARY**
 
-If specified, the function created will be local to session. On close of session it will be removed.
+Should be used to delete the `temporary` function.
 
 ### **IF EXISTS**
 
-If specified will not throw any exception if no function exists.
+If specified, no exception is thrown when the function does not exist.
