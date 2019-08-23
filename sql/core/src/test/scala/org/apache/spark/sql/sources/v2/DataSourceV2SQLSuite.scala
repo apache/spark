@@ -59,6 +59,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   }
 
   after {
+    spark.sessionState.catalog.reset()
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.clear()
   }
@@ -482,8 +483,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
     val rdd = sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
-
-    spark.sql("DROP TABLE table_name")
   }
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
@@ -500,8 +499,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
-
-    spark.sql("DROP TABLE table_name")
   }
 
   test("DropTable: basic") {

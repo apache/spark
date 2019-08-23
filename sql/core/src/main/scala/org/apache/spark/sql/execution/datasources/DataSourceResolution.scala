@@ -184,7 +184,6 @@ case class DataSourceResolution(
       defaultCatalog match {
         case Some(catalog) =>
           ShowTables(
-            plan.output,
             catalog.asTableCatalog,
             catalogManager.currentNamespace,
             pattern)
@@ -192,11 +191,11 @@ case class DataSourceResolution(
           ShowTablesCommand(None, pattern)
       }
 
-    case plan @ ShowTablesStatement(Some(namespace), pattern) =>
+    case ShowTablesStatement(Some(namespace), pattern) =>
       val CatalogNamespace(maybeCatalog, ns) = namespace
       maybeCatalog match {
         case Some(catalog) =>
-          ShowTables(plan.output, catalog.asTableCatalog, ns, pattern)
+          ShowTables(catalog.asTableCatalog, ns, pattern)
         case None =>
           if (namespace.length != 1) {
             throw new AnalysisException(

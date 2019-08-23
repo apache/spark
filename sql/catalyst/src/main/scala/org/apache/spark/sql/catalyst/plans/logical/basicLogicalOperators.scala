@@ -617,13 +617,16 @@ case class AlterTable(
 }
 
 /**
- * Show tables.
+ * The logical plan of the SHOW TABLE command that works for v2 catalogs.
  */
 case class ShowTables(
-    override val output: Seq[Attribute],
     catalog: TableCatalog,
     namespace: Seq[String],
-    pattern: Option[String]) extends Command
+    pattern: Option[String]) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)(),
+    AttributeReference("tableName", StringType, nullable = false)())
+}
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
