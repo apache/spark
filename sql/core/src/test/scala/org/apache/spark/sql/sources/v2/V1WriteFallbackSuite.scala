@@ -69,10 +69,12 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 }
 
 class V1WriteFallbackSessionCatalogSuite
-  extends SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+  extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLTests = true)
+  with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
 
   override protected val v2Format = classOf[InMemoryV1Provider].getName
   override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName
+  override protected val catalogAndNamespace: String = ""
 
   override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(InMemoryV1Provider.getTableData(spark, s"default.$tableName"), expected)
@@ -84,80 +86,6 @@ class V1WriteFallbackSessionCatalogSuite
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
-    }
-  }
-
-  import testImplicits._
-
-  test("insertInto: overwrite partitioned table in dynamic mode not supported") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
-        doInsert(t1, init)
-
-        val e = intercept[AnalysisException] {
-          val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-          doInsert(t1, df, SaveMode.Overwrite)
-        }
-
-        verifyTable(t1, init)
-        assert(e.getMessage.contains("Table does not support dynamic overwrite"))
-      }
-    }
-  }
-
-  private def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
-    withTable(tableName) {
-      val viewName = "tmp_view"
-      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
-      df.createOrReplaceTempView(viewName)
-      withTempView(viewName) {
-        testFn(viewName)
-      }
-    }
-  }
-
-  test("InsertInto: append to partitioned table - static clause") {
-    val t1 = "tbl"
-    withTableAndData(t1) { view =>
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-      sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM $view")
-      verifyTable(t1, sql(s"SELECT 23, data FROM $view"))
-    }
-  }
-
-  test("InsertInto: overwrite - dynamic clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
-        verifyTable(t1, Seq(
-          (1, "a"),
-          (2, "b"),
-          (3, "c")).toDF("id", "data"))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - dynamic clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
-        val e = intercept[AnalysisException] {
-          sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
-        }
-        assert(e.getMessage.contains("Table does not support dynamic overwrite"))
-
-        verifyTable(t1, Seq(
-          (2, "dummy"),
-          (4, "keep")).toDF("id", "data"))
-      }
     }
   }
 }

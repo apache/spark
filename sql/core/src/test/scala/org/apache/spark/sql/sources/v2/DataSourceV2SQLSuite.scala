@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
@@ -31,10 +31,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2SQLSuite extends InsertIntoSQLTests {
+class DataSourceV2SQLSuite
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = true) {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
@@ -45,6 +46,15 @@ class DataSourceV2SQLSuite extends InsertIntoSQLTests {
 
   private def catalog(name: String): CatalogPlugin = {
     spark.sessionState.catalogManager.catalog(name)
+  }
+
+  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
   }
 
   before {
@@ -1722,236 +1732,5 @@ class DataSourceV2SQLSuite extends InsertIntoSQLTests {
 class FakeV2Provider extends TableProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     throw new UnsupportedOperationException("Unnecessary for DDL tests")
-  }
-}
-
-private[v2] trait InsertIntoSQLTests extends QueryTest with SharedSparkSession with BeforeAndAfter {
-
-  protected val v2Format: String
-  protected val catalogAndNamespace: String
-
-  private def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
-    withTable(tableName) {
-      val viewName = "tmp_view"
-      val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
-      df.createOrReplaceTempView(viewName)
-      withTempView(viewName) {
-        testFn(viewName)
-      }
-    }
-  }
-
-  test("InsertInto: when the table doesn't exist") {
-    val t1 = s"${catalogAndNamespace}tbl"
-    val t2 = s"${catalogAndNamespace}tbl2"
-    withTableAndData(t1) { _ =>
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO $t2 VALUES (2L, 'dummy')")
-      }
-      assert(e.getMessage.contains(t2))
-      assert(e.getMessage.contains("Table not found"))
-    }
-  }
-
-  test("InsertInto: append to partitioned table - static clause") {
-    val t1 = s"${catalogAndNamespace}tbl"
-    withTableAndData(t1) { view =>
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-      sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM $view")
-      checkAnswer(spark.table(t1), sql(s"SELECT 23, data FROM $view"))
-    }
-  }
-
-  test("InsertInto: overwrite - dynamic clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c")))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - dynamic clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c"),
-          Row(4, "keep")))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - missing clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
-        sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c")))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - missing clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
-        sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c"),
-          Row(4, "keep")))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - static clause") {
-    val t1 = s"${catalogAndNamespace}tbl"
-    withTableAndData(t1) { view =>
-      sql(s"CREATE TABLE $t1 (id bigint, data string, p1 int) USING $v2Format PARTITIONED BY (p1)")
-      sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 23), (4L, 'keep', 2)")
-      sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p1 = 23) SELECT * FROM $view")
-      checkAnswer(spark.table(t1), Seq(
-        Row(1, "a", 23),
-        Row(2, "b", 23),
-        Row(3, "c", 23),
-        Row(4, "keep", 2)))
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause reordered - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - implicit dynamic partition - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause reordered - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - implicit dynamic partition - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - multiple static partitions - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = s"${catalogAndNamespace}tbl"
-      withTableAndData(t1) { view =>
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-          s"USING $v2Format PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
-        checkAnswer(spark.table(t1), Seq(
-          Row(2, "a", 2),
-          Row(2, "b", 2),
-          Row(2, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
   }
 }

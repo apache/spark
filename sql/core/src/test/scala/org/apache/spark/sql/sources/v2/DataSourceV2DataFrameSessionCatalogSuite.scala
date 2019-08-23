@@ -33,9 +33,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-
 class DataSourceV2DataFrameSessionCatalogSuite
-  extends SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = false)
+  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
   import testImplicits._
 
@@ -46,6 +46,8 @@ class DataSourceV2DataFrameSessionCatalogSuite
     }
     dfw.insertInto(tableName)
   }
+
+  override protected val catalogAndNamespace: String = ""
 
   test("saveAsTable: Append mode should not fail if the table already exists " +
     "and a same-name temp view exist") {
@@ -70,39 +72,6 @@ class DataSourceV2DataFrameSessionCatalogSuite
         spark.range(20).write.format(v2Format).mode(SaveMode.Overwrite).saveAsTable("same_name")
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
         checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
-      }
-    }
-  }
-
-  test("insertInto: overwrite partitioned table in dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
-        doInsert(t1, init)
-
-        val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-        doInsert(t1, df, SaveMode.Overwrite)
-
-        verifyTable(t1, df.union(sql("SELECT 4L, 'keep'")))
-      }
-    }
-  }
-
-  test("insertInto: overwrite partitioned table in dynamic mode by position") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
-        doInsert(t1, init)
-
-        val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
-        doInsert(t1, dfr, SaveMode.Overwrite)
-
-        val df = Seq((1L, "a"), (2L, "b"), (3L, "c"), (4L, "keep")).toDF("id", "data")
-        verifyTable(t1, df)
       }
     }
   }
@@ -153,8 +122,6 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
     checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
     checkAnswer(sql(s"TABLE $tableName"), expected)
   }
-
-  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode = null): Unit
 
   import testImplicits._
 
@@ -240,100 +207,5 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
     spark.sql(s"CREATE TABLE $t1 USING $v2Format AS SELECT 'c', 'd'")
     df.write.format(v2Format).mode("ignore").saveAsTable(t1)
     verifyTable(t1, Seq(("c", "d")).toDF("id", "data"))
-  }
-
-  test("insertInto: append") {
-    val t1 = "tbl"
-    sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    doInsert(t1, df)
-    verifyTable(t1, df)
-  }
-
-  test("insertInto: append by position") {
-    val t1 = "tbl"
-    sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
-
-    doInsert(t1, dfr)
-    verifyTable(t1, df)
-  }
-
-  test("insertInto: append partitioned table") {
-    val t1 = "tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-      doInsert(t1, df)
-      verifyTable(t1, df)
-    }
-  }
-
-  test("insertInto: overwrite non-partitioned table") {
-    val t1 = "tbl"
-    sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    val df2 = Seq((4L, "d"), (5L, "e"), (6L, "f")).toDF("id", "data")
-    doInsert(t1, df)
-    doInsert(t1, df2, SaveMode.Overwrite)
-    verifyTable(t1, df2)
-  }
-
-  test("insertInto: overwrite partitioned table in static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "tbl"
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-      val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
-      doInsert(t1, init)
-
-      val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-      doInsert(t1, df, SaveMode.Overwrite)
-      verifyTable(t1, df)
-    }
-  }
-
-
-  test("insertInto: overwrite partitioned table in static mode by position") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
-        val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
-        doInsert(t1, init)
-
-        val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
-        doInsert(t1, dfr, SaveMode.Overwrite)
-
-        val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-        verifyTable(t1, df)
-      }
-    }
-  }
-
-  test("insertInto: fails when missing a column") {
-    val t1 = "tbl"
-    sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
-    val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
-    val exc = intercept[AnalysisException] {
-      doInsert(t1, df)
-    }
-
-    verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
-    assert(exc.getMessage.contains(s"Cannot write to 'default.$t1', not enough data columns"))
-  }
-
-  test("insertInto: fails when an extra column is present") {
-    val t1 = "tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
-      val df = Seq((1L, "a", "mango")).toDF("id", "data", "fruit")
-      val exc = intercept[AnalysisException] {
-        doInsert(t1, df)
-      }
-
-      verifyTable(t1, Seq.empty[(Long, String)].toDF("id", "data"))
-      assert(exc.getMessage.contains(s"Cannot write to 'default.$t1', too many data columns"))
-    }
   }
 }
