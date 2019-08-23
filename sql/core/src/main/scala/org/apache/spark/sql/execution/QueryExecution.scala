@@ -125,7 +125,8 @@ class QueryExecution(
       sparkSession.sessionState.columnarRules),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
-    ReuseSubquery(sparkSession.sessionState.conf))
+    ReuseSubquery(sparkSession.sessionState.conf),
+    ExtractAlreadyPlanned)
 
   def simpleString: String = withRedaction {
     val concat = new PlanStringConcat()
