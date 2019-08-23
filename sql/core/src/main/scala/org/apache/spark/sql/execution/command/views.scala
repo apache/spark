@@ -233,6 +233,12 @@ case class CreateViewCommand(
       throw new AnalysisException(
         "It is not allowed to create a persisted view from the Dataset API")
     }
+    val aliasedSchema = aliasPlan(session, analyzedPlan).schema
+
+    // Generate the query column names, throw an AnalysisException if there exists duplicate column
+    // names.
+    SchemaUtils.checkColumnNameDuplication(
+      aliasedSchema.fieldNames, "in the view definition", session.sessionState.conf.resolver)
 
     val newProperties = generateViewProperties(properties, session, analyzedPlan)
 
@@ -240,7 +246,7 @@ case class CreateViewCommand(
       identifier = name,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
-      schema = aliasPlan(session, analyzedPlan).schema,
+      schema = aliasedSchema,
       properties = newProperties,
       viewText = originalText,
       comment = comment
@@ -293,6 +299,11 @@ case class AlterViewAsCommand(
     // Detect cyclic view reference on ALTER VIEW.
     val viewIdent = viewMeta.identifier
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+
+    // Generate the query column names, throw an AnalysisException if there exists duplicate column
+    // names.
+    SchemaUtils.checkColumnNameDuplication(
+      analyzedPlan.schema.fieldNames, "in the view definition", session.sessionState.conf.resolver)
 
     val newProperties = generateViewProperties(viewMeta.properties, session, analyzedPlan)
 
@@ -357,11 +368,6 @@ object ViewHelper {
       session: SparkSession,
       analyzedPlan: LogicalPlan): Map[String, String] = {
     val queryOutput = analyzedPlan.schema.fieldNames
-
-    // Generate the query column names, throw an AnalysisException if there exists duplicate column
-    // names.
-    SchemaUtils.checkColumnNameDuplication(
-      queryOutput, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
