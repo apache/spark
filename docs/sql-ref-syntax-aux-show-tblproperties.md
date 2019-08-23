@@ -19,4 +19,40 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+This statement returns the value of a table property given an optional value for
+a property key. If no key is specified then all the proerties are returned. 
+
+### Syntax
+{% highlight sql %}
+SHOW TBLPROPERTIES tableIdentifier [(tablePropertyKey)]
+
+tableIdentifier:= [db_name.]table_name
+tablePropertyKey:= (unquoted_property_key | property_key_as_string_literal)
+unquoted_property_key:= [key_part1][.key_part2][...]
+{% endhighlight %}
+
+**Note**
+- Property value returned by this statement exludes some properties 
+  that are internal to spark and hive. The excluded properties are :
+  - All the properties that start with prefix `spark.sql`
+  - Propery keys such as:  `EXTERNAL`, `comment`
+  - All the properties generated intenally by hive to store statistics. Some of these
+    properties are: `numFiles`, `numPartitions`, `numRows`.
+
+### Examples
+{% highlight sql %}
+-- show all the user specified properties for table `customer`
+SHOW TBLPROPERTIES customer;
+-- show all the user specified properties for a qualified table `customer`
+-- in database `salesdb`
+SHOW TBLPROPERTIES salesdb.customer;
+-- show value for unquoted propery key `show.me.the.value`
+SHOW TBLPROPERTIES customer (show.me.the.value)
+-- show value for property `show.me.the.value` specified as string literal
+SHOW TBLPROPERTIES customer ('show.me.the.value')
+{% endhighlight %}
+
+### Related Statements
+- [ALTER TABLE SET TBLPROPERTIES](sql-ref-syntax-ddl-alter-table.html)
+- [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
