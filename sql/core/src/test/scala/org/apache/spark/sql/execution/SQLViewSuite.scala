@@ -706,4 +706,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-23519 view should be created even when query output contains duplicate col name") {
+    sql("CREATE TABLE t23519 AS SELECT 1 AS c1")
+    sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
+    checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
+  }
 }
