@@ -97,7 +97,13 @@ object ExplainUtils {
       getSubqueries(plan, subqueries)
       var i = 0
 
-      // Process all the subqueries in the plan.
+      /**
+       * 1. [[getSubqueries]] collects the child plan [[BaseSubqueryExec]]
+       * 2. [[processPlan]] checks the collected child plan of [[BaseSubqueryExec]]. If child plan
+       *    is an instance of [[BaseSubqueryExec]] (happens in case of `ReusedSubqueryExec`), then
+       *    it skips calling [[processPlanSkippingSubqueries]] in order to avoid printing the same
+       *    subquery plan more than once.
+       */
       for (sub <- subqueries) {
         if (i == 0) {
           append("\n===== Subqueries =====\n\n")
@@ -201,7 +207,7 @@ object ExplainUtils {
             e.plan match {
               case s : BaseSubqueryExec =>
                 subqueries += ((p, e, s.child))
-                getSubqueries(e.plan, subqueries)
+                getSubqueries(s, subqueries)
             }
           case other =>
         })
