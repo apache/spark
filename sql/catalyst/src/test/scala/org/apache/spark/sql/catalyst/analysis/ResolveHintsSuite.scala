@@ -187,6 +187,19 @@ class ResolveHintsSuite extends AnalysisTest {
         Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
         table("TaBlE")),
       Seq(errMsg))
+
+    val errMsg2 = "expects UnresolvedAttribute type"
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION",
+        Seq(Literal(10), Literal(10)),
+        table("TaBlE")),
+      Seq(errMsg2))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITION",
+        Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
+        table("TaBlE")),
+      Seq(errMsg2))
   }
 
   test("log warnings for invalid hints") {

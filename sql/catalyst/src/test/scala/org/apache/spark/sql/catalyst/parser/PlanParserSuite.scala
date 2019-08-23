@@ -627,6 +627,11 @@ class PlanParserSuite extends AnalysisTest {
     intercept("SELECT /*+ COALESCE(30 + 50) */ * FROM t", "mismatched input")
 
     comparePlans(
+      parsePlan("SELECT /*+ REPARTITION(c) */ * FROM t"),
+      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("c")),
+        table("t").select(star())))
+
+    comparePlans(
       parsePlan("SELECT /*+ REPARTITION(100, c) */ * FROM t"),
       UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
         table("t").select(star())))
