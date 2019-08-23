@@ -20,11 +20,10 @@ license: |
 ---
 
 ### Description
-A view is a virtual table based on the result set of base query. The base query
-can involve joins, expressions, reordered columns, column aliases, and other SQL
-features that can make a query hard to understand or maintain.
-A view is purely a logical construct (an alias for a query) with no physical
-data behind it.
+Views are based on result-set of complex base SQL queries that are hard to
+maintain or understand. CREATE VIEW constructs a virtual table that have no
+physical data therefore other operations like ALTER VIEW and DROP VIEW 
+only change metadata. 
 
 ### Syntax
 {% highlight sql %}
@@ -40,14 +39,17 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
 
 ### Examples
 {% highlight sql %}
--- Create a global temporary view `v1` if it does not exist.
-CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS v1 AS SELECT * FROM t1;
--- Create or replace view `v2` with comments and metadata.
-CREATE OR REPLACE VIEW v2 
-    (c1 COMMENT 'comment for c1', c2) 
-    COMMENT 'comment for v1' 
-    TBLPROPERTIES (key1=value1, key2=value2) 
-    AS SELECT * FROM t1;
+-- Create a global temporary view `subscribed_movies` if it does not exist.
+CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies 
+    AS SELECT mo.member_id, mb.full_name, mo.movie_title
+     FROM movies AS mo INNER JOIN members AS mb 
+     ON mo.member_id = mb.id;
+-- Create or replace view for `experienced_employee` with comments.
+CREATE OR REPLACE VIEW experienced_employee 
+    (ID COMMENT 'Unique identification number', Name) 
+    COMMENT 'View for experienced employees' 
+    AS SELECT id, name FROM all_employee 
+        WHERE working_years > 5;
 {% endhighlight %}
 
 ### Parameters
