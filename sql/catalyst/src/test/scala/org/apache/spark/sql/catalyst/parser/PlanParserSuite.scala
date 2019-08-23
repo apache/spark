@@ -645,7 +645,12 @@ class PlanParserSuite extends AnalysisTest {
             table("t").select(star())))))
 
     comparePlans(
-      parsePlan("SELECT /*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50), REPARTITION(300, c) */ * FROM t"),
+      parsePlan(
+        """
+          |SELECT
+          |/*+ REPARTITION(100, c), BROADCASTJOIN(u), COALESCE(50), REPARTITION(300, c) */
+          |* FROM t
+        """.stripMargin),
       UnresolvedHint("REPARTITION", Seq(Literal(100), UnresolvedAttribute("c")),
         UnresolvedHint("BROADCASTJOIN", Seq($"u"),
           UnresolvedHint("COALESCE", Seq(Literal(50)),
