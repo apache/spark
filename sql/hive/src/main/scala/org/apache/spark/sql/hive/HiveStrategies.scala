@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
     ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CommandUtils, CreateTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -118,8 +118,16 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
       val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        CommandUtils.getSizeInBytesFallBackToHdfs(session, new Path(table.location),
-          session.sessionState.conf.defaultSizeInBytes)
+        try {
+          val hadoopConf = session.sessionState.newHadoopConf()
+          val tablePath = new Path(table.location)
+          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+          fs.getContentSummary(tablePath).getLength
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to get table size from hdfs.", e)
+            session.sessionState.conf.defaultSizeInBytes
+        }
       } else {
         session.sessionState.conf.defaultSizeInBytes
       }
