@@ -189,7 +189,7 @@ object YarnSparkHadoopUtil {
   def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
     if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
       val sizeInMB =
-        Utils.byteStringAsMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString).toInt
+        Utils.byteStringAsMb(s"${sparkConf.get(MEMORY_OFFHEAP_SIZE)}B").toInt
       require(sizeInMB > 0,
         s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
       sizeInMB
