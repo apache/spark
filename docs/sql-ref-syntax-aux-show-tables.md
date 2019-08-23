@@ -18,5 +18,34 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
+### Description
+Return all tables form the database. It shows databse name and whether a table is temporary.
 
-**This page is under construction**
+### Syntax
+{% highlight sql %}
+SHOW TABLES [{FROM|IN} dbname] [LIKE 'pattern']
+{% endhighlight %}
+
+### Parameter
+
+ **dbname**
+
+ All the tables from this *Database* are returned, if not provided it takes the current *Database*.
+
+ **FROM** or **IN**
+
+ Return all tables from or in a database.
+
+ **LIKE 'pattern'**
+
+ Returns tables which are all match the pattern. In pattern '*' matches any number of characters.
+
+
+### Example
+{% highlight sql %}
+SHOW TABLES
+SHOW TABLES FROM userdb
+SHOW TABLES IN userdb
+SHOW TABLES FROM userdb LIKE employeedb*
+{% endhighlight %}
+
