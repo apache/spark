@@ -44,12 +44,12 @@ DROP DATABASE inventorydb CASCADE;
 
 ### **IF EXISTS**
 
-If specified will not throw any exception if no database exists.
+If specified, no exception is thrown when the database does not exist.
  
 ###  **RESTRICT**
 
-If specified will restrict dropping a non-empty database and is enabled by default.
+If specified, will restrict dropping a non-empty database and is enabled by default.
 
 ### **CASCADE**
 
-If specified will drop all the associated tables and functions.
+If specified, will drop all the associated tables and functions.
