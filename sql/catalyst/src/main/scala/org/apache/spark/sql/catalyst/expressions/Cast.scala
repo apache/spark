@@ -1255,8 +1255,11 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castDecimalToIntegralTypeCode(
       ctx: CodegenContext,
       integralType: String): CastFunction = {
-    (c, evPrim, evNull) =>
-      code"$evPrim = $c.to${integralType.capitalize}($failOnIntegralTypeOverflow);"
+    if (failOnIntegralTypeOverflow) {
+      (c, evPrim, evNull) => code"$evPrim = $c.roundTo${integralType.capitalize}();"
+    } else {
+      (c, evPrim, evNull) => code"$evPrim = $c.to${integralType.capitalize}();"
+    }
   }
 
   private[this] def castIntegralTypeToIntegralTypeExactCode(integralType: String): CastFunction = {
