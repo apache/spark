@@ -513,6 +513,8 @@ struct<>
 -- !query 63 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Literals of type 'NOT_SUPPORTED' are currently not supported.
+Literals of type 'not_supported' are currently not supported.(line 1, pos 7)
+
 == SQL ==
 select extract(not_supported from c) from t
+-------^^^
