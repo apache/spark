@@ -618,7 +618,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       assert(e.getMessage.contains("Detected implicit cartesian product"))
     }
 
-    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
       cartesianQueries.foreach(checkCartesianDetection)
     }
 
