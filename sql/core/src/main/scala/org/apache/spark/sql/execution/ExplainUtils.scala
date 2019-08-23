@@ -205,7 +205,7 @@ object ExplainUtils {
         p.expressions.flatMap(_.collect {
           case e: PlanExpression[_] =>
             e.plan match {
-              case s : BaseSubqueryExec =>
+              case s: BaseSubqueryExec =>
                 subqueries += ((p, e, s.child))
                 getSubqueries(s, subqueries)
             }
