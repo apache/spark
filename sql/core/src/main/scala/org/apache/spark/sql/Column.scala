@@ -823,16 +823,6 @@ class Column(val expr: Expression) extends Logging {
   def like(literal: String): Column = withExpr { Like(expr, lit(literal).expr) }
 
   /**
-   * SQL like expression. Returns a boolean column based on a SQL LIKE ESCAPE match.
-   *
-   * @group expr_ops
-   * @since 3.0.0
-   */
-  def like(literal: String, escapeChar: Char): Column = withExpr {
-    Like(expr, lit(literal).expr, Option(escapeChar))
-  }
-
-  /**
    * SQL RLIKE expression (LIKE with Regex). Returns a boolean column based on a regex
    * match.
    *
