@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
@@ -29,6 +30,14 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
  */
 case class AlreadyPlanned(physicalPlan: SparkPlan) extends LeafNode {
   override def output: Seq[Attribute] = physicalPlan.output
+}
+
+object AlreadyPlanned {
+  def dataFrame(sparkSession: SparkSession, query: SparkPlan): DataFrame = {
+    val plan = AlreadyPlanned(query)
+    val qe = new PlannedExecution(sparkSession, plan)
+    new Dataset(sparkSession, qe, RowEncoder(plan.schema))
+  }
 }
 
 class PlannedExecution(

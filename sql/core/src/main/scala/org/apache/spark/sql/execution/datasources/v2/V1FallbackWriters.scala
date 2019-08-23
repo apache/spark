@@ -112,10 +112,7 @@ trait SupportsV1Write extends SparkPlan {
   def query: SparkPlan
 
   protected def writeWithV1(relation: InsertableRelation): RDD[InternalRow] = {
-    val plan = AlreadyPlanned(query)
-    val qe = new PlannedExecution(sqlContext.sparkSession, plan)
-    val df = new Dataset(sqlContext.sparkSession, qe, RowEncoder(plan.schema))
-    relation.insert(df, overwrite = false)
+    relation.insert(AlreadyPlanned.dataFrame(sqlContext.sparkSession, query), overwrite = false)
     sparkContext.emptyRDD
   }
 }
