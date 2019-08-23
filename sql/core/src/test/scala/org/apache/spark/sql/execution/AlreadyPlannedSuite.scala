@@ -45,5 +45,9 @@ class AlreadyPlannedSuite extends SparkPlanTest with SharedSparkSession {
     val expected = df.where('id < 3).alias("l").join(df.alias("r"), Seq("id"))
 
     checkAnswer(join, identity, expected.collect())
+
+    val useJoinedPlan = AlreadyPlanned.dataFrame(spark, expected.queryExecution.executedPlan)
+    checkAnswer(useJoinedPlan, identity, expected.collect())
+    checkAnswer(useJoinedPlan.where('id < 2), identity, expected.where('id < 2).collect())
   }
 }

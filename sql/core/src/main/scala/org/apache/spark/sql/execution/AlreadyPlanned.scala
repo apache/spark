@@ -21,8 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -36,7 +35,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 case class AlreadyPlanned(
     physicalPlan: SparkPlan,
     output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
-
   override def newInstance(): LogicalPlan = this.copy(output = output.map(_.newInstance()))
 
   override def computeStats(): Statistics = Statistics(sizeInBytes = conf.defaultSizeInBytes)
@@ -46,7 +44,7 @@ case class AlreadyPlannedExec(
     physicalPlan: SparkPlan,
     output: Seq[Attribute]) extends LeafExecNode {
   override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException()
+    throw new UnsupportedOperationException("AlreadyPlanned nodes should be removed pre-execution")
   }
   override def supportsColumnar: Boolean = physicalPlan.supportsColumnar
   override def vectorTypes: Option[Seq[String]] = physicalPlan.vectorTypes
@@ -64,10 +62,14 @@ object AlreadyPlanned {
 object ExtractAlreadyPlanned extends Rule[SparkPlan] {
   override def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     case AlreadyPlannedExec(alreadyPlanned: SparkPlan, output) =>
-      val newAttr = output.map(o => o.name -> o).toMap
-      val newPlan = alreadyPlanned.mapExpressions {
-        case a: Attribute => a.withExprId(newAttr(a.name).exprId)
+      if (alreadyPlanned.output != output) {
+        val newAttr = output.map(o => o.name -> o).toMap
+        val projections = alreadyPlanned.output.map { o =>
+          Alias(o, o.name)(newAttr(o.name).exprId, o.qualifier, Option(o.metadata))
+        }
+        ProjectExec(projections, alreadyPlanned)
+      } else {
+        alreadyPlanned
       }
-      newPlan
   }
 }
