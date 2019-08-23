@@ -545,6 +545,43 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Throw exception on unsafe cast with strict casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t select 1L, 2")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0D, 3")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 3 column(s)"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 1 column(s)"))
+
+        // Insert into table successfully.
+        sql("insert into t select 1, 2.0D")
+        checkAnswer(sql("select * from t"), Row(1, 2.0D))
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
