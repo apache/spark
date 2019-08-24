@@ -20,9 +20,9 @@ license: |
 ---
 
 ### Description
-Views are based on result-set of complex base SQL queries that are hard to
-maintain or understand. CREATE VIEW constructs a virtual table that have no
-physical data therefore other operations like ALTER VIEW and DROP VIEW 
+Views are based on result-set of complex base `SQL` queries that are hard to
+maintain or understand. `CREATE VIEW` constructs a virtual table that has no
+physical data therefore other operations like `ALTER VIEW` and `DROP VIEW` 
 only change metadata. 
 
 ### Syntax
@@ -62,7 +62,7 @@ GLOBAL TEMPORARY views are tied to a system preserved temporary database `global
 #### IF NOT EXISTS
 Creates a view if it does not exists.
 #### COMMENT
-Table-level and column-level comments can be specified in CREATE VIEW statement.
+View-level and column-level comments can be specified in CREATE VIEW statement.
 #### TBLPROPERTIES
 Metadata key-value pairs.
 #### AS SELECT
