@@ -20,8 +20,8 @@ license: |
 ---
 
 ### Description
-Set the provided databse as current database. All subsequent commands that do not explicitly
-specify a database will use this one. The default current database is default
+Set the provided database as current database. All subsequent queries will resolve
+table names to this database if database name is not provided. The default database name is 'default'
 
 ### Syntax
 {% highlight sql %}
@@ -32,10 +32,10 @@ USE dbname
 
  **dbname**
 
- dbname is used as current database, If the provided database does not exist, an exception is thrown.
+ dbname is used as current database. If the provided database does not exist, an exception is thrown.
 
 
 ### Example
 {% highlight sql %}
-USE userdb
+USE userdb;
 {% endhighlight %}
