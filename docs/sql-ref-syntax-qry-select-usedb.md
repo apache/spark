@@ -1,0 +1,41 @@
+---
+layout: global
+title: USE Database
+displayTitle: USE Database
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+---
+
+### Description
+Set the provided databse as current database. All subsequent commands that do not explicitly
+specify a database will use this one. The default current database is default
+
+### Syntax
+{% highlight sql %}
+USE dbname
+{% endhighlight %}
+
+### Parameter
+
+ **dbname**
+
+ dbname is used as current database, If the provided database does not exist, an exception is thrown.
+
+
+### Example
+{% highlight sql %}
+USE userdb
+{% endhighlight %}
