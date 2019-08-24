@@ -46,8 +46,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
 
   private var hiveServer2: HiveThriftServer2 = _
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  override def beforeEach(): Unit = {
     // Chooses a random port between 10000 and 19999
     var listeningPort = 10000 + Random.nextInt(10000)
 
@@ -64,12 +63,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
     logInfo("HiveThriftServer2 started successfully")
   }
 
-  override def afterAll(): Unit = {
-    try {
-      hiveServer2.stop()
-    } finally {
-      super.afterAll()
-    }
+  override def afterEach(): Unit = {
+    hiveServer2.stop()
   }
 
   override val isTestWithConfigSets = false
