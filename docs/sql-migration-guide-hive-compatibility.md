@@ -25,7 +25,7 @@ license: |
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 2.3.5 and 3.0.0 to 3.1.1. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.3.6 and 3.0.0 to 3.1.1. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 
