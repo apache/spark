@@ -1620,11 +1620,15 @@ object CodeGenerator extends Logging {
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState]): Seq[(VariableValue, Expression)] = {
-    val argMap = mutable.Map[VariableValue, Expression]()
-    // Collects local variables only in `argMap`
-    val collectLocalVariable = (ev: ExprValue, expr: Expression) => ev match {
-      case vv: VariableValue => argMap += vv -> expr
+      subExprs: Map[Expression, SubExprEliminationState]): Set[VariableValue] = {
+    val argSet = mutable.Set[VariableValue]()
+    if (ctx.INPUT_ROW != null) {
+      argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
+    }
+
+    // Collects local variables from a given `expr` tree
+    val collectLocalVariable = (ev: ExprValue) => ev match {
+      case vv: VariableValue => argSet += vv
       case _ =>
     }
 
@@ -1633,26 +1637,23 @@ object CodeGenerator extends Logging {
       stack.pop() match {
         case e if subExprs.contains(e) =>
           val SubExprEliminationState(isNull, value) = subExprs(e)
-          collectLocalVariable(value, e)
-          collectLocalVariable(isNull, e)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
           // Since the children possibly have common subexprs, we push them here
           stack.pushAll(e.children)
 
-        case ref: BoundReference
-            if ctx.currentVars != null && ctx.currentVars(ref.ordinal) != null =>
+        case ref: BoundReference if ctx.currentVars != null &&
+            ctx.currentVars(ref.ordinal) != null =>
           val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
-          collectLocalVariable(value, ref)
-          collectLocalVariable(isNull, ref)
-
-        case ref: BoundReference =>
-          argMap += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow]) -> ref
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
 
         case e =>
           stack.pushAll(e.children)
       }
     }
 
-    argMap.toSeq
+    argSet.toSet
   }
 
   /**
@@ -1757,6 +1758,15 @@ object CodeGenerator extends Logging {
       }
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaParamLength
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr).sum
+  }
+
+  def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int = {
+    def paramLengthForExpr(input: ExprValue): Int = input.javaType match {
+      case java.lang.Long.TYPE | java.lang.Double.TYPE => 2
+      case _ => 1
     }
     // Initial value is 1 for `this`.
     1 + params.map(paramLengthForExpr).sum
