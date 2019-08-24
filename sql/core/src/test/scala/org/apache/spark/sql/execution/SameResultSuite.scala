@@ -23,13 +23,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * Tests for the sameResult function for [[SparkPlan]]s.
  */
-class SameResultSuite extends QueryTest with SharedSQLContext {
+class SameResultSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("FileSourceScanExec: different orders of data filters and partition filters") {

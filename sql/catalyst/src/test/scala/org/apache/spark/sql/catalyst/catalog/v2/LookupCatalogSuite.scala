@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.catalog.v2
 
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
+import org.mockito.invocation.InvocationOnMock
 import org.scalatest.Inside
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalog.v2.{CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -33,10 +36,17 @@ private case class TestCatalogPlugin(override val name: String) extends CatalogP
 class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
   import CatalystSqlParser._
 
-  private val catalogs = Seq("prod", "test").map(x => x -> new TestCatalogPlugin(x)).toMap
+  private val catalogs = Seq("prod", "test").map(x => x -> TestCatalogPlugin(x)).toMap
 
-  override def lookupCatalog(name: String): CatalogPlugin =
-    catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+  override val catalogManager: CatalogManager = {
+    val manager = mock(classOf[CatalogManager])
+    when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+      val name = invocation.getArgument[String](0)
+      catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+    })
+    when(manager.defaultCatalog).thenReturn(None)
+    manager
+  }
 
   test("catalog object identifier") {
     Seq(
@@ -118,12 +128,17 @@ class LookupCatalogSuite extends SparkFunSuite with LookupCatalog with Inside {
 class LookupCatalogWithDefaultSuite extends SparkFunSuite with LookupCatalog with Inside {
   import CatalystSqlParser._
 
-  private val catalogs = Seq("prod", "test").map(x => x -> new TestCatalogPlugin(x)).toMap
+  private val catalogs = Seq("prod", "test").map(x => x -> TestCatalogPlugin(x)).toMap
 
-  override def defaultCatalogName: Option[String] = Some("prod")
-
-  override def lookupCatalog(name: String): CatalogPlugin =
-    catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+  override val catalogManager: CatalogManager = {
+    val manager = mock(classOf[CatalogManager])
+    when(manager.catalog(any())).thenAnswer((invocation: InvocationOnMock) => {
+      val name = invocation.getArgument[String](0)
+      catalogs.getOrElse(name, throw new CatalogNotFoundException(s"$name not found"))
+    })
+    when(manager.defaultCatalog).thenReturn(catalogs.get("prod"))
+    manager
+  }
 
   test("catalog object identifier") {
     Seq(

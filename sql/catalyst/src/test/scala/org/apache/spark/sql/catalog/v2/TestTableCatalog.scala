@@ -93,6 +93,19 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
 
   override def dropTable(ident: Identifier): Boolean = Option(tables.remove(ident)).isDefined
 
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    if (tables.containsKey(newIdent)) {
+      throw new TableAlreadyExistsException(newIdent)
+    }
+
+    Option(tables.remove(oldIdent)) match {
+      case Some(table) =>
+        tables.put(newIdent, InMemoryTable(table.name, table.schema, table.properties))
+      case _ =>
+        throw new NoSuchTableException(oldIdent)
+    }
+  }
+
   private def allNamespaces: Seq[Seq[String]] = {
     (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
   }

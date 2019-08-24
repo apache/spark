@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -456,6 +457,23 @@ object DateTimeUtils {
   }
 
   /**
+   * Returns seconds, including fractional parts, multiplied by 1000. The timestamp
+   * is expressed in microseconds since the epoch.
+   */
+  def getMilliseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Decimal = {
+    val micros = Decimal(getMicroseconds(timestamp, timeZone))
+    (micros / Decimal(MICROS_PER_MILLIS)).toPrecision(8, 3)
+  }
+
+  /**
+   * Returns seconds, including fractional parts, multiplied by 1000000. The timestamp
+   * is expressed in microseconds since the epoch.
+   */
+  def getMicroseconds(timestamp: SQLTimestamp, timeZone: TimeZone): Int = {
+    Math.floorMod(localTimestamp(timestamp, timeZone), MICROS_PER_SECOND * 60).toInt
+  }
+
+  /**
    * Returns the 'day in year' value for the given date. The date is expressed in days
    * since 1.1.1970.
    */
@@ -487,6 +505,14 @@ object DateTimeUtils {
    */
   def getYear(date: SQLDate): Int = {
     LocalDate.ofEpochDay(date).getYear
+  }
+
+  /**
+   * Returns the year which conforms to ISO 8601. Each ISO 8601 week-numbering
+   * year begins with the Monday of the week containing the 4th of January.
+   */
+  def getIsoYear(date: SQLDate): Int = {
+    daysToLocalDate(date).get(IsoFields.WEEK_BASED_YEAR)
   }
 
   /**
@@ -811,5 +837,15 @@ object DateTimeUtils {
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
     convertTz(time, getTimeZone(timeZone), TimeZoneGMT)
+  }
+
+  /**
+   * Returns the number of seconds with fractional part in microsecond precision
+   * since 1970-01-01 00:00:00 local time.
+   */
+  def getEpoch(timestamp: SQLTimestamp, zoneId: ZoneId): Decimal = {
+    val offset = zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds
+    val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
+    new Decimal().set(sinceEpoch, 20, 6)
   }
 }

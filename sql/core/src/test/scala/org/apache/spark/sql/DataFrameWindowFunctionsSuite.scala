@@ -25,13 +25,13 @@ import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
  * Window function testing for DataFrame API.
  */
-class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 

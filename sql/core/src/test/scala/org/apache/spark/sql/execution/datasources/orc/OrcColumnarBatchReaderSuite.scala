@@ -22,11 +22,11 @@ import org.apache.orc.TypeDescription
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, WritableColumnVector}
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String.fromString
 
-class OrcColumnarBatchReaderSuite extends QueryTest with SQLTestUtils with SharedSQLContext {
+class OrcColumnarBatchReaderSuite extends QueryTest with SharedSparkSession {
   private val dataSchema = StructType.fromDDL("col1 int, col2 int")
   private val partitionSchema = StructType.fromDDL("p1 string, p2 string")
   private val partitionValues = InternalRow(fromString("partValue1"), fromString("partValue2"))

@@ -37,13 +37,13 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-import org.apache.spark.sql.test.SQLTestData.{NullStrings, TestData2}
+import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
+import org.apache.spark.sql.test.SQLTestData.{DecimalData, NullStrings, TestData2}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
-class DataFrameSuite extends QueryTest with SharedSQLContext {
+class DataFrameSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
@@ -154,6 +154,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       structDf.select(xxhash64($"a", $"*")),
       structDf.select(xxhash64($"a", $"record.*")))
+  }
+
+  test("SPARK-28224: Aggregate sum big decimal overflow") {
+    val largeDecimals = spark.sparkContext.parallelize(
+      DecimalData(BigDecimal("1"* 20 + ".123"), BigDecimal("1"* 20 + ".123")) ::
+        DecimalData(BigDecimal("9"* 20 + ".123"), BigDecimal("9"* 20 + ".123")) :: Nil).toDF()
+
+    Seq(true, false).foreach { nullOnOverflow =>
+      withSQLConf((SQLConf.DECIMAL_OPERATIONS_NULL_ON_OVERFLOW.key, nullOnOverflow.toString)) {
+        val structDf = largeDecimals.select("a").agg(sum("a"))
+        if (nullOnOverflow) {
+          checkAnswer(structDf, Row(null))
+        } else {
+          val e = intercept[SparkException] {
+            structDf.collect
+          }
+          assert(e.getCause.getClass.equals(classOf[ArithmeticException]))
+          assert(e.getCause.getMessage.contains("cannot be represented as Decimal"))
+        }
+      }
+    }
   }
 
   test("Star Expansion - explode should fail with a meaningful message if it takes a star") {

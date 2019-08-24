@@ -23,12 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, StagingTableCatalog, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogV2Implicits, Identifier, NamespaceChange, StagingTableCatalog, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.{IdentityTransform, Transform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.sources.{And, EqualTo, Filter}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
 import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
@@ -36,8 +36,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 // this is currently in the spark-sql module because the read and write API is not in catalyst
 // TODO(rdblue): when the v2 source API is in catalyst, merge with TestTableCatalog/InMemoryTable
-class TestInMemoryTableCatalog extends TableCatalog {
+class TestInMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
   import CatalogV2Implicits._
+
+  override val defaultNamespace: Array[String] = Array()
+  protected val namespaces: util.Map[List[String], Map[String, String]] =
+    new ConcurrentHashMap[List[String], Map[String, String]]()
 
   protected val tables: util.Map[Identifier, InMemoryTable] =
     new ConcurrentHashMap[Identifier, InMemoryTable]()
@@ -104,8 +108,84 @@ class TestInMemoryTableCatalog extends TableCatalog {
     Option(tables.remove(ident)).isDefined
   }
 
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = {
+    if (tables.containsKey(newIdent)) {
+      throw new TableAlreadyExistsException(newIdent)
+    }
+
+    Option(tables.remove(oldIdent)) match {
+      case Some(table) =>
+        tables.put(newIdent,
+          new InMemoryTable(table.name, table.schema, table.partitioning, table.properties))
+      case _ =>
+        throw new NoSuchTableException(oldIdent)
+    }
+  }
+
   def clearTables(): Unit = {
     tables.clear()
+  }
+
+  private def allNamespaces: Seq[Seq[String]] = {
+    (tables.keySet.asScala.map(_.namespace.toSeq) ++ namespaces.keySet.asScala).toSeq.distinct
+  }
+
+  override def namespaceExists(namespace: Array[String]): Boolean = {
+    allNamespaces.exists(_.startsWith(namespace))
+  }
+
+  override def listNamespaces: Array[Array[String]] = {
+    allNamespaces.map(_.head).distinct.map(Array(_)).toArray
+  }
+
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
+    allNamespaces
+      .filter(_.size > namespace.length)
+      .filter(_.startsWith(namespace))
+      .map(_.take(namespace.length + 1))
+      .distinct
+      .map(_.toArray)
+      .toArray
+  }
+
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
+    Option(namespaces.get(namespace.toSeq)) match {
+      case Some(metadata) =>
+        metadata.asJava
+      case _ if namespaceExists(namespace) =>
+        util.Collections.emptyMap[String, String]
+      case _ =>
+        throw new NoSuchNamespaceException(namespace)
+    }
+  }
+
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = {
+    if (namespaceExists(namespace)) {
+      throw new NamespaceAlreadyExistsException(namespace)
+    }
+
+    Option(namespaces.putIfAbsent(namespace.toList, metadata.asScala.toMap)) match {
+      case Some(_) =>
+        throw new NamespaceAlreadyExistsException(namespace)
+      case _ =>
+        // created successfully
+    }
+  }
+
+  override def alterNamespace(
+      namespace: Array[String],
+      changes: NamespaceChange*): Unit = {
+    val metadata = loadNamespaceMetadata(namespace).asScala.toMap
+    namespaces.put(namespace.toList, CatalogV2Util.applyNamespaceChanges(metadata, changes))
+  }
+
+  override def dropNamespace(namespace: Array[String]): Boolean = {
+    if (listTables(namespace).nonEmpty) {
+      throw new IllegalStateException(s"Cannot delete non-empty namespace: ${namespace.quoted}")
+    }
+    Option(namespaces.remove(namespace.toList)).isDefined
   }
 }
 
@@ -117,7 +197,7 @@ class InMemoryTable(
     val schema: StructType,
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
-  extends Table with SupportsRead with SupportsWrite {
+  extends Table with SupportsRead with SupportsWrite with SupportsDelete {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -220,28 +300,9 @@ class InMemoryTable(
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
-      val deleteKeys = dataMap.keys.filter { partValues =>
-        filters.flatMap(splitAnd).forall {
-          case EqualTo(attr, value) =>
-            partFieldNames.zipWithIndex.find(_._1 == attr) match {
-              case Some((_, partIndex)) =>
-                value == partValues(partIndex)
-              case _ =>
-                throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
-            }
-          case f =>
-            throw new IllegalArgumentException(s"Unsupported filter type: $f")
-        }
-      }
+      val deleteKeys = InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
       dataMap --= deleteKeys
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-    }
-
-    private def splitAnd(filter: Filter): Seq[Filter] = {
-      filter match {
-        case And(left, right) => splitAnd(left) ++ splitAnd(right)
-        case _ => filter :: Nil
-      }
     }
   }
 
@@ -249,6 +310,47 @@ class InMemoryTable(
     override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear
       withData(messages.map(_.asInstanceOf[BufferedRows]))
+    }
+  }
+
+  override def deleteWhere(filters: Array[Filter]): Unit = dataMap.synchronized {
+    dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partFieldNames, filters)
+  }
+}
+
+object InMemoryTable {
+  def filtersToKeys(
+      keys: Iterable[Seq[Any]],
+      partitionNames: Seq[String],
+      filters: Array[Filter]): Iterable[Seq[Any]] = {
+    keys.filter { partValues =>
+      filters.flatMap(splitAnd).forall {
+        case EqualTo(attr, value) =>
+          value == extractValue(attr, partitionNames, partValues)
+        case IsNotNull(attr) =>
+          null != extractValue(attr, partitionNames, partValues)
+        case f =>
+          throw new IllegalArgumentException(s"Unsupported filter type: $f")
+      }
+    }
+  }
+
+  private def extractValue(
+      attr: String,
+      partFieldNames: Seq[String],
+      partValues: Seq[Any]): Any = {
+    partFieldNames.zipWithIndex.find(_._1 == attr) match {
+      case Some((_, partIndex)) =>
+        partValues(partIndex)
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown filter attribute: $attr")
+    }
+  }
+
+  private def splitAnd(filter: Filter): Seq[Filter] = {
+    filter match {
+      case And(left, right) => splitAnd(left) ++ splitAnd(right)
+      case _ => filter :: Nil
     }
   }
 }

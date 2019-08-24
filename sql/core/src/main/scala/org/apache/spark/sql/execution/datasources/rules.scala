@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{ArrayType, AtomicType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -188,10 +189,14 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         query
       }
 
+      // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
+      // TODO: use ANSI store assignment policy by default in SPARK-28495.
+      val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
       c.copy(
         tableDesc = existingTable,
-        query = Some(DDLPreprocessingUtils.castAndRenameQueryOutput(
-          newQuery, existingTable.schema.toAttributes, conf)))
+        query = Some(TableOutputResolver.resolveOutputColumns(
+          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          byName = true, conf, storeAssignmentPolicy)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -397,8 +402,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
+    // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
+    // TODO: use ANSI store assignment policy by default in SPARK-28495.
+    val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
+    val newQuery = TableOutputResolver.resolveOutputColumns(
+      tblName, expectedColumns, insert.query, byName = false, conf, storeAssignmentPolicy)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -525,39 +533,6 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
-    }
-  }
-}
-
-object DDLPreprocessingUtils {
-
-  /**
-   * Adjusts the name and data type of the input query output columns, to match the expectation.
-   */
-  def castAndRenameQueryOutput(
-      query: LogicalPlan,
-      expectedOutput: Seq[Attribute],
-      conf: SQLConf): LogicalPlan = {
-    val newChildOutput = expectedOutput.zip(query.output).map {
-      case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) &&
-          expected.name == actual.name &&
-          expected.metadata == actual.metadata) {
-          actual
-        } else {
-          // Renaming is needed for handling the following cases like
-          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-          // 2) Target tables have column metadata
-          Alias(
-            Cast(actual, expected.dataType, Option(conf.sessionLocalTimeZone)),
-            expected.name)(explicitMetadata = Option(expected.metadata))
-        }
-    }
-
-    if (newChildOutput == query.output) {
-      query
-    } else {
-      Project(newChildOutput, query)
     }
   }
 }

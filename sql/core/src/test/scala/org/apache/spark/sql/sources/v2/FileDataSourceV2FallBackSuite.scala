@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 
@@ -80,7 +80,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     Set(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
-class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
+class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
 
   private val dummyParquetReaderV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyParquetWriterV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName

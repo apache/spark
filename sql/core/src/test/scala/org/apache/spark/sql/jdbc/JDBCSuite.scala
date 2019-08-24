@@ -36,12 +36,12 @@ import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartiti
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends QueryTest
-  with BeforeAndAfter with PrivateMethodTester with SharedSQLContext {
+  with BeforeAndAfter with PrivateMethodTester with SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"

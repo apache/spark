@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.Numeric.{ByteIsIntegral, IntIsIntegral, LongIsIntegral, ShortIsIntegral}
+import scala.math.Numeric._
 import scala.math.Ordering
+
+import org.apache.spark.sql.types.Decimal.DecimalIsConflicted
 
 
 object ByteExactNumeric extends ByteIsIntegral with Ordering.ByteOrdering {
@@ -107,4 +109,75 @@ object LongExactNumeric extends LongIsIntegral with Ordering.LongOrdering {
   override def times(x: Long, y: Long): Long = Math.multiplyExact(x, y)
 
   override def negate(x: Long): Long = Math.negateExact(x)
+
+  override def toInt(x: Long): Int =
+    if (x == x.toInt) {
+      x.toInt
+    } else {
+      throw new ArithmeticException(s"Casting $x to int causes overflow.")
+    }
+}
+
+object FloatExactNumeric extends FloatIsFractional with Ordering.FloatOrdering {
+  private def overflowException(x: Float, dataType: String) =
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
+
+  private val intUpperBound = Int.MaxValue.toFloat
+  private val intLowerBound = Int.MinValue.toFloat
+  private val longUpperBound = Long.MaxValue.toFloat
+  private val longLowerBound = Long.MinValue.toFloat
+
+  override def toInt(x: Float): Int = {
+    // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
+    // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
+    // for negative floating values, it is equivalent to `Math.ceil`.
+    // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
+    // to check if the floating value x is in the range of an integral type after rounding.
+    // This condition applies to converting Float/Double value to any integral types.
+    if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
+      x.toInt
+    } else {
+      overflowException(x, "int")
+    }
+  }
+
+  override def toLong(x: Float): Long = {
+    if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
+      x.toLong
+    } else {
+      overflowException(x, "int")
+    }
+  }
+}
+
+object DoubleExactNumeric extends DoubleIsFractional with Ordering.DoubleOrdering {
+  private def overflowException(x: Double, dataType: String) =
+    throw new ArithmeticException(s"Casting $x to $dataType causes overflow.")
+
+  private val intUpperBound = Int.MaxValue.toDouble
+  private val intLowerBound = Int.MinValue.toDouble
+  private val longUpperBound = Long.MaxValue.toDouble
+  private val longLowerBound = Long.MinValue.toDouble
+
+  override def toInt(x: Double): Int = {
+    if (Math.floor(x) <= intUpperBound && Math.ceil(x) >= intLowerBound) {
+      x.toInt
+    } else {
+      overflowException(x, "int")
+    }
+  }
+
+  override def toLong(x: Double): Long = {
+    if (Math.floor(x) <= longUpperBound && Math.ceil(x) >= longLowerBound) {
+      x.toLong
+    } else {
+      overflowException(x, "long")
+    }
+  }
+}
+
+object DecimalExactNumeric extends DecimalIsConflicted {
+  override def toInt(x: Decimal): Int = x.roundToInt()
+
+  override def toLong(x: Decimal): Long = x.roundToLong()
 }

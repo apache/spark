@@ -66,6 +66,11 @@
           <groupId>com.fasterxml.jackson.dataformat</groupId>
           <artifactId>jackson-dataformat-yaml</artifactId>
         </exclusion>
+        <!-- SPARK-28765 Unused JDK11-specific dependency -->
+        <exclusion>
+          <groupId>javax.annotation</groupId>
+          <artifactId>javax.annotation-api</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
 

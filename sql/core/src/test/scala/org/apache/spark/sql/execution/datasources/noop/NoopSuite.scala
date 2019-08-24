@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.noop
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class NoopSuite extends SharedSQLContext {
+class NoopSuite extends SharedSparkSession {
   import testImplicits._
 
   test("materialisation of all rows") {
