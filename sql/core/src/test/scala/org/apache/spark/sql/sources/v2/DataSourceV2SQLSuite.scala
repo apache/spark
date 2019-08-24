@@ -57,6 +57,10 @@ class DataSourceV2SQLSuite
     }
   }
 
+  override def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+  }
+
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set(

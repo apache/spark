@@ -21,19 +21,26 @@ import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 
 class DataSourceV2SQLSessionCatalogSuite
-  extends SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog]
-  with InsertIntoSQLTests {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = true)
+  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
   import testImplicits._
 
   override protected val catalogAndNamespace = ""
 
-  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+  override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
     val tmpView = "tmp_view"
     withTempView(tmpView) {
       insert.createOrReplaceTempView(tmpView)
       val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
       sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
     }
+  }
+
+  override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+    checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
+    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
+    checkAnswer(sql(s"TABLE $tableName"), expected)
   }
 }

@@ -47,6 +47,13 @@ class DataSourceV2DataFrameSessionCatalogSuite
     dfw.insertInto(tableName)
   }
 
+  override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+    checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
+    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
+    checkAnswer(sql(s"TABLE $tableName"), expected)
+  }
+
   override protected val catalogAndNamespace: String = ""
 
   test("saveAsTable: Append mode should not fail if the table already exists " +
@@ -116,12 +123,7 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
     spark.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
   }
 
-  protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
-    checkAnswer(spark.table(tableName), expected)
-    checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
-    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
-    checkAnswer(sql(s"TABLE $tableName"), expected)
-  }
+  protected def verifyTable(tableName: String, expected: DataFrame): Unit
 
   import testImplicits._
 
