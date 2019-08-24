@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -143,7 +142,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       var loader = conf.getClassLoader
       val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
       if (StringUtils.isNotBlank(auxJars)) {
-        loader = Utilities.addToClassPath(loader, StringUtils.split(auxJars, ","))
+        loader = ThriftserverShimUtils.addToClassPath(loader, StringUtils.split(auxJars, ","))
       }
       conf.setClassLoader(loader)
       Thread.currentThread().setContextClassLoader(loader)
