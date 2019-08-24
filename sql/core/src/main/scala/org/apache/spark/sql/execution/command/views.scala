@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 
@@ -234,13 +234,8 @@ case class CreateViewCommand(
         "It is not allowed to create a persisted view from the Dataset API")
     }
     val aliasedSchema = aliasPlan(session, analyzedPlan).schema
-
-    // Generate the query column names, throw an AnalysisException if there exists duplicate column
-    // names.
-    SchemaUtils.checkColumnNameDuplication(
-      aliasedSchema.fieldNames, "in the view definition", session.sessionState.conf.resolver)
-
-    val newProperties = generateViewProperties(properties, session, analyzedPlan)
+    val newProperties = generateViewProperties(
+      properties, session, analyzedPlan, aliasedSchema.fieldNames)
 
     CatalogTable(
       identifier = name,
@@ -300,12 +295,8 @@ case class AlterViewAsCommand(
     val viewIdent = viewMeta.identifier
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
-    // Generate the query column names, throw an AnalysisException if there exists duplicate column
-    // names.
-    SchemaUtils.checkColumnNameDuplication(
-      analyzedPlan.schema.fieldNames, "in the view definition", session.sessionState.conf.resolver)
-
-    val newProperties = generateViewProperties(viewMeta.properties, session, analyzedPlan)
+    val newProperties = generateViewProperties(
+      viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 
     val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
@@ -366,8 +357,15 @@ object ViewHelper {
   def generateViewProperties(
       properties: Map[String, String],
       session: SparkSession,
-      analyzedPlan: LogicalPlan): Map[String, String] = {
+      analyzedPlan: LogicalPlan,
+      fieldNames: Array[String]): Map[String, String] = {
+    // for createViewCommand queryOutput may be different from fieldNames
     val queryOutput = analyzedPlan.schema.fieldNames
+
+    // Generate the query column names, throw an AnalysisException if there exists duplicate column
+    // names.
+    SchemaUtils.checkColumnNameDuplication(
+      fieldNames, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
