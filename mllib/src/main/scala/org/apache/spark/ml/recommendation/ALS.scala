@@ -990,16 +990,21 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         previousUserFactors.unpersist()
       }
     } else {
+      var previousCachedItemFactors: Option[RDD[(Int, FactorBlock)]] = None
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
+          itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
           val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
           ALS.cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
+
+          previousCachedItemFactors.foreach(_.unpersist())
           previousCheckpointFile = itemFactors.getCheckpointFile
+          previousCachedItemFactors = Option(itemFactors)
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, solver = solver)
@@ -1029,8 +1034,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
-      itemFactors.unpersist()
       itemIdAndFactors.count()
+      itemFactors.unpersist()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
       itemInBlocks.unpersist()
