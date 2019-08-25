@@ -865,9 +865,9 @@ private[spark] class TaskSetManager(
 
     if (successful(index)) {
       logInfo(s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, but the task will not" +
-        s" be re-executed (either because the task failed with a shuffle data fetch failure," +
-        s" so the previous stage needs to be re-run, or because a different copy of the task" +
-        s" has already succeeded).")
+        " be re-executed (either because the task failed with a shuffle data fetch failure," +
+        " so the previous stage needs to be re-run, or because a different copy of the task" +
+        " has already succeeded).")
     } else {
       addPendingTask(index)
     }

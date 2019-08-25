@@ -894,7 +894,7 @@ private[spark] class SparkSubmit extends Logging {
       case e: NoClassDefFoundError =>
         logError(s"Failed to load $childMainClass: ${e.getMessage()}")
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
-          logInfo(s"Failed to load hive class.")
+          logInfo("Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
@@ -1090,13 +1090,13 @@ private[spark] object SparkSubmitUtils {
   def extractMavenCoordinates(coordinates: String): Seq[MavenCoordinate] = {
     coordinates.split(",").map { p =>
       val splits = p.replace("/", ":").split(":")
-      require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
+      require(splits.length == 3, "Provided Maven Coordinates must be in the form " +
         s"'groupId:artifactId:version'. The coordinate provided is: $p")
-      require(splits(0) != null && splits(0).trim.nonEmpty, s"The groupId cannot be null or " +
+      require(splits(0) != null && splits(0).trim.nonEmpty, "The groupId cannot be null or " +
         s"be whitespace. The groupId provided is: ${splits(0)}")
-      require(splits(1) != null && splits(1).trim.nonEmpty, s"The artifactId cannot be null or " +
+      require(splits(1) != null && splits(1).trim.nonEmpty, "The artifactId cannot be null or " +
         s"be whitespace. The artifactId provided is: ${splits(1)}")
-      require(splits(2) != null && splits(2).trim.nonEmpty, s"The version cannot be null or " +
+      require(splits(2) != null && splits(2).trim.nonEmpty, "The version cannot be null or " +
         s"be whitespace. The version provided is: ${splits(2)}")
       new MavenCoordinate(splits(0), splits(1), splits(2))
     }
@@ -1426,7 +1426,7 @@ private[spark] object SparkSubmitUtils {
           s"clients registered for master url ${master}.")
       case 1 => serviceLoaders.headOption.get
       case _ =>
-        throw new IllegalArgumentException(s"No external SparkSubmitOperations " +
+        throw new IllegalArgumentException("No external SparkSubmitOperations " +
           s"clients found for master url: '$master'")
     }
   }

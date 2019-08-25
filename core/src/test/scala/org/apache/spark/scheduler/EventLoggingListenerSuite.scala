@@ -59,7 +59,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   private var testDirPath: Path = _
 
   before {
-    testDir = Utils.createTempDir(namePrefix = s"history log")
+    testDir = Utils.createTempDir(namePrefix = "history log")
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }

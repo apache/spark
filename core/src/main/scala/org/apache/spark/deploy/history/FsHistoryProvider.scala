@@ -109,7 +109,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val historyUiAclsEnable = conf.get(History.HISTORY_SERVER_UI_ACLS_ENABLE)
   private val historyUiAdminAcls = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS)
   private val historyUiAdminAclsGroups = conf.get(History.HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS)
-  logInfo(s"History server ui acls " + (if (historyUiAclsEnable) "enabled" else "disabled") +
+  logInfo("History server ui acls " + (if (historyUiAclsEnable) "enabled" else "disabled") +
     "; users with admin permissions: " + historyUiAdminAcls.mkString(",") +
     "; groups with admin permissions" + historyUiAdminAclsGroups.mkString(","))
 
@@ -516,7 +516,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           // replayExecutor.submit (..) indicates the ExecutorService is unable
           // to take any more submissions at this time
           case e: Exception =>
-            logError(s"Exception while submitting event log for replay", e)
+            logError("Exception while submitting event log for replay", e)
             None
         }
       }

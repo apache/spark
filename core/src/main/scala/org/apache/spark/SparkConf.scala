@@ -784,7 +784,7 @@ private[spark] object SparkConf extends Logging {
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
       logWarning(
         s"The configuration key $key is not supported anymore " +
-          s"because Spark doesn't use Akka since 2.0")
+          "because Spark doesn't use Akka since 2.0")
     }
   }
 

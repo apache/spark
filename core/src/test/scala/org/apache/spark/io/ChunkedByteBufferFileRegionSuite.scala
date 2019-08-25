@@ -103,7 +103,7 @@ class ChunkedByteBufferFileRegionSuite extends SparkFunSuite with MockitoSugar
     assert(targetChannel.pos === 40)
   }
 
-  test(s"transfer to with random limits") {
+  test("transfer to with random limits") {
     val rng = new Random()
     val seed = System.currentTimeMillis()
     logInfo(s"seed = $seed")

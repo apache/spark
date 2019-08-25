@@ -108,7 +108,7 @@ class AppClientSuite
 
       eventually(timeout(10.seconds), interval(10.millis)) {
         val apps = getApplications()
-        assert(apps.head.getExecutorLimit === numExecutorsRequested, s"executor request failed")
+        assert(apps.head.getExecutorLimit === numExecutorsRequested, "executor request failed")
       }
 
       // Send request to kill executor, verify request was made

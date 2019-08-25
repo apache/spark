@@ -161,7 +161,7 @@ private[spark] class HadoopDelegationTokenManager(
         provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
-          s" Check your configuration to see if security is disabled or not.")
+          " Check your configuration to see if security is disabled or not.")
         None
       }
     }.foldLeft(Long.MaxValue)(math.min)
@@ -264,7 +264,7 @@ private[spark] class HadoopDelegationTokenManager(
       logInfo("Successfully logged into KDC.")
       ugi
     } else if (!SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())) {
-      logInfo(s"Attempting to load user's ticket cache.")
+      logInfo("Attempting to load user's ticket cache.")
       val ccache = sparkConf.getenv("KRB5CCNAME")
       val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
         UserGroupInformation.getCurrentUser().getUserName())
@@ -285,7 +285,7 @@ private[spark] class HadoopDelegationTokenManager(
         providers += iterator.next
       } catch {
         case t: Throwable =>
-          logDebug(s"Failed to load built in provider.", t)
+          logDebug("Failed to load built in provider.", t)
       }
     }
 

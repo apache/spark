@@ -300,7 +300,7 @@ private[spark] object ClosureCleaner extends Logging {
         }
       }
 
-      logDebug(s" + fields accessed by starting closure: " + accessedFields.size)
+      logDebug(" + fields accessed by starting closure: " + accessedFields.size)
       accessedFields.foreach { f => logDebug("     " + f) }
 
       // List of outer (class, object) pairs, ordered from outermost to innermost
@@ -317,14 +317,14 @@ private[spark] object ClosureCleaner extends Logging {
           // SPARK-14558: if the outermost object is a REPL line object, we should clone
           // and clean it as it may carray a lot of unnecessary information,
           // e.g. hadoop conf, spark conf, etc.
-          logDebug(s" + outermost object is a REPL line object, so we clone it:" +
+          logDebug(" + outermost object is a REPL line object, so we clone it:" +
             s" ${outermostClass}")
         } else {
           // The closure is ultimately nested inside a class; keep the object of that
           // class without cloning it since we don't want to clone the user's objects.
           // Note that we still need to keep around the outermost object itself because
           // we need it to clone its child closure later (see below).
-          logDebug(s" + outermost object is not a closure or REPL line object," +
+          logDebug(" + outermost object is not a closure or REPL line object," +
             s" so do not clone it: ${outermostClass}")
           parent = outermostObject // e.g. SparkContext
           outerPairs = outerPairs.tail

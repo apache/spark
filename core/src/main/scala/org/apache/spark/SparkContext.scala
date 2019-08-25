@@ -1524,7 +1524,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val fs = hadoopPath.getFileSystem(hadoopConfiguration)
       val isDir = fs.getFileStatus(hadoopPath).isDirectory
       if (!isLocal && scheme == "file" && isDir) {
-        throw new SparkException(s"addFile does not support local directories when not running " +
+        throw new SparkException("addFile does not support local directories when not running " +
           "local mode.")
       }
       if (!recursive && isDir) {
@@ -1920,7 +1920,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
-      throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
+      throw new SparkException("Cannot stop SparkContext within listener bus thread.")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
@@ -2414,7 +2414,7 @@ class SparkContext(config: SparkConf) extends Logging {
         try {
           stop()
         } finally {
-          throw new SparkException(s"Exception when registering SparkListener", e)
+          throw new SparkException("Exception when registering SparkListener", e)
         }
     }
 

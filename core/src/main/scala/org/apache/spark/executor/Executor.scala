@@ -147,7 +147,7 @@ private[spark] class Executor(
           val plugins = Utils.loadExtensions(classOf[ExecutorPlugin], pluginNames, conf)
           plugins.foreach { plugin =>
             plugin.init()
-            logDebug(s"Successfully loaded plugin " + plugin.getClass().getCanonicalName())
+            logDebug("Successfully loaded plugin " + plugin.getClass().getCanonicalName())
           }
           plugins
         }
@@ -478,7 +478,7 @@ private[spark] class Executor(
           // other exceptions.  Its *possible* this is what the user meant to do (though highly
           // unlikely).  So we will log an error and keep going.
           logError(s"TID ${taskId} completed successfully though internally it encountered " +
-            s"unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
+            "unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
             s"swallowing Spark's internal ${classOf[FetchFailedException]}", fetchFailure)
         }
         val taskFinishNs = System.nanoTime()
@@ -563,7 +563,7 @@ private[spark] class Executor(
           if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
-              s"dropping it.")
+              "dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
@@ -612,7 +612,7 @@ private[spark] class Executor(
             val fetchFailedCls = classOf[FetchFailedException].getName
             logWarning(s"TID ${taskId} encountered a ${fetchFailedCls} and " +
               s"failed, but the ${fetchFailedCls} was hidden by another " +
-              s"exception.  Spark is handling this like a fetch failure and ignoring the " +
+              "exception.  Spark is handling this like a fetch failure and ignoring the " +
               s"other exception: $t")
           }
           setTaskFinishedAndClearInterruptStatus()
@@ -920,7 +920,7 @@ private[spark] class Executor(
         logWarning("Issue communicating with driver in heartbeater", e)
         heartbeatFailures += 1
         if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
-          logError(s"Exit as unable to send heartbeats to driver " +
+          logError("Exit as unable to send heartbeats to driver " +
             s"more than $HEARTBEAT_MAX_FAILURES times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }

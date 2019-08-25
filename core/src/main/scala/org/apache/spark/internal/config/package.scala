@@ -847,7 +847,7 @@ package object config {
         "made in creating intermediate shuffle files.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The file buffer size must be positive and less than or equal to" +
+        "The file buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -857,7 +857,7 @@ package object config {
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
-        s"The buffer size must be positive and less than or equal to" +
+        "The buffer size must be positive and less than or equal to" +
           s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024}.")
       .createWithDefaultString("32k")
 
@@ -866,7 +866,7 @@ package object config {
       .doc("The buffer size, in bytes, to use when writing the sorted records to an on-disk file.")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v > 12 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
-        s"The buffer size must be greater than 12 and less than or equal to " +
+        "The buffer size must be greater than 12 and less than or equal to " +
           s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefault(1024 * 1024)
 

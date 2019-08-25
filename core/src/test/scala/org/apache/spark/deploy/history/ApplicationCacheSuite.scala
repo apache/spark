@@ -242,9 +242,9 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     operations.putAppUI(appId, attemptId, true, started, started + 10)
 
     val updatedUI = cache.withSparkUI(appId, attemptId) { ui => ui }
-    assert(firstUI !== updatedUI, s"expected updated UI")
+    assert(firstUI !== updatedUI, "expected updated UI")
     assertMetric("lookupCount", metrics.lookupCount, 2)
-    assert(1 === operations.detachCount, s"detach count")
+    assert(1 === operations.detachCount, "detach count")
   }
 
   /**

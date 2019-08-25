@@ -159,7 +159,7 @@ private[spark] class BarrierCoordinator(
           // Finished current barrier() call successfully, clean up ContextBarrierState and
           // increase the barrier epoch.
           logInfo(s"Barrier sync epoch $barrierEpoch from $barrierId received all updates from " +
-            s"tasks, finished successfully.")
+            "tasks, finished successfully.")
           barrierEpoch += 1
           requesters.clear()
           cancelTimerTask()

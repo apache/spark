@@ -270,14 +270,14 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     assert(replicateAndGetNumCopies("a2", 3) === 2)
 
     // Add another store, 3x replication should work now, 4x replication should only replicate 3x
-    val newStore1 = makeBlockManager(storeSize, s"newstore1")
+    val newStore1 = makeBlockManager(storeSize, "newstore1")
     eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a3", 3) === 3)
     }
     assert(replicateAndGetNumCopies("a4", 4) === 3)
 
     // Add another store, 4x replication should work now
-    val newStore2 = makeBlockManager(storeSize, s"newstore2")
+    val newStore2 = makeBlockManager(storeSize, "newstore2")
     eventually(timeout(1.second), interval(10.milliseconds)) {
       assert(replicateAndGetNumCopies("a5", 4) === 4)
     }

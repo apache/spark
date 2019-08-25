@@ -106,7 +106,7 @@ private[scheduler] class BlacklistTracker (
       if (execsToUnblacklist.nonEmpty) {
         // Un-blacklist any executors that have been blacklisted longer than the blacklist timeout.
         logInfo(s"Removing executors $execsToUnblacklist from blacklist because the blacklist " +
-          s"for those executors has timed out")
+          "for those executors has timed out")
         execsToUnblacklist.foreach { exec =>
           val status = executorIdToBlacklistStatus.remove(exec).get
           val failedExecsOnNode = nodeToBlacklistedExecs(status.node)
@@ -121,7 +121,7 @@ private[scheduler] class BlacklistTracker (
       if (nodesToUnblacklist.nonEmpty) {
         // Un-blacklist any nodes that have been blacklisted longer than the blacklist timeout.
         logInfo(s"Removing nodes $nodesToUnblacklist from blacklist because the blacklist " +
-          s"has timed out")
+          "has timed out")
         nodesToUnblacklist.foreach { node =>
           nodeIdToBlacklistExpiryTime.remove(node)
           listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
@@ -154,7 +154,7 @@ private[scheduler] class BlacklistTracker (
           force = true)
       case None =>
         logInfo(s"Not attempting to kill blacklisted executor id $exec " +
-          s"since allocation client is not defined.")
+          "since allocation client is not defined.")
     }
   }
 
@@ -182,7 +182,7 @@ private[scheduler] class BlacklistTracker (
           }
         case None =>
           logWarning(s"Not attempting to kill executors on blacklisted host $node " +
-            s"since allocation client is not defined.")
+            "since allocation client is not defined.")
       }
     }
   }
@@ -248,7 +248,7 @@ private[scheduler] class BlacklistTracker (
       // problem to re-blacklist, with a later expiry time.
       if (newTotal >= MAX_FAILURES_PER_EXEC && !executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor id: $exec because it has $newTotal" +
-          s" task failures in successful task sets")
+          " task failures in successful task sets")
         val node = failuresInTaskSet.node
         executorIdToBlacklistStatus.put(exec, BlacklistedExecutor(node, expiryTimeForNewBlacklists))
         listenerBus.post(SparkListenerExecutorBlacklisted(now, exec, newTotal))
@@ -467,7 +467,7 @@ private[spark] object BlacklistTracker extends Logging {
       throw new IllegalArgumentException(s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
         s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
-        s"Spark will not be robust to one bad node.  Decrease " +
+        "Spark will not be robust to one bad node.  Decrease " +
         s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
         s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }

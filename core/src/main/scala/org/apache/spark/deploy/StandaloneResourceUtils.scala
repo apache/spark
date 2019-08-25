@@ -151,8 +151,8 @@ private[spark] object StandaloneResourceUtils extends Logging {
               available = retained
             } else if (checked) {
               keepAllocating = false
-              throw new SparkException(s"No more resources available since they've already" +
-                s" assigned to other workers/drivers.")
+              throw new SparkException("No more resources available since they've already" +
+                " assigned to other workers/drivers.")
             } else {
               keepAllocating = true
             }

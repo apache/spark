@@ -199,7 +199,7 @@ private class HistoryServerDiskManager(
 
   private def makeRoom(size: Long): Unit = {
     if (free() < size) {
-      logDebug(s"Not enough free space, looking at candidates for deletion...")
+      logDebug("Not enough free space, looking at candidates for deletion...")
       val evicted = new ListBuffer[ApplicationStoreInfo]()
       Utils.tryWithResource(
         listing.view(classOf[ApplicationStoreInfo]).index("lastAccess").closeableIterator()

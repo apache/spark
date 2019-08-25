@@ -193,7 +193,7 @@ private[history] class ApplicationCache(
    * @return a string value, primarily for testing and diagnostics
    */
   override def toString: String = {
-    val sb = new StringBuilder(s"ApplicationCache(" +
+    val sb = new StringBuilder("ApplicationCache(" +
           s" retainedApplications= $retainedApplications)")
     sb.append(s"; time= ${clock.getTimeMillis()}")
     sb.append(s"; entry count= ${appCache.size()}\n")

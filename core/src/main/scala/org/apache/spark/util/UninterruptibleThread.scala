@@ -59,7 +59,7 @@ private[spark] class UninterruptibleThread(
    */
   def runUninterruptibly[T](f: => T): T = {
     if (Thread.currentThread() != this) {
-      throw new IllegalStateException(s"Call runUninterruptibly in a wrong thread. " +
+      throw new IllegalStateException("Call runUninterruptibly in a wrong thread. " +
         s"Expected: $this but was ${Thread.currentThread()}")
     }
 

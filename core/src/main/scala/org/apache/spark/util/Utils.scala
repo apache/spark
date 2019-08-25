@@ -279,12 +279,12 @@ private[spark] object Utils extends Logging {
       // So attempting to create and then check if directory was created or not.
       dir.mkdirs()
       if ( !dir.exists() || !dir.isDirectory) {
-        logError(s"Failed to create directory " + dir)
+        logError("Failed to create directory " + dir)
       }
       dir.isDirectory
     } catch {
       case e: Exception =>
-        logError(s"Failed to create directory " + dir, e)
+        logError("Failed to create directory " + dir, e)
         false
     }
   }
@@ -2290,14 +2290,14 @@ private[spark] object Utils extends Logging {
             val exceptionMessage = if (startPort == 0) {
               s"${e.getMessage}: Service$serviceString failed after " +
                 s"$maxRetries retries (on a random free port)! " +
-                s"Consider explicitly setting the appropriate binding address for " +
+                "Consider explicitly setting the appropriate binding address for " +
                 s"the service$serviceString (for example ${DRIVER_BIND_ADDRESS.key} " +
-                s"for SparkDriver) to the correct binding address."
+                "for SparkDriver) to the correct binding address."
             } else {
               s"${e.getMessage}: Service$serviceString failed after " +
                 s"$maxRetries retries (starting from $startPort)! Consider explicitly setting " +
                 s"the appropriate port for the service$serviceString (for example spark.ui.port " +
-                s"for SparkUI) to an available port or increasing spark.port.maxRetries."
+                "for SparkUI) to an available port or increasing spark.port.maxRetries."
             }
             val exception = new BindException(exceptionMessage)
             // restore original stack trace

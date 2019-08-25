@@ -80,7 +80,7 @@ private[spark] class StatsdReporter(
           timers.entrySet.asScala.foreach(e => reportTimer(e.getKey, e.getValue))
         } recover {
           case ioe: IOException =>
-            logDebug(s"Unable to send packets to StatsD", NetUtils.wrapException(
+            logDebug("Unable to send packets to StatsD", NetUtils.wrapException(
               address.getHostString, address.getPort, localAddress, localPort, ioe))
           case e: Throwable => logDebug(s"Unable to send packets to StatsD at '$host:$port'", e)
         }

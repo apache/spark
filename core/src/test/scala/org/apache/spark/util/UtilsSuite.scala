@@ -982,7 +982,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         val file = File.createTempFile("temp-file-name", ".tmp")
         file.deleteOnExit()
         val cmd =
-          s"""
+          """
              |#!/bin/bash
              |trap "" SIGTERM
              |sleep 10

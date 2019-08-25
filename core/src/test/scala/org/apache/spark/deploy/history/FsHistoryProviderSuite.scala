@@ -57,7 +57,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
+    testDir = Utils.createTempDir(namePrefix = "a b%20c+d")
   }
 
   override def afterEach(): Unit = {
@@ -1010,7 +1010,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
 
   test("SPARK-21571: clean up removes invalid history files") {
     val clock = new ManualClock()
-    val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"2d")
+    val conf = createTestConf().set(MAX_LOG_AGE_S.key, "2d")
     val provider = new FsHistoryProvider(conf, clock)
 
     // Create 0-byte size inprogress and complete files
@@ -1080,7 +1080,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         SparkListenerApplicationEnd(5L)
       ) ++ (1 to 1000).map { i => SparkListenerJobStart(i, i, Nil) }: _*)
 
-    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE.key, s"1k")
+    val conf = createTestConf().set(END_EVENT_REPARSE_CHUNK_SIZE.key, "1k")
     val provider = new FsHistoryProvider(conf)
     updateAndCheck(provider) { list =>
       assert(list.size === 1)

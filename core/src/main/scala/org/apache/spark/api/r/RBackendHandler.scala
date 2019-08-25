@@ -154,7 +154,7 @@ private[r] class RBackendHandler(server: RBackend)
 
         if (index.isEmpty) {
           logWarning(s"cannot find matching method ${cls}.$methodName. "
-            + s"Candidates are:")
+            + "Candidates are:")
           selectedMethods.foreach { method =>
             logWarning(s"$methodName(${method.getParameterTypes.mkString(",")})")
           }
@@ -175,7 +175,7 @@ private[r] class RBackendHandler(server: RBackend)
 
         if (index.isEmpty) {
           logWarning(s"cannot find matching constructor for ${cls}. "
-            + s"Candidates are:")
+            + "Candidates are:")
           ctors.foreach { ctor =>
             logWarning(s"$cls(${ctor.getParameterTypes.mkString(",")})")
           }

@@ -273,7 +273,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
         None
       case NonFatal(e) =>
         logWarning(s"Error reading partitioner from $checkpointDirPath, " +
-            s"partitioner will not be recovered which may lead to performance loss", e)
+            "partitioner will not be recovered which may lead to performance loss", e)
         None
     }
   }

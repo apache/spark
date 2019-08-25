@@ -472,7 +472,7 @@ class MemoryStoreSuite
 
       // Add one big block, which will require evicting everything in the memorystore.  However our
       // mock BlockEvictionHandler will throw an exception -- make sure all locks are cleared.
-      val largeBlockId = BlockId(s"rdd_2_1")
+      val largeBlockId = BlockId("rdd_2_1")
       val largeBlockInfo = new BlockInfo(StorageLevel.MEMORY_ONLY, ct, tellMaster = false)
       val initialWriteLock = blockInfoManager.lockNewBlockForWriting(largeBlockId, largeBlockInfo)
       assert(initialWriteLock)

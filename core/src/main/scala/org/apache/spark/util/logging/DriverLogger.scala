@@ -69,7 +69,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       writer = Some(new DfsAsyncWriter(appId, hadoopConf))
     } catch {
       case e: Exception =>
-        logError(s"Could not persist driver logs to dfs", e)
+        logError("Could not persist driver logs to dfs", e)
     }
   }
 
@@ -81,7 +81,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       writer.foreach(_.closeWriter())
     } catch {
       case e: Exception =>
-        logError(s"Error in persisting driver logs", e)
+        logError("Error in persisting driver logs", e)
     } finally {
       Utils.tryLogNonFatalError {
         JavaUtils.deleteRecursively(FileUtils.getFile(localLogFile).getParentFile())
@@ -105,7 +105,7 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
       val fileSystem: FileSystem = new Path(rootDir).getFileSystem(hadoopConf)
       if (!fileSystem.exists(new Path(rootDir))) {
         throw new RuntimeException(s"${rootDir} does not exist." +
-          s" Please create this dir in order to persist driver logs")
+          " Please create this dir in order to persist driver logs")
       }
       val dfsLogFile: String = FileUtils.getFile(rootDir, appId
         + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
@@ -192,7 +192,7 @@ private[spark] object DriverLogger extends Logging {
             None
         }
       } else {
-        logWarning(s"Driver logs are not persisted because" +
+        logWarning("Driver logs are not persisted because" +
           s" ${DRIVER_LOG_DFS_DIR.key} is not configured")
         None
       }

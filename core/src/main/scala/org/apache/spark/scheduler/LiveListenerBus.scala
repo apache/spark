@@ -208,7 +208,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
    */
   def stop(): Unit = {
     if (!started.get()) {
-      throw new IllegalStateException(s"Attempted to stop bus that has not yet started!")
+      throw new IllegalStateException("Attempted to stop bus that has not yet started!")
     }
 
     if (!stopped.compareAndSet(false, true)) {

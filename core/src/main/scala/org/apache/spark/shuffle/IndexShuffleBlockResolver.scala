@@ -210,7 +210,7 @@ private[spark] class IndexShuffleBlockResolver(
       val actualPosition = channel.position()
       val expectedPosition = blockId.reduceId * 8L + 16
       if (actualPosition != expectedPosition) {
-        throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
+        throw new Exception("SPARK-22982: Incorrect channel position after index file reads: " +
           s"expected $expectedPosition but actual position was $actualPosition.")
       }
       new FileSegmentManagedBuffer(

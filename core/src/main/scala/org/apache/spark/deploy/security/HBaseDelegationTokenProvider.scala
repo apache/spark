@@ -54,7 +54,7 @@ private[security] class HBaseDelegationTokenProvider
     } catch {
       case NonFatal(e) =>
         logWarning(s"Failed to get token from service $serviceName due to  " + e +
-          s" Retrying to fetch HBase security token with hbase connection parameter.")
+          " Retrying to fetch HBase security token with hbase connection parameter.")
         // Seems to be spark is trying to get the token from HBase 2.x.x  version or above where the
         // obtainToken(Configuration conf) API has been removed. Lets try obtaining the token from
         // another compatible API of HBase service.

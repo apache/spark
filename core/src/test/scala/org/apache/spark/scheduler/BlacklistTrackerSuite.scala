@@ -450,7 +450,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       assert(excMsg === s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key} " +
         s"( = ${maxNodeAttempts}) was >= ${config.TASK_MAX_FAILURES.key} " +
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
-        s"Spark will not be robust to one bad node.  Decrease " +
+        "Spark will not be robust to one bad node.  Decrease " +
         s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.TASK_MAX_FAILURES.key}, " +
         s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
     }

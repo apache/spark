@@ -169,7 +169,7 @@ class KryoSerializer(conf: SparkConf)
           .foreach { reg => reg.registerClasses(kryo) }
       } catch {
         case e: Exception =>
-          throw new SparkException(s"Failed to register classes with Kryo", e)
+          throw new SparkException("Failed to register classes with Kryo", e)
       }
     }
 

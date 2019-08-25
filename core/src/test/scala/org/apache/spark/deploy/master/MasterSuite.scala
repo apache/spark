@@ -780,7 +780,7 @@ class MasterSuite extends SparkFunSuite
     var status = masterRef.askSync[DriverStatusResponse](RequestDriverStatus(driverId))
     assert(status.state === Some(DriverState.SUBMITTED))
     val worker = new MockWorker(masterRef)
-    worker.rpcEnv.setupEndpoint(s"worker", worker)
+    worker.rpcEnv.setupEndpoint("worker", worker)
     val resources = Map(GPU -> new ResourceInformation(GPU, Array("0", "1", "2")),
       FPGA -> new ResourceInformation(FPGA, Array("f1", "f2", "f3")))
     val regMsg = RegisterWorker(worker.id, "localhost", 7077, worker.self, 10, 1024,
@@ -816,7 +816,7 @@ class MasterSuite extends SparkFunSuite
         workerResourceReqs: Map[String, Int] = Map.empty)
     : MockWorker = {
       val worker = new MockWorker(master)
-      worker.rpcEnv.setupEndpoint(s"worker", worker)
+      worker.rpcEnv.setupEndpoint("worker", worker)
       val resources = workerResourceReqs.map { case (rName, amount) =>
         val shortName = rName.charAt(0)
         val addresses = (0 until amount).map(i => s"$shortName$i").toArray
