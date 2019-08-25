@@ -47,13 +47,13 @@ private[spark] case class RDDOperationNode(
     name: String,
     cached: Boolean,
     barrier: Boolean,
-    callsite: String)
+    callsite: String) extends Serializable
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
  * This represents an RDD dependency.
  */
-private[spark] case class RDDOperationEdge(fromId: Int, toId: Int)
+private[spark] case class RDDOperationEdge(fromId: Int, toId: Int) extends Serializable
 
 /**
  * A cluster that groups nodes together in an RDDOperationGraph.
@@ -64,7 +64,7 @@ private[spark] case class RDDOperationEdge(fromId: Int, toId: Int)
 private[spark] class RDDOperationCluster(
     val id: String,
     val barrier: Boolean,
-    private var _name: String) {
+    private var _name: String) extends Serializable {
   private val _childNodes = new ListBuffer[RDDOperationNode]
   private val _childClusters = new ListBuffer[RDDOperationCluster]
 

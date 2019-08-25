@@ -76,8 +76,7 @@ private[spark] class ReplayListenerBus(eventSkipNum: Int = 0)
     try {
       val lineEntries = lines
         .zipWithIndex
-        .filter { case (_, index) => index >= eventSkipNum}
-        .filter { case (line, _) => eventsFilter(line) }
+        .filter { case (line, index) => index >= eventSkipNum && eventsFilter(line) }
 
       while (lineEntries.hasNext) {
         try {

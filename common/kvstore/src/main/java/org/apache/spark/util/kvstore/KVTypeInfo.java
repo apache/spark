@@ -17,6 +17,10 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.io.IOException;
+import java.io.Serializable;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -31,7 +35,7 @@ import org.apache.spark.annotation.Private;
  * Wrapper around types managed in a KVStore, providing easy access to their indexed fields.
  */
 @Private
-public class KVTypeInfo {
+public class KVTypeInfo implements Serializable {
 
   private final Class<?> type;
   private final Map<String, KVIndex> indices;
@@ -120,7 +124,7 @@ public class KVTypeInfo {
   /**
    * Abstracts the difference between invoking a Field and a Method.
    */
-  interface Accessor {
+  interface Accessor extends Serializable {
 
     Object get(Object instance) throws ReflectiveOperationException;
 
@@ -129,7 +133,7 @@ public class KVTypeInfo {
 
   private class FieldAccessor implements Accessor {
 
-    private final Field field;
+    private Field field;
 
     FieldAccessor(Field field) {
       this.field = field;
@@ -144,11 +148,24 @@ public class KVTypeInfo {
     public Class getType() {
       return field.getType();
     }
+
+    private void writeObject(ObjectOutputStream out) throws IOException {
+      out.writeUTF(field.getName());
+      out.writeObject(field.getDeclaringClass());
+    }
+
+    private void readObject(ObjectInputStream in)
+      throws IOException, ClassNotFoundException, NoSuchFieldException {
+      String name = in.readUTF();
+      Class<?> clazz = (Class<?>) in.readObject();
+      field = clazz.getDeclaredField(name);
+      field.setAccessible(true);
+    }
   }
 
   private class MethodAccessor implements Accessor {
 
-    private final Method method;
+    private Method method;
 
     MethodAccessor(Method method) {
       this.method = method;
@@ -162,6 +179,21 @@ public class KVTypeInfo {
     @Override
     public Class getType() {
       return method.getReturnType();
+    }
+
+    private void writeObject(ObjectOutputStream out) throws IOException {
+      out.writeUTF(method.getName());
+      out.writeObject(method.getDeclaringClass());
+      out.writeObject(method.getParameterTypes());
+    }
+
+    private void readObject(ObjectInputStream in)
+      throws IOException, ClassNotFoundException, NoSuchMethodException {
+      String name = in.readUTF();
+      Class<?> clazz = (Class<?>) in.readObject();
+      Class<?>[] parameters = (Class<?>[]) in.readObject();
+      method = clazz.getDeclaredMethod(name, parameters);
+      method.setAccessible(true);
     }
   }
 

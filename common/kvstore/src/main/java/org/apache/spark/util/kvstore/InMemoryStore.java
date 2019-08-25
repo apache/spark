@@ -18,13 +18,7 @@
 package org.apache.spark.util.kvstore;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
@@ -43,7 +37,7 @@ import org.apache.spark.annotation.Private;
  * according to the index. This saves memory but makes iteration more expensive.
  */
 @Private
-public class InMemoryStore implements KVStore {
+public class InMemoryStore implements KVStore, Serializable {
 
   private Object metadata;
   private InMemoryLists inMemoryLists = new InMemoryLists();
@@ -144,7 +138,7 @@ public class InMemoryStore implements KVStore {
    * Encapsulates ConcurrentHashMap so that the typing in and out of the map strictly maps a
    * class of type T to an InstanceList of type T.
    */
-  private static class InMemoryLists {
+  private static class InMemoryLists implements Serializable {
     private final ConcurrentMap<Class<?>, InstanceList<?>> data = new ConcurrentHashMap<>();
 
     @SuppressWarnings("unchecked")
@@ -164,7 +158,7 @@ public class InMemoryStore implements KVStore {
     }
   }
 
-  private static class InstanceList<T> {
+  private static class InstanceList<T> implements Serializable {
 
     /**
      * A BiConsumer to control multi-entity removal.  We use this in a forEach rather than an

@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.io.Serializable;
 import java.util.Arrays;
 
 import com.google.common.base.Preconditions;
@@ -34,7 +35,7 @@ import com.google.common.base.Preconditions;
  * This class is not efficient and is mostly meant to compare really small arrays, like those
  * generally used as indices and keys in a KVStore.
  */
-class ArrayWrappers {
+class ArrayWrappers implements Serializable {
 
   @SuppressWarnings("unchecked")
   public static Comparable<Object> forArray(Object a) {
@@ -53,7 +54,7 @@ class ArrayWrappers {
     return (Comparable<Object>) ret;
   }
 
-  private static class ComparableIntArray implements Comparable<ComparableIntArray> {
+  private static class ComparableIntArray implements Comparable<ComparableIntArray>, Serializable {
 
     private final int[] array;
 
@@ -92,7 +93,8 @@ class ArrayWrappers {
     }
   }
 
-  private static class ComparableLongArray implements Comparable<ComparableLongArray> {
+  private static class ComparableLongArray
+    implements Comparable<ComparableLongArray>, Serializable {
 
     private final long[] array;
 
@@ -131,7 +133,8 @@ class ArrayWrappers {
     }
   }
 
-  private static class ComparableByteArray implements Comparable<ComparableByteArray> {
+  private static class ComparableByteArray
+    implements Comparable<ComparableByteArray>, Serializable {
 
     private final byte[] array;
 
@@ -170,7 +173,8 @@ class ArrayWrappers {
     }
   }
 
-  private static class ComparableObjectArray implements Comparable<ComparableObjectArray> {
+  private static class ComparableObjectArray
+    implements Comparable<ComparableObjectArray>, Serializable {
 
     private final Object[] array;
 

@@ -30,8 +30,6 @@ import scala.io.Source
 import scala.util.Try
 import scala.xml.Node
 
-import com.esotericsoftware.kryo.Kryo.DefaultInstantiatorStrategy
-import com.esotericsoftware.kryo.io.Input
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.MoreExecutors
@@ -40,7 +38,6 @@ import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
 import org.fusesource.leveldbjni.internal.NativeDB
-import org.objenesis.strategy.{SerializingInstantiatorStrategy, StdInstantiatorStrategy}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -53,7 +50,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.ReplayListenerBus._
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.status._
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo, ApplicationInfo}
@@ -134,6 +131,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val storePath = conf.get(LOCAL_STORE_DIR).map(new File(_))
   private val fastInProgressParsing = conf.get(FAST_IN_PROGRESS_PARSING)
+
+  // a JavaSerializer used to deserialize InMemoryStoreSnapshot
+  val serializer = new JavaSerializer(conf).newInstance()
 
   // Visible for testing.
   private[history] val listing: KVStore = storePath.map { path =>
@@ -347,7 +347,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           loadDiskStore(sm, appId, attempt)
 
         case _ =>
-          createInMemoryStore(appId, attempt)
+          createInMemoryStore(attempt)
       }
     } catch {
       case _: FileNotFoundException =>
@@ -446,6 +446,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // the end-user.
             !entry.getPath().getName().startsWith(".") &&
             !entry.getPath().getName().endsWith(".ckp") &&
+            !entry.getPath().getName().endsWith(".ckp.tmp") &&
             !isBlacklisted(entry.getPath)
         }
         .filter { entry =>
@@ -963,7 +964,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val trackingStore = new ElementTrackingStore(store, replayConf)
     val replayBus = new ReplayListenerBus(eventSkipNum)
     val listener = new AppStatusListener(trackingStore, replayConf, false,
-      lastUpdateTime = Some(lastUpdated))
+      lastUpdateTime = Some(lastUpdated), initLiveEntitiesFromStore = eventSkipNum > 0)
     replayBus.addListener(listener)
 
     for {
@@ -1089,8 +1090,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     KVUtils.open(newStorePath, metadata)
   }
 
-  private def createInMemoryStore(appId: String, attempt: AttemptInfoWrapper): KVStore = {
-    val imsSnapshot = getOrCreateInMemoryStoreSnapshot(appId)
+  private def createInMemoryStore(attempt: AttemptInfoWrapper): KVStore = {
+    val imsSnapshot = getOrCreateInMemoryStoreSnapshot(attempt)
     val store = imsSnapshot.store
     if (imsSnapshot.finished) {
       store
@@ -1101,31 +1102,33 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private def getOrCreateInMemoryStoreSnapshot(appId: String): InMemoryStoreSnapshot = {
+  private def getOrCreateInMemoryStoreSnapshot(attempt: AttemptInfoWrapper)
+    : InMemoryStoreSnapshot = {
     if (conf.get(IMS_CHECKPOINT_ENABLED)) {
-      val path = new Path(logDir, s"ims_$appId.ckp").toUri.getPath
-      logInfo(s"loading $path.")
-      try {
-        val fileIn = new FileInputStream(path)
-//        val serializer = new KryoSerializer(conf)
-//        val in = serializer.newInstance().deserializeStream(fileIn)
-//        val imsSnapshot = in.readObject[InMemoryStoreSnapshot]()
-//        in.close()
-        val kryo = new KryoSerializer(conf).newKryo()
-        kryo.setInstantiatorStrategy(new StdInstantiatorStrategy())
-        val input = new Input(fileIn)
-        val imsSnapshot = kryo.readObject(input, classOf[InMemoryStoreSnapshot])
-        input.close()
-        logInfo(s"Loaded InMemoryStoreSnapshot(ims, eventsSkipNum=${imsSnapshot.eventsNum}," +
-          s" finished=${imsSnapshot.finished}) from $path.")
-        imsSnapshot
-      } catch {
-        case e: Throwable =>
-          val cause = Option(e.getCause)
-          logError(s"failed to load $path", cause.getOrElse(e))
-          throw e
+      val ckpPath = new Path(logDir, attempt.logPath + ".ckp")
+      if (fs.exists(ckpPath)) {
+        try {
+          logInfo(s"Loading InMemoryStore checkpoint file: $ckpPath")
+          Utils.tryWithResource(EventLoggingListener.openEventLog(ckpPath, fs)) { in =>
+            val objIn = serializer.deserializeStream(in)
+            val startNs = System.nanoTime()
+            val imsSnapshot = objIn.readObject[InMemoryStoreSnapshot]()
+            objIn.close()
+            val finishedNs = System.nanoTime()
+            val duration = TimeUnit.NANOSECONDS.toMillis(finishedNs - startNs)
+            logInfo(s"Loaded InMemoryStore, eventsNum=${imsSnapshot.eventsNum}, " +
+              s"finished=${imsSnapshot.finished}, took ${duration}ms")
+            // +1 for skipping SparkListenerLogStart
+            imsSnapshot.copy(eventsNum = imsSnapshot.eventsNum + 1)
+          }
+        } catch {
+          case e: Exception =>
+            logError("Failed to load InMemoryStore checkpoint file, use log file instead", e)
+            InMemoryStoreSnapshot(new InMemoryStore, 0, false)
+        }
+      } else {
+        InMemoryStoreSnapshot(new InMemoryStore, 0, false)
       }
-
     } else {
       InMemoryStoreSnapshot(new InMemoryStore, 0, false)
     }

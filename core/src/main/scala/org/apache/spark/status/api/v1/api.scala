@@ -30,6 +30,7 @@ import com.fasterxml.jackson.databind.annotation.{JsonDeserialize, JsonSerialize
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.metrics.ExecutorMetricType
+import org.apache.spark.status.{LiveExecutor, LiveRDDDistribution, LiveRDDPartition}
 
 case class ApplicationInfo private[spark](
     id: String,
@@ -76,7 +77,7 @@ class ExecutorStageSummary private[spark](
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
     val diskBytesSpilled : Long,
-    val isBlacklistedForStage: Boolean)
+    val isBlacklistedForStage: Boolean) extends Serializable
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -107,13 +108,13 @@ class ExecutorSummary private[spark](
     @JsonSerialize(using = classOf[ExecutorMetricsJsonSerializer])
     @JsonDeserialize(using = classOf[ExecutorMetricsJsonDeserializer])
     val peakMemoryMetrics: Option[ExecutorMetrics],
-    val attributes: Map[String, String])
+    val attributes: Map[String, String]) extends Serializable
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
     val usedOffHeapStorageMemory: Long,
     val totalOnHeapStorageMemory: Long,
-    val totalOffHeapStorageMemory: Long)
+    val totalOffHeapStorageMemory: Long) extends Serializable
 
 /** deserializer for peakMemoryMetrics: convert map to ExecutorMetrics */
 private[spark] class ExecutorMetricsJsonDeserializer
@@ -165,7 +166,7 @@ class JobData private[spark](
     val numCompletedStages: Int,
     val numSkippedStages: Int,
     val numFailedStages: Int,
-    val killedTasksSummary: Map[String, Int])
+    val killedTasksSummary: Map[String, Int]) extends Serializable
 
 class RDDStorageInfo private[spark](
     val id: Int,
@@ -176,9 +177,10 @@ class RDDStorageInfo private[spark](
     val memoryUsed: Long,
     val diskUsed: Long,
     val dataDistribution: Option[Seq[RDDDataDistribution]],
-    val partitions: Option[Seq[RDDPartitionInfo]])
+    val partitions: Option[Seq[RDDPartitionInfo]]) extends Serializable
 
 class RDDDataDistribution private[spark](
+    val executorId: String,
     val address: String,
     val memoryUsed: Long,
     val memoryRemaining: Long,
@@ -190,14 +192,35 @@ class RDDDataDistribution private[spark](
     @JsonDeserialize(contentAs = classOf[JLong])
     val onHeapMemoryRemaining: Option[Long],
     @JsonDeserialize(contentAs = classOf[JLong])
-    val offHeapMemoryRemaining: Option[Long])
+    val offHeapMemoryRemaining: Option[Long]) extends Serializable {
+
+  def toLiveRDDDistribution(executors: scala.collection.Map[String, LiveExecutor])
+    : LiveRDDDistribution = {
+    // TODO (wuyi) does the liveexecutor always exists ?
+    val exec = executors.get(executorId).get
+    val liveRDDDistribution = new LiveRDDDistribution(exec)
+    liveRDDDistribution.memoryUsed = memoryUsed
+    liveRDDDistribution.diskUsed = diskUsed
+    liveRDDDistribution.onHeapUsed = onHeapMemoryUsed.getOrElse(0)
+    liveRDDDistribution.offHeapUsed = offHeapMemoryUsed.getOrElse(0)
+    liveRDDDistribution.lastUpdate = this
+    liveRDDDistribution
+  }
+}
 
 class RDDPartitionInfo private[spark](
     val blockName: String,
     val storageLevel: String,
     val memoryUsed: Long,
     val diskUsed: Long,
-    val executors: Seq[String])
+    val executors: Seq[String]) extends Serializable {
+
+  def toLiveRDDPartition: LiveRDDPartition = {
+    val liveRDDPartition = new LiveRDDPartition(blockName)
+    liveRDDPartition.value = this
+    liveRDDPartition
+  }
+}
 
 class StageData private[spark](
     val status: StageStatus,
@@ -250,7 +273,7 @@ class StageData private[spark](
     val accumulatorUpdates: Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
     val executorSummary: Option[Map[String, ExecutorStageSummary]],
-    val killedTasksSummary: Map[String, Int])
+    val killedTasksSummary: Map[String, Int]) extends Serializable
 
 class TaskData private[spark](
     val taskId: Long,
@@ -286,15 +309,15 @@ class TaskMetrics private[spark](
     val inputMetrics: InputMetrics,
     val outputMetrics: OutputMetrics,
     val shuffleReadMetrics: ShuffleReadMetrics,
-    val shuffleWriteMetrics: ShuffleWriteMetrics)
+    val shuffleWriteMetrics: ShuffleWriteMetrics) extends Serializable
 
 class InputMetrics private[spark](
     val bytesRead: Long,
-    val recordsRead: Long)
+    val recordsRead: Long) extends Serializable
 
 class OutputMetrics private[spark](
     val bytesWritten: Long,
-    val recordsWritten: Long)
+    val recordsWritten: Long) extends Serializable
 
 class ShuffleReadMetrics private[spark](
     val remoteBlocksFetched: Long,
@@ -303,12 +326,12 @@ class ShuffleReadMetrics private[spark](
     val remoteBytesRead: Long,
     val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
-    val recordsRead: Long)
+    val recordsRead: Long) extends Serializable
 
 class ShuffleWriteMetrics private[spark](
     val bytesWritten: Long,
     val writeTime: Long,
-    val recordsWritten: Long)
+    val recordsWritten: Long) extends Serializable
 
 class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
@@ -368,12 +391,12 @@ class ApplicationEnvironmentInfo private[spark] (
     val sparkProperties: Seq[(String, String)],
     val hadoopProperties: Seq[(String, String)],
     val systemProperties: Seq[(String, String)],
-    val classpathEntries: Seq[(String, String)])
+    val classpathEntries: Seq[(String, String)]) extends Serializable
 
 class RuntimeInfo private[spark](
     val javaVersion: String,
     val javaHome: String,
-    val scalaVersion: String)
+    val scalaVersion: String) extends Serializable
 
 case class StackTrace(elems: Seq[String]) {
   override def toString: String = elems.mkString

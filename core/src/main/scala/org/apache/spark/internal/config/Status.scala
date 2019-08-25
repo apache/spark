@@ -19,6 +19,8 @@ package org.apache.spark.internal.config
 
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.network.util.ByteUnit
+
 private[spark] object Status {
 
   val IMS_CHECKPOINT_ENABLED =
@@ -26,13 +28,20 @@ private[spark] object Status {
       .doc("Whether to checkpoint InMemoryStore in a live AppStatusListener, in order to " +
         "accelerate the startup speed of History Server.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val IMS_CHECKPOINT_BATCH_SIZE =
     ConfigBuilder("spark.appStateStore.ims.checkpoint.batchSize")
-      .doc("The minimal batch size to trigger a checkpoint for InMemoryStore.")
+      .doc("The minimal batch size to trigger the checkpoint for InMemoryStore.")
       .intConf
-      .createWithDefault(1000)
+      .createWithDefault(5000)
+
+  val IMS_CHECKPOINT_BUFFER_SIZE =
+    ConfigBuilder("spark.appStateStore.ims.checkpoint.bufferSize")
+      .doc("Buffer size to use when checkpoint InMemoryStore to output streams, " +
+        "in KiB unless otherwise specified.")
+      .bytesConf(ByteUnit.KiB)
+      .createWithDefaultString("100k")
 
   val ASYNC_TRACKING_ENABLED = ConfigBuilder("spark.appStateStore.asyncTracking.enable")
     .booleanConf

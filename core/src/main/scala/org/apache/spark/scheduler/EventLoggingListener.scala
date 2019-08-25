@@ -345,6 +345,7 @@ private[spark] class EventLoggingListener(
 }
 
 private[spark] object EventLoggingListener extends Logging {
+  val CKP = ".ckp"
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
@@ -430,7 +431,7 @@ private[spark] object EventLoggingListener extends Logging {
   def codecName(log: Path): Option[String] = {
     // Compression codec is encoded as an extension, e.g. app_123.lzf
     // Since we sanitize the app ID to not include periods, it is safe to split on it
-    val logName = log.getName.stripSuffix(IN_PROGRESS)
+    val logName = log.getName.stripSuffix(CKP).stripSuffix(IN_PROGRESS)
     logName.split("\\.").tail.lastOption
   }
 
