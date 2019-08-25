@@ -34,11 +34,11 @@ import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSQLContext {
+class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
@@ -48,6 +48,16 @@ class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedS
 
 abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
   import testImplicits._
+
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING, true)
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.sessionState.conf.unsetConf(SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING)
+    super.afterAll()
+  }
 
   private val maxI = 5
   private val maxJ = 13

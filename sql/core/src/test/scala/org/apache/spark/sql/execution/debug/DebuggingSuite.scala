@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.debug
 
-import org.apache.spark.SparkFunSuite
+import java.io.ByteArrayOutputStream
+
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 
-class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
+class DebuggingSuite extends SharedSparkSession {
 
   test("DataFrame.debug()") {
     testData.debug()
@@ -47,5 +48,46 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
     assert(res.length == 2)
     assert(res.forall{ case (subtree, code) =>
       subtree.contains("Range") && code.contains("Object[]")})
+  }
+
+  test("SPARK-28537: DebugExec cannot debug broadcast related queries") {
+    val rightDF = spark.range(10)
+    val leftDF = spark.range(10)
+    val joinedDF = leftDF.join(rightDF, leftDF("id") === rightDF("id"))
+
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      joinedDF.debug()
+    }
+
+    val output = captured.toString()
+    assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
+      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
+        |Tuples output: 0
+        | id LongType: {}
+        |== WholeStageCodegen ==
+        |Tuples output: 10
+        | id LongType: {java.lang.Long}
+        |== Range (0, 10, step=1, splits=2) ==
+        |Tuples output: 0
+        | id LongType: {}""".stripMargin))
+  }
+
+  test("SPARK-28537: DebugExec cannot debug columnar related queries") {
+    val df = spark.range(5)
+    df.persist()
+
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      df.debug()
+    }
+    df.unpersist()
+
+    val output = captured.toString().replaceAll("#\\d+", "#x")
+    assert(output.contains(
+      """== InMemoryTableScan [id#xL] ==
+        |Tuples output: 0
+        | id LongType: {}
+        |""".stripMargin))
   }
 }

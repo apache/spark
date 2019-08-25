@@ -21,7 +21,6 @@ import java.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -32,7 +31,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class V2StreamingScanSupportCheckSuite extends SparkFunSuite with SharedSparkSession {
+class V2StreamingScanSupportCheckSuite extends SharedSparkSession {
   import TableCapability._
 
   private def createStreamingRelation(table: Table, v1Relation: Option[StreamingRelation]) = {

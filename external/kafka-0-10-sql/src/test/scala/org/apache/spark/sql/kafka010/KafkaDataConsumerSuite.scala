@@ -30,10 +30,10 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ThreadUtils
 
-class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
+class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester {
 
   protected var testUtils: KafkaTestUtils = _
 

@@ -33,14 +33,14 @@ import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStru
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
  * A test suite that tests various Parquet queries.
  */
-abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
+abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSparkSession {
   import testImplicits._
 
   test("simple select queries") {

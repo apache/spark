@@ -22,7 +22,6 @@ import java.io.File
 import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Final, Partial}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -30,10 +29,10 @@ import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeSt
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
-class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with SharedSQLContext {
+class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils {
   import testImplicits._
 
   /**

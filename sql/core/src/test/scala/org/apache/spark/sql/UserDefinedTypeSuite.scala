@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 private[sql] case class MyLabeledPoint(label: Double, features: TestUDT.MyDenseVector) {
@@ -101,7 +101,7 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest
+class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
     with ExpressionEvalHelper {
   import testImplicits._
 

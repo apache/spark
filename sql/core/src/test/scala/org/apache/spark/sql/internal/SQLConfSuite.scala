@@ -21,10 +21,10 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
-class SQLConfSuite extends QueryTest with SharedSQLContext {
+class SQLConfSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val testKey = "test.key.0"

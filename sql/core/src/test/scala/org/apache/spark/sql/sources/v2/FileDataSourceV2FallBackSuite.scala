@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.ScanBuilder
 import org.apache.spark.sql.sources.v2.writer.WriteBuilder
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, QueryExecutionListener}
 
@@ -80,7 +80,7 @@ class DummyWriteOnlyFileTable extends Table with SupportsWrite {
     Set(TableCapability.BATCH_WRITE, TableCapability.ACCEPT_ANY_SCHEMA).asJava
 }
 
-class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
+class FileDataSourceV2FallBackSuite extends QueryTest with SharedSparkSession {
 
   private val dummyParquetReaderV2 = classOf[DummyReadOnlyFileDataSourceV2].getName
   private val dummyParquetWriterV2 = classOf[DummyWriteOnlyFileDataSourceV2].getName
@@ -180,13 +180,13 @@ class FileDataSourceV2FallBackSuite extends QueryTest with SharedSQLContext {
       withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> format,
         SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> format) {
         val commands = ArrayBuffer.empty[(String, LogicalPlan)]
-        val exceptions = ArrayBuffer.empty[(String, Exception)]
+        val errors = ArrayBuffer.empty[(String, Throwable)]
         val listener = new QueryExecutionListener {
           override def onFailure(
               funcName: String,
               qe: QueryExecution,
-              exception: Exception): Unit = {
-            exceptions += funcName -> exception
+              error: Throwable): Unit = {
+            errors += funcName -> error
           }
 
           override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {

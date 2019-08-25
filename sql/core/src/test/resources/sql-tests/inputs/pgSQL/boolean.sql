@@ -191,37 +191,37 @@ SELECT '' AS tf_12_ff_4, BOOLTBL1.*, BOOLTBL2.*
 -- - thomas 2000-01-04
 --
 
--- SELECT '' AS True, f1
---    FROM BOOLTBL1
---    WHERE f1 IS TRUE;
+SELECT '' AS True, f1
+   FROM BOOLTBL1
+   WHERE f1 IS TRUE;
 
--- SELECT '' AS "Not False", f1
---    FROM BOOLTBL1
---    WHERE f1 IS NOT FALSE;
+SELECT '' AS `Not False`, f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT FALSE;
 
--- SELECT '' AS "False", f1
---    FROM BOOLTBL1
---    WHERE f1 IS FALSE;
+SELECT '' AS `False`, f1
+   FROM BOOLTBL1
+   WHERE f1 IS FALSE;
 
--- SELECT '' AS "Not True", f1
---    FROM BOOLTBL1
---    WHERE f1 IS NOT TRUE;
+SELECT '' AS `Not True`, f1
+   FROM BOOLTBL1
+   WHERE f1 IS NOT TRUE;
 
--- SELECT '' AS "True", f1
---    FROM BOOLTBL2
---    WHERE f1 IS TRUE;
+SELECT '' AS `True`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS TRUE;
 
--- SELECT '' AS "Not False", f1
---    FROM BOOLTBL2
---    WHERE f1 IS NOT FALSE;
+SELECT '' AS `Not False`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT FALSE;
 
--- SELECT '' AS "False", f1
---    FROM BOOLTBL2
---    WHERE f1 IS FALSE;
+SELECT '' AS `False`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS FALSE;
 
--- SELECT '' AS "Not True", f1
---    FROM BOOLTBL2
---    WHERE f1 IS NOT TRUE;
+SELECT '' AS `Not True`, f1
+   FROM BOOLTBL2
+   WHERE f1 IS NOT TRUE;
 
 --
 -- Tests for BooleanTest
@@ -232,15 +232,15 @@ INSERT INTO BOOLTBL3 VALUES ('false', false, 2);
 INSERT INTO BOOLTBL3 VALUES ('null', null, 3);
 
 -- [SPARK-27924] E061-14: Search Conditions
--- SELECT
---     d,
---     b IS TRUE AS istrue,
---     b IS NOT TRUE AS isnottrue,
---     b IS FALSE AS isfalse,
---     b IS NOT FALSE AS isnotfalse,
---     b IS UNKNOWN AS isunknown,
---     b IS NOT UNKNOWN AS isnotunknown
--- FROM booltbl3 ORDER BY o;
+SELECT
+    d,
+    b IS TRUE AS istrue,
+    b IS NOT TRUE AS isnottrue,
+    b IS FALSE AS isfalse,
+    b IS NOT FALSE AS isnotfalse,
+    b IS UNKNOWN AS isunknown,
+    b IS NOT UNKNOWN AS isnotunknown
+FROM booltbl3 ORDER BY o;
 
 
 -- Test to make sure short-circuiting and NULL handling is

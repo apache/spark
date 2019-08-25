@@ -74,7 +74,7 @@ case class CatalogStorageFormat(
     inputFormat.foreach(map.put("InputFormat", _))
     outputFormat.foreach(map.put("OutputFormat", _))
     if (compressed) map.put("Compressed", "")
-    CatalogUtils.maskCredentials(properties) match {
+    SQLConf.get.redactOptions(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
         map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
@@ -478,7 +478,7 @@ object CatalogColumnStat extends Logging {
   val VERSION = 2
 
   private def getTimestampFormatter(): TimestampFormatter = {
-    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
+    TimestampFormatter(format = "uuuu-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
   }
 
   /**

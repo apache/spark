@@ -26,6 +26,7 @@ import org.apache.spark.util.Utils;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,8 +51,10 @@ public class Catalogs {
    */
   public static CatalogPlugin load(String name, SQLConf conf)
       throws CatalogNotFoundException, SparkException {
-    String pluginClassName = conf.getConfString("spark.sql.catalog." + name, null);
-    if (pluginClassName == null) {
+    String pluginClassName;
+    try {
+      pluginClassName = conf.getConfString("spark.sql.catalog." + name);
+    } catch (NoSuchElementException e){
       throw new CatalogNotFoundException(String.format(
           "Catalog '%s' plugin class not found: spark.sql.catalog.%s is not defined", name, name));
     }

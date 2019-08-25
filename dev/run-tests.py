@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
