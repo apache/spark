@@ -388,6 +388,41 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   }
 }
 
+abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInputTypes {
+  // last regex in string, we will update the pattern iff regexp value changed.
+  @transient protected var lastRegex: UTF8String = _
+  // last regex pattern, we cache it for performance concern
+  @transient protected var pattern: Pattern = _
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
+
+  protected def getMatcher(s: Any, p: Any) = {
+    if (!p.equals(lastRegex)) {
+      // regex value changed
+      lastRegex = p.asInstanceOf[UTF8String].clone()
+      pattern = Pattern.compile(lastRegex.toString)
+    }
+    pattern.matcher(s.toString)
+  }
+
+  protected def getDoGenCodeVals(ctx: CodegenContext, ev: ExprCode) = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val matcher = ctx.freshName("matcher")
+    val matchResult = ctx.freshName("matchResult")
+
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
+
+    (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull)
+
+  }
+}
+
 /**
  * Extract a specific(idx) group identified by a Java regex.
  *
@@ -401,22 +436,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
        100
   """,
   since = "1.5.0")
-case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression) extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
-
-  // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
-  // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    if (!p.equals(lastRegex)) {
-      // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
-    }
-    val m = pattern.matcher(s.toString)
+    val m = getMatcher(s, p)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
       val group = mr.group(r.asInstanceOf[Int])
@@ -431,24 +456,11 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   }
 
   override def dataType: DataType = StringType
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
   override def prettyName: String = "regexp_extract"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
-    val setEvNotNull = if (nullable) {
-      s"${ev.isNull} = false;"
-    } else {
-      ""
-    }
-
+    val (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull) =
+      getDoGenCodeVals(ctx, ev)
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
       if (!$regexp.equals($termLastRegex)) {
@@ -486,22 +498,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       > SELECT _FUNC_('100-200,300-400', '(\\d+)-(\\d+)', 1);
        [100, 300]
   """)
-case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
+case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression) extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
-
-  // last regex in string, we will update the pattern iff regexp value changed.
-  @transient private var lastRegex: UTF8String = _
-  // last regex pattern, we cache it for performance concern
-  @transient private var pattern: Pattern = _
+  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    if (!p.equals(lastRegex)) {
-      // regex value changed
-      lastRegex = p.asInstanceOf[UTF8String].clone()
-      pattern = Pattern.compile(lastRegex.toString)
-    }
-    val m = pattern.matcher(s.toString)
+    val m = getMatcher(s, p)
     var groupArrayBuffer = new ArrayBuffer[UTF8String]();
 
     while (m.find) {
@@ -518,20 +520,13 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   }
 
   override def dataType: DataType = ArrayType(StringType)
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType, IntegerType)
-  override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
   override def prettyName: String = "regexp_extract_all"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
     val groupArray = ctx.freshName("groupArray")
-
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-
     val arrayClass = classOf[GenericArrayData].getName
+    val (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull) =
+      getDoGenCodeVals(ctx, ev)
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
@@ -554,6 +549,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
         }
       }
       ${ev.value} = new $arrayClass($groupArray.toArray(new UTF8String[$groupArray.size()]));
+      $setEvNotNull
       """
     })
   }
