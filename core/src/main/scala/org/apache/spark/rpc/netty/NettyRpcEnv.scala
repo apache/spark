@@ -39,15 +39,19 @@ import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server._
 import org.apache.spark.rpc._
-import org.apache.spark.serializer.{JavaSerializer, JavaSerializerInstance, SerializationStream}
+import org.apache.spark.serializer.{JavaSerializer, SerializationStream, SerializerInstance}
 import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, ThreadUtils, Utils}
 
 private[netty] class NettyRpcEnv(
     val conf: SparkConf,
-    javaSerializerInstance: JavaSerializerInstance,
+    javaSerializer: JavaSerializer,
     host: String,
     securityManager: SecurityManager,
     numUsableCores: Int) extends RpcEnv(conf) with Logging {
+  private val serializer = new ThreadLocal[SerializerInstance] {
+    override def initialValue(): SerializerInstance = javaSerializer.newInstance()
+  }
+
   val role = conf.get(EXECUTOR_ID).map { id =>
     if (id == SparkContext.DRIVER_IDENTIFIER) "driver" else "executor"
   }
@@ -261,20 +265,20 @@ private[netty] class NettyRpcEnv(
   }
 
   private[netty] def serialize(content: Any): ByteBuffer = {
-    javaSerializerInstance.serialize(content)
+    serializer.get().serialize(content)
   }
 
   /**
    * Returns [[SerializationStream]] that forwards the serialized bytes to `out`.
    */
   private[netty] def serializeStream(out: OutputStream): SerializationStream = {
-    javaSerializerInstance.serializeStream(out)
+    serializer.get.serializeStream(out)
   }
 
   private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
     NettyRpcEnv.currentClient.withValue(client) {
       deserialize { () =>
-        javaSerializerInstance.deserialize[T](bytes)
+        serializer.get.deserialize[T](bytes)
       }
     }
   }
@@ -462,12 +466,8 @@ private[rpc] class NettyRpcEnvFactory extends RpcEnvFactory with Logging {
 
   def create(config: RpcEnvConfig): RpcEnv = {
     val sparkConf = config.conf
-    // Use JavaSerializerInstance in multiple threads is safe. However, if we plan to support
-    // KryoSerializer in future, we have to use ThreadLocal to store SerializerInstance
-    val javaSerializerInstance =
-      new JavaSerializer(sparkConf).newInstance().asInstanceOf[JavaSerializerInstance]
-    val nettyEnv =
-      new NettyRpcEnv(sparkConf, javaSerializerInstance, config.advertiseAddress,
+    val javaSerializer = new JavaSerializer(sparkConf)
+    val nettyEnv = new NettyRpcEnv(sparkConf, javaSerializer, config.advertiseAddress,
         config.securityManager, config.numUsableCores)
     if (!config.clientMode) {
       val startNettyRpcEnv: Int => (NettyRpcEnv, Int) = { actualPort =>

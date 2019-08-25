@@ -18,9 +18,10 @@
 package org.apache.spark.serializer
 
 import java.io._
+import java.lang.ref.WeakReference
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
@@ -68,8 +69,15 @@ private[spark] class JavaDeserializationStream(
   private val objIn = new ObjectInputStream(in) {
     override def resolveClass(desc: ObjectStreamClass): Class[_] = {
       if (useCache) {
-        serializerInstance.resolvedClassesCache.get.computeIfAbsent(
-          (desc.getName, loader), pair => normalResolve(pair._1))
+        val map = serializerInstance.resolvedClassesCache.get
+        val cached = map.get((desc.getName, loader))
+        if (cached.isEmpty || cached.get.get() == null) {
+          val resolved = normalResolve(desc.getName)
+          map += (((desc.getName, loader), new WeakReference(resolved)))
+          resolved
+        } else {
+          cached.get.get()
+        }
       } else {
         normalResolve(desc.getName)
       }
@@ -113,7 +121,7 @@ private[spark] class JavaSerializerInstance(
   extends SerializerInstance {
 
   val resolvedClassesCache = if (useCache) {
-    Some(new ConcurrentHashMap[(String, ClassLoader), Class[_]]())
+    Some(new HashMap[(String, ClassLoader), WeakReference[Class[_]]]())
   } else {
     None
   }
