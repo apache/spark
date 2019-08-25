@@ -125,7 +125,7 @@ case class RowDataSourceScanExec(
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
   override def doCanonicalize(): SparkPlan =
     copy(
-      fullOutput.map(QueryPlan.normalizeExprId(_, fullOutput)),
+      fullOutput.map(QueryPlan.normalizeExpressions(_, fullOutput)),
       rdd = null,
       tableIdentifier = None)
 }
@@ -491,7 +491,7 @@ case class FileSourceScanExec(
   override def doCanonicalize(): FileSourceScanExec = {
     FileSourceScanExec(
       relation,
-      output.map(QueryPlan.normalizeExprId(_, output)),
+      output.map(QueryPlan.normalizeExpressions(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
       optionalBucketSet,

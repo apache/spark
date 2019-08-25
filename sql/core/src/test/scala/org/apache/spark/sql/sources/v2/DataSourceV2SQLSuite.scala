@@ -22,13 +22,13 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLSuite
@@ -72,6 +72,7 @@ class DataSourceV2SQLSuite
   }
 
   after {
+    spark.sessionState.catalog.reset()
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.clear()
   }
@@ -245,7 +246,7 @@ class DataSourceV2SQLSuite
         assert(table.partitioning.isEmpty)
         assert(table.properties == Map("provider" -> "foo").asJava)
         assert(table.schema == new StructType()
-          .add("id", LongType, nullable = false)
+          .add("id", LongType)
           .add("data", StringType))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -271,8 +272,7 @@ class DataSourceV2SQLSuite
         assert(replacedTable.name == identifier)
         assert(replacedTable.partitioning.isEmpty)
         assert(replacedTable.properties == Map("provider" -> "foo").asJava)
-        assert(replacedTable.schema == new StructType()
-          .add("id", LongType, nullable = false))
+        assert(replacedTable.schema == new StructType().add("id", LongType))
 
         val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
         checkAnswer(
@@ -404,7 +404,7 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> orc2).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -421,7 +421,7 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -441,7 +441,7 @@ class DataSourceV2SQLSuite
     assert(table2.partitioning.isEmpty)
     assert(table2.properties == Map("provider" -> "foo").asJava)
     assert(table2.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -459,7 +459,7 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -490,7 +490,7 @@ class DataSourceV2SQLSuite
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -511,6 +511,32 @@ class DataSourceV2SQLSuite
     val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
+  }
+
+  test("CreateTableAsSelect: nullable schema") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT 1 i")
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.schema == new StructType().add("i", "int"))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Row(1))
+
+        sql(s"INSERT INTO $identifier SELECT CAST(null AS INT)")
+        val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq(Row(1), Row(null)))
+    }
   }
 
   test("DropTable: basic") {
@@ -1428,6 +1454,113 @@ class DataSourceV2SQLSuite
       sql(s"INSERT INTO $t2 SELECT * FROM $t1")
       checkAnswer(spark.table(t2), spark.table("source"))
     }
+  }
+
+  test("ShowTables: using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
+
+    runShowTablesSql("SHOW TABLES FROM testcat.db", Seq(Row("db", "table_name")))
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.n1.n2.db",
+      Seq(Row("n1.n2.db", "table_name")))
+  }
+
+  test("ShowTables: using v2 catalog with a pattern") {
+    spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db.table_name_2 (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db2.table_name_2 (id bigint, data string) USING foo")
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.db",
+      Seq(
+        Row("db", "table"),
+        Row("db", "table_name_1"),
+        Row("db", "table_name_2")))
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.db LIKE '*name*'",
+      Seq(Row("db", "table_name_1"), Row("db", "table_name_2")))
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.db LIKE '*2'",
+      Seq(Row("db", "table_name_2")))
+  }
+
+  test("ShowTables: using v2 catalog, namespace doesn't exist") {
+    runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
+  }
+
+  test("ShowTables: using v1 catalog") {
+    runShowTablesSql(
+      "SHOW TABLES FROM default",
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
+  }
+
+  test("ShowTables: using v1 catalog, db doesn't exist ") {
+    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
+    // 'db' and there is no default catalog set.
+    val exception = intercept[NoSuchDatabaseException] {
+      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
+    }
+
+    assert(exception.getMessage.contains("Database 'db' not found"))
+  }
+
+  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
+    }
+
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+  }
+
+  test("ShowTables: using v2 catalog with empty namespace") {
+    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
+    runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
+  }
+
+  test("ShowTables: namespace is not specified and default v2 catalog is set") {
+    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
+
+    // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
+    runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
+  }
+
+  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
+    runShowTablesSql(
+      "SHOW TABLES",
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
+
+    runShowTablesSql(
+      "SHOW TABLES LIKE '*2'",
+      Seq(Row("", "source2", true)),
+      expectV2Catalog = false)
+  }
+
+  private def runShowTablesSql(
+      sqlText: String,
+      expected: Seq[Row],
+      expectV2Catalog: Boolean = true): Unit = {
+    val schema = if (expectV2Catalog) {
+      new StructType()
+        .add("namespace", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+    } else {
+      new StructType()
+        .add("database", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+        .add("isTemporary", BooleanType, nullable = false)
+    }
+
+    val df = spark.sql(sqlText)
+    assert(df.schema === schema)
+    assert(expected === df.collect())
   }
 
   test("tableCreation: partition column case insensitive resolution") {
