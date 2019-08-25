@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.net.URI
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Cast, Expression, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
 
 class V2AppendDataAnalysisSuite extends DataSourceV2AnalysisSuite {
@@ -111,6 +115,20 @@ case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
 }
 
 abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
+
+  override def getAnalyzer(caseSensitive: Boolean): Analyzer = {
+    val conf = new SQLConf()
+      .copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
+      .copy(SQLConf.STORE_ASSIGNMENT_POLICY -> StoreAssignmentPolicy.STRICT)
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
+    new Analyzer(catalog, conf) {
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
+    }
+  }
+
   val table = TestRelation(StructType(Seq(
     StructField("x", FloatType),
     StructField("y", FloatType))).toAttributes)
@@ -172,11 +190,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     val y = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table,
-      Project(Seq(
-        Alias(Cast(toLower(X), FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
-        query))
+    val expectedPlan = byName(table, Project(Seq(X.withName("x"), y), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan, caseSensitive = false)
@@ -193,11 +207,7 @@ abstract class DataSourceV2AnalysisSuite extends AnalysisTest {
     val x = query.output.last
 
     val parsedPlan = byName(table, query)
-    val expectedPlan = byName(table,
-      Project(Seq(
-        Alias(Cast(x, FloatType, Some(conf.sessionLocalTimeZone)), "x")(),
-        Alias(Cast(y, FloatType, Some(conf.sessionLocalTimeZone)), "y")()),
-        query))
+    val expectedPlan = byName(table, Project(Seq(x, y), query))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan)

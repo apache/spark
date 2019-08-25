@@ -49,6 +49,7 @@ __all__ = ['Binarizer',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
+           'RobustScaler', 'RobustScalerModel',
            'RegexTokenizer',
            'RFormula', 'RFormulaModel',
            'SQLTransformer',
@@ -901,17 +902,19 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> hashingTF.transform(df).head().features
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> hashingTF.setParams(outputCol="freqs").transform(df).head().freqs
-    SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(10, {5: 1.0, 7: 1.0, 8: 1.0})
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
-    SparseVector(5, {0: 1.0, 1: 1.0, 2: 1.0})
+    SparseVector(5, {0: 1.0, 2: 1.0, 3: 1.0})
     >>> hashingTFPath = temp_path + "/hashing-tf"
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
+    >>> hashingTF.indexOf("b")
+    5
 
     .. versionadded:: 1.3.0
     """
@@ -955,6 +958,14 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
         Gets the value of binary or its default value.
         """
         return self.getOrDefault(self.binary)
+
+    @since("3.0.0")
+    def indexOf(self, term):
+        """
+        Returns the index of the input term.
+        """
+        self._transfer_params_to_java()
+        return self._java_obj.indexOf(term)
 
 
 @inherit_doc
@@ -2035,6 +2046,167 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInv
                           inputCol=self.getInputCol(),
                           outputCol=self.getOutputCol(),
                           handleInvalid=self.getHandleInvalid())
+
+
+@inherit_doc
+class RobustScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+    """
+    RobustScaler removes the median and scales the data according to the quantile range.
+    The quantile range is by default IQR (Interquartile Range, quantile range between the
+    1st quartile = 25th quantile and the 3rd quartile = 75th quantile) but can be configured.
+    Centering and scaling happen independently on each feature by computing the relevant
+    statistics on the samples in the training set. Median and quantile range are then
+    stored to be used on later data using the transform method.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> data = [(0, Vectors.dense([0.0, 0.0]),),
+    ...         (1, Vectors.dense([1.0, -1.0]),),
+    ...         (2, Vectors.dense([2.0, -2.0]),),
+    ...         (3, Vectors.dense([3.0, -3.0]),),
+    ...         (4, Vectors.dense([4.0, -4.0]),),]
+    >>> df = spark.createDataFrame(data, ["id", "features"])
+    >>> scaler = RobustScaler(inputCol="features", outputCol="scaled")
+    >>> model = scaler.fit(df)
+    >>> model.median
+    DenseVector([2.0, -2.0])
+    >>> model.range
+    DenseVector([2.0, 2.0])
+    >>> model.transform(df).collect()[1].scaled
+    DenseVector([0.5, -0.5])
+    >>> scalerPath = temp_path + "/robust-scaler"
+    >>> scaler.save(scalerPath)
+    >>> loadedScaler = RobustScaler.load(scalerPath)
+    >>> loadedScaler.getWithCentering() == scaler.getWithCentering()
+    True
+    >>> loadedScaler.getWithScaling() == scaler.getWithScaling()
+    True
+    >>> modelPath = temp_path + "/robust-scaler-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = RobustScalerModel.load(modelPath)
+    >>> loadedModel.median == model.median
+    True
+    >>> loadedModel.range == model.range
+    True
+
+    .. versionadded:: 3.0.0
+    """
+
+    lower = Param(Params._dummy(), "lower", "Lower quantile to calculate quantile range",
+                  typeConverter=TypeConverters.toFloat)
+    upper = Param(Params._dummy(), "upper", "Upper quantile to calculate quantile range",
+                  typeConverter=TypeConverters.toFloat)
+    withCentering = Param(Params._dummy(), "withCentering", "Whether to center data with median",
+                          typeConverter=TypeConverters.toBoolean)
+    withScaling = Param(Params._dummy(), "withScaling", "Whether to scale the data to "
+                        "quantile range", typeConverter=TypeConverters.toBoolean)
+
+    @keyword_only
+    def __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                 inputCol=None, outputCol=None):
+        """
+        __init__(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
+                 inputCol=None, outputCol=None)
+        """
+        super(RobustScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RobustScaler", self.uid)
+        self._setDefault(lower=0.25, upper=0.75, withCentering=False, withScaling=True)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.0.0")
+    def setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True,
+                  inputCol=None, outputCol=None):
+        """
+        setParams(self, lower=0.25, upper=0.75, withCentering=False, withScaling=True, \
+                  inputCol=None, outputCol=None)
+        Sets params for this RobustScaler.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.0.0")
+    def setLower(self, value):
+        """
+        Sets the value of :py:attr:`lower`.
+        """
+        return self._set(lower=value)
+
+    @since("3.0.0")
+    def getLower(self):
+        """
+        Gets the value of lower or its default value.
+        """
+        return self.getOrDefault(self.lower)
+
+    @since("3.0.0")
+    def setUpper(self, value):
+        """
+        Sets the value of :py:attr:`upper`.
+        """
+        return self._set(upper=value)
+
+    @since("3.0.0")
+    def getUpper(self):
+        """
+        Gets the value of upper or its default value.
+        """
+        return self.getOrDefault(self.upper)
+
+    @since("3.0.0")
+    def setWithCentering(self, value):
+        """
+        Sets the value of :py:attr:`withCentering`.
+        """
+        return self._set(withCentering=value)
+
+    @since("3.0.0")
+    def getWithCentering(self):
+        """
+        Gets the value of withCentering or its default value.
+        """
+        return self.getOrDefault(self.withCentering)
+
+    @since("3.0.0")
+    def setWithScaling(self, value):
+        """
+        Sets the value of :py:attr:`withScaling`.
+        """
+        return self._set(withScaling=value)
+
+    @since("3.0.0")
+    def getWithScaling(self):
+        """
+        Gets the value of withScaling or its default value.
+        """
+        return self.getOrDefault(self.withScaling)
+
+    def _create_model(self, java_model):
+        return RobustScalerModel(java_model)
+
+
+class RobustScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`RobustScaler`.
+
+    .. versionadded:: 3.0.0
+    """
+
+    @property
+    @since("3.0.0")
+    def median(self):
+        """
+        Median of the RobustScalerModel.
+        """
+        return self._call_java("median")
+
+    @property
+    @since("3.0.0")
+    def range(self):
+        """
+        Quantile range of the RobustScalerModel.
+        """
+        return self._call_java("range")
 
 
 @inherit_doc

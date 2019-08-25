@@ -34,7 +34,7 @@ class DeterministicExecutorPodsSnapshotsStore extends ExecutorPodsSnapshotsStore
 
   override def stop(): Unit = {}
 
-  def notifySubscribers(): Unit = {
+  override def notifySubscribers(): Unit = {
     subscribers.foreach(_(snapshotsBuffer))
     snapshotsBuffer.clear()
   }

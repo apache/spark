@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io
 
+import java.io.IOException
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
@@ -136,7 +137,7 @@ class HadoopMapReduceCommitProtocol(
     tmpOutputPath
   }
 
-  private def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
+  protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
     // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
@@ -205,11 +206,28 @@ class HadoopMapReduceCommitProtocol(
     }
   }
 
+  /**
+   * Abort the job; log and ignore any IO exception thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
+   *
+   * @param jobContext job context
+   */
   override def abortJob(jobContext: JobContext): Unit = {
-    committer.abortJob(jobContext, JobStatus.State.FAILED)
-    if (hasValidPath) {
-      val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-      fs.delete(stagingDir, true)
+    try {
+      committer.abortJob(jobContext, JobStatus.State.FAILED)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
+    }
+    try {
+      if (hasValidPath) {
+        val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+        fs.delete(stagingDir, true)
+      }
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
     }
   }
 
@@ -222,17 +240,35 @@ class HadoopMapReduceCommitProtocol(
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
+    logTrace(s"Commit task ${attemptId}")
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
     new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
   }
 
+  /**
+   * Abort the task; log and ignore any failure thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
+   *
+   * @param taskContext context
+   */
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
-    committer.abortTask(taskContext)
+    try {
+      committer.abortTask(taskContext)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
+    }
     // best effort cleanup of other staged files
-    for ((src, _) <- addedAbsPathFiles) {
-      val tmp = new Path(src)
-      tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+    try {
+      for ((src, _) <- addedAbsPathFiles) {
+        val tmp = new Path(src)
+        tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+      }
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
     }
   }
 }

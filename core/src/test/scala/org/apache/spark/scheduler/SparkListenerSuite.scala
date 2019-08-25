@@ -532,6 +532,34 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     }
   }
 
+  test("event queue size can be configued through spark conf") {
+    // configure the shared queue size to be 1, event log queue size to be 2,
+    // and listner bus event queue size to be 5
+    val conf = new SparkConf(false)
+      .set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 5)
+      .set(s"spark.scheduler.listenerbus.eventqueue.${SHARED_QUEUE}.capacity", "1")
+      .set(s"spark.scheduler.listenerbus.eventqueue.${EVENT_LOG_QUEUE}.capacity", "2")
+
+    val bus = new LiveListenerBus(conf)
+    val counter1 = new BasicJobCounter()
+    val counter2 = new BasicJobCounter()
+    val counter3 = new BasicJobCounter()
+
+    // add a new shared, status and event queue
+    bus.addToSharedQueue(counter1)
+    bus.addToStatusQueue(counter2)
+    bus.addToEventLogQueue(counter3)
+
+    assert(bus.activeQueues() === Set(SHARED_QUEUE, APP_STATUS_QUEUE, EVENT_LOG_QUEUE))
+    // check the size of shared queue is 1 as configured
+    assert(bus.getQueueCapacity(SHARED_QUEUE) == Some(1))
+    // no specific size of status queue is configured,
+    // it shoud use the LISTENER_BUS_EVENT_QUEUE_CAPACITY
+    assert(bus.getQueueCapacity(APP_STATUS_QUEUE) == Some(5))
+    // check the size of event log queue is 5 as configured
+    assert(bus.getQueueCapacity(EVENT_LOG_QUEUE) == Some(2))
+  }
+
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */

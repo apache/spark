@@ -17,9 +17,15 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.security.AccessController
+
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.hive.ql.exec.AddToClassPathAction
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.thrift.Type
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion._
 import org.slf4j.LoggerFactory
 
 /**
@@ -33,6 +39,9 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] type TGetSchemasReq = org.apache.hive.service.rpc.thrift.TGetSchemasReq
   private[thriftserver] type TGetTablesReq = org.apache.hive.service.rpc.thrift.TGetTablesReq
   private[thriftserver] type TGetColumnsReq = org.apache.hive.service.rpc.thrift.TGetColumnsReq
+  private[thriftserver] type TGetInfoReq = org.apache.hive.service.rpc.thrift.TGetInfoReq
+  private[thriftserver] type TExecuteStatementReq =
+    org.apache.hive.service.rpc.thrift.TExecuteStatementReq
 
   private[thriftserver] def getConsole: SessionState.LogHelper = {
     val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
@@ -47,4 +56,22 @@ private[thriftserver] object ThriftserverShimUtils {
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
+  private[thriftserver] def addToClassPath(
+      loader: ClassLoader,
+      auxJars: Array[String]): ClassLoader = {
+    val addAction = new AddToClassPathAction(loader, auxJars.toList.asJava)
+    AccessController.doPrivileged(addAction)
+  }
+
+  private[thriftserver] val testedProtocolVersions = Seq(
+    HIVE_CLI_SERVICE_PROTOCOL_V1,
+    HIVE_CLI_SERVICE_PROTOCOL_V2,
+    HIVE_CLI_SERVICE_PROTOCOL_V3,
+    HIVE_CLI_SERVICE_PROTOCOL_V4,
+    HIVE_CLI_SERVICE_PROTOCOL_V5,
+    HIVE_CLI_SERVICE_PROTOCOL_V6,
+    HIVE_CLI_SERVICE_PROTOCOL_V7,
+    HIVE_CLI_SERVICE_PROTOCOL_V8,
+    HIVE_CLI_SERVICE_PROTOCOL_V9,
+    HIVE_CLI_SERVICE_PROTOCOL_V10)
 }

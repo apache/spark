@@ -37,9 +37,6 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
   /** Updates the expression with a new plan. */
   def withNewPlan(plan: T): PlanExpression[T]
 
-  /** Defines how the canonicalization should work for this expression. */
-  def canonicalize(attrs: AttributeSeq): PlanExpression[T]
-
   protected def conditionString: String = children.mkString("[", " && ", "]")
 }
 
@@ -60,13 +57,6 @@ abstract class SubqueryExpression(
         children.length == p.children.length &&
         children.zip(p.children).forall(p => p._1.semanticEquals(p._2))
     case _ => false
-  }
-  override def canonicalize(attrs: AttributeSeq): SubqueryExpression = {
-    // Normalize the outer references in the subquery plan.
-    val normalizedPlan = plan.transformAllExpressions {
-      case OuterReference(r) => OuterReference(QueryPlan.normalizeExprId(r, attrs))
-    }
-    withNewPlan(normalizedPlan).canonicalized.asInstanceOf[SubqueryExpression]
   }
 }
 
