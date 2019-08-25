@@ -34,11 +34,11 @@ import org.apache.spark.sql.execution.datasources.PartitionedFile
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class BinaryFileFormatSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
   import BinaryFileFormat._
 
   private var testDir: String = _

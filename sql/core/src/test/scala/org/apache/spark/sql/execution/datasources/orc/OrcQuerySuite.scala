@@ -36,7 +36,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -621,7 +621,7 @@ abstract class OrcQueryTest extends OrcTest {
   }
 }
 
-class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
+class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   import testImplicits._
 
   test("LZO compression options for writing to an ORC file") {

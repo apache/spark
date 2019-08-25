@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenE
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
@@ -54,7 +54,7 @@ import org.apache.spark.tags.DockerTest
  * repository.
  */
 @DockerTest
-class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
+class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
   import testImplicits._
 
   override val db = new DatabaseOnDocker {

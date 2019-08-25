@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalog.v2
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -29,10 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 @Experimental
 trait LookupCatalog extends Logging {
 
-  import LookupCatalog._
-
-  protected def defaultCatalogName: Option[String] = None
-  protected def lookupCatalog(name: String): CatalogPlugin
+  protected val catalogManager: CatalogManager
 
   /**
    * Returns the default catalog. When set, this catalog is used for all identifiers that do not
@@ -42,15 +37,7 @@ trait LookupCatalog extends Logging {
    * If this is None and a table's provider (source) is a v2 provider, the v2 session catalog will
    * be used.
    */
-  def defaultCatalog: Option[CatalogPlugin] = {
-    try {
-      defaultCatalogName.map(lookupCatalog)
-    } catch {
-      case NonFatal(e) =>
-        logError(s"Cannot load default v2 catalog: ${defaultCatalogName.get}", e)
-        None
-    }
-  }
+  def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
 
   /**
    * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
@@ -58,15 +45,7 @@ trait LookupCatalog extends Logging {
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  def sessionCatalog: Option[CatalogPlugin] = {
-    try {
-      Some(lookupCatalog(SESSION_CATALOG_NAME))
-    } catch {
-      case NonFatal(e) =>
-        logError("Cannot load v2 session catalog", e)
-        None
-    }
-  }
+  def sessionCatalog: Option[CatalogPlugin] = catalogManager.v2SessionCatalog
 
   /**
    * Extract catalog plugin and remaining identifier names.
@@ -79,7 +58,7 @@ trait LookupCatalog extends Logging {
         Some((None, parts))
       case Seq(catalogName, tail @ _*) =>
         try {
-          Some((Some(lookupCatalog(catalogName)), tail))
+          Some((Some(catalogManager.catalog(catalogName)), tail))
         } catch {
           case _: CatalogNotFoundException =>
             Some((None, parts))
@@ -99,6 +78,24 @@ trait LookupCatalog extends Logging {
             maybeCatalog.orElse(defaultCatalog),
             Identifier.of(nameParts.init.toArray, nameParts.last)
         ))
+    }
+  }
+
+  type CatalogNamespace = (Option[CatalogPlugin], Seq[String])
+
+  /**
+   * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
+   * Catalog name takes precedence over namespaces.
+   */
+  object CatalogNamespace {
+    def unapply(parts: Seq[String]): Some[CatalogNamespace] = parts match {
+      case Seq(catalogName, tail @ _*) =>
+        try {
+          Some((Some(catalogManager.catalog(catalogName)), tail))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((defaultCatalog, parts))
+        }
     }
   }
 
@@ -136,8 +133,4 @@ trait LookupCatalog extends Logging {
         None
     }
   }
-}
-
-object LookupCatalog {
-  val SESSION_CATALOG_NAME: String = "session"
 }

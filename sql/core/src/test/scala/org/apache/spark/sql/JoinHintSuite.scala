@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class JoinHintSuite extends PlanTest with SharedSQLContext {
+class JoinHintSuite extends PlanTest with SharedSparkSession {
   import testImplicits._
 
   lazy val df = spark.range(10)

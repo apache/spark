@@ -95,7 +95,7 @@ SELECT double('nan')
 -- !query 11 schema
 struct<CAST(nan AS DOUBLE):double>
 -- !query 11 output
-NULL
+NaN
 
 
 -- !query 12
@@ -103,7 +103,7 @@ SELECT double('   NAN  ')
 -- !query 12 schema
 struct<CAST(   NAN   AS DOUBLE):double>
 -- !query 12 output
-NULL
+NaN
 
 
 -- !query 13
@@ -111,7 +111,7 @@ SELECT double('infinity')
 -- !query 13 schema
 struct<CAST(infinity AS DOUBLE):double>
 -- !query 13 output
-NULL
+Infinity
 
 
 -- !query 14
@@ -119,7 +119,7 @@ SELECT double('          -INFINiTY   ')
 -- !query 14 schema
 struct<CAST(          -INFINiTY    AS DOUBLE):double>
 -- !query 14 output
-NULL
+-Infinity
 
 
 -- !query 15

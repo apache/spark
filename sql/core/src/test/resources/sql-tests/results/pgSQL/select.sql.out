@@ -399,7 +399,6 @@ NULL
 
 
 -- !query 22
--- same thing
 SELECT * FROM foo ORDER BY f1 NULLS FIRST
 -- !query 22 schema
 struct<f1:int>
