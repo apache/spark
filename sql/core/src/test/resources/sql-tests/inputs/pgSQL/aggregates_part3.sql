@@ -5,7 +5,7 @@
 -- AGGREGATES [Part 3]
 -- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/aggregates.sql#L352-L605
 
--- We do not support inheritance tree, skip related tests.
+-- [SPARK-28865] Table inheritance
 -- try it on an inheritance tree
 -- create table minmaxtest(f1 int);
 -- create table minmaxtest1() inherits (minmaxtest);
@@ -91,7 +91,7 @@ select max(min(unique1)) from tenk1;
 -- select array_agg(distinct a order by a desc nulls last)
 --   from (values (1),(2),(1),(3),(null),(2)) v(a);
 
--- Skip the test below because it requires 4 UDFs: aggf_trans, aggfns_trans, aggfstr, and aggfns
+-- Skip the test below because it requires 4 UDAFs: aggf_trans, aggfns_trans, aggfstr, and aggfns
 -- multi-arg aggs, strict/nonstrict, distinct/order by
 
 -- select aggfstr(a,b,c)
