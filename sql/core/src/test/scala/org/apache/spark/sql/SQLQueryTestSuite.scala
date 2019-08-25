@@ -22,6 +22,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.spark.internal.config.Tests
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
@@ -109,15 +110,17 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
   protected val isTestWithConfigSets: Boolean = true
 
-  protected val baseResourcePath = {
-    // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
-    // relative path. Otherwise, we use classloader's getResource to find the location.
-    if (regenerateGoldenFiles) {
-      java.nio.file.Paths.get("src", "test", "resources", "sql-tests").toFile
-    } else {
-      val res = getClass.getClassLoader.getResource("sql-tests")
-      new File(res.getFile)
+  private val baseResourcePath = {
+    val sparkHome = {
+      assert(sys.props.contains("spark.test.home") ||
+        sys.env.contains("SPARK_HOME"), "spark.test.home or SPARK_HOME is not set.")
+      sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
     }
+
+    // Always uses 'sql-tests' directory from the source to prevent different paths by
+    // build tools. See https://github.com/apache/spark/pull/25373.
+    java.nio.file.Paths.get(sparkHome,
+      "sql", "core", "src", "test", "resources", "sql-tests").toFile
   }
 
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
