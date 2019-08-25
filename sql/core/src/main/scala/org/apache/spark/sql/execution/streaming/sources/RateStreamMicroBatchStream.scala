@@ -80,11 +80,11 @@ class RateStreamMicroBatchStream(
               LongOffset(SerializedOffset(content.substring(indexOfNewLine + 1)))
             } else {
               throw new IllegalStateException(
-                s"Log file was malformed: failed to detect the log file version line.")
+                "Log file was malformed: failed to detect the log file version line.")
             }
           } else {
             throw new IllegalStateException(
-              s"Log file was malformed: failed to detect the log file version line.")
+              "Log file was malformed: failed to detect the log file version line.")
           }
         }
       }

@@ -108,14 +108,14 @@ case class DataSourceResolution(
         AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
         V1WriteProvider(provider), options, location, comment, orCreate) =>
         throw new AnalysisException(
-          s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
+          "Replacing tables is not supported using the legacy / v1 Spark external catalog" +
             s" API. Write provider name: $provider, identifier: $table.")
 
     case ReplaceTableAsSelectStatement(
         AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
         V1WriteProvider(provider), options, location, comment, orCreate) =>
       throw new AnalysisException(
-        s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
+        "Replacing tables is not supported using the legacy / v1 Spark external catalog" +
           s" API. Write provider name: $provider, identifier: $table.")
 
     case replace: ReplaceTableStatement =>
@@ -145,7 +145,7 @@ case class DataSourceResolution(
     case DropViewStatement(CatalogObjectIdentifier(Some(catalog), ident), _) =>
       throw new AnalysisException(
         s"Can not specify catalog `${catalog.name}` for view $ident " +
-          s"because view support in catalog has not been implemented yet")
+          "because view support in catalog has not been implemented yet")
 
     case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
       DropTableCommand(tableName, ifExists, isView = true, purge = false)
@@ -172,7 +172,7 @@ case class DataSourceResolution(
 
     case DeleteFromStatement(AsTableIdentifier(table), tableAlias, condition) =>
       throw new AnalysisException(
-        s"Delete from tables is not supported using the legacy / v1 Spark external catalog" +
+        "Delete from tables is not supported using the legacy / v1 Spark external catalog" +
             s" API. Identifier: $table.")
 
     case delete: DeleteFromStatement =>

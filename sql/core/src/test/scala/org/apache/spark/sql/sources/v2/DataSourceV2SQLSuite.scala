@@ -202,7 +202,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
   test("CreateTable: use default catalog for v2 sources when default catalog is set") {
     spark.conf.set("spark.sql.default.catalog", "testcat")
-    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE table_name (id bigint, data string) USING foo")
 
     val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -277,7 +277,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat.table_name" +
         s" USING foo OPTIONS (`${TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION}`=true)" +
-        s" AS SELECT id FROM source")
+        " AS SELECT id FROM source")
     }
 
     assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
@@ -293,9 +293,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat.table_name" +
-        s" USING foo" +
+        " USING foo" +
         s" TBLPROPERTIES (`${TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
-        s" AS SELECT id FROM source")
+        " AS SELECT id FROM source")
     }
 
     assert(!testCatalog.tableExists(Identifier.of(Array(), "table_name")),
@@ -310,7 +310,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat_atomic.table_name" +
         s" USING foo OPTIONS (`${TestInMemoryTableCatalog.SIMULATE_FAILED_WRITE_OPTION}=true)" +
-        s" AS SELECT id FROM source")
+        " AS SELECT id FROM source")
     }
 
     var maybeReplacedTable = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -318,9 +318,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
     intercept[Exception] {
       spark.sql("REPLACE TABLE testcat_atomic.table_name" +
-        s" USING foo" +
+        " USING foo" +
         s" TBLPROPERTIES (`${TestInMemoryTableCatalog.SIMULATE_FAILED_CREATE_PROPERTY}`=true)" +
-        s" AS SELECT id FROM source")
+        " AS SELECT id FROM source")
     }
 
     maybeReplacedTable = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -374,10 +374,10 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     import TestInMemoryTableCatalog._
     spark.sql(s"CREATE TABLE testcat_atomic.created USING $orc2 AS SELECT id, data FROM source")
     intercept[CannotReplaceMissingTableException] {
-      spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
+      spark.sql("REPLACE TABLE testcat_atomic.replaced" +
         s" USING $orc2" +
         s" TBLPROPERTIES (`$SIMULATE_DROP_BEFORE_REPLACE_PROPERTY`=true)" +
-        s" AS SELECT id, data FROM source")
+        " AS SELECT id, data FROM source")
     }
   }
 
@@ -468,7 +468,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
     // setting the default catalog breaks the reference to source because the default catalog is
     // used and AsTableIdentifier no longer matches
-    spark.sql(s"CREATE TABLE table_name USING foo AS SELECT id, data FROM source")
+    spark.sql("CREATE TABLE table_name USING foo AS SELECT id, data FROM source")
 
     val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
@@ -490,9 +490,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
 
-    sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
+    sql("CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
 
-    checkAnswer(sql(s"TABLE default.table_name"), spark.table("source"))
+    checkAnswer(sql("TABLE default.table_name"), spark.table("source"))
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
     val t = catalog("session").asTableCatalog
@@ -537,9 +537,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
   test("DropTable: if exists") {
     intercept[NoSuchTableException] {
-      sql(s"DROP TABLE testcat.db.notbl")
+      sql("DROP TABLE testcat.db.notbl")
     }
-    sql(s"DROP TABLE IF EXISTS testcat.db.notbl")
+    sql("DROP TABLE IF EXISTS testcat.db.notbl")
   }
 
   test("Relation: basic") {
@@ -604,7 +604,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
 
   test("AlterTable: table does not exist") {
     val exc = intercept[AnalysisException] {
-      sql(s"ALTER TABLE testcat.ns1.table_name DROP COLUMN id")
+      sql("ALTER TABLE testcat.ns1.table_name DROP COLUMN id")
     }
 
     assert(exc.getMessage.contains("testcat.ns1.table_name"))

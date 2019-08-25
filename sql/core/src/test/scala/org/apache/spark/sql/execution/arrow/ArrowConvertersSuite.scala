@@ -65,7 +65,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("short conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -114,7 +114,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("int conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -163,7 +163,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("long conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -212,7 +212,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("float conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -259,7 +259,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("double conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -306,7 +306,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("decimal conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -371,7 +371,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
   test("index conversion") {
     val data = List[Int](1, 2, 3, 4, 5, 6)
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -403,7 +403,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("mixed numeric type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -494,7 +494,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("string type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -556,7 +556,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("boolean type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -585,7 +585,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("byte type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -617,7 +617,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("binary type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -651,7 +651,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("date type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -689,7 +689,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
   test("timestamp type conversion") {
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       val json =
-        s"""
+        """
            |{
            |  "schema" : {
            |    "fields" : [ {
@@ -730,7 +730,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("floating-point NaN") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -777,7 +777,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("array type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -924,7 +924,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("struct type conversion") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -1073,7 +1073,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("partitioned DataFrame") {
     val json1 =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -1113,7 +1113,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
          |}
        """.stripMargin
     val json2 =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -1223,7 +1223,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
 
   test("test Arrow Validator") {
     val json =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {
@@ -1263,7 +1263,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
          |}
        """.stripMargin
     val json_diff_col_order =
-      s"""
+      """
          |{
          |  "schema" : {
          |    "fields" : [ {

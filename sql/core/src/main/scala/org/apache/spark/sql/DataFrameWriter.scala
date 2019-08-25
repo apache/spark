@@ -401,7 +401,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
       case other =>
         throw new AnalysisException(s"insertInto does not support $other mode, " +
-          s"please use Append or Overwrite mode instead.")
+          "please use Append or Overwrite mode instead.")
     }
 
     runCommand(df.sparkSession, "insertInto") {

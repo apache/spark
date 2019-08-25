@@ -598,7 +598,7 @@ case class PreRuleReplaceAddWithBrokenVersion() extends Rule[SparkPlan] {
       new BrokenColumnarAdd(replaceWithColumnarExpression(add.left),
         replaceWithColumnarExpression(add.right))
     case exp =>
-      throw new CannotReplaceException(s"expression " +
+      throw new CannotReplaceException("expression " +
         s"${exp.getClass} ${exp} is not currently supported.")
   }
 

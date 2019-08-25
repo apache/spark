@@ -980,9 +980,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-19218 SET command should show a result in a sorted order") {
     val overrideConfs = sql("SET").collect()
-    sql(s"SET test.key3=1")
-    sql(s"SET test.key2=2")
-    sql(s"SET test.key1=3")
+    sql("SET test.key3=1")
+    sql("SET test.key2=2")
+    sql("SET test.key1=3")
     val result = sql("SET").collect()
     assert(result ===
       (overrideConfs ++ Seq(
@@ -1009,9 +1009,9 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     spark.sessionState.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
-    intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
+    intercept[IllegalArgumentException](sql("SET mapred.reduce.tasks=-1"))
+    intercept[IllegalArgumentException](sql("SET mapred.reduce.tasks=-01"))
+    intercept[IllegalArgumentException](sql("SET mapred.reduce.tasks=-2"))
     spark.sessionState.conf.clear()
   }
 
@@ -1023,7 +1023,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     val after = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key).toInt
     assert(before != after)
     assert(newConf === after)
-    intercept[IllegalArgumentException](sql(s"SET mapreduce.job.reduces=-1"))
+    intercept[IllegalArgumentException](sql("SET mapreduce.job.reduces=-1"))
     spark.sessionState.conf.clear()
   }
 
@@ -1689,23 +1689,23 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     assert(e.message.contains("Path does not exist"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
+      sql("select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
     assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
+      sql("select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
     assert(e.message.contains("Table or view not found: " +
       "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.file_path"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `Jdbc`.`file_path`")
+      sql("select id from `Jdbc`.`file_path`")
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: Jdbc"))
 
     e = intercept[AnalysisException] {
-      sql(s"select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
+      sql("select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
     }
     assert(e.message.contains("Unsupported data source type for direct query on files: " +
       "org.apache.spark.sql.execution.datasources.jdbc"))
@@ -3165,7 +3165,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         cachedView.persist()
 
         val queryDf = sql(
-          s"""select leftside.a, leftside.b
+          """select leftside.a, leftside.b
              |from cachedview leftside
              |join cachedview rightside
              |on leftside.a = rightside.a

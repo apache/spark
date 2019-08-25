@@ -115,7 +115,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     val benchmark = new Benchmark(title, values, minNumIters = 5, output = output)
 
     Seq(false, true).foreach { pushDownEnabled =>
-      val name = s"Parquet Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
+      val name = s"Parquet Vectorized ${if (pushDownEnabled) "(Pushdown)" else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
           spark.sql(s"SELECT $selectExpr FROM parquetTable WHERE $whereExpr").collect()
@@ -124,7 +124,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
     }
 
     Seq(false, true).foreach { pushDownEnabled =>
-      val name = s"Native ORC Vectorized ${if (pushDownEnabled) s"(Pushdown)" else ""}"
+      val name = s"Native ORC Vectorized ${if (pushDownEnabled) "(Pushdown)" else ""}"
       benchmark.addCase(name) { _ =>
         withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> s"$pushDownEnabled") {
           spark.sql(s"SELECT $selectExpr FROM orcTable WHERE $whereExpr").collect()
@@ -326,7 +326,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       }
     }
 
-    runBenchmark(s"Pushdown benchmark for Timestamp") {
+    runBenchmark("Pushdown benchmark for Timestamp") {
       withTempPath { dir =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_TIMESTAMP_ENABLED.key -> true.toString) {
           ParquetOutputTimestampType.values.toSeq.map(_.toString).foreach { fileType =>
@@ -361,7 +361,7 @@ object FilterPushdownBenchmark extends BenchmarkBase with SQLHelper {
       }
     }
 
-    runBenchmark(s"Pushdown benchmark with many filters") {
+    runBenchmark("Pushdown benchmark with many filters") {
       val numRows = 1
       val width = 500
 

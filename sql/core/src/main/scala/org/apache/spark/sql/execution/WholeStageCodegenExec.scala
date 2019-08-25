@@ -696,7 +696,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
     // Check if compiled code has a too large function
     if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
-      logInfo(s"Found too long generated codes and JIT optimization might not work: " +
+      logInfo("Found too long generated codes and JIT optimization might not work: " +
         s"the bytecode size ($maxCodeSize) is above the limit " +
         s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
         s"for this plan (id=$codegenStageId). To avoid this, you can raise the limit " +

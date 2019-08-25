@@ -702,7 +702,7 @@ object DataSource extends Logging {
         // NoClassDefFoundError's class name uses "/" rather than "." for packages
         val className = e.getCause.getMessage.replaceAll("/", ".")
         if (spark2RemovedClasses.contains(className)) {
-          throw new ClassNotFoundException(s"Detected an incompatible DataSourceRegister. " +
+          throw new ClassNotFoundException("Detected an incompatible DataSourceRegister. " +
             "Please remove the incompatible library from classpath or upgrade it. " +
             s"Error: ${e.getMessage}", e)
         } else {
@@ -781,7 +781,7 @@ object DataSource extends Logging {
 
     if (hasEmptySchema(schema)) {
       throw new AnalysisException(
-        s"""
+        """
            |Datasource does not support writing empty or nested empty schemas.
            |Please make sure the data schema has at least one or more column(s).
          """.stripMargin)

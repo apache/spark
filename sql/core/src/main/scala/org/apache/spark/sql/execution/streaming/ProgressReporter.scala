@@ -312,7 +312,7 @@ trait ProgressReporter extends Logging {
 
           logWarning(
             "Could not report metrics as number leaves in trigger logical plan did not match that" +
-              s" of the execution plan:\n" +
+              " of the execution plan:\n" +
               s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
               s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
           metricWarningLogged = true

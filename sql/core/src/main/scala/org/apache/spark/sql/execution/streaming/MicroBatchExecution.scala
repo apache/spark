@@ -308,7 +308,7 @@ class MicroBatchExecution(
               watermarkTracker.setWatermark(
                 math.max(watermarkTracker.currentWatermark, commitMetadata.nextBatchWatermarkMs))
             } else if (latestCommittedBatchId < latestBatchId - 1) {
-              logWarning(s"Batch completion log latest batch id is " +
+              logWarning("Batch completion log latest batch id is " +
                 s"${latestCommittedBatchId}, which is not trailing " +
                 s"batchid $latestBatchId by one")
             }
@@ -317,7 +317,7 @@ class MicroBatchExecution(
         logInfo(s"Resuming at batch $currentBatchId with committed offsets " +
           s"$committedOffsets and available offsets $availableOffsets")
       case None => // We are starting this stream for the first time.
-        logInfo(s"Starting new streaming query.")
+        logInfo("Starting new streaming query.")
         currentBatchId = 0
         watermarkTracker = WatermarkTracker(sparkSessionToRunBatches.conf)
     }

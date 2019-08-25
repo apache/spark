@@ -249,7 +249,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
           val evalTypes = validUdfs.map(_.evalType).toSet
           if (evalTypes.size != 1) {
             throw new AnalysisException(
-              s"Expected udfs have the same evalType but got different evalTypes: " +
+              "Expected udfs have the same evalType but got different evalTypes: " +
               s"${evalTypes.mkString(",")}")
           }
           val evalType = evalTypes.head

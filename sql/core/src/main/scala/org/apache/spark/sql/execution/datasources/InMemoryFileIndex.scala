@@ -203,7 +203,7 @@ object InMemoryFileIndex extends Logging {
     val statusMap = try {
       val description = paths.size match {
         case 0 =>
-          s"Listing leaf files and directories 0 paths"
+          "Listing leaf files and directories 0 paths"
         case 1 =>
           s"Listing leaf files and directories for 1 path:<br/>${paths(0)}"
         case s =>

@@ -81,7 +81,7 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
       //     1: list<list<i32>> f;
       //   }
       val schema =
-        s"""message ListOfPrimitiveList {
+        """message ListOfPrimitiveList {
            |  required group f (LIST) {
            |    repeated group f_tuple (LIST) {
            |      repeated int32 f_tuple_tuple;

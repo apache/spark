@@ -126,7 +126,7 @@ class JDBCOptions(
   require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
     (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
       numPartitions.isDefined),
-    s"When reading JDBC data sources, users need to specify all or none for the following " +
+    "When reading JDBC data sources, users need to specify all or none for the following " +
       s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
       s"and '$JDBC_NUM_PARTITIONS'")
 

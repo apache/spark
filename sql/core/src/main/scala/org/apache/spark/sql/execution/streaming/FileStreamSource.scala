@@ -162,7 +162,7 @@ class FileStreamSource(
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
-    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    logTrace("Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
         sparkSession,
@@ -245,7 +245,7 @@ class FileStreamSource(
     } else {
       logTrace(s"Listed ${files.size} file(s) in $listingTimeMs ms")
     }
-    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    logTrace("Files are:\n\t" + files.mkString("\n\t"))
     files
   }
 

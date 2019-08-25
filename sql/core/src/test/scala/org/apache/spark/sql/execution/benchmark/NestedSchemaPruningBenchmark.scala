@@ -60,7 +60,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
-      val benchmark = new Benchmark(s"Selection", numRows, numIters, output = output)
+      val benchmark = new Benchmark("Selection", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column", "SELECT col1 FROM (SELECT col1 FROM t1)")
       addCase(benchmark, "Nested column", "SELECT col2._1 FROM (SELECT col2 FROM t2)")
@@ -79,7 +79,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
-      val benchmark = new Benchmark(s"Limiting", numRows, numIters, output = output)
+      val benchmark = new Benchmark("Limiting", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column",
         s"SELECT col1 FROM (SELECT col1 FROM t1 LIMIT ${Int.MaxValue})")
@@ -101,14 +101,14 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
-      val benchmark = new Benchmark(s"Repartitioning", numRows, numIters, output = output)
+      val benchmark = new Benchmark("Repartitioning", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column",
-        s"SELECT col1 FROM (SELECT /*+ REPARTITION(1) */ col1 FROM t1)")
+        "SELECT col1 FROM (SELECT /*+ REPARTITION(1) */ col1 FROM t1)")
       addCase(benchmark, "Nested column",
-        s"SELECT col2._1 FROM (SELECT /*+ REPARTITION(1) */ col2 FROM t2)")
+        "SELECT col2._1 FROM (SELECT /*+ REPARTITION(1) */ col2 FROM t2)")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT /*+ REPARTITION(1) */ col3 FROM t3)")
+        "SELECT col3._1 FROM (SELECT /*+ REPARTITION(1) */ col3 FROM t3)")
 
       benchmark.run()
     }
@@ -123,14 +123,14 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
-      val benchmark = new Benchmark(s"Repartitioning by exprs", numRows, numIters, output = output)
+      val benchmark = new Benchmark("Repartitioning by exprs", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column",
-        s"SELECT col1 FROM (SELECT col1 FROM t1 DISTRIBUTE BY col1)")
+        "SELECT col1 FROM (SELECT col1 FROM t1 DISTRIBUTE BY col1)")
       addCase(benchmark, "Nested column",
-        s"SELECT col2._1 FROM (SELECT col2 FROM t2 DISTRIBUTE BY col2._1)")
+        "SELECT col2._1 FROM (SELECT col2 FROM t2 DISTRIBUTE BY col2._1)")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT col3 FROM t3 DISTRIBUTE BY col3._1)")
+        "SELECT col3._1 FROM (SELECT col3 FROM t3 DISTRIBUTE BY col3._1)")
 
       benchmark.run()
     }
@@ -145,14 +145,14 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
-      val benchmark = new Benchmark(s"Sample", numRows, numIters, output = output)
+      val benchmark = new Benchmark("Sample", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column",
-        s"SELECT col1 FROM (SELECT col1 FROM t1 TABLESAMPLE(100 percent))")
+        "SELECT col1 FROM (SELECT col1 FROM t1 TABLESAMPLE(100 percent))")
       addCase(benchmark, "Nested column",
-        s"SELECT col2._1 FROM (SELECT col2 FROM t2 TABLESAMPLE(100 percent))")
+        "SELECT col2._1 FROM (SELECT col2 FROM t2 TABLESAMPLE(100 percent))")
       addCase(benchmark, "Nested column in array",
-        s"SELECT col3._1 FROM (SELECT col3 FROM t3 TABLESAMPLE(100 percent))")
+        "SELECT col3._1 FROM (SELECT col3 FROM t3 TABLESAMPLE(100 percent))")
 
       benchmark.run()
     }
@@ -167,7 +167,7 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         spark.read.format(dataSourceName).load(path + s"/$i").createOrReplaceTempView(s"t$i")
       }
 
-      val benchmark = new Benchmark(s"Sorting", numRows, numIters, output = output)
+      val benchmark = new Benchmark("Sorting", numRows, numIters, output = output)
 
       addCase(benchmark, "Top-level column", "SELECT col1 FROM t1 ORDER BY col1")
       addCase(benchmark, "Nested column", "SELECT col2._1 FROM t2 ORDER BY col2._1")

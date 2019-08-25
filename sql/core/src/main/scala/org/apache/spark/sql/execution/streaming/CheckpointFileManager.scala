@@ -192,8 +192,8 @@ object CheckpointFileManager extends Logging {
         logWarning(
           "Could not use FileContext API for managing Structured Streaming checkpoint files at " +
             s"$path. Using FileSystem API instead for managing log files. If the implementation " +
-            s"of FileSystem.rename() is not atomic, then the correctness and fault-tolerance of" +
-            s"your Structured Streaming is not guaranteed.")
+            "of FileSystem.rename() is not atomic, then the correctness and fault-tolerance of" +
+            "your Structured Streaming is not guaranteed.")
         new FileSystemBasedCheckpointFileManager(path, hadoopConf)
     }
   }

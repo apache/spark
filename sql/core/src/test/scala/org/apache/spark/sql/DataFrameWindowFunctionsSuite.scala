@@ -656,7 +656,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSparkSession {
       sql("SELECT a, MAX(b), SUM(b) FROM testData2 GROUP BY a HAVING RANK() OVER(ORDER BY a) = 1"))
     checkAnalysisError(
       sql(
-        s"""SELECT a, MAX(b)
+        """SELECT a, MAX(b)
            |FROM testData2
            |GROUP BY a
            |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin))

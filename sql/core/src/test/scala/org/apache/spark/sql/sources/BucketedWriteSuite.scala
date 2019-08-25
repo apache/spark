@@ -159,7 +159,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
 
     for (bucketFile <- allBucketFiles) {
       val bucketId = BucketingUtils.getBucketId(bucketFile.getName).getOrElse {
-        fail(s"Unable to find the related bucket files.")
+        fail("Unable to find the related bucket files.")
       }
 
       // Remove the duplicate columns in bucketCols and sortCols;

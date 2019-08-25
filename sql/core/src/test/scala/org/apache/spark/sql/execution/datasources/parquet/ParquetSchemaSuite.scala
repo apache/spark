@@ -1281,7 +1281,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     "2-level list of required struct",
 
     parquetSchema =
-      s"""message root {
+      """message root {
          |  required group f0 {
          |    required group f00 (LIST) {
          |      repeated group element {
@@ -1306,7 +1306,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     },
 
     expectedSchema =
-      s"""message root {
+      """message root {
          |  required group f0 {
          |    required group f00 (LIST) {
          |      repeated group element {

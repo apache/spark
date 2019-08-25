@@ -238,14 +238,14 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           text.substring(1, text.length).toInt
         } catch {
           case _: NumberFormatException =>
-            throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
+            throw new IllegalStateException("Log file was malformed: failed to read correct log " +
               s"version from $text.")
         }
       if (version > 0) {
         if (version > maxSupportedVersion) {
-          throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
+          throw new IllegalStateException("UnsupportedLogVersion: maximum supported log version " +
             s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
-            s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
+            "by a newer version of Spark and cannot be read by this version. Please upgrade.")
         } else {
           return version
         }
@@ -253,7 +253,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
 
     // reaching here means we failed to read the correct log version
-    throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
+    throw new IllegalStateException("Log file was malformed: failed to read correct log " +
       s"version from $text.")
   }
 }

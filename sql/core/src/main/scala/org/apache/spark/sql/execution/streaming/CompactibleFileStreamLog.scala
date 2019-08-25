@@ -170,7 +170,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * of given parameter, and let CompactibleFileStreamLog handles purging by itself.
    */
   override def purge(thresholdBatchId: Long): Unit = throw new UnsupportedOperationException(
-    s"Cannot purge as it might break internal state.")
+    "Cannot purge as it might break internal state.")
 
   /**
    * Compacts all logs before `batchId` plus the provided `logs`, and writes them into the

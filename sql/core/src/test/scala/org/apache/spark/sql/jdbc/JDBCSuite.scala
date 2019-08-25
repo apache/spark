@@ -192,7 +192,7 @@ class JDBCSuite extends QueryTest
        """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement(
-      s"""
+      """
         |create table test.nulltypes (a INT, b BOOLEAN, c TINYINT, d BINARY(20), e VARCHAR(20),
         |f VARCHAR_IGNORECASE(20), g CHAR(20), h BLOB, i CLOB, j TIME, k DATE, l TIMESTAMP,
         |m DOUBLE, n REAL, o DECIMAL(38, 18))
@@ -463,7 +463,7 @@ class JDBCSuite extends QueryTest
     withView("tempPeople") {
       val e = intercept[IllegalArgumentException] {
         sql(
-          s"""
+          """
              |CREATE OR REPLACE TEMPORARY VIEW tempPeople
              |USING org.apache.spark.sql.jdbc
              |OPTIONS (
@@ -1459,7 +1459,7 @@ class JDBCSuite extends QueryTest
 
     // Option query and partitioncolumn are not allowed together.
     val expectedErrorMsg =
-      s"""
+      """
          |Options 'query' and 'partitionColumn' can not be specified together.
          |Please define the query using `dbtable` option instead and make sure to qualify
          |the partition columns using the supplied subquery alias to resolve any ambiguity.

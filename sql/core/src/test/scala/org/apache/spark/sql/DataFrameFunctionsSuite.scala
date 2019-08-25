@@ -768,7 +768,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().selectExpr("array_contains(array(1), .01234567890123456790123456780)")
     }
     val errorMsg1 =
-      s"""
+      """
          |Input to function array_contains should have been array followed by a
          |value with same element type, but it's [array<int>, decimal(29,29)].
        """.stripMargin.replace("\n", " ").trim()
@@ -778,7 +778,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().selectExpr("array_contains(array(1), 'foo')")
     }
     val errorMsg2 =
-      s"""
+      """
          |Input to function array_contains should have been array followed by a
          |value with same element type, but it's [array<int>, string].
        """.stripMargin.replace("\n", " ").trim()
@@ -1136,7 +1136,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(("a string element", "a")).toDF().selectExpr("array_position(_1, _2)")
     }
     val errorMsg1 =
-      s"""
+      """
          |Input to function array_position should have been array followed by a
          |value with same element type, but it's [string, string].
        """.stripMargin.replace("\n", " ").trim()
@@ -1146,7 +1146,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().selectExpr("array_position(array(1), '1')")
     }
     val errorMsg2 =
-      s"""
+      """
          |Input to function array_position should have been array followed by a
          |value with same element type, but it's [array<int>, string].
        """.stripMargin.replace("\n", " ").trim()
@@ -1212,7 +1212,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(("a string element", 1)).toDF().selectExpr("element_at(_1, _2)")
     }
     val errorMsg1 =
-      s"""
+      """
          |The first argument to function element_at should have been array or map type, but
          |its string type.
        """.stripMargin.replace("\n", " ").trim()
@@ -1237,7 +1237,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().selectExpr("element_at(array('a', 'b'), 1L)")
     }
     val errorMsg2 =
-      s"""
+      """
          |Input to function element_at should have been array followed by a int, but it's
          |[array<string>, bigint].
        """.stripMargin.replace("\n", " ").trim()
@@ -1277,7 +1277,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       OneRowRelation().selectExpr("element_at(map(1, 'a', 2, 'b'), '1')")
     }
     val errorMsg3 =
-      s"""
+      """
          |Input to function element_at should have been map followed by a value of same
          |key type, but it's [map<int,string>, string].
        """.stripMargin.replace("\n", " ").trim()
@@ -1681,7 +1681,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(("a string element", "a")).toDF().selectExpr("array_remove(_1, _2)")
     }
     val errorMsg1 =
-      s"""
+      """
          |Input to function array_remove should have been array followed by a
          |value with same element type, but it's [string, string].
        """.stripMargin.replace("\n", " ").trim()
@@ -1692,7 +1692,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     }
 
     val errorMsg2 =
-      s"""
+      """
          |Input to function array_remove should have been array followed by a
          |value with same element type, but it's [array<int>, string].
        """.stripMargin.replace("\n", " ").trim()

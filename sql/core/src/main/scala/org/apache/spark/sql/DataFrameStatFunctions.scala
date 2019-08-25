@@ -514,7 +514,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       case LongType => (sketch, row) => sketch.addLong(row.getLong(0))
       case _ =>
         throw new IllegalArgumentException(
-          s"Count-min Sketch only supports string type and integral types, " +
+          "Count-min Sketch only supports string type and integral types, " +
             s"and does not support type $colType."
         )
     }
@@ -593,7 +593,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
       case LongType => (filter, row) => filter.putLong(row.getLong(0))
       case _ =>
         throw new IllegalArgumentException(
-          s"Bloom filter only supports string type and integral types, " +
+          "Bloom filter only supports string type and integral types, " +
             s"and does not support type $colType."
         )
     }

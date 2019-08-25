@@ -52,7 +52,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   test("data source table CTAS") {
     withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test
+        """CREATE TABLE ddl_test
            |USING json
            |AS SELECT 1 AS a, "foo" AS b
          """.stripMargin
@@ -65,7 +65,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   test("partitioned data source table") {
     withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test
+        """CREATE TABLE ddl_test
            |USING json
            |PARTITIONED BY (b)
            |AS SELECT 1 AS a, "foo" AS b
@@ -79,7 +79,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   test("bucketed data source table") {
     withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test
+        """CREATE TABLE ddl_test
            |USING json
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
            |AS SELECT 1 AS a, "foo" AS b
@@ -93,7 +93,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   test("partitioned bucketed data source table") {
     withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test
+        """CREATE TABLE ddl_test
            |USING json
            |PARTITIONED BY (c)
            |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
@@ -108,7 +108,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   test("data source table with a comment") {
     withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test
+        """CREATE TABLE ddl_test
            |USING json
            |COMMENT 'This is a comment'
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
@@ -122,7 +122,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   test("data source table with table properties") {
     withTable("ddl_test") {
       sql(
-        s"""CREATE TABLE ddl_test
+        """CREATE TABLE ddl_test
            |USING json
            |TBLPROPERTIES ('a' = '1')
            |AS SELECT 1 AS a, "foo" AS b, 2.5 AS c
@@ -186,7 +186,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     withTable("t1") {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
       sql(s"$createTable USING json")
-      val shownDDL = sql(s"SHOW CREATE TABLE t1")
+      val shownDDL = sql("SHOW CREATE TABLE t1")
         .head()
         .getString(0)
         .split("\n")

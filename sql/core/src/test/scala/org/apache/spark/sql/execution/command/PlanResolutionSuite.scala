@@ -344,7 +344,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Test v2 CreateTable with known catalog in identifier") {
     val sql =
-      s"""
+      """
          |CREATE TABLE IF NOT EXISTS testcat.mydb.table_name (
          |    id bigint,
          |    description string,
@@ -383,7 +383,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Test v2 CreateTable with default catalog") {
     val sql =
-      s"""
+      """
          |CREATE TABLE IF NOT EXISTS mydb.table_name (
          |    id bigint,
          |    description string,
@@ -460,7 +460,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Test v2 CTAS with known catalog in identifier") {
     val sql =
-      s"""
+      """
          |CREATE TABLE IF NOT EXISTS testcat.mydb.table_name
          |USING parquet
          |COMMENT 'table comment'
@@ -494,7 +494,7 @@ class PlanResolutionSuite extends AnalysisTest {
 
   test("Test v2 CTAS with default catalog") {
     val sql =
-      s"""
+      """
          |CREATE TABLE IF NOT EXISTS mydb.table_name
          |USING parquet
          |COMMENT 'table comment'

@@ -855,7 +855,7 @@ class JoinSuite extends QueryTest with SharedSparkSession {
           // outputOrdering should be consistent between physical plan and executed plan
           assert(outputOrderingPhysical == outputOrderingExecuted,
             s"Operator $join1 did not have the same output ordering in the physical plan as in " +
-            s"the executed plan.")
+            "the executed plan.")
       }
     }
 

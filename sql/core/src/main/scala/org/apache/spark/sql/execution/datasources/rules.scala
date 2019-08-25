@@ -530,7 +530,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
-        failAnalysis(s"Inserting into an RDD-based table is not allowed.")
+        failAnalysis("Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
     }

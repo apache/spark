@@ -331,7 +331,7 @@ class CatalogSuite extends SharedSparkSession {
 
   test("get table") {
     withTempDatabase { db =>
-      withTable(s"tbl_x", s"$db.tbl_y") {
+      withTable("tbl_x", s"$db.tbl_y") {
         // Try to find non existing tables.
         intercept[AnalysisException](spark.catalog.getTable("tbl_x"))
         intercept[AnalysisException](spark.catalog.getTable("tbl_y"))
@@ -408,7 +408,7 @@ class CatalogSuite extends SharedSparkSession {
 
   test("table exists") {
     withTempDatabase { db =>
-      withTable(s"tbl_x", s"$db.tbl_y") {
+      withTable("tbl_x", s"$db.tbl_y") {
         // Try to find non existing tables.
         assert(!spark.catalog.tableExists("tbl_x"))
         assert(!spark.catalog.tableExists("tbl_y"))

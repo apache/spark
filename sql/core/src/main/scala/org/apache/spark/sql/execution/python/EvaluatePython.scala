@@ -182,7 +182,7 @@ object EvaluatePython {
           val array = c.asInstanceOf[Array[_]]
           if (array.length != fields.length) {
             throw new IllegalStateException(
-              s"Input row doesn't have expected number of values required by the schema. " +
+              "Input row doesn't have expected number of values required by the schema. " +
                 s"${fields.length} fields are required while ${array.length} values are provided."
             )
           }

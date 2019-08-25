@@ -334,7 +334,7 @@ abstract class FileStreamSinkSuite extends StreamTest {
     assertAncestorIsMetadataDirectory(s"/a/b/${FileStreamSink.metadataDir}/c")
     assertAncestorIsMetadataDirectory(s"/a/b/${FileStreamSink.metadataDir}/c/")
 
-    assertAncestorIsNotMetadataDirectory(s"/a/b/c")
+    assertAncestorIsNotMetadataDirectory("/a/b/c")
     assertAncestorIsNotMetadataDirectory(s"/a/b/c/${FileStreamSink.metadataDir}extra")
   }
 

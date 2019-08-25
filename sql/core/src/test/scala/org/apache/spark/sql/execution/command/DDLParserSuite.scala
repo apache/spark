@@ -342,7 +342,7 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
 
   test("create hive table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
-    val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
+    val fileFormat = "STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
     val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
     val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
 
@@ -1077,13 +1077,13 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("CTAS statement with a PARTITIONED BY clause is not allowed") {
-    assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
+    assertUnsupported("CREATE TABLE ctas1 PARTITIONED BY (k int)" +
       " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 
   test("CTAS statement with schema") {
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
+    assertUnsupported("CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
+    assertUnsupported("CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
   }
 
   test("unsupported operations") {

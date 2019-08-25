@@ -186,7 +186,7 @@ case class ParquetPartitionReaderFactory(
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
       convertTz: Option[TimeZone]): RecordReader[Void, UnsafeRow] = {
-    logDebug(s"Falling back to parquet-mr")
+    logDebug("Falling back to parquet-mr")
     val taskContext = Option(TaskContext.get())
     // ParquetRecordReader returns UnsafeRow
     val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)

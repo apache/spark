@@ -240,7 +240,7 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(condition).map {
         f => DataSourceStrategy.translateFilter(f).getOrElse(
-          throw new AnalysisException(s"Exec delete failed:" +
+          throw new AnalysisException("Exec delete failed:" +
               s" cannot translate expression to source filter: $f"))
       }.toArray
       DeleteFromTableExec(r.table.asDeletable, filters) :: Nil

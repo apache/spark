@@ -45,7 +45,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
   private def toNoop(ds: Dataset[_]): Unit = ds.write.format("noop").save()
 
   private def quotedValuesBenchmark(rowsNum: Int, numIters: Int): Unit = {
-    val benchmark = new Benchmark(s"Parsing quoted values", rowsNum, output = output)
+    val benchmark = new Benchmark("Parsing quoted values", rowsNum, output = output)
 
     withTempPath { path =>
       val str = (0 until 10000).map(i => s""""$i"""").mkString(",")
@@ -58,7 +58,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val schema = new StructType().add("value", StringType)
       val ds = spark.read.option("header", true).schema(schema).csv(path.getAbsolutePath)
 
-      benchmark.addCase(s"One quoted string", numIters) { _ =>
+      benchmark.addCase("One quoted string", numIters) { _ =>
         toNoop(ds)
       }
 
@@ -87,20 +87,20 @@ object CSVBenchmark extends SqlBasedBenchmark {
         toNoop(ds.select("*"))
       }
       val cols100 = columnNames.take(100).map(Column(_))
-      benchmark.addCase(s"Select 100 columns", numIters) { _ =>
+      benchmark.addCase("Select 100 columns", numIters) { _ =>
         toNoop(ds.select(cols100: _*))
       }
-      benchmark.addCase(s"Select one column", numIters) { _ =>
+      benchmark.addCase("Select one column", numIters) { _ =>
         toNoop(ds.select($"col1"))
       }
-      benchmark.addCase(s"count()", numIters) { _ =>
+      benchmark.addCase("count()", numIters) { _ =>
         ds.count()
       }
 
       val schemaErr1 = StructType(StructField("col0", DateType) +:
         (1 until colsNum).map(i => StructField(s"col$i", IntegerType)))
       val dsErr1 = spark.read.schema(schemaErr1).csv(path.getAbsolutePath)
-      benchmark.addCase(s"Select 100 columns, one bad input field", numIters) { _ =>
+      benchmark.addCase("Select 100 columns, one bad input field", numIters) { _ =>
         toNoop(dsErr1.select(cols100: _*))
       }
 
@@ -109,7 +109,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val dsErr2 = spark.read.schema(schemaErr2)
         .option("columnNameOfCorruptRecord", badRecColName)
         .csv(path.getAbsolutePath)
-      benchmark.addCase(s"Select 100 columns, corrupt record field", numIters) { _ =>
+      benchmark.addCase("Select 100 columns, corrupt record field", numIters) { _ =>
         toNoop(dsErr2.select((Column(badRecColName) +: cols100): _*))
       }
 
@@ -136,10 +136,10 @@ object CSVBenchmark extends SqlBasedBenchmark {
       benchmark.addCase(s"Select $colsNum columns + count()", numIters) { _ =>
         ds.select("*").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"Select 1 column + count()", numIters) { _ =>
+      benchmark.addCase("Select 1 column + count()", numIters) { _ =>
         ds.select($"col1").filter((_: Row) => true).count()
       }
-      benchmark.addCase(s"count()", numIters) { _ =>
+      benchmark.addCase("count()", numIters) { _ =>
         ds.count()
       }
 
@@ -166,7 +166,7 @@ object CSVBenchmark extends SqlBasedBenchmark {
       val dateDir = new File(path, "date").getAbsolutePath
 
       val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
-      writeBench.addCase(s"Create a dataset of timestamps", numIters) { _ =>
+      writeBench.addCase("Create a dataset of timestamps", numIters) { _ =>
         toNoop(timestamps)
       }
 

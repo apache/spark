@@ -133,7 +133,7 @@ class ParquetFileFormat
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
       logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
-        s" create job summaries. " +
+        " create job summaries. " +
         s"Set Parquet option ${ParquetOutputFormat.JOB_SUMMARY_LEVEL} to NONE.")
     }
 
@@ -327,7 +327,7 @@ class ParquetFileFormat
         // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
-        logDebug(s"Falling back to parquet-mr")
+        logDebug("Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
         val readSupport = new ParquetReadSupport(convertTz, enableVectorizedReader = false)
         val reader = if (pushed.isDefined && enableRecordFilter) {

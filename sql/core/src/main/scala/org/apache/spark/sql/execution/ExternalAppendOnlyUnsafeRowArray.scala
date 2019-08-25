@@ -184,7 +184,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       if (expectedModificationsCount != modificationsCount) {
         throw new ConcurrentModificationException(
           s"The backing ${classOf[ExternalAppendOnlyUnsafeRowArray].getName} has been modified " +
-            s"since the creation of this Iterator")
+            "since the creation of this Iterator")
       }
     }
   }

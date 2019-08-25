@@ -83,7 +83,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("Simple INSERT OVERWRITE a JSONRelation") {
     sql(
-      s"""
+      """
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
 
@@ -115,7 +115,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("PreInsert casting and renaming") {
     sql(
-      s"""
+      """
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 2, a * 4 FROM jt
       """.stripMargin)
 
@@ -125,7 +125,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     )
 
     sql(
-      s"""
+      """
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 4 AS A, a * 6 as c FROM jt
       """.stripMargin)
 
@@ -138,7 +138,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("SELECT clause generating a different number of columns is not allowed.") {
     val message = intercept[AnalysisException] {
       sql(
-        s"""
+        """
         |INSERT OVERWRITE TABLE jsonTable SELECT a FROM jt
       """.stripMargin)
     }.getMessage
@@ -148,7 +148,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("INSERT OVERWRITE a JSONRelation multiple times") {
     sql(
-      s"""
+      """
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
     """.stripMargin)
     checkAnswer(
@@ -160,7 +160,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 5)
     spark.read.json(rdd1.toDS()).createOrReplaceTempView("jt1")
     sql(
-      s"""
+      """
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
     """.stripMargin)
     checkAnswer(
@@ -172,7 +172,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
     spark.read.json(rdd2.toDS()).createOrReplaceTempView("jt2")
     sql(
-      s"""
+      """
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
     """.stripMargin)
     checkAnswer(
@@ -181,7 +181,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     )
 
     sql(
-      s"""
+      """
          |INSERT OVERWRITE TABLE jsonTable SELECT a * 10, b FROM jt1
     """.stripMargin)
     checkAnswer(
@@ -195,7 +195,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("INSERT INTO JSONRelation for now") {
     sql(
-      s"""
+      """
       |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
     """.stripMargin)
     checkAnswer(
@@ -204,7 +204,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     )
 
     sql(
-      s"""
+      """
          |INSERT INTO TABLE jsonTable SELECT a, b FROM jt
     """.stripMargin)
     checkAnswer(
@@ -258,7 +258,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("it is not allowed to write to a table while querying it.") {
     val message = intercept[AnalysisException] {
       sql(
-        s"""
+        """
         |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jsonTable
       """.stripMargin)
     }.getMessage
@@ -270,7 +270,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   test("Caching")  {
     // write something to the jsonTable
     sql(
-      s"""
+      """
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
     // Cached Query Execution
@@ -303,7 +303,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
     // Insert overwrite and keep the same schema.
     sql(
-      s"""
+      """
         |INSERT OVERWRITE TABLE jsonTable SELECT a * 2, b FROM jt
       """.stripMargin)
     // jsonTable should be recached.
@@ -337,7 +337,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
     val message = intercept[AnalysisException] {
       sql(
-        s"""
+        """
         |INSERT OVERWRITE TABLE oneToTen SELECT CAST(a AS INT) FROM jt
         """.stripMargin)
     }.getMessage
@@ -351,14 +351,14 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("SPARK-15824 - Execute an INSERT wrapped in a WITH statement immediately") {
     withTable("target", "target2") {
-      sql(s"CREATE TABLE target(a INT, b STRING) USING JSON")
+      sql("CREATE TABLE target(a INT, b STRING) USING JSON")
       sql("WITH tbl AS (SELECT * FROM jt) INSERT OVERWRITE TABLE target SELECT a, b FROM tbl")
       checkAnswer(
         sql("SELECT a, b FROM target"),
         sql("SELECT a, b FROM jt")
       )
 
-      sql(s"CREATE TABLE target2(a INT, b STRING) USING JSON")
+      sql("CREATE TABLE target2(a INT, b STRING) USING JSON")
       val e = sql(
         """
           |WITH tbl AS (SELECT * FROM jt)
@@ -525,7 +525,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
         val path1 = Utils.createTempDir()
         sql(s"alter table t add partition(part1=1, part2=1) location '$path1'")
-        sql(s"insert into t partition(part1=1, part2=1) select 1")
+        sql("insert into t partition(part1=1, part2=1) select 1")
         checkAnswer(spark.table("t"), Row(1, 1, 1))
 
         sql("insert overwrite table t partition(part1=1, part2=1) select 2")

@@ -1634,11 +1634,11 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
     }
   }
 
-  test(s"SPARK-23786: Checking column names against schema in the multiline mode") {
+  test("SPARK-23786: Checking column names against schema in the multiline mode") {
     checkHeader(multiLine = true)
   }
 
-  test(s"SPARK-23786: Checking column names against schema in the per-line mode") {
+  test("SPARK-23786: Checking column names against schema in the per-line mode") {
     checkHeader(multiLine = false)
   }
 

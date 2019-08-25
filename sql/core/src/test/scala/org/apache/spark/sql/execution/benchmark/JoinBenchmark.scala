@@ -127,8 +127,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
   def sortMergeJoin(): Unit = {
     val N = 2 << 20
     codegenBenchmark("sort merge join", N) {
-      val df1 = spark.range(N).selectExpr(s"id * 2 as k1")
-      val df2 = spark.range(N).selectExpr(s"id * 3 as k2")
+      val df1 = spark.range(N).selectExpr("id * 2 as k1")
+      val df2 = spark.range(N).selectExpr("id * 3 as k2")
       val df = df1.join(df2, col("k1") === col("k2"))
       assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[SortMergeJoinExec]).isDefined)
       df.count()
@@ -155,8 +155,8 @@ object JoinBenchmark extends SqlBasedBenchmark {
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000000",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
       codegenBenchmark("shuffle hash join", N) {
-        val df1 = spark.range(N).selectExpr(s"id as k1")
-        val df2 = spark.range(N / 3).selectExpr(s"id * 3 as k2")
+        val df1 = spark.range(N).selectExpr("id as k1")
+        val df2 = spark.range(N / 3).selectExpr("id * 3 as k2")
         val df = df1.join(df2, col("k1") === col("k2"))
         assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[ShuffledHashJoinExec]).isDefined)
         df.count()

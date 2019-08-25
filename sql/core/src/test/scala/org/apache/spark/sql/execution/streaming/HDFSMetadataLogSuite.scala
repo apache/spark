@@ -108,7 +108,7 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
       val metadataLog = new HDFSMetadataLog[String](spark, dir.getAbsolutePath)
       def assertLogFileMalformed(func: => Int): Unit = {
         val e = intercept[IllegalStateException] { func }
-        assert(e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
+        assert(e.getMessage.contains("Log file was malformed: failed to read correct log version"))
       }
       assertLogFileMalformed { metadataLog.validateVersion("", 100) }
       assertLogFileMalformed { metadataLog.validateVersion("xyz", 100) }

@@ -431,7 +431,7 @@ object PartitioningUtils {
     // Lists out those non-leaf partition directories that also contain files
     val suspiciousPaths = distinctPartColNames.sortBy(_.length).flatMap(partColNamesToPaths)
 
-    s"Conflicting partition column names detected:\n" +
+    "Conflicting partition column names detected:\n" +
       distinctPartColLists.mkString("\n\t", "\n\t", "\n\n") +
       "For partitioned table directories, data files should only live in leaf directories.\n" +
       "And directories at the same level should have the same partition column name.\n" +
@@ -550,7 +550,7 @@ object PartitioningUtils {
     }
 
     if (partitionColumns.nonEmpty && partitionColumns.size == schema.fields.length) {
-      throw new AnalysisException(s"Cannot use all columns for partition columns")
+      throw new AnalysisException("Cannot use all columns for partition columns")
     }
   }
 

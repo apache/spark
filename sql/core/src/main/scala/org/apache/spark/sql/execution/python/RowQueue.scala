@@ -267,7 +267,7 @@ private[python] case class HybridRowQueue(
       synchronized {
         reading = queues.remove()
       }
-      assert(reading != null, s"queue should not be empty")
+      assert(reading != null, "queue should not be empty")
       row = reading.remove()
       assert(row != null, s"$reading should have at least one row")
     }

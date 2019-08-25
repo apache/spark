@@ -35,19 +35,19 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
   // ============================ StateManagerImplV1 ============================
 
-  test(s"StateManager v1 - primitive type - without timestamp") {
+  test("StateManager v1 - primitive type - without timestamp") {
     val schema = new StructType().add("value", IntegerType, nullable = false)
     testStateManagerWithoutTimestamp[Int](version = 1, schema, Seq(0, 10))
   }
 
-  test(s"StateManager v1 - primitive type - with timestamp") {
+  test("StateManager v1 - primitive type - with timestamp") {
     val schema = new StructType()
       .add("value", IntegerType, nullable = false)
       .add("timeoutTimestamp", IntegerType, nullable = false)
     testStateManagerWithTimestamp[Int](version = 1, schema, Seq(0, 10))
   }
 
-  test(s"StateManager v1 - nested type - without timestamp") {
+  test("StateManager v1 - nested type - without timestamp") {
     val schema = StructType(Seq(
       StructField("i", IntegerType, nullable = false),
       StructField("nested", StructType(Seq(
@@ -69,7 +69,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
     }
   }
 
-  test(s"StateManager v1 - nested type - with timestamp") {
+  test("StateManager v1 - nested type - with timestamp") {
     val schema = StructType(Seq(
       StructField("i", IntegerType, nullable = false),
       StructField("nested", StructType(Seq(
@@ -94,20 +94,20 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
 
   // ============================ StateManagerImplV2 ============================
 
-  test(s"StateManager v2 - primitive type - without timestamp") {
+  test("StateManager v2 - primitive type - without timestamp") {
     val schema = new StructType()
       .add("groupState", new StructType().add("value", IntegerType, nullable = false))
     testStateManagerWithoutTimestamp[Int](version = 2, schema, Seq(0, 10))
   }
 
-  test(s"StateManager v2 - primitive type - with timestamp") {
+  test("StateManager v2 - primitive type - with timestamp") {
     val schema = new StructType()
       .add("groupState", new StructType().add("value", IntegerType, nullable = false))
       .add("timeoutTimestamp", LongType, nullable = false)
     testStateManagerWithTimestamp[Int](version = 2, schema, Seq(0, 10))
   }
 
-  test(s"StateManager v2 - nested type - without timestamp") {
+  test("StateManager v2 - nested type - without timestamp") {
     val schema = StructType(Seq(
       StructField("groupState", StructType(Seq(
         StructField("i", IntegerType, nullable = false),
@@ -127,7 +127,7 @@ class FlatMapGroupsWithStateExecHelperSuite extends StreamTest {
     testStateManagerWithoutTimestamp[NestedStruct](version = 2, schema, testValues)
   }
 
-  test(s"StateManager v2 - nested type - with timestamp") {
+  test("StateManager v2 - nested type - with timestamp") {
     val schema = StructType(Seq(
       StructField("groupState", StructType(Seq(
         StructField("i", IntegerType, nullable = false),

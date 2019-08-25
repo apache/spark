@@ -70,7 +70,7 @@ case class InsertIntoDataSourceDirCommand(
       sparkSession.sessionState.executePlan(dataSource.planForWriting(saveMode, query)).toRdd
     } catch {
       case ex: AnalysisException =>
-        logError(s"Failed to write to directory " + storage.locationUri.toString, ex)
+        logError("Failed to write to directory " + storage.locationUri.toString, ex)
         throw ex
     }
 

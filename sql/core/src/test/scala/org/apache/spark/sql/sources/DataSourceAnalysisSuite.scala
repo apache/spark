@@ -56,7 +56,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
     val rule = DataSourceAnalysis(conf)
     test(
-      s"convertStaticPartitions only handle INSERT having at least static partitions " +
+      "convertStaticPartitions only handle INSERT having at least static partitions " +
         s"(caseSensitive: $caseSensitive)") {
       intercept[AssertionError] {
         rule.convertStaticPartitions(
@@ -139,7 +139,7 @@ class DataSourceAnalysisSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(
-      s"Static partitions need to appear before dynamic partitions" +
+      "Static partitions need to appear before dynamic partitions" +
       s" (caseSensitive: $caseSensitive)") {
       // Static partitions need to appear before dynamic partitions.
       intercept[AnalysisException] {

@@ -103,13 +103,13 @@ object UDFBenchmark extends SqlBasedBenchmark {
 
       val benchmark = new Benchmark("UDF identity overhead", cardinality, output = output)
 
-      benchmark.addCase(s"Baseline", numIters = 5) { _ =>
+      benchmark.addCase("Baseline", numIters = 5) { _ =>
         spark.range(cardinality).select(
           col("id"), col("id") * 2, col("id") * 3).write.format("noop").save()
       }
 
       val identityUDF = udf { x: Long => x }
-      benchmark.addCase(s"With identity UDF", numIters = 5) { _ =>
+      benchmark.addCase("With identity UDF", numIters = 5) { _ =>
         spark.range(cardinality).select(
           identityUDF(col("id")),
           identityUDF(col("id") * 2),

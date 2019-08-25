@@ -1109,7 +1109,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
   test("SPARK-23023 Cast rows to strings in showString") {
     val df1 = Seq(Seq(1, 2, 3, 4)).toDF("a")
     assert(df1.showString(10) ===
-      s"""+------------+
+      """+------------+
          ||           a|
          |+------------+
          ||[1, 2, 3, 4]|
@@ -1117,7 +1117,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
     val df2 = Seq(Map(1 -> "a", 2 -> "b")).toDF("a")
     assert(df2.showString(10) ===
-      s"""+----------------+
+      """+----------------+
          ||               a|
          |+----------------+
          ||[1 -> a, 2 -> b]|
@@ -1125,7 +1125,7 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
     val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
     assert(df3.showString(10) ===
-      s"""+------+---+
+      """+------+---+
          ||     a|  b|
          |+------+---+
          ||[1, a]|  0|

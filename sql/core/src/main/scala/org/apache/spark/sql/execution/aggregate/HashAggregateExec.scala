@@ -595,7 +595,7 @@ case class HashAggregateExec(
         // Inline mutable state since not many aggregation operations in a task
         fastHashMapTerm = ctx.addMutableState(fastHashMapClassName, "vectorizedHastHashMap",
           v => s"$v = new $fastHashMapClassName();", forceInline = true)
-        ctx.addMutableState(s"java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter",
+        ctx.addMutableState("java.util.Iterator<InternalRow>", "vectorizedFastHashMapIter",
           forceInline = true)
       } else {
         val generatedMap = new RowBasedHashMapGenerator(ctx, aggregateExpressions,

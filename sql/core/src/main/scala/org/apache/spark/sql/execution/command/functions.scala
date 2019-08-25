@@ -68,7 +68,7 @@ case class CreateFunctionCommand(
 
   // Temporary function names should not contain database prefix like "database.function"
   if (databaseName.isDefined && isTemp) {
-    throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+    throw new AnalysisException("Specifying a database in CREATE TEMPORARY FUNCTION " +
       s"is not allowed: '${databaseName.get}'")
   }
 
@@ -172,7 +172,7 @@ case class DropFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
-        throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
+        throw new AnalysisException("Specifying a database in DROP TEMPORARY FUNCTION " +
           s"is not allowed: '${databaseName.get}'")
       }
       if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {

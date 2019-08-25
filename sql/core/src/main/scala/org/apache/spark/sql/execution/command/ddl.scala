@@ -202,7 +202,7 @@ case class DropTableCommand(
             "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
         case o if o != CatalogTableType.VIEW && isView =>
           throw new AnalysisException(
-            s"Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
+            "Cannot drop a table with DROP VIEW. Please use DROP TABLE instead")
         case _ =>
       }
     }
@@ -866,7 +866,7 @@ object DDLUtils {
             "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
         case o if o != CatalogTableType.VIEW && isView =>
           throw new AnalysisException(
-            s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+            "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
         case _ =>
       }
     }

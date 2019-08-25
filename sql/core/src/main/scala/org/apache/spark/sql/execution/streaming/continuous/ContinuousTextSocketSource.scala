@@ -127,7 +127,7 @@ class TextSocketContinuousStream(
   override def commit(end: Offset): Unit = synchronized {
     val endOffset = end match {
       case off: TextSocketOffset => off
-      case _ => throw new IllegalArgumentException(s"TextSocketContinuousReader.commit()" +
+      case _ => throw new IllegalArgumentException("TextSocketContinuousReader.commit()" +
         s"received an offset ($end) that did not originate with an instance of this class")
     }
 

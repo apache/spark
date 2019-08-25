@@ -70,7 +70,7 @@ class JdbcRelationProvider extends CreatableRelationProvider
           case SaveMode.ErrorIfExists =>
             throw new AnalysisException(
               s"Table or view '${options.table}' already exists. " +
-                s"SaveMode: ErrorIfExists.")
+                "SaveMode: ErrorIfExists.")
 
           case SaveMode.Ignore =>
             // With `SaveMode.Ignore` mode, if table already exists, the save operation is expected

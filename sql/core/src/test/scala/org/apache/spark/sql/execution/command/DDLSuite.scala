@@ -371,7 +371,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val e = intercept[AnalysisException] {
           sql(s"CREATE DATABASE $dbName")
         }.getMessage
-        assert(e.contains(s"already exists"))
+        assert(e.contains("already exists"))
       } finally {
         catalog.reset()
       }
@@ -436,7 +436,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         withTable("tab2") {
           sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING ${dataSource}")
           ex = intercept[AnalysisException] {
-            sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
+            sql("CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
           }.getMessage
           assert(ex.contains(exMsgWithDefaultDB))
         }
@@ -894,7 +894,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // to a temp file by withResourceTempPath
     withResourceTempPath("test-data/cars.csv") { tmpFile =>
       withTempView("testview") {
-        sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
+        sql("CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
           "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
           s"OPTIONS (PATH '${tmpFile.toURI}')")
 
@@ -1979,7 +1979,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
         (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
         sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
-        sql(s"CREATE VIEW my_view AS SELECT 1")
+        sql("CREATE VIEW my_view AS SELECT 1")
         intercept[NoSuchTableException] {
           sql("TRUNCATE TABLE my_temp_tab")
         }
@@ -2668,7 +2668,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val e = intercept[AnalysisException] {
           sql(sql1)
         }.getMessage
-        assert(e.contains(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+        assert(e.contains("Specifying a database in CREATE TEMPORARY FUNCTION " +
           s"is not allowed: '$dbName'"))
       }
     }

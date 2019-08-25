@@ -46,7 +46,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      runBenchmark(s"ORC Write") {
+      runBenchmark("ORC Write") {
         val benchmark = new Benchmark(s"Write ${scaleFactor}M rows", N, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
           df.write.mode("overwrite").orc(path + "/withoutBF")
@@ -67,7 +67,7 @@ object BloomFilterBenchmark extends SqlBasedBenchmark {
       df.write.orc(path + "/withoutBF")
       df.write.option("orc.bloom.filter.columns", "value").orc(path + "/withBF")
 
-      runBenchmark(s"ORC Read") {
+      runBenchmark("ORC Read") {
         val benchmark = new Benchmark(s"Read a row from ${scaleFactor}M rows", N, output = output)
         benchmark.addCase("Without bloom filter") { _ =>
           spark.read.orc(path + "/withoutBF").where("value = 0").count

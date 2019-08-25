@@ -184,7 +184,7 @@ class RowBasedHashMapGenerator(
   }
 
   protected def generateRowIterator(): String = {
-    s"""
+    """
        |public org.apache.spark.unsafe.KVIterator<UnsafeRow, UnsafeRow> rowIterator() {
        |  return batch.rowIterator();
        |}

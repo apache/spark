@@ -765,10 +765,10 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   /** Assert event stats generated on that last batch with data in it */
   private def assertEventStats(min: Long, max: Long, avg: Double, wtrmark: Long): AssertOnQuery = {
     assertEventStats { e =>
-      assert(e.get("min") === formatTimestamp(min), s"min value mismatch")
-      assert(e.get("max") === formatTimestamp(max), s"max value mismatch")
-      assert(e.get("avg") === formatTimestamp(avg.toLong), s"avg value mismatch")
-      assert(e.get("watermark") === formatTimestamp(wtrmark), s"watermark value mismatch")
+      assert(e.get("min") === formatTimestamp(min), "min value mismatch")
+      assert(e.get("max") === formatTimestamp(max), "max value mismatch")
+      assert(e.get("avg") === formatTimestamp(avg.toLong), "avg value mismatch")
+      assert(e.get("watermark") === formatTimestamp(wtrmark), "watermark value mismatch")
     }
   }
 

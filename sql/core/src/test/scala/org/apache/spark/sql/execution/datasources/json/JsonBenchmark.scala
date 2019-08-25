@@ -221,7 +221,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
         val ds = in.select("*")
         run(ds)
       }
-      benchmark.addCase(s"Select 1 column", numIters) { _ =>
+      benchmark.addCase("Select 1 column", numIters) { _ =>
         val ds = in.select($"col1")
         run(ds)
       }
@@ -396,7 +396,7 @@ object JSONBenchmark extends SqlBasedBenchmark {
       val dateDir = new File(path, "date").getAbsolutePath
 
       val writeBench = new Benchmark("Write dates and timestamps", rowsNum, output = output)
-      writeBench.addCase(s"Create a dataset of timestamps", numIters) { _ =>
+      writeBench.addCase("Create a dataset of timestamps", numIters) { _ =>
         run(timestamps)
       }
 

@@ -247,7 +247,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   override def toString(): String = {
-    s"HDFSStateStoreProvider[" +
+    "HDFSStateStoreProvider[" +
       s"id = (op=${stateStoreId.operatorId},part=${stateStoreId.partitionId}),dir = $baseDir]"
   }
 
