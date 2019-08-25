@@ -25,10 +25,11 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
@@ -80,6 +81,28 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       partitions: Array[Transform],
       properties: util.Map[String, String]): InMemoryTable = {
     new InMemoryTable(name, schema, partitions, properties)
+  }
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    Option(tables.get(ident)) match {
+      case Some(table) =>
+        val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+
+        // fail if the last column in the schema was dropped
+        if (schema.fields.isEmpty) {
+          throw new IllegalArgumentException(s"Cannot drop all fields")
+        }
+
+        val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
+          .withData(table.data)
+
+        tables.put(ident, newTable)
+
+        newTable
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
   }
 }
 

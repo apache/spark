@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, CatalogPlugin, LookupCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2._
 import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util.loadTable
 import org.apache.spark.sql.catalyst._
@@ -955,19 +955,26 @@ class Analyzer(
      */
     private def resolveV2Alter(
         tableName: Seq[String],
-        changes: Seq[TableChange]): Option[AlterTable] = tableName match {
-      case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
-        Some(AlterTable(v2Catalog.asTableCatalog, ident, UnresolvedRelation(tableName), changes))
-      case CatalogObjectIdentifier(None, ident) if ident.namespace().length <= 1 =>
-        sessionCatalog.flatMap(loadTable(_, ident)).map {
-          // Leave unresolved tables (V1 tables) to V1 code paths
-          case unresolved: UnresolvedTable => return None
-          case resolved: Table =>
-            val relation = DataSourceV2Relation.create(resolved)
-            AlterTable(sessionCatalog.get.asTableCatalog, ident, relation, changes)
-        }
-      case _ =>
-        None
+        changes: Seq[TableChange]): Option[AlterTable] = {
+      lookupV2Relation(UnresolvedRelation(tableName)) match {
+        case scala.Left(Some((v2Catalog, ident, table))) =>
+          Some(AlterTable(
+            v2Catalog.asTableCatalog,
+            ident,
+            DataSourceV2Relation.create(table),
+            changes))
+        case scala.Left(None) =>
+          Some(AlterTable(
+            catalogManager.catalog(tableName.head).asTableCatalog,
+            Identifier.of(tableName.drop(1).init.toArray, tableName.last),
+            UnresolvedRelation(tableName),
+            changes))
+        case scala.Right(Some((ident, table))) =>
+          val relation = DataSourceV2Relation.create(table)
+          Some(AlterTable(sessionCatalog.get.asTableCatalog, ident, relation, changes))
+        case _ =>
+          None
+      }
     }
   }
   /**
@@ -2821,6 +2828,43 @@ class Analyzer(
 
         case UpCast(child, dataType, _) => Cast(child, dataType.asNullable)
       }
+    }
+  }
+
+  /**
+   * Performs the lookup of DataSourceV2 Tables. The order of resolution is:
+   *   1. Check if this relation is a temporary table
+   *   2. Check if it has a catalog identifier. Here we try to load the table. If we find the table,
+   *      we can return the table. If we can't find it, then we leave the relation as
+   *      `UnresolvedRelation` on the Left so that CheckAnalysis fails with a better error message.
+   *   3. Try resolving the relation using the V2SessionCatalog if that is defined. If the
+   *      V2SessionCatalog returns a V1 table definition (UnresolvedTable), then we return a `None`
+   *      on the right side so that we can fallback to the V1 code paths.
+   * The basic idea is, if a value is returned on the Left, it means the table is definitely not
+   * defined for a catalog, and we should throw an AnalysisException. If a value is returned on
+   * the right, then we can try creating a V2 relation if a V2 Table is defined. If it isn't
+   * defined, then we should defer to V1 code paths.
+   */
+  private def lookupV2Relation(
+      unresolved: UnresolvedRelation
+      ): Either[Option[(CatalogPlugin, Identifier, Table)], Option[(Identifier, Table)]] = {
+    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
+
+    unresolved.multipartIdentifier match {
+      case AsTemporaryViewIdentifier(ti) if catalog.isTemporaryTable(ti) =>
+        scala.Right(None)
+      case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
+        loadTable(v2Catalog, ident) match {
+          case Some(t: Table) => scala.Left(Some((v2Catalog, ident, t)))
+          case _ => scala.Left(None)
+        }
+      case CatalogObjectIdentifier(None, ident) =>
+        catalogManager.v2SessionCatalog.flatMap(loadTable(_, ident)) match {
+          case Some(_: UnresolvedTable) => scala.Right(None)
+          case Some(t) => scala.Right(Some(ident -> t))
+          case None => scala.Right(None)
+        }
+      case _ => scala.Right(None)
     }
   }
 }
