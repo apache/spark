@@ -730,6 +730,7 @@ object SQLConf {
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
+    .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
     .booleanConf
