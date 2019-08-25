@@ -361,9 +361,9 @@ class GaussianMixture @Since("2.0.0") (
 
     // Extract the number of features.
     val numFeatures = instances.first().size
-    require(numFeatures < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
+    require(numFeatures < GaussianMixture.MAX_NUM_FEATURES, "GaussianMixture cannot handle more " +
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
-      s" matrix is quadratic in the number of features.")
+      " matrix is quadratic in the number of features.")
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)

@@ -91,7 +91,7 @@ abstract class Classifier[
    * @param numClasses Number of classes label can take.
    */
   protected def validateNumClasses(numClasses: Int): Unit = {
-    require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
+    require(numClasses > 0, "Classifier (in extractLabeledPoints) found numClasses =" +
       s" $numClasses, but requires numClasses > 0.")
   }
 
@@ -103,7 +103,7 @@ abstract class Classifier[
    *                  [0, numClasses).
    */
   protected def validateLabel(label: Double, numClasses: Int): Unit = {
-    require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
+    require(label.toLong == label && label >= 0 && label < numClasses, "Classifier was given" +
       s" dataset with invalid label $label.  Labels must be integers in range" +
       s" [0, $numClasses).")
   }
@@ -133,14 +133,14 @@ abstract class Classifier[
           throw new SparkException("ML algorithm was given empty dataset.")
         }
         val maxDoubleLabel: Double = maxLabelRow.head.getDouble(0)
-        require((maxDoubleLabel + 1).isValidInt, s"Classifier found max label value =" +
+        require((maxDoubleLabel + 1).isValidInt, "Classifier found max label value =" +
           s" $maxDoubleLabel but requires integers in range [0, ... ${Int.MaxValue})")
         val numClasses = maxDoubleLabel.toInt + 1
         require(numClasses <= maxNumClasses, s"Classifier inferred $numClasses from label values" +
           s" in column $labelCol, but this exceeded the max numClasses ($maxNumClasses) allowed" +
           s" to be inferred from values.  To avoid this error for labels with > $maxNumClasses" +
-          s" classes, specify numClasses explicitly in the metadata; this can be done by applying" +
-          s" StringIndexer to the label column.")
+          " classes, specify numClasses explicitly in the metadata; this can be done by applying" +
+          " StringIndexer to the label column.")
         logInfo(this.getClass.getCanonicalName + s" inferred $numClasses classes for" +
           s" labelCol=$labelCol since numClasses was not specified in the column metadata.")
         numClasses

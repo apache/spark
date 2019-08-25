@@ -136,7 +136,7 @@ private[ml] object Param {
           className match {
             case JsonMatrixConverter.className =>
               val checkFields = Array("numRows", "numCols", "values", "isTransposed", "type")
-              require(checkFields.forall(keys.contains), s"Expect a JSON serialized Matrix" +
+              require(checkFields.forall(keys.contains), "Expect a JSON serialized Matrix" +
                 s" but cannot find fields ${checkFields.mkString(", ")} in $json.")
               JsonMatrixConverter.fromJson(json).asInstanceOf[T]
 
@@ -145,7 +145,7 @@ private[ml] object Param {
         } else {
           // "class" info in JSON was added in Spark 2.3(SPARK-22289). JSON support for Vector was
           // implemented before that and does not have "class" attribute.
-          require(keys.contains("type") && keys.contains("values"), s"Expect a JSON serialized" +
+          require(keys.contains("type") && keys.contains("values"), "Expect a JSON serialized" +
             s" vector/matrix but cannot find fields 'type' and 'values' in $json.")
           JsonVectorConverter.fromJson(json).asInstanceOf[T]
         }
@@ -306,7 +306,7 @@ object ParamValidators {
 
     if (model.isSet(inputCol)) {
       require(!model.isSet(inputCols), s"$name requires " +
-        s"exactly one of inputCol, inputCols Params to be set, but both are set.")
+        "exactly one of inputCol, inputCols Params to be set, but both are set.")
 
       checkExclusiveParams(isSingleCol = true, requiredParams = singleColumnParams,
         excludedParams = multiColumnParams)
@@ -315,7 +315,7 @@ object ParamValidators {
         excludedParams = singleColumnParams)
     } else {
       throw new IllegalArgumentException(s"$name requires " +
-        s"exactly one of inputCol, inputCols Params to be set, but neither is set.")
+        "exactly one of inputCol, inputCols Params to be set, but neither is set.")
     }
   }
 }

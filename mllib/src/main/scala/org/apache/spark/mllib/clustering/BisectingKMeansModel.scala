@@ -131,7 +131,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
         val model = SaveLoadV3_0.load(sc, path)
         model
       case _ => throw new Exception(
-        s"BisectingKMeansModel.load did not recognize model with (className, format version):" +
+        "BisectingKMeansModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $formatVersion).  Supported:\n" +
           s"  (${SaveLoadV1_0.thisClassName}, ${SaveLoadV1_0.thisClassName}\n" +
           s"  (${SaveLoadV2_0.thisClassName}, ${SaveLoadV2_0.thisClassName})\n" +

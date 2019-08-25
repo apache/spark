@@ -537,7 +537,7 @@ private[spark] object BLAS extends Serializable with Logging {
         case (dmA: DenseMatrix, svx: SparseVector) =>
           gemv(alpha, dmA, svx, beta, y)
         case _ =>
-          throw new IllegalArgumentException(s"gemv doesn't support running on matrix type " +
+          throw new IllegalArgumentException("gemv doesn't support running on matrix type " +
             s"${A.getClass} and vector type ${x.getClass}.")
       }
     }

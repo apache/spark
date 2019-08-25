@@ -68,7 +68,7 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   def getEvaluator: Evaluator = $(evaluator)
 
   protected def transformSchemaImpl(schema: StructType): StructType = {
-    require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
+    require($(estimatorParamMaps).nonEmpty, "Validator requires non-empty estimatorParamMaps")
     val firstEstimatorParamMap = $(estimatorParamMaps).head
     val est = $(estimator)
     for (paramMap <- $(estimatorParamMaps).tail) {
@@ -107,8 +107,8 @@ private[ml] object ValidatorParams {
     val uidToInstance: Map[String, Params] = MetaAlgorithmReadWrite.getUidMap(instance)
     instance.getEstimatorParamMaps.foreach { case pMap: ParamMap =>
       pMap.toSeq.foreach { case ParamPair(p, v) =>
-        require(uidToInstance.contains(p.parent), s"ValidatorParams save requires all Params in" +
-          s" estimatorParamMaps to apply to this ValidatorParams, its Estimator, or its" +
+        require(uidToInstance.contains(p.parent), "ValidatorParams save requires all Params in" +
+          " estimatorParamMaps to apply to this ValidatorParams, its Estimator, or its" +
           s" Evaluator. An extraneous Param was found: $p")
       }
     }

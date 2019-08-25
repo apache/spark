@@ -140,7 +140,7 @@ object DistanceMeasure {
     distanceMeasure match {
       case EUCLIDEAN => new EuclideanDistanceMeasure
       case COSINE => new CosineDistanceMeasure
-      case _ => throw new IllegalArgumentException(s"distanceMeasure must be one of: " +
+      case _ => throw new IllegalArgumentException("distanceMeasure must be one of: " +
         s"$EUCLIDEAN, $COSINE. $distanceMeasure provided.")
     }
 

@@ -392,13 +392,13 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
         // the fitIntercept.
         if (yMean == 0.0) {
-          instr.logWarning(s"Mean and standard deviation of the label are zero, so the " +
-            s"coefficients and the intercept will all be zero; as a result, training is not " +
-            s"needed.")
+          instr.logWarning("Mean and standard deviation of the label are zero, so the " +
+            "coefficients and the intercept will all be zero; as a result, training is not " +
+            "needed.")
         } else {
-          instr.logWarning(s"The standard deviation of the label is zero, so the coefficients " +
-            s"will be zeros and the intercept will be the mean of the label; as a result, " +
-            s"training is not needed.")
+          instr.logWarning("The standard deviation of the label is zero, so the coefficients " +
+            "will be zeros and the intercept will be the mean of the label; as a result, " +
+            "training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
         val coefficients = Vectors.sparse(numFeatures, Seq.empty)
@@ -421,7 +421,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       } else {
         require($(regParam) == 0.0, "The standard deviation of the label is zero. " +
           "Model cannot be regularized.")
-        instr.logWarning(s"The standard deviation of the label is zero. " +
+        instr.logWarning("The standard deviation of the label is zero. " +
           "Consider setting fitIntercept=true.")
       }
     }

@@ -111,8 +111,8 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
         case VectorSizeHint.ERROR_INVALID =>
           val checkVectorSizeUDF = udf { vector: Vector =>
             if (vector == null) {
-              throw new SparkException(s"Got null vector in VectorSizeHint, set `handleInvalid` " +
-                s"to 'skip' to filter invalid rows.")
+              throw new SparkException("Got null vector in VectorSizeHint, set `handleInvalid` " +
+                "to 'skip' to filter invalid rows.")
             }
             if (vector.size != localSize) {
               throw new SparkException(s"VectorSizeHint Expecting a vector of size $localSize but" +

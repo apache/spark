@@ -194,8 +194,8 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     if (isSet(inputCols)) {
       require(getInputCols.length == getOutputCols.length &&
         getInputCols.length == getSplitsArray.length, s"Bucketizer $this has mismatched Params " +
-        s"for multi-column transform.  Params (inputCols, outputCols, splitsArray) should have " +
-        s"equal lengths, but they have different lengths: " +
+        "for multi-column transform.  Params (inputCols, outputCols, splitsArray) should have " +
+        "equal lengths, but they have different lengths: " +
         s"(${getInputCols.length}, ${getOutputCols.length}, ${getSplitsArray.length}).")
 
       var transformedSchema = schema
@@ -284,7 +284,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
         if (insertPos == 0 || insertPos == splits.length) {
           throw new SparkException(s"Feature value $feature out of Bucketizer bounds" +
             s" [${splits.head}, ${splits.last}].  Check your features, or loosen " +
-            s"the lower/upper bound constraints.")
+            "the lower/upper bound constraints.")
         } else {
           insertPos - 1
         }

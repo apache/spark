@@ -145,7 +145,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     } else None
 
     // Fit models in a Future for training in parallel
-    instr.logDebug(s"Train split with multiple sets of parameters.")
+    instr.logDebug("Train split with multiple sets of parameters.")
     val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
       Future[Double] {
         val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]

@@ -28,7 +28,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 class FakeLinearRegressionWriter extends MLWriterFormat {
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
-    throw new Exception(s"Fake writer doesn't writestart")
+    throw new Exception("Fake writer doesn't writestart")
   }
 }
 
@@ -37,7 +37,7 @@ class FakeLinearRegressionWriterWithName extends MLFormatRegister {
   override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
-    throw new Exception(s"Fake writer doesn't writestart")
+    throw new Exception("Fake writer doesn't writestart")
   }
 }
 
@@ -47,7 +47,7 @@ class DuplicateLinearRegressionWriter1 extends MLFormatRegister {
   override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
-    throw new Exception(s"Duplicate writer shouldn't have been called")
+    throw new Exception("Duplicate writer shouldn't have been called")
   }
 }
 
@@ -56,7 +56,7 @@ class DuplicateLinearRegressionWriter2 extends MLFormatRegister {
   override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
   override def write(path: String, sparkSession: SparkSession,
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
-    throw new Exception(s"Duplicate writer shouldn't have been called")
+    throw new Exception("Duplicate writer shouldn't have been called")
   }
 }
 

@@ -54,7 +54,7 @@ class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: Stri
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
   override protected def createTransformFunc: Vector => Vector = {
-    require(params.contains(scalingVec), s"transformation requires a weight vector")
+    require(params.contains(scalingVec), "transformation requires a weight vector")
     val elemScaler = new OldElementwiseProduct(OldVectors.fromML($(scalingVec)))
     val vectorSize = $(scalingVec).size
 

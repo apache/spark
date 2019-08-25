@@ -164,9 +164,9 @@ class GBTClassifier @Since("1.4.0") (
     val convert2LabeledPoint = (dataset: Dataset[_]) => {
       dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
         case Row(label: Double, features: Vector) =>
-          require(label == 0 || label == 1, s"GBTClassifier was given" +
+          require(label == 0 || label == 1, "GBTClassifier was given" +
             s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
-            s" GBTClassifier currently only supports binary classification.")
+            " GBTClassifier currently only supports binary classification.")
           LabeledPoint(label, features)
       }
     }

@@ -539,7 +539,7 @@ class LogisticRegression @Since("1.2.0") (
 
     val isMultinomial = getFamily.toLowerCase(Locale.ROOT) match {
       case "binomial" =>
-        require(numClasses == 1 || numClasses == 2, s"Binomial family only supports 1 or 2 " +
+        require(numClasses == 1 || numClasses == 2, "Binomial family only supports 1 or 2 " +
         s"outcome classes but found $numClasses.")
         false
       case "multinomial" => true
@@ -573,8 +573,8 @@ class LogisticRegression @Since("1.2.0") (
       val isConstantLabel = histogram.count(_ != 0.0) == 1
 
       if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
-        instr.logWarning(s"All labels are the same value and fitIntercept=true, so the " +
-          s"coefficients will be zeros. Training is not needed.")
+        instr.logWarning("All labels are the same value and fitIntercept=true, so the " +
+          "coefficients will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
           new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
@@ -587,8 +587,8 @@ class LogisticRegression @Since("1.2.0") (
         (coefMatrix, interceptVec, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
-          instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
-            s"dangerous ground, so the algorithm may not converge.")
+          instr.logWarning("All labels belong to a single class and fitIntercept=false. It's a " +
+            "dangerous ground, so the algorithm may not converge.")
         }
 
         val featuresMean = summarizer.mean.toArray
@@ -714,7 +714,7 @@ class LogisticRegression @Since("1.2.0") (
               (_initialModel.interceptVector.size == numCoefficientSets) &&
               (_initialModel.getFitIntercept == $(fitIntercept))
             if (!modelIsValid) {
-              instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+              instr.logWarning("Initial coefficients will be ignored! Its dimensions " +
                 s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
                 s"expected size ($numCoefficientSets, $numFeatures)")
             }
@@ -937,7 +937,7 @@ class LogisticRegressionModel private[spark] (
   extends ProbabilisticClassificationModel[Vector, LogisticRegressionModel] with MLWritable
   with LogisticRegressionParams with HasTrainingSummary[LogisticRegressionTrainingSummary] {
 
-  require(coefficientMatrix.numRows == interceptVector.size, s"Dimension mismatch! Expected " +
+  require(coefficientMatrix.numRows == interceptVector.size, "Dimension mismatch! Expected " +
     s"coefficientMatrix.numRows == interceptVector.size, but ${coefficientMatrix.numRows} != " +
     s"${interceptVector.size}")
 
@@ -1191,7 +1191,7 @@ class LogisticRegressionModel private[spark] (
   override def write: MLWriter = new LogisticRegressionModel.LogisticRegressionModelWriter(this)
 
   override def toString: String = {
-    s"LogisticRegressionModel: " +
+    "LogisticRegressionModel: " +
     s"uid = ${super.toString}, numClasses = $numClasses, numFeatures = $numFeatures"
   }
 }

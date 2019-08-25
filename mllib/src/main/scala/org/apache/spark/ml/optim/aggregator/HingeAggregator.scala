@@ -43,7 +43,7 @@ private[ml] class HingeAggregator(
   private val numFeaturesPlusIntercept: Int = if (fitIntercept) numFeatures + 1 else numFeatures
   @transient private lazy val coefficientsArray = bcCoefficients.value match {
     case DenseVector(values) => values
-    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector" +
+    case _ => throw new IllegalArgumentException("coefficients only supports dense vector" +
       s" but got type ${bcCoefficients.value.getClass}.")
   }
   protected override val dim: Int = numFeaturesPlusIntercept
@@ -57,7 +57,7 @@ private[ml] class HingeAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+      require(numFeatures == features.size, "Dimensions mismatch when adding new instance." +
         s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 

@@ -118,7 +118,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
     val (inputColNames, outputColNames) = getInOutCols()
 
     require(outputColNames.distinct.length == outputColNames.length,
-      s"Output columns should not be duplicate.")
+      "Output columns should not be duplicate.")
 
     val outputFields = inputColNames.zip(outputColNames).flatMap {
       case (inputColName, outputColName) =>

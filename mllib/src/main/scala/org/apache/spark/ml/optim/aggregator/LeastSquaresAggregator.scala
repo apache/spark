@@ -161,7 +161,7 @@ private[ml] class LeastSquaresAggregator(
     bcFeaturesMean: Broadcast[Array[Double]])(bcCoefficients: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, LeastSquaresAggregator] {
   require(labelStd > 0.0, s"${this.getClass.getName} requires the label standard " +
-    s"deviation to be positive.")
+    "deviation to be positive.")
 
   private val numFeatures = bcFeaturesStd.value.length
   protected override val dim: Int = numFeatures
@@ -198,7 +198,7 @@ private[ml] class LeastSquaresAggregator(
    */
   def add(instance: Instance): LeastSquaresAggregator = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new sample." +
+      require(numFeatures == features.size, "Dimensions mismatch when adding new sample." +
         s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 

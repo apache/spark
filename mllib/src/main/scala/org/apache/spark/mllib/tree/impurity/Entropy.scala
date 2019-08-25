@@ -102,7 +102,7 @@ private[spark] class EntropyAggregator(numClasses: Int)
     }
     if (label < 0) {
       throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
-        s"but requires label is non-negative.")
+        "but requires label is non-negative.")
     }
     allStats(offset + label.toInt) += numSamples * sampleWeight
     allStats(offset + statsSize - 1) += numSamples

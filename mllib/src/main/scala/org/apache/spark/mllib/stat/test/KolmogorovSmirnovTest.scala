@@ -181,7 +181,7 @@ private[stat] object KolmogorovSmirnovTest extends Logging {
             new NormalDistribution(0, 1)
           }
         case  _ => throw new UnsupportedOperationException(s"$distName not yet supported through" +
-          s" convenience method. Current options are:['norm'].")
+          " convenience method. Current options are:['norm'].")
       }
 
     testOneSample(data, distObj)

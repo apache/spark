@@ -93,7 +93,7 @@ private[ml] class HuberAggregator(
    */
   def add(instance: Instance): HuberAggregator = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new sample." +
+      require(numFeatures == features.size, "Dimensions mismatch when adding new sample." +
         s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 

@@ -251,7 +251,7 @@ class OneHotEncoderModel private[ml] (
         } else {
           if (label < 0) {
             throw new SparkException(s"Negative value: $label. Input can't be negative. " +
-              s"To handle invalid values, set Param handleInvalid to " +
+              "To handle invalid values, set Param handleInvalid to " +
               s"${OneHotEncoder.KEEP_INVALID}")
           } else {
             throw new SparkException(s"Unseen value: $label. To handle unseen values, " +

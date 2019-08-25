@@ -92,7 +92,7 @@ private[spark] class DecisionTreeMetadata(
    */
   def setNumSplits(featureIndex: Int, numSplits: Int) {
     require(isContinuous(featureIndex),
-      s"Only number of bin for a continuous feature can be set.")
+      "Only number of bin for a continuous feature can be set.")
     numBins(featureIndex) = numSplits + 1
   }
 
@@ -117,11 +117,11 @@ private[spark] object DecisionTreeMetadata extends Logging {
       featureSubsetStrategy: String): DecisionTreeMetadata = {
 
     val numFeatures = input.map(_.features.size).take(1).headOption.getOrElse {
-      throw new IllegalArgumentException(s"DecisionTree requires size of input RDD > 0, " +
-        s"but was given by empty one.")
+      throw new IllegalArgumentException("DecisionTree requires size of input RDD > 0, " +
+        "but was given by empty one.")
     }
-    require(numFeatures > 0, s"DecisionTree requires number of features > 0, " +
-      s"but was given an empty features vector")
+    require(numFeatures > 0, "DecisionTree requires number of features > 0, " +
+      "but was given an empty features vector")
     val (numExamples, weightSum) = input.aggregate((0L, 0.0))(
       seqOp = (cw, instance) => (cw._1 + 1L, cw._2 + instance.weight),
       combOp = (cw1, cw2) => (cw1._1 + cw2._1, cw1._2 + cw2._2)
@@ -135,7 +135,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
     if (maxPossibleBins < strategy.maxBins) {
       logWarning(s"DecisionTree reducing maxBins from ${strategy.maxBins} to $maxPossibleBins" +
-        s" (= number of training instances)")
+        " (= number of training instances)")
     }
 
     // We check the number of bins here against maxPossibleBins.
@@ -210,9 +210,9 @@ private[spark] object DecisionTreeMetadata extends Logging {
           case None =>
             Try(_featureSubsetStrategy.toDouble).filter(_ > 0).filter(_ <= 1.0).toOption match {
               case Some(value) => math.ceil(value * numFeatures).toInt
-              case _ => throw new IllegalArgumentException(s"Supported values:" +
+              case _ => throw new IllegalArgumentException("Supported values:" +
                 s" ${TreeEnsembleParams.supportedFeatureSubsetStrategies.mkString(", ")}," +
-                s" (0.0-1.0], [1-n].")
+                " (0.0-1.0], [1-n].")
             }
         }
     }

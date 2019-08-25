@@ -47,7 +47,7 @@ private[ml] trait DifferentiableLossAggregator[
 
   /** Merge two aggregators. The `this` object will be modified in place and returned. */
   def merge(other: Agg): Agg = {
-    require(dim == other.dim, s"Dimensions mismatch when merging with another " +
+    require(dim == other.dim, "Dimensions mismatch when merging with another " +
       s"${getClass.getSimpleName}. Expecting $dim but got ${other.dim}.")
 
     if (other.weightSum != 0) {
@@ -67,7 +67,7 @@ private[ml] trait DifferentiableLossAggregator[
 
   /** The current weighted averaged gradient. */
   def gradient: Vector = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
+    require(weightSum > 0.0, "The effective number of instances should be " +
       s"greater than 0.0, but was $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
     BLAS.scal(1.0 / weightSum, result)
@@ -79,7 +79,7 @@ private[ml] trait DifferentiableLossAggregator[
 
   /** The current loss value of this aggregator. */
   def loss: Double = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
+    require(weightSum > 0.0, "The effective number of instances should be " +
       s"greater than 0.0, but was $weightSum.")
     lossSum / weightSum
   }

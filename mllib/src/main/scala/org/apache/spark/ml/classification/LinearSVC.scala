@@ -205,7 +205,7 @@ class LinearSVC @Since("2.2.0") (
         n
       case None => histogram.length
     }
-    require(numClasses == 2, s"LinearSVC only supports binary classification." +
+    require(numClasses == 2, "LinearSVC only supports binary classification." +
       s" $numClasses classes detected in $labelCol")
     instr.logNumClasses(numClasses)
     instr.logNumFeatures(numFeatures)

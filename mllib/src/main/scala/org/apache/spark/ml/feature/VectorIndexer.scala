@@ -143,7 +143,7 @@ class VectorIndexer @Since("1.4.0") (
   override def fit(dataset: Dataset[_]): VectorIndexerModel = {
     transformSchema(dataset.schema, logging = true)
     val firstRow = dataset.select($(inputCol)).take(1)
-    require(firstRow.length == 1, s"VectorIndexer cannot be fit on an empty dataset.")
+    require(firstRow.length == 1, "VectorIndexer cannot be fit on an empty dataset.")
     val numFeatures = firstRow(0).getAs[Vector](0).size
     val vectorDataset = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val maxCats = $(maxCategories)
@@ -367,9 +367,9 @@ class VectorIndexerModel private[ml] (
               case _: NoSuchElementException =>
                 localHandleInvalid match {
                   case VectorIndexer.ERROR_INVALID =>
-                    throw new SparkException(s"VectorIndexer encountered invalid value " +
+                    throw new SparkException("VectorIndexer encountered invalid value " +
                       s"${tmpv(featureIndex)} on feature index ${featureIndex}. To handle " +
-                      s"or skip invalid value, try setting VectorIndexer.handleInvalid.")
+                      "or skip invalid value, try setting VectorIndexer.handleInvalid.")
                   case VectorIndexer.KEEP_INVALID =>
                     tmpv.values(featureIndex) = categoryMap.size
                   case VectorIndexer.SKIP_INVALID =>
@@ -397,9 +397,9 @@ class VectorIndexerModel private[ml] (
                 case _: NoSuchElementException =>
                   localHandleInvalid match {
                     case VectorIndexer.ERROR_INVALID =>
-                      throw new SparkException(s"VectorIndexer encountered invalid value " +
+                      throw new SparkException("VectorIndexer encountered invalid value " +
                         s"${tmpv.values(k)} on feature index ${featureIndex}. To handle " +
-                        s"or skip invalid value, try setting VectorIndexer.handleInvalid.")
+                        "or skip invalid value, try setting VectorIndexer.handleInvalid.")
                     case VectorIndexer.KEEP_INVALID =>
                       tmpv.values(k) = localVectorMap(featureIndex).size
                     case VectorIndexer.SKIP_INVALID =>

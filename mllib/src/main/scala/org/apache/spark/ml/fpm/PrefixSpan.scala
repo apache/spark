@@ -144,7 +144,7 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
     val inputType = dataset.schema(sequenceColParam).dataType
     require(inputType.isInstanceOf[ArrayType] &&
       inputType.asInstanceOf[ArrayType].elementType.isInstanceOf[ArrayType],
-      s"The input column must be ArrayType and the array element type must also be ArrayType, " +
+      "The input column must be ArrayType and the array element type must also be ArrayType, " +
       s"but got $inputType.")
 
     val data = dataset.select(sequenceColParam)

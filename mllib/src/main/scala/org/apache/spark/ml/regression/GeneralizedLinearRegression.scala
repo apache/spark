@@ -1560,7 +1560,7 @@ class GeneralizedLinearRegressionTrainingSummary private[regression] (
 
       if (family.name != "tweedie") {
         sb.append("\n")
-        sb.append(s"AIC: " + round(aic))
+        sb.append("AIC: " + round(aic))
       }
 
       sb.toString()

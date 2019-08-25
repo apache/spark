@@ -278,7 +278,7 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
           assert(lrModel1.coefficients === lrModel2.coefficients)
           assert(lrModel1.intercept === lrModel2.intercept)
         case other =>
-          fail(s"Loaded OneVsRestModel expected model of type LogisticRegressionModel" +
+          fail("Loaded OneVsRestModel expected model of type LogisticRegressionModel" +
             s" but found ${other.getClass.getName}")
       }
     }

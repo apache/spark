@@ -242,7 +242,7 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     val distinctSplits = splits.distinct
     if (splits.length != distinctSplits.length) {
       log.warn(s"Some quantiles were identical. Bucketing to ${distinctSplits.length - 1}" +
-        s" buckets as a result.")
+        " buckets as a result.")
     }
     distinctSplits.sorted
   }

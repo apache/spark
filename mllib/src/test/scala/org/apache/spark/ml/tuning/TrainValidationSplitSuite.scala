@@ -264,12 +264,12 @@ class TrainValidationSplitSuite
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
               === lr.getMaxIter)
           case other =>
-            fail(s"Loaded TrainValidationSplit expected estimator of type LogisticRegression" +
+            fail("Loaded TrainValidationSplit expected estimator of type LogisticRegression" +
               s" but found ${other.getClass.getName}")
         }
 
       case other =>
-        fail(s"Loaded TrainValidationSplit expected estimator of type OneVsRest" +
+        fail("Loaded TrainValidationSplit expected estimator of type OneVsRest" +
           s" but found ${other.getClass.getName}")
     }
 

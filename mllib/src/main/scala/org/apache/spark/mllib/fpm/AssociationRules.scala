@@ -143,7 +143,7 @@ object AssociationRules {
 
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
       val sharedItems = antecedent.toSet.intersect(consequent.toSet)
-      s"A valid association rule must have disjoint antecedent and " +
+      "A valid association rule must have disjoint antecedent and " +
         s"consequent but ${sharedItems} is present in both."
     })
 

@@ -94,12 +94,12 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
         if (v.doubleValue == intV) {
           intV
         } else {
-          throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+          throw new IllegalArgumentException("ALS only supports values in Integer range " +
             s"and without fractional part for columns ${$(userCol)} and ${$(itemCol)}. " +
             s"Value $n was either out of Integer range or contained a fractional part that " +
-            s"could not be converted.")
+            "could not be converted.")
         }
-      case _ => throw new IllegalArgumentException(s"ALS only supports values in Integer range " +
+      case _ => throw new IllegalArgumentException("ALS only supports values in Integer range " +
         s"for columns ${$(userCol)} and ${$(itemCol)}. Value $n was not numeric.")
     }
   }

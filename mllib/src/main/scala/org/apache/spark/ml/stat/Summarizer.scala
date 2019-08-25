@@ -313,7 +313,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
       if (weight == 0.0) return this
 
       if (n == 0) {
-        require(instance.size > 0, s"Vector should have dimension larger than zero.")
+        require(instance.size > 0, "Vector should have dimension larger than zero.")
         n = instance.size
 
         if (requestedCompMetrics.contains(ComputeMean)) { currMean = Array.ofDim[Double](n) }
@@ -330,7 +330,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
         }
       }
 
-      require(n == instance.size, s"Dimensions mismatch when adding new sample." +
+      require(n == instance.size, "Dimensions mismatch when adding new sample." +
         s" Expecting $n but got ${instance.size}.")
 
       val localCurrMean = currMean
@@ -392,7 +392,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def merge(other: SummarizerBuffer): this.type = {
       if (this.totalWeightSum != 0.0 && other.totalWeightSum != 0.0) {
-        require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
+        require(n == other.n, "Dimensions mismatch when merging with another summarizer. " +
           s"Expecting $n but got ${other.n}.")
         totalCnt += other.totalCnt
         totalWeightSum += other.totalWeightSum
@@ -452,7 +452,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def mean: Vector = {
       require(requestedMetrics.contains(Mean))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+      require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
       val realMean = Array.ofDim[Double](n)
       var i = 0
@@ -468,7 +468,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def variance: Vector = {
       require(requestedMetrics.contains(Variance))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+      require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
       val realVariance = Array.ofDim[Double](n)
 
@@ -500,7 +500,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def numNonzeros: Vector = {
       require(requestedMetrics.contains(NumNonZeros))
-      require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+      require(totalCnt > 0, "Nothing has been added to this summarizer.")
 
       Vectors.dense(nnz.map(_.toDouble))
     }
@@ -510,7 +510,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def max: Vector = {
       require(requestedMetrics.contains(Max))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+      require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
       var i = 0
       while (i < n) {
@@ -525,7 +525,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def min: Vector = {
       require(requestedMetrics.contains(Min))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+      require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
       var i = 0
       while (i < n) {
@@ -540,7 +540,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def normL2: Vector = {
       require(requestedMetrics.contains(NormL2))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+      require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
       val realMagnitude = Array.ofDim[Double](n)
 
@@ -558,7 +558,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
      */
     def normL1: Vector = {
       require(requestedMetrics.contains(NormL1))
-      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+      require(totalWeightSum > 0, "Nothing has been added to this summarizer.")
 
       Vectors.dense(currL1)
     }

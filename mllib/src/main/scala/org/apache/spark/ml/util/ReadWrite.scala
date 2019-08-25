@@ -613,7 +613,7 @@ private[ml] object DefaultParamsReader {
     val defaultParams = metadata \ "defaultParamMap"
     val params = metadata \ "paramMap"
     if (expectedClassName.nonEmpty) {
-      require(className == expectedClassName, s"Error loading metadata: Expected class name" +
+      require(className == expectedClassName, "Error loading metadata: Expected class name" +
         s" $expectedClassName but found class name $className")
     }
 
@@ -685,8 +685,8 @@ private[ml] class FileSystemOverwrite extends Logging {
         fs.delete(qualifiedOutputPath, true)
       } else {
         throw new IOException(s"Path $path already exists. To overwrite it, " +
-          s"please use write.overwrite().save(path) for Scala and use " +
-          s"write().overwrite().save(path) for Java and Python.")
+          "please use write.overwrite().save(path) for Scala and use " +
+          "write().overwrite().save(path) for Java and Python.")
       }
     }
   }

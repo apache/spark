@@ -57,7 +57,7 @@ class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
       Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(1, 5), Array(4.0, 9.0)))
       .map(Tuple1.apply).toDF("features")
     val gm = new GaussianMixture()
-    withClue(s"GMM should restrict the maximum number of features to be < " +
+    withClue("GMM should restrict the maximum number of features to be < " +
       s"${GaussianMixture.MAX_NUM_FEATURES}") {
       intercept[IllegalArgumentException] {
         gm.fit(df)

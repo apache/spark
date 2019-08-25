@@ -141,7 +141,7 @@ private[r] object LDAWrapper extends MLReadable[LDAWrapper] {
       case _ =>
         throw new SparkException(
           s"Unsupported input features type of ${featureSchema.dataType.typeName}," +
-            s" only String type and Vector type are supported now.")
+            " only String type and Vector type are supported now.")
     }
 
     if (topicConcentration != -1) {

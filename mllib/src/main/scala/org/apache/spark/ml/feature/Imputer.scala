@@ -42,7 +42,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
    *
    * @group param
    */
-  final val strategy: Param[String] = new Param(this, "strategy", s"strategy for imputation. " +
+  final val strategy: Param[String] = new Param(this, "strategy", "strategy for imputation. " +
     s"If ${Imputer.mean}, then replace missing values using the mean value of the feature. " +
     s"If ${Imputer.median}, then replace missing values using the median value of the feature.",
     ParamValidators.inArray[String](Array(Imputer.mean, Imputer.median)))
@@ -65,9 +65,9 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    require($(inputCols).length == $(inputCols).distinct.length, s"inputCols contains" +
+    require($(inputCols).length == $(inputCols).distinct.length, "inputCols contains" +
       s" duplicates: (${$(inputCols).mkString(", ")})")
-    require($(outputCols).length == $(outputCols).distinct.length, s"outputCols contains" +
+    require($(outputCols).length == $(outputCols).distinct.length, "outputCols contains" +
       s" duplicates: (${$(outputCols).mkString(", ")})")
     require($(inputCols).length == $(outputCols).length, s"inputCols(${$(inputCols).length})" +
       s" and outputCols(${$(outputCols).length}) should have the same length")
@@ -164,7 +164,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 
     val emptyCols = $(inputCols).zip(results).filter(_._2.isNaN).map(_._1)
     if (emptyCols.nonEmpty) {
-      throw new SparkException(s"surrogate cannot be computed. " +
+      throw new SparkException("surrogate cannot be computed. " +
         s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
         s"missingValue(${$(missingValue)})")
     }

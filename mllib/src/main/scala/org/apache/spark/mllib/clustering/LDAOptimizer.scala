@@ -130,9 +130,9 @@ final class EMLDAOptimizer extends LDAOptimizer {
 
     // Note: The restriction > 1.0 may be relaxed in the future (allowing sparse solutions),
     // but values in (0,1) are not yet supported.
-    require(docConcentration > 1.0 || docConcentration == -1.0, s"LDA docConcentration must be" +
+    require(docConcentration > 1.0 || docConcentration == -1.0, "LDA docConcentration must be" +
       s" > 1.0 (or -1 for auto) for EM Optimizer, but was set to $docConcentration")
-    require(topicConcentration > 1.0 || topicConcentration == -1.0, s"LDA topicConcentration " +
+    require(topicConcentration > 1.0 || topicConcentration == -1.0, "LDA topicConcentration " +
       s"must be > 1.0 (or -1 for auto) for EM Optimizer, but was set to $topicConcentration")
 
     this.docConcentration = if (docConcentration == -1) (50.0 / k) + 1.0 else docConcentration

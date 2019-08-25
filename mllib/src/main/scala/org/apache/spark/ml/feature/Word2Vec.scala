@@ -376,8 +376,8 @@ object Word2VecModel extends MLReadable[Word2VecModel] {
       val approximateSizeInBytes = (floatSize * vectorSize + averageWordSize) * numWords
       val numPartitions = (approximateSizeInBytes / bufferSizeInBytes) + 1
       require(numPartitions < 10e8, s"Word2VecModel calculated that it needs $numPartitions " +
-        s"partitions to save this model, which is too large.  Try increasing " +
-        s"spark.kryoserializer.buffer.max so that Word2VecModel can use fewer partitions.")
+        "partitions to save this model, which is too large.  Try increasing " +
+        "spark.kryoserializer.buffer.max so that Word2VecModel can use fewer partitions.")
       numPartitions.toInt
     }
   }

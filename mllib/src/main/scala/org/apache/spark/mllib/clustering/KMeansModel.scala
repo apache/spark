@@ -128,7 +128,7 @@ object KMeansModel extends Loader[KMeansModel] {
       case (className, "2.0") if className == classNameV2_0 =>
         SaveLoadV2_0.load(sc, path)
       case _ => throw new Exception(
-        s"KMeansModel.load did not recognize model with (className, format version):" +
+        "KMeansModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $version).  Supported:\n" +
           s"  ($classNameV1_0, 1.0)\n" +
           s"  ($classNameV2_0, 2.0)")

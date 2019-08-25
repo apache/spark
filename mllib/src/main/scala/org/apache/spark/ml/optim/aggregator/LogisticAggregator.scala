@@ -194,26 +194,26 @@ private[ml] class LogisticAggregator(
   private val coefficientSize = bcCoefficients.value.size
   protected override val dim: Int = coefficientSize
   if (multinomial) {
-    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, s"The number of " +
+    require(numClasses ==  coefficientSize / numFeaturesPlusIntercept, "The number of " +
       s"coefficients should be ${numClasses * numFeaturesPlusIntercept} but was $coefficientSize")
   } else {
     require(coefficientSize == numFeaturesPlusIntercept, s"Expected $numFeaturesPlusIntercept " +
       s"coefficients but got $coefficientSize")
-    require(numClasses == 1 || numClasses == 2, s"Binary logistic aggregator requires numClasses " +
+    require(numClasses == 1 || numClasses == 2, "Binary logistic aggregator requires numClasses " +
       s"in {1, 2} but found $numClasses.")
   }
 
   @transient private lazy val coefficientsArray: Array[Double] = bcCoefficients.value match {
     case DenseVector(values) => values
-    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
+    case _ => throw new IllegalArgumentException("coefficients only supports dense vector but " +
       s"got type ${bcCoefficients.value.getClass}.)")
   }
 
   if (multinomial && numClasses <= 2) {
-    logInfo(s"Multinomial logistic regression for binary classification yields separate " +
-      s"coefficients for positive and negative classes. When no regularization is applied, the" +
-      s"result will be effectively the same as binary logistic regression. When regularization" +
-      s"is applied, multinomial loss will produce a result different from binary loss.")
+    logInfo("Multinomial logistic regression for binary classification yields separate " +
+      "coefficients for positive and negative classes. When no regularization is applied, the" +
+      "result will be effectively the same as binary logistic regression. When regularization" +
+      "is applied, multinomial loss will produce a result different from binary loss.")
   }
 
   /** Update gradient and loss using binary loss function. */
@@ -348,7 +348,7 @@ private[ml] class LogisticAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
-      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+      require(numFeatures == features.size, "Dimensions mismatch when adding new instance." +
         s" Expecting $numFeatures but got ${features.size}.")
       require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 

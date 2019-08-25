@@ -172,9 +172,9 @@ class GaussianMixture private (
 
     // Get length of the input vectors
     val d = breezeData.first().length
-    require(d < GaussianMixture.MAX_NUM_FEATURES, s"GaussianMixture cannot handle more " +
+    require(d < GaussianMixture.MAX_NUM_FEATURES, "GaussianMixture cannot handle more " +
       s"than ${GaussianMixture.MAX_NUM_FEATURES} features because the size of the covariance" +
-      s" matrix is quadratic in the number of features.")
+      " matrix is quadratic in the number of features.")
 
     val shouldDistributeGaussians = GaussianMixture.shouldDistributeGaussians(k, d)
 

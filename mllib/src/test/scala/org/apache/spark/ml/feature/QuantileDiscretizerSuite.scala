@@ -73,7 +73,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
       val observedNumBuckets = result.select("result").distinct.count
       assert(observedNumBuckets == expectedNumBuckets,
-        s"Observed number of buckets are not correct." +
+        "Observed number of buckets are not correct." +
           s" Expected $expectedNumBuckets but found $observedNumBuckets")
     }
   }
@@ -222,7 +222,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       for (i <- 1 to 2) {
         val observedNumBuckets = result.select("result" + i).distinct.count
         assert(observedNumBuckets == expectedNumBucket,
-          s"Observed number of buckets are not correct." +
+          "Observed number of buckets are not correct." +
             s" Expected $expectedNumBucket but found ($observedNumBuckets")
       }
     }

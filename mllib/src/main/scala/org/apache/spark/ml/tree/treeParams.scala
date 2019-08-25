@@ -376,7 +376,7 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
       s" Supported options: ${TreeEnsembleParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
-      s", (0.0-1.0], [1-n].",
+      ", (0.0-1.0], [1-n].",
     (value: String) =>
       TreeEnsembleParams.supportedFeatureSubsetStrategies.contains(
         value.toLowerCase(Locale.ROOT))
