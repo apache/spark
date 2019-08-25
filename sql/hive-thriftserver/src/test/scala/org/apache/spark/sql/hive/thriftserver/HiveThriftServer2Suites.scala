@@ -669,6 +669,13 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(rs.next())
       assert(rs.getString(1) === "interval 3 months 1 hours")
     }
+    // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 3 months 1 hou")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
   }
 }
 
