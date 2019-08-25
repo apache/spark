@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType, StringType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
 class DataFrameStatSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -371,18 +371,20 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
       Seq(Row("1", "a"), Row("2", null), Row("3", "b"))
     )
     val schema = StructType(Seq(
-      StructField("non_null_column", StringType, false),
-      StructField("nullable_column", StringType, true),
+      StructField("non_null", StringType, false),
+      StructField("nullable", StringType, true)
     ))
     val df = spark.createDataFrame(rows, schema)
 
-    val results = df.freqItems(df.columns)
+    val result = df.stat.freqItems(df.columns)
 
-    assert(results.schema("non_null_column_freqItems").containsNull == false)
-    assert(results.schema("nullable_column_freqItems").containsNull == true)
+    val nonNullableFreqItems = result.schema("non_null_freqItems").dataType.asInstanceOf[ArrayType]
+    val nullableFreqItems = result.schema("nullable_freqItems").dataType.asInstanceOf[ArrayType]
 
-    // The original bug was a NullPointerException exception caused by calling `collect()`, test for this
-    val rows = results.collect()
+    assert(nonNullableFreqItems.containsNull == false)
+    assert(nullableFreqItems.containsNull == true)
+    // Original bug was a NullPointerException exception caused by calling collect(), test for this
+    val resultRows = result.collect()
   }
 
   test("sampleBy") {
