@@ -28,6 +28,11 @@ class DataSourceV2DataFrameSuite
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
   }
 
+  after {
+    spark.sessionState.catalogManager.reset()
+    spark.sessionState.conf.clear()
+  }
+
   override protected val catalogAndNamespace: String = "testcat.ns1.ns2.tbls"
   override protected val v2Format: String = classOf[FakeV2Provider].getName
 

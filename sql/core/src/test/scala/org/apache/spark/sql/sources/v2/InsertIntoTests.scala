@@ -30,7 +30,7 @@ abstract class InsertIntoTests(
   import testImplicits._
 
   test("insertInto: append") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     doInsert(t1, df)
@@ -38,7 +38,7 @@ abstract class InsertIntoTests(
   }
 
   test("insertInto: append by position") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     val dfr = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("data", "id")
@@ -48,7 +48,7 @@ abstract class InsertIntoTests(
   }
 
   test("insertInto: append partitioned table") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
@@ -58,7 +58,7 @@ abstract class InsertIntoTests(
   }
 
   test("insertInto: overwrite non-partitioned table") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     val df2 = Seq((4L, "d"), (5L, "e"), (6L, "f")).toDF("id", "data")
@@ -69,7 +69,7 @@ abstract class InsertIntoTests(
 
   test("insertInto: overwrite partitioned table in static mode") {
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "tbl"
+      val t1 = s"${catalogAndNamespace}tbl"
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
       doInsert(t1, init)
@@ -83,7 +83,7 @@ abstract class InsertIntoTests(
 
   test("insertInto: overwrite partitioned table in static mode by position") {
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "tbl"
+      val t1 = s"${catalogAndNamespace}tbl"
       withTable(t1) {
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
@@ -99,7 +99,7 @@ abstract class InsertIntoTests(
   }
 
   test("insertInto: fails when missing a column") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING $v2Format")
     val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
     val exc = intercept[AnalysisException] {
@@ -107,11 +107,12 @@ abstract class InsertIntoTests(
     }
 
     verifyTable(t1, Seq.empty[(Long, String, String)].toDF("id", "data", "missing"))
-    assert(exc.getMessage.contains(s"Cannot write to 'default.$t1', not enough data columns"))
+    val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
+    assert(exc.getMessage.contains(s"Cannot write to '$tableName', not enough data columns"))
   }
 
   test("insertInto: fails when an extra column is present") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format")
       val df = Seq((1L, "a", "mango")).toDF("id", "data", "fruit")
@@ -120,12 +121,13 @@ abstract class InsertIntoTests(
       }
 
       verifyTable(t1, Seq.empty[(Long, String)].toDF("id", "data"))
-      assert(exc.getMessage.contains(s"Cannot write to 'default.$t1', too many data columns"))
+      val tableName = if (catalogAndNamespace.isEmpty) s"default.$t1" else t1
+      assert(exc.getMessage.contains(s"Cannot write to '$tableName', too many data columns"))
     }
   }
 
   dynamicOverwriteTest("insertInto: overwrite partitioned table in dynamic mode") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
@@ -139,7 +141,7 @@ abstract class InsertIntoTests(
   }
 
   dynamicOverwriteTest("insertInto: overwrite partitioned table in dynamic mode by position") {
-    val t1 = "tbl"
+    val t1 = s"${catalogAndNamespace}tbl"
     withTable(t1) {
       sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
       val init = Seq((2L, "dummy"), (4L, "keep")).toDF("id", "data")
@@ -212,6 +214,38 @@ private[v2] trait InsertIntoSQLTests extends QueryTest with SharedSparkSession w
         sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
         sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM $view")
         verifyTable(t1, sql(s"SELECT 23, data FROM $view"))
+      }
+    }
+
+    test("InsertInto: static PARTITION clause fails with non-partition column") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTableAndData(t1) { view =>
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (data)")
+
+        val exc = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM $view")
+        }
+
+        verifyTable(t1, spark.emptyDataFrame)
+        assert(exc.getMessage.contains(
+          "PARTITION clause cannot contain a non-partition column name"))
+        assert(exc.getMessage.contains("id"))
+      }
+    }
+
+    test("InsertInto: dynamic PARTITION clause fails with non-partition column") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTableAndData(t1) { view =>
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+
+        val exc = intercept[AnalysisException] {
+          sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM $view")
+        }
+
+        verifyTable(t1, spark.emptyDataFrame)
+        assert(exc.getMessage.contains(
+          "PARTITION clause cannot contain a non-partition column name"))
+        assert(exc.getMessage.contains("data"))
       }
     }
 
