@@ -182,7 +182,7 @@ def parse_opts():
         help="A comma-separated list of Python modules to test (default: %(default)s)"
     )
     parser.add_argument(
-        "-p", "--parallelism", type=int, default=8,
+        "-p", "--parallelism", type=int, default=4,
         help="The number of suites to test in parallel (default %(default)d)"
     )
     parser.add_argument(
