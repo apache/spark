@@ -39,6 +39,19 @@ function formatStatus(status, type, row) {
     return "Dead"
 }
 
+function formatResourceCells(resources) {
+    var result = ""
+    var count = 0
+    $.each(resources, function (name, resInfo) {
+        if (count > 0) {
+            result += ", "
+        }
+        result += name + ': [' + resInfo.addresses.join(", ") + ']'
+        count += 1
+    });
+    return result
+}
+
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
     "title-numeric-pre": function (a) {
         var x = a.match(/title="*(-?[0-9\.]+)/)[1];
@@ -62,6 +75,12 @@ $(document).ajaxStart(function () {
 function logsExist(execs) {
     return execs.some(function(exec) {
         return !($.isEmptyObject(exec["executorLogs"]));
+    });
+}
+
+function resourcesExist(execs) {
+    return execs.some(function(exec) {
+        return !($.isEmptyObject(exec["resources"]));
     });
 }
 
@@ -106,7 +125,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6];
+var execOptionalColumns = [5, 6, 9];
 var execDataTable;
 var sumDataTable;
 
@@ -401,6 +420,7 @@ $(document).ready(function () {
                         },
                         {data: 'diskUsed', render: formatBytes},
                         {data: 'totalCores'},
+                        {name: 'resourcesCol', data: 'resources', render: formatResourceCells, orderable: false},
                         {
                             data: 'activeTasks',
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
@@ -446,13 +466,15 @@ $(document).ready(function () {
                     "order": [[0, "asc"]],
                     "columnDefs": [
                         {"visible": false, "targets": 5},
-                        {"visible": false, "targets": 6}
+                        {"visible": false, "targets": 6},
+                        {"visible": false, "targets": 9}
                     ]
                 };
 
                 execDataTable = $(selector).DataTable(conf);
                 execDataTable.column('executorLogsCol:name').visible(logsExist(response));
                 execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
+                execDataTAble.column('resourcesCol:name').visible(resourcesExist(response));
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
@@ -553,6 +575,7 @@ $(document).ready(function () {
                     "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
                     "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
                     "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
+                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='7' data-exec-col-idx='8'>Resources</div>" +
                     "</div>");
 
                 reselectCheckboxesBasedOnTaskTableState();
