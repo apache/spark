@@ -71,27 +71,31 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
   }
 
   test("new KafkaDataConsumer instance in case of Task retry") {
-    KafkaDataConsumer.cache.clear()
+    try {
+      KafkaDataConsumer.cache.clear()
 
-    val kafkaParams = getKafkaParams()
-    val key = new CacheKey(groupId, topicPartition)
+      val kafkaParams = getKafkaParams()
+      val key = new CacheKey(groupId, topicPartition)
 
-    val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
-    TaskContext.setTaskContext(context1)
-    val consumer1 = KafkaDataConsumer.acquire(topicPartition, kafkaParams, true)
-    consumer1.release()
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      TaskContext.setTaskContext(context1)
+      val consumer1 = KafkaDataConsumer.acquire(topicPartition, kafkaParams, true)
+      consumer1.release()
 
-    assert(KafkaDataConsumer.cache.size() == 1)
-    assert(KafkaDataConsumer.cache.get(key).eq(consumer1.internalConsumer))
+      assert(KafkaDataConsumer.cache.size() == 1)
+      assert(KafkaDataConsumer.cache.get(key).eq(consumer1.internalConsumer))
 
-    val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
-    TaskContext.setTaskContext(context2)
-    val consumer2 = KafkaDataConsumer.acquire(topicPartition, kafkaParams, true)
-    consumer2.release()
+      val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
+      TaskContext.setTaskContext(context2)
+      val consumer2 = KafkaDataConsumer.acquire(topicPartition, kafkaParams, true)
+      consumer2.release()
 
-    // The first consumer should be removed from cache and new non-cached should be returned
-    assert(KafkaDataConsumer.cache.size() == 0)
-    assert(consumer1.internalConsumer.ne(consumer2.internalConsumer))
+      // The first consumer should be removed from cache and new non-cached should be returned
+      assert(KafkaDataConsumer.cache.size() == 0)
+      assert(consumer1.internalConsumer.ne(consumer2.internalConsumer))
+    } finally {
+      TaskContext.unset()
+    }
   }
 
   test("SPARK-23623: concurrent use of KafkaDataConsumer") {
