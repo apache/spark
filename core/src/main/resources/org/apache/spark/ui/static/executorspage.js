@@ -78,12 +78,6 @@ function logsExist(execs) {
     });
 }
 
-function resourcesExist(execs) {
-    return execs.some(function(exec) {
-        return !($.isEmptyObject(exec["resources"]));
-    });
-}
-
 // Determine Color Opacity from 0.5-1
 // activeTasks range from 0 to maxTasks
 function activeTasksAlpha(activeTasks, maxTasks) {
@@ -474,7 +468,6 @@ $(document).ready(function () {
                 execDataTable = $(selector).DataTable(conf);
                 execDataTable.column('executorLogsCol:name').visible(logsExist(response));
                 execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
-                execDataTAble.column('resourcesCol:name').visible(resourcesExist(response));
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
@@ -575,7 +568,7 @@ $(document).ready(function () {
                     "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
                     "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
                     "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
-                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='7' data-exec-col-idx='8'>Resources</div>" +
+                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'>Resources</div>" +
                     "</div>");
 
                 reselectCheckboxesBasedOnTaskTableState();
@@ -607,8 +600,10 @@ $(document).ready(function () {
                         var execCol = execDataTable.column(execColIdx);
                         execCol.visible(!execCol.visible());
                         var sumColIdx = thisBox.attr("data-sum-col-idx");
-                        var sumCol = sumDataTable.column(sumColIdx);
-                        sumCol.visible(!sumCol.visible());
+                        if (sumColIdx) {
+                            var sumCol = sumDataTable.column(sumColIdx);
+                            sumCol.visible(!sumCol.visible());
+                        }
                     }
                 });
 

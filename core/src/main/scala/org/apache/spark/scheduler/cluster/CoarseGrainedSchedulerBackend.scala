@@ -343,6 +343,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           executorData.freeCores -= scheduler.CPUS_PER_TASK
           task.resources.foreach { case (rName, rInfo) =>
             assert(executorData.resourcesInfo.contains(rName))
+            logWarning("launching task with data: " + rInfo.toString())
+
             executorData.resourcesInfo(rName).acquire(rInfo.addresses)
           }
 
