@@ -162,7 +162,7 @@ private object ResourceRequestHelper extends Logging {
         case e: NoSuchMethodException =>
           throw new SparkException(
             s"Cannot find setResourceInformation in ${resource.getClass}. " +
-              "This is likely due to a jar conflict between different YARN versions.", e)
+              "This is likely due to a JAR conflict between different YARN versions.", e)
       }
 
     resources.foreach { case (name, rawAmount) =>
