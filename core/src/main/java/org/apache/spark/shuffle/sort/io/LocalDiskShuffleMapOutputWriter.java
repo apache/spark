@@ -97,6 +97,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
+<<<<<<< HEAD
   public void commitAllPartitions() throws IOException {
     // Check the position after transferTo loop to see if it is in the right position and raise a
     // exception if it is incorrect. The position will not be increased to the expected length
@@ -111,9 +112,15 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
               "to unexpected behavior when using transferTo. You can set " +
               "spark.file.transferTo=false to disable this NIO feature.");
     }
+||||||| merged common ancestors
+  public void commitAllPartitions() throws IOException {
+=======
+  public long[] commitAllPartitions() throws IOException {
+>>>>>>> origin/master
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
+    return partitionLengths;
   }
 
   @Override

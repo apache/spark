@@ -95,6 +95,7 @@ The binary distribution of this product bundles binaries of
 Gson 2.2.4,
 which has the following notices:
 
+
                             The Netty Project
                             =================
 
@@ -154,28 +155,15 @@ facade for Java, which can be obtained at:
   * HOMEPAGE:
     * http://www.slf4j.org/
 
-This product contains a modified portion of 'ArrayDeque', written by Josh
-Bloch of Google, Inc:
-
-  * LICENSE:
-    * license/LICENSE.deque.txt (Public Domain)
-
 This product contains a modified portion of 'Apache Harmony', an open source
 Java SE, which can be obtained at:
 
+  * NOTICE:
+    * license/NOTICE.harmony.txt
   * LICENSE:
     * license/LICENSE.harmony.txt (Apache License 2.0)
   * HOMEPAGE:
     * http://archive.apache.org/dist/harmony/
-
-This product contains a modified version of Roland Kuhn's ASL2
-AbstractNodeQueue, which is based on Dmitriy Vyukov's non-intrusive MPSC queue.
-It can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.abstractnodequeue.txt (Public Domain)
-  * HOMEPAGE:
-    * https://github.com/akka/akka/blob/wip-2.2.3-for-scala-2.11/akka-actor/src/main/java/akka/dispatch/AbstractNodeQueue.java
 
 This product contains a modified portion of 'jbzip2', a Java bzip2 compression
 and decompression library written by Matthew J. Francis. It can be obtained at:
@@ -192,7 +180,7 @@ a constant-size alphabet written by Yuta Mori. It can be obtained at:
   * LICENSE:
     * license/LICENSE.libdivsufsort.txt (MIT License)
   * HOMEPAGE:
-    * https://code.google.com/p/libdivsufsort/
+    * https://github.com/y-256/libdivsufsort
 
 This product contains a modified portion of Nitsan Wakart's 'JCTools', Java Concurrency Tools for the JVM,
  which can be obtained at:
@@ -248,7 +236,7 @@ interchange format, which can be obtained at:
   * LICENSE:
     * license/LICENSE.protobuf.txt (New BSD License)
   * HOMEPAGE:
-    * http://code.google.com/p/protobuf/
+    * https://github.com/google/protobuf
 
 This product optionally depends on 'Bouncy Castle Crypto APIs' to generate
 a temporary self-signed X.509 certificate when the JVM does not provide the
@@ -265,7 +253,7 @@ by Google Inc, which can be obtained at:
   * LICENSE:
     * license/LICENSE.snappy.txt (New BSD License)
   * HOMEPAGE:
-    * http://code.google.com/p/snappy/
+    * https://github.com/google/snappy
 
 This product optionally depends on 'JBoss Marshalling', an alternative Java
 serialization API, which can be obtained at:
@@ -281,7 +269,7 @@ benchmarking framework, which can be obtained at:
   * LICENSE:
     * license/LICENSE.caliper.txt (Apache License 2.0)
   * HOMEPAGE:
-    * http://code.google.com/p/caliper/
+    * https://github.com/google/caliper
 
 This product optionally depends on 'Apache Commons Logging', a logging
 framework, which can be obtained at:
@@ -322,6 +310,15 @@ provides utilities for the java.lang API, which can be obtained at:
     * license/LICENSE.commons-lang.txt (Apache License 2.0)
   * HOMEPAGE:
     * https://commons.apache.org/proper/commons-lang/
+
+
+This product contains the Maven wrapper scripts from 'Maven Wrapper', that provides an easy way to ensure a user has everything necessary to run the Maven build.
+
+  * LICENSE:
+    * license/LICENSE.mvn-wrapper.txt (Apache License 2.0)
+  * HOMEPAGE:
+    * https://github.com/takari/maven-wrapper
+
 
 The binary distribution of this product bundles binaries of
 Commons Codec 1.4,
@@ -619,45 +616,6 @@ fixes; these can be found from file "VERSION.txt" in SCM.
 Apache Commons Net
 Copyright 2001-2012 The Apache Software Foundation
 
-Copyright 2011 The Netty Project
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-This product contains a modified version of 'JZlib', a re-implementation of
-zlib in pure Java, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.jzlib.txt (BSD Style License)
-  * HOMEPAGE:
-    * http://www.jcraft.com/jzlib/
-
-This product contains a modified version of 'Webbit', a Java event based
-WebSocket and HTTP server:
-
-This product optionally depends on 'Protocol Buffers', Google's data
-interchange format, which can be obtained at:
-
-This product optionally depends on 'SLF4J', a simple logging facade for Java,
-which can be obtained at:
-
-This product optionally depends on 'Apache Log4J', a logging framework,
-which can be obtained at:
-
-This product optionally depends on 'JBoss Logging', a logging framework,
-which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.jboss-logging.txt (GNU LGPL 2.1)
-  * HOMEPAGE:
-    * http://anonsvn.jboss.org/repos/common/common-logging-spi/
-
-This product optionally depends on 'Apache Felix', an open source OSGi
-framework implementation, which can be obtained at:
-
-  * LICENSE:
-    * license/LICENSE.felix.txt (Apache License 2.0)
-  * HOMEPAGE:
-    * http://felix.apache.org/
 
 Jackson core and extension components may be licensed under different licenses.
 To find the details that apply to this artifact see the accompanying LICENSE file.

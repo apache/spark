@@ -96,7 +96,7 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.${funcName}($c);
+          ${ev.value} = java.lang.StrictMath.${funcName}($c);
         }
       """
     )
@@ -291,10 +291,6 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   usage = """
     _FUNC_(expr) - Returns inverse hyperbolic cosine of `expr`.
   """,
-  arguments = """
-    Arguments:
-      * expr - hyperbolic angle
-  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -304,9 +300,10 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   """,
   since = "3.0.0")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => math.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
+  extends UnaryMathExpression((x: Double) => StrictMath.log(x + math.sqrt(x * x - 1.0)), "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
+    defineCodeGen(ctx, ev,
+      c => s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c - 1.0))")
   }
 }
 
@@ -361,7 +358,11 @@ case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expre
       > SELECT _FUNC_(0);
        1.0
   """)
-case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
+case class Exp(child: Expression) extends UnaryMathExpression(StrictMath.exp, "EXP") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.exp($c)")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns exp(`expr`) - 1.",
@@ -370,7 +371,11 @@ case class Exp(child: Expression) extends UnaryMathExpression(math.exp, "EXP")
       > SELECT _FUNC_(0);
        0.0
   """)
-case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXPM1")
+case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1, "EXPM1") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"java.lang.StrictMath.expm1($c)")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the largest integer not greater than `expr`.",
@@ -486,7 +491,7 @@ case class Factorial(child: Expression) extends UnaryExpression with ImplicitCas
       > SELECT _FUNC_(1);
        0.0
   """)
-case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
+case class Log(child: Expression) extends UnaryLogExpression(StrictMath.log, "LOG")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the logarithm of `expr` with base 2.",
@@ -496,14 +501,14 @@ case class Log(child: Expression) extends UnaryLogExpression(math.log, "LOG")
        1.0
   """)
 case class Log2(child: Expression)
-  extends UnaryLogExpression((x: Double) => math.log(x) / math.log(2), "LOG2") {
+  extends UnaryLogExpression((x: Double) => StrictMath.log(x) / StrictMath.log(2), "LOG2") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
         if ($c <= $yAsymptote) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = java.lang.Math.log($c) / java.lang.Math.log(2);
+          ${ev.value} = java.lang.StrictMath.log($c) / java.lang.StrictMath.log(2);
         }
       """
     )
@@ -517,7 +522,7 @@ case class Log2(child: Expression)
       > SELECT _FUNC_(10);
        1.0
   """)
-case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG10")
+case class Log10(child: Expression) extends UnaryLogExpression(StrictMath.log10, "LOG10")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns log(1 + `expr`).",
@@ -526,7 +531,7 @@ case class Log10(child: Expression) extends UnaryLogExpression(math.log10, "LOG1
       > SELECT _FUNC_(0);
        0.0
   """)
-case class Log1p(child: Expression) extends UnaryLogExpression(math.log1p, "LOG1P") {
+case class Log1p(child: Expression) extends UnaryLogExpression(StrictMath.log1p, "LOG1P") {
   protected override val yAsymptote: Double = -1.0
 }
 
@@ -584,10 +589,6 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   usage = """
     _FUNC_(expr) - Returns inverse hyperbolic sine of `expr`.
   """,
-  arguments = """
-    Arguments:
-      * expr - hyperbolic angle
-  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -597,11 +598,11 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
 case class Asinh(child: Expression)
   extends UnaryMathExpression((x: Double) => x match {
     case Double.NegativeInfinity => Double.NegativeInfinity
-    case _ => math.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
+    case _ => StrictMath.log(x + math.sqrt(x * x + 1.0)) }, "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, c =>
       s"$c == Double.NEGATIVE_INFINITY ? Double.NEGATIVE_INFINITY : " +
-      s"java.lang.Math.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
+      s"java.lang.StrictMath.log($c + java.lang.Math.sqrt($c * $c + 1.0))")
   }
 }
 
@@ -669,10 +670,6 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
   usage = """
     _FUNC_(expr) - Returns inverse hyperbolic tangent of `expr`.
   """,
-  arguments = """
-    Arguments:
-      * expr - hyperbolic angle
-  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -682,9 +679,12 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
   """,
   since = "3.0.0")
 case class Atanh(child: Expression)
-  extends UnaryMathExpression((x: Double) => 0.5 * math.log((1.0 + x) / (1.0 - x)), "ATANH") {
+  // SPARK-28519: more accurate express for 1/2 * ln((1 + x) / (1 - x))
+  extends UnaryMathExpression((x: Double) =>
+    0.5 * (StrictMath.log1p(x) - StrictMath.log1p(-x)), "ATANH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"0.5 * java.lang.Math.log((1.0 + $c)/(1.0 - $c))")
+    defineCodeGen(ctx, ev,
+      c => s"0.5 * (java.lang.StrictMath.log1p($c) - java.lang.StrictMath.log1p(- $c))")
   }
 }
 
@@ -931,9 +931,9 @@ case class Atan2(left: Expression, right: Expression)
        8.0
   """)
 case class Pow(left: Expression, right: Expression)
-  extends BinaryMathExpression(math.pow, "POWER") {
+  extends BinaryMathExpression(StrictMath.pow, "POWER") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
+    defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.StrictMath.pow($c1, $c2)")
   }
 }
 
@@ -1064,7 +1064,7 @@ case class Hypot(left: Expression, right: Expression)
        2.0
   """)
 case class Logarithm(left: Expression, right: Expression)
-  extends BinaryMathExpression((c1, c2) => math.log(c2) / math.log(c1), "LOG") {
+  extends BinaryMathExpression((c1, c2) => StrictMath.log(c2) / StrictMath.log(c1), "LOG") {
 
   /**
    * Natural log, i.e. using e as the base.
@@ -1079,7 +1079,7 @@ case class Logarithm(left: Expression, right: Expression)
     val dLeft = input1.asInstanceOf[Double]
     val dRight = input2.asInstanceOf[Double]
     // Unlike Hive, we support Log base in (0.0, 1.0]
-    if (dLeft <= 0.0 || dRight <= 0.0) null else math.log(dRight) / math.log(dLeft)
+    if (dLeft <= 0.0 || dRight <= 0.0) null else StrictMath.log(dRight) / StrictMath.log(dLeft)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1089,7 +1089,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = java.lang.Math.log($c2);
+            ${ev.value} = java.lang.StrictMath.log($c2);
           }
         """)
     } else {
@@ -1098,7 +1098,7 @@ case class Logarithm(left: Expression, right: Expression)
           if ($c1 <= 0.0 || $c2 <= 0.0) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = java.lang.Math.log($c2) / java.lang.Math.log($c1);
+            ${ev.value} = java.lang.StrictMath.log($c2) / java.lang.StrictMath.log($c1);
           }
         """)
     }

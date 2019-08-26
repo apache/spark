@@ -38,7 +38,6 @@ INSERT INTO FLOAT4_TBL VALUES ('1.2345678901234e-20');
 
 -- special inputs
 SELECT float('NaN');
--- [SPARK-28060] Float type can not accept some special inputs
 SELECT float('nan');
 SELECT float('   NAN  ');
 SELECT float('infinity');
@@ -49,7 +48,6 @@ SELECT float('N A N');
 SELECT float('NaN x');
 SELECT float(' INFINITY    x');
 
--- [SPARK-28060] Float type can not accept some special inputs
 SELECT float('Infinity') + 100.0;
 SELECT float('Infinity') / float('Infinity');
 SELECT float('nan') / float('nan');
