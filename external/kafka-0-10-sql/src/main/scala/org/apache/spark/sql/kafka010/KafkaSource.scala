@@ -308,8 +308,6 @@ private[kafka010] class KafkaSource(
 
 /** Companion object for the [[KafkaSource]]. */
 private[kafka010] object KafkaSource {
-  private[kafka010] val VERSION = 1
-
   def getSortedExecutorList(sc: SparkContext): Array[String] = {
     val bm = sc.env.blockManager
     bm.master.getPeers(bm.blockManagerId).toArray
