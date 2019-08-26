@@ -420,6 +420,7 @@ object JoinReorderGA extends PredicateHelper with Logging {
       conditions: Set[Expression],
       output: Seq[Attribute]): Option[LogicalPlan] = {
 
+    // for debug: to generate a deterministic plan.
     if (conf.joinReorderGASeed >= 0) {
       util.Random.setSeed(conf.joinReorderGASeed)
     }
