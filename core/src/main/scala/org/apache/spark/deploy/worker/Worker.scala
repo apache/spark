@@ -248,16 +248,15 @@ private[deploy] class Worker(
     }
   }
 
-  private def updateResourcesUsed(deltaInfo: Map[String, ResourceInformation], add: Boolean)
-    : Unit = {
+  private def addResourcesUsed(deltaInfo: Map[String, ResourceInformation]): Unit = {
     deltaInfo.foreach { case (rName, rInfo) =>
-      val curInfo = resourcesUsed(rName)
-      val newInfo = if (add) {
-          curInfo + rInfo
-        } else {
-          curInfo - rInfo
-        }
-      resourcesUsed(rName) = newInfo
+      resourcesUsed(rName) = resourcesUsed(rName) + rInfo
+    }
+  }
+
+  private def removeResourcesUsed(deltaInfo: Map[String, ResourceInformation]): Unit = {
+    deltaInfo.foreach { case (rName, rInfo) =>
+      resourcesUsed(rName) = resourcesUsed(rName) - rInfo
     }
   }
 
@@ -605,7 +604,7 @@ private[deploy] class Worker(
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
-          updateResourcesUsed(resources_, true)
+          addResourcesUsed(resources_)
         } catch {
           case e: Exception =>
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
@@ -652,7 +651,7 @@ private[deploy] class Worker(
 
       coresUsed += driverDesc.cores
       memoryUsed += driverDesc.mem
-      updateResourcesUsed(resources_, true)
+      addResourcesUsed(resources_)
 
     case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
@@ -793,7 +792,7 @@ private[deploy] class Worker(
     trimFinishedDriversIfNecessary()
     memoryUsed -= driver.driverDesc.mem
     coresUsed -= driver.driverDesc.cores
-    updateResourcesUsed(driver.resources, false)
+    removeResourcesUsed(driver.resources)
   }
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
@@ -815,7 +814,7 @@ private[deploy] class Worker(
           trimFinishedExecutorsIfNecessary()
           coresUsed -= executor.cores
           memoryUsed -= executor.memory
-          updateResourcesUsed(executor.resources, false)
+          removeResourcesUsed(executor.resources)
 
           if (CLEANUP_FILES_AFTER_EXECUTOR_EXIT) {
             shuffleService.executorRemoved(executorStateChanged.execId.toString, appId)
