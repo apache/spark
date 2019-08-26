@@ -62,9 +62,7 @@ LOGGER = logging.getLogger()
 for scala in ["2.12"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
-        SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars")
-        print("SPARK_DIST_CLASSPATH")
-        print(os.listdir(SPARK_DIST_CLASSPATH))
+        SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
         break
 else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
@@ -79,10 +77,6 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
-
-    # TODO
-    LOGGER.info("Env:")
-    LOGGER.info(env)
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
     # recognized by the tempfile module to override the default system temp directory.
@@ -166,7 +160,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.6"] if which(x)]
+    python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
     if "python2.7" not in python_execs:
         LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
                        " back to `python` instead")
@@ -188,7 +182,7 @@ def parse_opts():
         help="A comma-separated list of Python modules to test (default: %(default)s)"
     )
     parser.add_argument(
-        "-p", "--parallelism", type=int, default=1,
+        "-p", "--parallelism", type=int, default=8,
         help="The number of suites to test in parallel (default %(default)d)"
     )
     parser.add_argument(
@@ -232,7 +226,7 @@ def _check_coverage(python_exec):
 
 def main():
     opts = parse_opts()
-    if True:
+    if opts.verbose:
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO

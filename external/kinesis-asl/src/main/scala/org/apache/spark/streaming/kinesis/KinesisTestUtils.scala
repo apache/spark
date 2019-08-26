@@ -208,7 +208,7 @@ private[kinesis] object KinesisTestUtils {
     val uri = new java.net.URI(endpoint)
     RegionUtils.getRegionsForService(AmazonKinesis.ENDPOINT_PREFIX)
       .asScala
-      .find(_.getAvailableEndpoints.contains(uri.getHost))
+      .find(_.getAvailableEndpoints.asScala.toSeq.contains(uri.getHost))
       .map(_.getName)
       .getOrElse(
         throw new IllegalArgumentException(s"Could not resolve region for endpoint: $endpoint"))
