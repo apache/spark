@@ -419,7 +419,6 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
     }
 
     (classNamePattern, matcher, matchResult, termLastRegex, termPattern, setEvNotNull)
-
   }
 }
 
@@ -436,7 +435,9 @@ abstract class RegExpExtractBase extends TernaryExpression with ImplicitCastInpu
        100
   """,
   since = "1.5.0")
-case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression) extends RegExpExtractBase {
+case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
+  extends RegExpExtractBase {
+
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
 
@@ -498,7 +499,9 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       > SELECT _FUNC_('100-200,300-400', '(\\d+)-(\\d+)', 1);
        [100, 300]
   """)
-case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression) extends RegExpExtractBase {
+case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
+  extends RegExpExtractBase {
+
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
 
@@ -530,27 +533,27 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
-      if (!$regexp.equals($termLastRegex)) {
-        // regex value changed
-        $termLastRegex = $regexp.clone();
-        $termPattern = $classNamePattern.compile($termLastRegex.toString());
-      }
-      java.util.regex.Matcher $matcher =
-        $termPattern.matcher($subject.toString());
-      java.util.ArrayList $groupArray =
-        new java.util.ArrayList<UTF8String>();
+        |if (!$regexp.equals($termLastRegex)) {
+        |  // regex value changed
+        |  $termLastRegex = $regexp.clone();
+        |  $termPattern = $classNamePattern.compile($termLastRegex.toString());
+        |}
+        |java.util.regex.Matcher $matcher =
+        |  $termPattern.matcher($subject.toString());
+        |java.util.ArrayList $groupArray =
+        |  new java.util.ArrayList<UTF8String>();
 
-      while ($matcher.find()) {
-        java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        if ($matchResult.group($idx) == null) {
-          $groupArray.add(UTF8String.EMPTY_UTF8);
-        } else {
-          $groupArray.add(UTF8String.fromString($matchResult.group($idx)));
-        }
-      }
-      ${ev.value} = new $arrayClass($groupArray.toArray(new UTF8String[$groupArray.size()]));
-      $setEvNotNull
-      """
+        |while ($matcher.find()) {
+        |  java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
+        |  if ($matchResult.group($idx) == null) {
+        |    $groupArray.add(UTF8String.EMPTY_UTF8);
+        |  } else {
+        |    $groupArray.add(UTF8String.fromString($matchResult.group($idx)));
+        |  }
+        |}
+        |${ev.value} = new $arrayClass($groupArray.toArray(new UTF8String[$groupArray.size()]));
+        |$setEvNotNull
+        |"""
     })
   }
 }
