@@ -582,6 +582,38 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("Throw exception on unsafe cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t values('a', 'b')")
+        }.getMessage
+        assert(msg.contains("Cannot cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot cast 'd': StringType to DoubleType"))
+        msg = intercept[AnalysisException] {
+          sql("insert into t values(now(), now())")
+        }.getMessage
+        assert(msg.contains("Cannot cast 'i': TimestampType to IntegerType") &&
+          msg.contains("Cannot cast 'd': TimestampType to DoubleType"))
+      }
+    }
+  }
+
+  test("Allow on writing any numeric value to numeric type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d float) using parquet")
+        sql("insert into t values(1L, 2.0)")
+        checkAnswer(sql("select * from t"), Row(1, 2.0F))
+      }
+    }
+  }
+
   test("SPARK-24860: dynamic partition overwrite specified per source without catalog table") {
     withTempPath { path =>
       Seq((1, 1), (2, 2)).toDF("i", "part")
