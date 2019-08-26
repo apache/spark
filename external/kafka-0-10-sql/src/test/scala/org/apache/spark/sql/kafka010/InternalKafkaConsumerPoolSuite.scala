@@ -125,11 +125,11 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
       assertPoolStateForKey(pool, newCacheKey, numIdle = 0, numActive = 1, numTotal = 1)
 
       // at least one of idle object should be freed up
-      assert(pool.getNumIdle < numToReturn)
+      assert(pool.numIdle < numToReturn)
       // we can determine number of active objects correctly
-      assert(pool.getNumActive === keyToPooledObjectPairs.length - numToReturn + 1)
+      assert(pool.numActive === keyToPooledObjectPairs.length - numToReturn + 1)
       // total objects should be more than number of active + 1 but can't expect exact number
-      assert(pool.getTotal > keyToPooledObjectPairs.length - numToReturn + 1)
+      assert(pool.size > keyToPooledObjectPairs.length - numToReturn + 1)
     }
   }
 
@@ -231,9 +231,9 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
       numIdle: Int,
       numActive: Int,
       numTotal: Int): Unit = {
-    assert(pool.getNumIdle === numIdle)
-    assert(pool.getNumActive === numActive)
-    assert(pool.getTotal === numTotal)
+    assert(pool.numIdle === numIdle)
+    assert(pool.numActive === numActive)
+    assert(pool.size === numTotal)
   }
 
   private def assertPoolStateForKey(
@@ -242,9 +242,9 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
       numIdle: Int,
       numActive: Int,
       numTotal: Int): Unit = {
-    assert(pool.getNumIdle(key) === numIdle)
-    assert(pool.getNumActive(key) === numActive)
-    assert(pool.getTotal(key) === numTotal)
+    assert(pool.numIdle(key) === numIdle)
+    assert(pool.numActive(key) === numActive)
+    assert(pool.size(key) === numTotal)
   }
 
   private def getTestKafkaParams: ju.Map[String, Object] = Map[String, Object](
@@ -261,9 +261,9 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
       kafkaParams: ju.Map[String, Object],
       keys: List[CacheKey]): Seq[(CacheKey, InternalKafkaConsumer)] = {
     keys.map { key =>
-      val numActiveBeforeBorrowing = pool.getNumActive
-      val numIdleBeforeBorrowing = pool.getNumIdle
-      val numTotalBeforeBorrowing = pool.getTotal
+      val numActiveBeforeBorrowing = pool.numActive
+      val numIdleBeforeBorrowing = pool.numIdle
+      val numTotalBeforeBorrowing = pool.size
 
       val pooledObj = pool.borrowObject(key, kafkaParams)
 
@@ -279,9 +279,9 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
       pool: InternalKafkaConsumerPool,
       objects: Seq[(CacheKey, InternalKafkaConsumer)]): Unit = {
     objects.foreach { case (key, pooledObj) =>
-      val numActiveBeforeReturning = pool.getNumActive
-      val numIdleBeforeReturning = pool.getNumIdle
-      val numTotalBeforeReturning = pool.getTotal
+      val numActiveBeforeReturning = pool.numActive
+      val numIdleBeforeReturning = pool.numIdle
+      val numTotalBeforeReturning = pool.size
 
       pool.returnObject(pooledObj)
 

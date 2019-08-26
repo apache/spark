@@ -52,7 +52,7 @@ private[kafka010] class InternalKafkaConsumerPool(
   // the class is intended to have only soft capacity
   assert(poolConfig.getMaxTotal < 0)
 
-  private lazy val pool = {
+  private val pool = {
     val internalPool = new GenericKeyedObjectPool[CacheKey, InternalKafkaConsumer](
       objectFactory, poolConfig)
     internalPool.setSwallowedExceptionListener(CustomSwallowedExceptionListener)
@@ -72,7 +72,7 @@ private[kafka010] class InternalKafkaConsumerPool(
   def borrowObject(key: CacheKey, kafkaParams: ju.Map[String, Object]): InternalKafkaConsumer = {
     updateKafkaParamForKey(key, kafkaParams)
 
-    if (getTotal == poolConfig.getSoftMaxTotal()) {
+    if (size == poolConfig.softMaxSize()) {
       pool.clearOldest()
     }
 
@@ -111,17 +111,17 @@ private[kafka010] class InternalKafkaConsumerPool(
     pool.clear()
   }
 
-  def getNumIdle: Int = pool.getNumIdle
+  def numIdle: Int = pool.getNumIdle
 
-  def getNumIdle(key: CacheKey): Int = pool.getNumIdle(key)
+  def numIdle(key: CacheKey): Int = pool.getNumIdle(key)
 
-  def getNumActive: Int = pool.getNumActive
+  def numActive: Int = pool.getNumActive
 
-  def getNumActive(key: CacheKey): Int = pool.getNumActive(key)
+  def numActive(key: CacheKey): Int = pool.getNumActive(key)
 
-  def getTotal: Int = getNumIdle + getNumActive
+  def size: Int = numIdle + numActive
 
-  def getTotal(key: CacheKey): Int = getNumIdle(key) + getNumActive(key)
+  def size(key: CacheKey): Int = numIdle(key) + numActive(key)
 
   private def updateKafkaParamForKey(key: CacheKey, kafkaParams: ju.Map[String, Object]): Unit = {
     // We can assume that kafkaParam should not be different for same cache key,
@@ -155,16 +155,16 @@ private[kafka010] object InternalKafkaConsumerPool {
   }
 
   class PoolConfig extends GenericKeyedObjectPoolConfig[InternalKafkaConsumer] {
-    private var softMaxTotal = Int.MaxValue
+    private var _softMaxSize = Int.MaxValue
 
-    def getSoftMaxTotal(): Int = softMaxTotal
+    def softMaxSize(): Int = _softMaxSize
 
     init()
 
     def init(): Unit = {
       val conf = SparkEnv.get.conf
 
-      softMaxTotal = conf.get(CONSUMER_CACHE_CAPACITY)
+      _softMaxSize = conf.get(CONSUMER_CACHE_CAPACITY)
 
       val jmxEnabled = conf.get(CONSUMER_CACHE_JMX_ENABLED)
       val minEvictableIdleTimeMillis = conf.get(CONSUMER_CACHE_MIN_EVICTABLE_IDLE_TIME_MILLIS)
@@ -203,8 +203,7 @@ private[kafka010] object InternalKafkaConsumerPool {
   class ObjectFactory extends BaseKeyedPooledObjectFactory[CacheKey, InternalKafkaConsumer]
     with Logging {
 
-    val keyToKafkaParams: ConcurrentHashMap[CacheKey, ju.Map[String, Object]] =
-      new ConcurrentHashMap[CacheKey, ju.Map[String, Object]]()
+    val keyToKafkaParams = new ConcurrentHashMap[CacheKey, ju.Map[String, Object]]()
 
     override def create(key: CacheKey): InternalKafkaConsumer = {
       Option(keyToKafkaParams.get(key)) match {

@@ -203,15 +203,15 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("evict idle fetched data") {
-    import FetchedDataPool._
     import org.scalatest.time.SpanSugar._
 
     val minEvictableIdleTimeMillis = 1000
     val evictorThreadRunIntervalMillis = 500
 
     val newConf = Seq(
-      CONFIG_NAME_MIN_EVICTABLE_IDLE_TIME_MILLIS -> minEvictableIdleTimeMillis.toString,
-      CONFIG_NAME_EVICTOR_THREAD_RUN_INTERVAL_MILLIS -> evictorThreadRunIntervalMillis.toString)
+      CONSUMER_CACHE_MIN_EVICTABLE_IDLE_TIME_MILLIS.key -> minEvictableIdleTimeMillis.toString,
+      CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL_MILLIS.key ->
+        evictorThreadRunIntervalMillis.toString)
 
     withSparkConf(newConf: _*) {
       val dataPool = FetchedDataPool.build
@@ -331,7 +331,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
       fetchedDataPool: FetchedDataPool,
       expectedNumCreated: Long,
       expectedNumTotal: Long): Unit = {
-    assert(fetchedDataPool.getNumCreated === expectedNumCreated)
-    assert(fetchedDataPool.getNumTotal === expectedNumTotal)
+    assert(fetchedDataPool.numCreated === expectedNumCreated)
+    assert(fetchedDataPool.numTotal === expectedNumTotal)
   }
 }

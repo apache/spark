@@ -105,7 +105,8 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
 
       consumer1.release()
 
-      assert(consumerPool.getTotal(key) === 1)
+      assert(consumerPool.size(key) === 1)
+      // check whether acquired object is available in pool
       val pooledObj = consumerPool.borrowObject(key, kafkaParams)
       assert(consumer1Underlying.get.eq(pooledObj))
       consumerPool.returnObject(pooledObj)
@@ -124,8 +125,9 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
 
       consumer2.release()
 
-      // The first consumer should be removed from cache, but second consumer should be cached.
-      assert(consumerPool.getTotal(key) === 1)
+      // The first consumer should be removed from cache, but the consumer after invalidate
+      // should be cached.
+      assert(consumerPool.size(key) === 1)
       val pooledObj2 = consumerPool.borrowObject(key, kafkaParams)
       assert(consumer2Underlying.get.eq(pooledObj2))
       consumerPool.returnObject(pooledObj2)
@@ -286,8 +288,8 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
       fetchedDataPool: FetchedDataPool,
       expectedNumCreated: Long,
       expectedNumTotal: Long): Unit = {
-    assert(fetchedDataPool.getNumCreated === expectedNumCreated)
-    assert(fetchedDataPool.getNumTotal === expectedNumTotal)
+    assert(fetchedDataPool.numCreated === expectedNumCreated)
+    assert(fetchedDataPool.numTotal === expectedNumTotal)
   }
 
   private def readAndGetLastOffset(

@@ -46,7 +46,7 @@ private[kafka010] class InternalKafkaConsumer(
 
   val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  private val consumer = createConsumer
+  private val consumer = createConsumer()
 
   /**
    * Poll messages from Kafka starting from `offset` and returns a pair of "list of consumer record"
@@ -59,7 +59,7 @@ private[kafka010] class InternalKafkaConsumer(
    *                          consumer polls nothing before timeout.
    */
   def fetch(offset: Long, pollTimeoutMs: Long):
-    (ju.List[ConsumerRecord[Array[Byte], Array[Byte]]], Long) = {
+      (ju.List[ConsumerRecord[Array[Byte], Array[Byte]]], Long) = {
 
     // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
     seek(offset)
@@ -105,7 +105,7 @@ private[kafka010] class InternalKafkaConsumer(
   }
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
-  private def createConsumer: KafkaConsumer[Array[Byte], Array[Byte]] = {
+  private def createConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
     val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
       .setAuthenticationConfigIfNeeded()
       .build()
