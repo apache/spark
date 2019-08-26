@@ -31,6 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
@@ -226,10 +227,25 @@ case class AdaptiveSparkPlanExec(
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
-    super.generateTreeString(depth, lastChildren, append, verbose, prefix, addSuffix, maxFields)
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
+    super.generateTreeString(depth,
+      lastChildren,
+      append,
+      verbose,
+      prefix,
+      addSuffix,
+      maxFields,
+      printNodeId)
     currentPhysicalPlan.generateTreeString(
-      depth + 1, lastChildren :+ true, append, verbose, "", addSuffix = false, maxFields)
+      depth + 1,
+      lastChildren :+ true,
+      append,
+      verbose,
+      "",
+      addSuffix = false,
+      maxFields,
+      printNodeId)
   }
 
   override def hashCode(): Int = initialPlan.hashCode()
