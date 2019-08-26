@@ -377,6 +377,15 @@ private[spark] object StandaloneResourceUtils extends Logging {
     conf.get(SPARK_RESOURCES_COORDINATE)
   }
 
+  def toMutable(immutableResources: Map[String, ResourceInformation])
+    : Map[String, MutableResourceInfo] = {
+    immutableResources.map { case (rName, rInfo) =>
+      val mutableAddress = new mutable.HashSet[String]()
+      rInfo.addresses.foreach(mutableAddress.add)
+      rName -> MutableResourceInfo(rInfo.name, mutableAddress)
+    }
+  }
+
   // used for UI
   def formatResourcesDetails(
       usedInfo: Map[String, ResourceInformation],

@@ -67,46 +67,22 @@ private[spark] class WorkerInfo(
     }
   }
 
-  def resourcesInfo[T: ClassTag]: Map[String, T] = {
+  def resourcesInfo: Map[String, ResourceInformation] = {
     resources.map { case (rName, rInfo) =>
-      rName -> createResourceInfo(rName, rInfo.addresses, implicitly[ClassTag[T]])
+      rName -> new ResourceInformation(rName, rInfo.addresses.toArray)
     }
   }
 
   def resourcesInfoFree: Map[String, ResourceInformation] = {
     resources.map { case (rName, rInfo) =>
-      rName -> createResourceInfo(rName, rInfo.availableAddrs,
-        implicitly[ClassTag[ResourceInformation]])
+      rName -> new ResourceInformation(rName, rInfo.availableAddrs.toArray)
     }
   }
 
-  def resourcesInfoUsed[T: ClassTag]: Map[String, T] = {
+  def resourcesInfoUsed: Map[String, ResourceInformation] = {
     resources.map { case (rName, rInfo) =>
-      rName -> createResourceInfo(rName, rInfo.assignedAddrs, implicitly[ClassTag[T]])
+      rName -> new ResourceInformation(rName, rInfo.assignedAddrs.toArray)
     }
-  }
-
-  private def createResourceInfo[T](
-      name: String,
-      addresses: Seq[String],
-      ct: ClassTag[T]): T = {
-    val clazz = ct.runtimeClass
-    val rf = {
-      clazz match {
-        case _ if clazz.equals(classOf[MutableResourceInfo]) =>
-          MutableResourceInfo(name, toMutableAddress(addresses))
-
-        case _ if clazz.equals(classOf[ResourceInformation]) =>
-          new ResourceInformation(name, addresses.toArray)
-      }
-    }
-    rf.asInstanceOf[T]
-  }
-
-  private def toMutableAddress(address: Seq[String]): mutable.HashSet[String] = {
-    val mutableAddress = new mutable.HashSet[String]()
-    address.foreach(mutableAddress.add)
-    mutableAddress
   }
 
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
