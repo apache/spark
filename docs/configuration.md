@@ -1009,6 +1009,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.eventLog.logRolling.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether rolling over event log files is enabled. If set to true, it cuts down each event
+     log file to be configured size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.logRolling.maxFileSize</code></td>
+  <td>128m</td>
+  <td>
+    The max size of event log file to be rolled over.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.dagGraph.retainedRootRDDs</code></td>
   <td>Int.MaxValue</td>
   <td>
