@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
@@ -156,6 +156,22 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
 
     val model = dt.fit(df)
     testPredictionModelSinglePrediction(model, df)
+  }
+
+  test("model support predict leaf index") {
+    val model = new DecisionTreeRegressionModel("dtr", TreeTests.root0, 3)
+    model.setLeafCol("predictedLeafId")
+      .setPredictionCol("")
+
+    val data = TreeTests.getSingleTreeLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Double, predictedLeafId: Double) =>
+        assert(leafId === predictedLeafId)
+    }
   }
 
   test("should support all NumericType labels and not support other types") {

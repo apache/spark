@@ -306,6 +306,27 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
     }
   }
 
+  test("Throw exception on unsafe table insertion with strict casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
+        var msg = intercept[AnalysisException] {
+          Seq((1L, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+
+        // Insert into table successfully.
+        Seq((1, 2.0)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        // The API `saveAsTable` matches the fields by name.
+        Seq((4.0, 3)).toDF("d", "i").write.mode("append").saveAsTable("t")
+        checkAnswer(sql("select * from t"), Seq(Row(1, 2.0), Row(3, 4.0)))
+      }
+    }
+  }
+
   test("test path option in load") {
     spark.read
       .format("org.apache.spark.sql.test")

@@ -731,6 +731,8 @@ case class SubqueryExec(name: String, child: SparkPlan)
   override def executeCollect(): Array[InternalRow] = {
     ThreadUtils.awaitResult(relationFuture, Duration.Inf)
   }
+
+  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
 }
 
 object SubqueryExec {

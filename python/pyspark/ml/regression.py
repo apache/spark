@@ -589,6 +589,10 @@ class DecisionTreeParams(Params):
     Mixin for Decision Tree parameters.
     """
 
+    leafCol = Param(Params._dummy(), "leafCol", "Leaf indices column name. Predicted leaf " +
+                    "index of each instance in each tree by preorder.",
+                    typeConverter=TypeConverters.toString)
+
     maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., " +
                      "depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
                      typeConverter=TypeConverters.toInt)
@@ -620,6 +624,18 @@ class DecisionTreeParams(Params):
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
+
+    def setLeafCol(self, value):
+        """
+        Sets the value of :py:attr:`leafCol`.
+        """
+        return self._set(leafCol=value)
+
+    def getLeafCol(self):
+        """
+        Gets the value of leafCol or its default value.
+        """
+        return self.getOrDefault(self.leafCol)
 
     def getMaxDepth(self):
         """
@@ -805,7 +821,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
+    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance", leafCol="leafId")
     >>> model = dt.fit(df)
     >>> model.depth
     1
@@ -816,7 +832,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     >>> model.numFeatures
     1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    0.0
+    >>> result.leafId
     0.0
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
@@ -852,19 +871,20 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="variance",
-                 seed=None, varianceCol=None, weightCol=None):
+                 seed=None, varianceCol=None, weightCol=None, leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 impurity="variance", seed=None, varianceCol=None, weightCol=None)
+                 impurity="variance", seed=None, varianceCol=None, weightCol=None, \
+                 leafCol="")
         """
         super(DecisionTreeRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.DecisionTreeRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="variance")
+                         impurity="variance", leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -873,12 +893,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeigh
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="variance", seed=None, varianceCol=None, weightCol=None):
+                  impurity="variance", seed=None, varianceCol=None, weightCol=None,
+                  leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  impurity="variance", seed=None, varianceCol=None, weightCol=None)
+                  impurity="variance", seed=None, varianceCol=None, weightCol=None, \
+                  leafCol="")
         Sets params for the DecisionTreeRegressor.
         """
         kwargs = self._input_kwargs
@@ -1047,15 +1069,18 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
+    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42, leafCol="leafId")
     >>> model = rf.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0])
     >>> model.numFeatures
     1
     >>> model.trees
@@ -1084,13 +1109,13 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                 featureSubsetStrategy="auto"):
+                 featureSubsetStrategy="auto", leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                 featureSubsetStrategy="auto")
+                 featureSubsetStrategy="auto", leafCol="")
         """
         super(RandomForestRegressor, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1098,7 +1123,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="variance", subsamplingRate=1.0, numTrees=20,
-                         featureSubsetStrategy="auto")
+                         featureSubsetStrategy="auto", leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1108,13 +1133,13 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20,
-                  featureSubsetStrategy="auto"):
+                  featureSubsetStrategy="auto", leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   impurity="variance", subsamplingRate=1.0, seed=None, numTrees=20, \
-                  featureSubsetStrategy="auto")
+                  featureSubsetStrategy="auto", leafCol="")
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -1232,7 +1257,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
+    >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42, leafCol="leafId")
     >>> print(gbt.getImpurity())
     variance
     >>> print(gbt.getFeatureSubsetStrategy())
@@ -1245,8 +1270,11 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0, 0.0, 0.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1283,21 +1311,22 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
-                 validationIndicatorCol=None):
+                 validationIndicatorCol=None, leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                 validationIndicatorCol=None)
+                 validationIndicatorCol=None, leafCol="")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01)
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                         leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1308,14 +1337,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
                   impuriy="variance", featureSubsetStrategy="all", validationTol=0.01,
-                  validationIndicatorCol=None):
+                  validationIndicatorCol=None, leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
                   checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
                   impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
-                  validationIndicatorCol=None)
+                  validationIndicatorCol=None, leafCol="")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self._input_kwargs

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.commons.logging.LogFactory
+import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema, Type}
 import org.apache.hive.service.cli.thrift.TProtocolVersion._
@@ -49,6 +50,12 @@ private[thriftserver] object ThriftserverShimUtils {
   }
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
+
+  private[thriftserver] def addToClassPath(
+      loader: ClassLoader,
+      auxJars: Array[String]): ClassLoader = {
+    Utilities.addToClassPath(loader, auxJars)
+  }
 
   private[thriftserver] val testedProtocolVersions = Seq(
     HIVE_CLI_SERVICE_PROTOCOL_V1,

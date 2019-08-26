@@ -253,7 +253,6 @@ commons-codec:commons-codec
 commons-collections:commons-collections
 io.fabric8:kubernetes-client
 io.fabric8:kubernetes-model
-io.netty:netty
 io.netty:netty-all
 net.hydromatic:eigenbase-properties
 net.sf.supercsv:super-csv
