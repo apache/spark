@@ -377,14 +377,14 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       any(),
-      meq(s"${new Path(makeQualifiedPath(checkpointLocation.toString)).toString}/sources/0"),
+      meq(s"${checkpointLocation.toString}/sources/0"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       any(),
-      meq(s"${new Path(makeQualifiedPath(checkpointLocation.toString)).toString}/sources/1"),
+      meq(s"${checkpointLocation.toString}/sources/1"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))

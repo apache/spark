@@ -444,7 +444,9 @@ class StreamSuite extends StreamTest {
     val inputData = MemoryStream[String]
     val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
     // Test StreamingQuery.display
+    val dir1 = Utils.createTempDir().getCanonicalFile
     val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
+      .option("checkpointLocation", "file://" + dir1.getCanonicalPath)
       .start()
       .asInstanceOf[StreamingQueryWrapper]
       .streamingQuery
@@ -853,7 +855,6 @@ class StreamSuite extends StreamTest {
   test("should resolve the checkpoint path") {
     withTempDir { dir =>
       val checkpointLocation = dir.getCanonicalPath
-      assert(!checkpointLocation.startsWith("file:/"))
       val query = MemoryStream[Int].toDF
         .writeStream
         .option("checkpointLocation", checkpointLocation)
@@ -862,7 +863,7 @@ class StreamSuite extends StreamTest {
       try {
         val resolvedCheckpointDir =
           query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot
-        assert(resolvedCheckpointDir.startsWith("file:/"))
+        assert(resolvedCheckpointDir.equals(checkpointLocation))
       } finally {
         query.stop()
       }
