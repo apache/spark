@@ -102,7 +102,6 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       intercept[IllegalStateException] {
         stream.write(p)
       }
-      assert(writer.getNumBytesWritten === data(p).length)
     }
     verifyWrittenRecords()
   }
@@ -122,8 +121,6 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
             tempFileInput.getChannel, channelWrapper.channel(), 0L, data(p).length)
         }
       }
-      assert(writer.getNumBytesWritten === data(p).length,
-        s"Partition $p does not have the correct number of bytes.")
     }
     verifyWrittenRecords()
   }
@@ -139,8 +136,9 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   private def verifyWrittenRecords(): Unit = {
-    mapOutputWriter.commitAllPartitions()
+    val committedLengths = mapOutputWriter.commitAllPartitions()
     assert(partitionSizesInMergedFile === partitionLengths)
+    assert(committedLengths === partitionLengths)
     assert(mergedOutputFile.length() === partitionLengths.sum)
     assert(data === readRecordsFromFile())
   }

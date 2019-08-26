@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution.streaming.sources
 import java.net.{InetSocketAddress, SocketException}
 import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
+import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
-
-import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -37,11 +36,11 @@ import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
+class TextSocketStreamSuite extends StreamTest with SharedSparkSession {
 
   override def afterEach() {
     sqlContext.streams.active.foreach(_.stop())
@@ -416,7 +415,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
         while (true) {
           val line = messageQueue.take() + "\n"
-          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes("UTF-8")))
+          clientSocketChannel.write(ByteBuffer.wrap(line.getBytes(StandardCharsets.UTF_8)))
         }
       } catch {
         case e: InterruptedException =>

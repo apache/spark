@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
@@ -28,8 +29,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -187,10 +189,14 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         query
       }
 
+      // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
+      // TODO: use ANSI store assignment policy by default in SPARK-28495.
+      val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
       c.copy(
         tableDesc = existingTable,
-        query = Some(DDLPreprocessingUtils.castAndRenameQueryOutput(
-          newQuery, existingTable.schema.toAttributes, conf)))
+        query = Some(TableOutputResolver.resolveOutputColumns(
+          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          byName = true, conf, storeAssignmentPolicy)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -235,6 +241,46 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           StructType(normalizedTable.schema.filterNot(partitionSchema.contains) ++ partitionSchema)
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
+      }
+
+    case create: V2CreateTablePlan =>
+      val schema = create.tableSchema
+      val partitioning = create.partitioning
+      val identifier = create.tableName
+      val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      // Check that columns are not duplicated in the schema
+      val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
+      SchemaUtils.checkColumnNameDuplication(
+        flattenedSchema,
+        s"in the table definition of $identifier",
+        isCaseSensitive)
+
+      // Check that columns are not duplicated in the partitioning statement
+      SchemaUtils.checkTransformDuplication(
+        partitioning, "in the partitioning", isCaseSensitive)
+
+      if (schema.isEmpty) {
+        if (partitioning.nonEmpty) {
+          throw new AnalysisException("It is not allowed to specify partitioning when the " +
+            "table schema is not defined.")
+        }
+
+        create
+      } else {
+        // Resolve and normalize partition columns as necessary
+        val resolver = sparkSession.sessionState.conf.resolver
+        val normalizedPartitions = partitioning.map {
+          case transform: RewritableTransform =>
+            val rewritten = transform.references().map { ref =>
+              // Throws an exception if the reference cannot be resolved
+              val position = SchemaUtils.findColumnPosition(ref.fieldNames(), schema, resolver)
+              FieldReference(SchemaUtils.getColumnName(position, schema))
+            }
+            transform.withReferences(rewritten)
+          case other => other
+        }
+
+        create.withPartitioning(normalizedPartitions)
       }
   }
 
@@ -356,8 +402,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
-    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
+    // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
+    // TODO: use ANSI store assignment policy by default in SPARK-28495.
+    val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
+    val newQuery = TableOutputResolver.resolveOutputColumns(
+      tblName, expectedColumns, insert.query, byName = false, conf, storeAssignmentPolicy)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -484,39 +533,6 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 
       case _ => // OK
-    }
-  }
-}
-
-object DDLPreprocessingUtils {
-
-  /**
-   * Adjusts the name and data type of the input query output columns, to match the expectation.
-   */
-  def castAndRenameQueryOutput(
-      query: LogicalPlan,
-      expectedOutput: Seq[Attribute],
-      conf: SQLConf): LogicalPlan = {
-    val newChildOutput = expectedOutput.zip(query.output).map {
-      case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) &&
-          expected.name == actual.name &&
-          expected.metadata == actual.metadata) {
-          actual
-        } else {
-          // Renaming is needed for handling the following cases like
-          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-          // 2) Target tables have column metadata
-          Alias(
-            Cast(actual, expected.dataType, Option(conf.sessionLocalTimeZone)),
-            expected.name)(explicitMetadata = Option(expected.metadata))
-        }
-    }
-
-    if (newChildOutput == query.output) {
-      query
-    } else {
-      Project(newChildOutput, query)
     }
   }
 }

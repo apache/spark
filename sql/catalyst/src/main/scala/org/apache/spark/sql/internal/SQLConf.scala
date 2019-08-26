@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -374,7 +375,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val FILE_COMRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
+  val FILE_COMPRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
     .internal()
     .doc("When estimating the output data size of a table scan, multiply the file size with this " +
       "factor as the estimated data size, in case the data is compressed in the file and lead to" +
@@ -794,6 +795,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val FAIL_AMBIGUOUS_SELF_JOIN =
+    buildConf("spark.sql.analyzer.failAmbiguousSelfJoin")
+      .doc("When true, fail the Dataset query if it contains ambiguous self-join.")
+      .internal()
+      .booleanConf
+      .createWithDefault(true)
+
   // Whether to retain group by columns or not in GroupedData.agg.
   val DATAFRAME_RETAIN_GROUP_COLUMNS = buildConf("spark.sql.retainGroupColumns")
     .internal()
@@ -1132,6 +1140,15 @@ object SQLConf {
       .doc("How long in milliseconds a file is guaranteed to be visible for all readers.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(TimeUnit.MINUTES.toMillis(10)) // 10 minutes
+
+  val FILE_SOURCE_SCHEMA_FORCE_NULLABLE =
+    buildConf("spark.sql.streaming.fileSource.schema.forceNullable")
+      .internal()
+      .doc("When true, force the schema of streaming file source to be nullable (including all " +
+        "the fields). Otherwise, the schema might not be compatible with actual data, which " +
+        "leads to corruptions.")
+      .booleanConf
+      .createWithDefault(true)
 
   val STREAMING_SCHEMA_INFERENCE =
     buildConf("spark.sql.streaming.schemaInference")
@@ -1525,8 +1542,9 @@ object SQLConf {
     .createWithDefault(false)
 
   val PREFER_INTEGRAL_DIVISION = buildConf("spark.sql.function.preferIntegralDivision")
+    .internal()
     .doc("When true, will perform integral division with the / operator " +
-      "if both sides are integral types.")
+      "if both sides are integral types. This is for PostgreSQL test cases only.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1624,6 +1642,24 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+
+  object StoreAssignmentPolicy extends Enumeration {
+    val LEGACY, STRICT = Value
+  }
+
+  val STORE_ASSIGNMENT_POLICY =
+    buildConf("spark.sql.storeAssignmentPolicy")
+      .doc("When inserting a value into a column with different data type, Spark will perform " +
+        "type coercion. Currently we support 2 policies for the type coercion rules: legacy and " +
+        "strict. With legacy policy, Spark allows casting any value to any data type. " +
+        "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
+        "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
+        "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."
+      )
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(StoreAssignmentPolicy.values.map(_.toString))
+      .createOptional
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -1780,9 +1816,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW =
-    buildConf("spark.sql.arithmeticOperations.failOnOverFlow")
-      .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
+  val LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING =
+    buildConf("spark.sql.legacy.bucketedTableScan.outputOrdering")
+      .internal()
+      .doc("When true, the bucketed table scan will list files during planning to figure out the " +
+        "output ordering, which is expensive and may make the planning quite slow.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val FAIL_ON_INTEGRAL_TYPE_OVERFLOW =
+    buildConf("spark.sql.failOnIntegralTypeOverflow")
+      .doc("If it is set to true, all operations on integral fields throw an " +
         "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
         "result is returned.")
       .internal()
@@ -2077,7 +2121,7 @@ class SQLConf extends Serializable with Logging {
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
-  def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
+  def fileCompressionFactor: Double = getConf(FILE_COMPRESSION_FACTOR)
 
   def stringRedactionPattern: Option[Regex] = getConf(SQL_STRING_REDACTION_PATTERN)
 
@@ -2296,7 +2340,7 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
-  def arithmeticOperationsFailOnOverflow: Boolean = getConf(ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW)
+  def failOnIntegralTypeOverflow: Boolean = getConf(FAIL_ON_INTEGRAL_TYPE_OVERFLOW)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
@@ -2330,6 +2374,9 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
+    getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

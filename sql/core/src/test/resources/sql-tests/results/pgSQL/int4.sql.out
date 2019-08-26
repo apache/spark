@@ -63,7 +63,7 @@ SELECT '' AS five, * FROM INT4_TBL
 -- !query 7 schema
 struct<five:string,f1:int>
 -- !query 7 output
--123456
+	-123456
 	-2147483647
 	0
 	123456
@@ -75,7 +75,7 @@ SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> smallint('0')
 -- !query 8 schema
 struct<four:string,f1:int>
 -- !query 8 output
--123456
+	-123456
 	-2147483647
 	123456
 	2147483647
@@ -86,7 +86,7 @@ SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> int('0')
 -- !query 9 schema
 struct<four:string,f1:int>
 -- !query 9 output
--123456
+	-123456
 	-2147483647
 	123456
 	2147483647
@@ -97,7 +97,7 @@ SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = smallint('0')
 -- !query 10 schema
 struct<one:string,f1:int>
 -- !query 10 output
-0
+	0
 
 
 -- !query 11
@@ -105,7 +105,7 @@ SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = int('0')
 -- !query 11 schema
 struct<one:string,f1:int>
 -- !query 11 output
-0
+	0
 
 
 -- !query 12
@@ -113,7 +113,7 @@ SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < smallint('0')
 -- !query 12 schema
 struct<two:string,f1:int>
 -- !query 12 output
--123456
+	-123456
 	-2147483647
 
 
@@ -122,7 +122,7 @@ SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < int('0')
 -- !query 13 schema
 struct<two:string,f1:int>
 -- !query 13 output
--123456
+	-123456
 	-2147483647
 
 
@@ -131,7 +131,7 @@ SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= smallint('0')
 -- !query 14 schema
 struct<three:string,f1:int>
 -- !query 14 output
--123456
+	-123456
 	-2147483647
 	0
 
@@ -141,7 +141,7 @@ SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= int('0')
 -- !query 15 schema
 struct<three:string,f1:int>
 -- !query 15 output
--123456
+	-123456
 	-2147483647
 	0
 
@@ -151,7 +151,7 @@ SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > smallint('0')
 -- !query 16 schema
 struct<two:string,f1:int>
 -- !query 16 output
-123456
+	123456
 	2147483647
 
 
@@ -160,7 +160,7 @@ SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > int('0')
 -- !query 17 schema
 struct<two:string,f1:int>
 -- !query 17 output
-123456
+	123456
 	2147483647
 
 
@@ -169,7 +169,7 @@ SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= smallint('0')
 -- !query 18 schema
 struct<three:string,f1:int>
 -- !query 18 output
-0
+	0
 	123456
 	2147483647
 
@@ -179,7 +179,7 @@ SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= int('0')
 -- !query 19 schema
 struct<three:string,f1:int>
 -- !query 19 output
-0
+	0
 	123456
 	2147483647
 
@@ -189,7 +189,7 @@ SELECT '' AS one, i.* FROM INT4_TBL i WHERE (i.f1 % smallint('2')) = smallint('1
 -- !query 20 schema
 struct<one:string,f1:int>
 -- !query 20 output
-2147483647
+	2147483647
 
 
 -- !query 21
@@ -197,7 +197,7 @@ SELECT '' AS three, i.* FROM INT4_TBL i WHERE (i.f1 % int('2')) = smallint('0')
 -- !query 21 schema
 struct<three:string,f1:int>
 -- !query 21 output
--123456
+	-123456
 	0
 	123456
 
@@ -207,7 +207,7 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 -- !query 22 schema
 struct<five:string,f1:int,x:int>
 -- !query 22 output
--123456	-246912
+	-123456	-246912
 	-2147483647	2
 	0	0
 	123456	246912
@@ -220,7 +220,7 @@ WHERE abs(f1) < 1073741824
 -- !query 23 schema
 struct<five:string,f1:int,x:int>
 -- !query 23 output
--123456	-246912
+	-123456	-246912
 	0	0
 	123456	246912
 
@@ -230,7 +230,7 @@ SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 -- !query 24 schema
 struct<five:string,f1:int,x:int>
 -- !query 24 output
--123456	-246912
+	-123456	-246912
 	-2147483647	2
 	0	0
 	123456	246912
@@ -243,7 +243,7 @@ WHERE abs(f1) < 1073741824
 -- !query 25 schema
 struct<five:string,f1:int,x:int>
 -- !query 25 output
--123456	-246912
+	-123456	-246912
 	0	0
 	123456	246912
 
@@ -253,7 +253,7 @@ SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 -- !query 26 schema
 struct<five:string,f1:int,x:int>
 -- !query 26 output
--123456	-123454
+	-123456	-123454
 	-2147483647	-2147483645
 	0	2
 	123456	123458
@@ -266,7 +266,7 @@ WHERE f1 < 2147483646
 -- !query 27 schema
 struct<five:string,f1:int,x:int>
 -- !query 27 output
--123456	-123454
+	-123456	-123454
 	-2147483647	-2147483645
 	0	2
 	123456	123458
@@ -277,7 +277,7 @@ SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 -- !query 28 schema
 struct<five:string,f1:int,x:int>
 -- !query 28 output
--123456	-123454
+	-123456	-123454
 	-2147483647	-2147483645
 	0	2
 	123456	123458
@@ -290,7 +290,7 @@ WHERE f1 < 2147483646
 -- !query 29 schema
 struct<five:string,f1:int,x:int>
 -- !query 29 output
--123456	-123454
+	-123456	-123454
 	-2147483647	-2147483645
 	0	2
 	123456	123458
@@ -301,7 +301,7 @@ SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 -- !query 30 schema
 struct<five:string,f1:int,x:int>
 -- !query 30 output
--123456	-123458
+	-123456	-123458
 	-2147483647	2147483647
 	0	-2
 	123456	123454
@@ -314,7 +314,7 @@ WHERE f1 > -2147483647
 -- !query 31 schema
 struct<five:string,f1:int,x:int>
 -- !query 31 output
--123456	-123458
+	-123456	-123458
 	0	-2
 	123456	123454
 	2147483647	2147483645
@@ -325,7 +325,7 @@ SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 -- !query 32 schema
 struct<five:string,f1:int,x:int>
 -- !query 32 output
--123456	-123458
+	-123456	-123458
 	-2147483647	2147483647
 	0	-2
 	123456	123454
@@ -338,7 +338,7 @@ WHERE f1 > -2147483647
 -- !query 33 schema
 struct<five:string,f1:int,x:int>
 -- !query 33 output
--123456	-123458
+	-123456	-123458
 	0	-2
 	123456	123454
 	2147483647	2147483645
@@ -349,7 +349,7 @@ SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT4_TBL i
 -- !query 34 schema
 struct<five:string,f1:int,x:int>
 -- !query 34 output
--123456	-61728
+	-123456	-61728
 	-2147483647	-1073741823
 	0	0
 	123456	61728
@@ -361,7 +361,7 @@ SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT4_TBL i
 -- !query 35 schema
 struct<five:string,f1:int,x:int>
 -- !query 35 output
--123456	-61728
+	-123456	-61728
 	-2147483647	-1073741823
 	0	0
 	123456	61728

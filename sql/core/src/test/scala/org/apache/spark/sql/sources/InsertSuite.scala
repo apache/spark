@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -50,7 +50,7 @@ case class SimpleInsert(userSpecifiedSchema: StructType)(@transient val sparkSes
   }
 }
 
-class InsertSuite extends DataSourceTest with SharedSQLContext {
+class InsertSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -541,6 +541,43 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
         sql("insert overwrite table t partition(part1=1, part2) select 4, 1")
         checkAnswer(spark.table("t"), Row(4, 1, 1) :: Row(2, 2, 2) :: Row(3, 1, 2) :: Nil)
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with strict casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        var msg = intercept[AnalysisException] {
+          sql("insert into t select 1L, 2")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': LongType to IntegerType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'd': DecimalType(2,1) to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1, 2.0D, 3")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 3 column(s)"))
+
+        msg = intercept[AnalysisException] {
+          sql("insert into t select 1")
+        }.getMessage
+        assert(msg.contains("`t` requires that the data to be inserted have the same number of " +
+          "columns as the target table: target table has 2 column(s)" +
+          " but the inserted data has 1 column(s)"))
+
+        // Insert into table successfully.
+        sql("insert into t select 1, 2.0D")
+        checkAnswer(sql("select * from t"), Row(1, 2.0D))
       }
     }
   }

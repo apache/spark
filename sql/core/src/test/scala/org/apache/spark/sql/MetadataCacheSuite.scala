@@ -21,12 +21,12 @@ import java.io.File
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test suite to handle metadata cache related.
  */
-abstract class MetadataCacheSuite extends QueryTest with SharedSQLContext {
+abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
 
   /** Removes one data file in the given directory. */
   protected def deleteOneFileInDirectory(dir: File): Unit = {
