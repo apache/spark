@@ -458,8 +458,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             .orElseGet(() -> new StreamFallbackChannelWrapper(openStreamUnchecked(writer)));
         try {
           for (int i = 0; i < spills.length; i++) {
-            long partitionLengthInSpill = 0L;
-            partitionLengthInSpill += spills[i].partitionLengths[partition];
+            long partitionLengthInSpill = spills[i].partitionLengths[partition];
             final FileChannel spillInputChannel = spillInputChannels[i];
             final long writeStartTime = System.nanoTime();
             Utils.copyFileStreamNIO(
