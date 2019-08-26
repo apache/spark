@@ -227,6 +227,7 @@ class SparkSession private(
    *
    * @since 2.0.0
    */
+  @Unstable
   def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
   /**
