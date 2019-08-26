@@ -381,7 +381,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
     : Map[String, MutableResourceInfo] = {
     immutableResources.map { case (rName, rInfo) =>
       val mutableAddress = new mutable.HashSet[String]()
-      rInfo.addresses.foreach(mutableAddress.add)
+      mutableAddress ++= rInfo.addresses
       rName -> MutableResourceInfo(rInfo.name, mutableAddress)
     }
   }
