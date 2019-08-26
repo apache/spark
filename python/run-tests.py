@@ -78,6 +78,10 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
 
+    # TODO
+    LOGGER.info("Env:")
+    Logger.info(env)
+
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
     # recognized by the tempfile module to override the default system temp directory.
     tmp_dir = os.path.join(target_dir, str(uuid.uuid4()))
@@ -182,7 +186,7 @@ def parse_opts():
         help="A comma-separated list of Python modules to test (default: %(default)s)"
     )
     parser.add_argument(
-        "-p", "--parallelism", type=int, default=4,
+        "-p", "--parallelism", type=int, default=1,
         help="The number of suites to test in parallel (default %(default)d)"
     )
     parser.add_argument(
@@ -226,7 +230,7 @@ def _check_coverage(python_exec):
 
 def main():
     opts = parse_opts()
-    if opts.verbose:
+    if True:
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO
