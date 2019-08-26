@@ -161,7 +161,8 @@ object Cast {
   def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (_: NumericType, _: NumericType) => true
-    case (_, StringType) => true
+    case (_: AtomicType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
