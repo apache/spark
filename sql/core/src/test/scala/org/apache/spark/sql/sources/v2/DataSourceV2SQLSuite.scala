@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerTy
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = true) {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true) {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 

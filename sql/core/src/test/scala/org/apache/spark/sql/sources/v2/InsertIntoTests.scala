@@ -23,11 +23,30 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SharedSparkSession
 
+/**
+ * A collection of "INSERT INTO" tests that can be run through the SQL or DataFrameWriter APIs.
+ * Extending test suites can implement the `doInsert` method to run the insert through either
+ * API.
+ *
+ * @param supportsDynamicOverwrite Whether the Table implementations used in the test suite support
+ *                                 dynamic partition overwrites. If they do, we will check for the
+ *                                 success of the operations. If not, then we will check that we
+ *                                 failed with the right error message.
+ * @param includeSQLOnlyTests Certain INSERT INTO behavior can be achieved purely through SQL, e.g.
+ *                            static or dynamic partition overwrites. This flag should be set to
+ *                            true if we would like to test these cases.
+ */
 abstract class InsertIntoTests(
     override protected val supportsDynamicOverwrite: Boolean,
-    override protected val includeSQLTests: Boolean) extends InsertIntoSQLTests {
+    override protected val includeSQLOnlyTests: Boolean) extends InsertIntoSQLOnlyTests {
 
   import testImplicits._
+
+  /**
+   * Insert data into a table using the insertInto statement. Implementations can be in SQL
+   * ("INSERT") or using the DataFrameWriter (`df.write.insertInto`).
+   */
+  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode = null): Unit
 
   test("insertInto: append") {
     val t1 = s"${catalogAndNamespace}tbl"
@@ -156,16 +175,28 @@ abstract class InsertIntoTests(
   }
 }
 
-private[v2] trait InsertIntoSQLTests extends QueryTest with SharedSparkSession with BeforeAndAfter {
+private[v2] trait InsertIntoSQLOnlyTests
+  extends QueryTest
+  with SharedSparkSession
+  with BeforeAndAfter {
 
   import testImplicits._
 
-  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode = null): Unit
+  /** Check that the results in `tableName` match the `expected` DataFrame. */
   protected def verifyTable(tableName: String, expected: DataFrame): Unit
+
   protected val v2Format: String
   protected val catalogAndNamespace: String
+
+  /**
+   * Whether dynamic partition overwrites are supported by the `Table` definitions used in the
+   * test suites. Tables that leverage the V1 Write interface do not support dynamic partition
+   * overwrites.
+   */
   protected val supportsDynamicOverwrite: Boolean
-  protected val includeSQLTests: Boolean
+
+  /** Whether to include the SQL specific tests in this trait within the extending test suite. */
+  protected val includeSQLOnlyTests: Boolean
 
   private def withTableAndData(tableName: String)(testFn: String => Unit): Unit = {
     withTable(tableName) {
@@ -194,7 +225,7 @@ private[v2] trait InsertIntoSQLTests extends QueryTest with SharedSparkSession w
     }
   }
 
-  if (includeSQLTests) {
+  if (includeSQLOnlyTests) {
     test("InsertInto: when the table doesn't exist") {
       val t1 = s"${catalogAndNamespace}tbl"
       val t2 = s"${catalogAndNamespace}tbl2"

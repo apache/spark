@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 
 class DataSourceV2DataFrameSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = false) {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
   import testImplicits._
 
   before {

@@ -69,7 +69,7 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 }
 
 class V1WriteFallbackSessionCatalogSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLTests = true)
+  extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
   with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
 
   override protected val v2Format = classOf[InMemoryV1Provider].getName

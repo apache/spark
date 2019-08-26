@@ -21,7 +21,7 @@ import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 
 class DataSourceV2SQLSessionCatalogSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = true)
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
   with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
   import testImplicits._

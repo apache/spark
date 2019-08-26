@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2DataFrameSessionCatalogSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLTests = false)
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
 
   import testImplicits._
