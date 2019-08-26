@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.io.{Closeable, OutputStream}
+import java.io.{Closeable, IOException, OutputStream}
 
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.api.ShufflePartitionWriter
@@ -60,15 +60,41 @@ private[spark] class ShufflePartitionPairsWriter(
   }
 
   override def close(): Unit = {
+    var thrownException: Option[IOException] = None
     if (objOut != null) {
-      // Closing objOut should propagate close to all inner layers
-      objOut.close()
+      thrownException = tryCloseOrAddSuppressed(objOut, thrownException)
+      objOut = null
     }
-    objOut = null
-    wrappedStream = null
-    partitionStream = null
+
+    if (wrappedStream != null) {
+      thrownException = tryCloseOrAddSuppressed(wrappedStream, thrownException)
+      wrappedStream = null
+    }
+
+    if (partitionStream != null) {
+      thrownException = tryCloseOrAddSuppressed(partitionStream, thrownException)
+      partitionStream = null
+    }
+
+    thrownException.foreach(throw _)
+
     isOpen = false
     updateBytesWritten()
+  }
+
+  private def tryCloseOrAddSuppressed(
+      closeable: Closeable, prevException: Option[IOException]): Option[IOException] = {
+    var resolvedException = prevException
+    try {
+      closeable.close()
+    } catch {
+      case e: IOException =>
+        resolvedException = prevException.map(presentPrev => {
+          presentPrev.addSuppressed(e)
+          presentPrev
+        }).orElse(Some(e))
+    }
+    resolvedException
   }
 
   /**

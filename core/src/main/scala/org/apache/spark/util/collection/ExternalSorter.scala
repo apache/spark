@@ -23,7 +23,7 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.ByteStreams
+import com.google.common.io.{ByteStreams, Closeables}
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -739,6 +739,7 @@ private[spark] class ExternalSorter[K, V, C](
         val partitionId = it.nextPartition()
         var partitionWriter: ShufflePartitionWriter = null
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
+        var threwException = true
         try {
           partitionWriter = mapOutputWriter.getPartitionWriter(partitionId)
           val blockId = ShuffleBlockId(shuffleId, mapId, partitionId)
@@ -751,9 +752,10 @@ private[spark] class ExternalSorter[K, V, C](
           while (it.hasNext && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
           }
+          threwException = false
         } finally {
           if (partitionPairsWriter != null) {
-            partitionPairsWriter.close()
+            Closeables.close(partitionPairsWriter, threwException)
           }
         }
         if (partitionWriter != null) {
