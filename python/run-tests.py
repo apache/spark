@@ -80,7 +80,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
     # TODO
     LOGGER.info("Env:")
-    Logger.info(env)
+    LOGGER.info(env)
 
     # Create a unique temp directory under 'target/' for each run. The TMPDIR variable is
     # recognized by the tempfile module to override the default system temp directory.
