@@ -77,6 +77,7 @@ class JoinReorderGASuite extends PlanTest with StatsEstimationTestBase {
     // We set the relax-factor to 1 to let it run more iterations
     // to "ensure" it can find the best plan.
     conf.setConf(SQLConf.JOIN_REORDER_GA_RELAX_FACTOR, 1.0)
+    conf.setConf(SQLConf.JOIN_REORDER_GA_SEED, 1000L)
   }
 
   override def afterAll(): Unit = {
@@ -86,6 +87,7 @@ class JoinReorderGASuite extends PlanTest with StatsEstimationTestBase {
       conf.setConf(JOIN_REORDER_DP_THRESHOLD, originalThreadHold)
       conf.setConf(JOIN_REORDER_GA_ENABLED, originalGAEnabled)
       conf.setConf(SQLConf.JOIN_REORDER_GA_RELAX_FACTOR, originalGARelaxFactor)
+      conf.setConf(SQLConf.JOIN_REORDER_GA_SEED, -1L)
     } finally {
       super.afterAll()
     }

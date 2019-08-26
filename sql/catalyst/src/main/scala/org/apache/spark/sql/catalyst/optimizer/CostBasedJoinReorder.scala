@@ -420,6 +420,10 @@ object JoinReorderGA extends PredicateHelper with Logging {
       conditions: Set[Expression],
       output: Seq[Attribute]): Option[LogicalPlan] = {
 
+    if (conf.joinReorderGASeed >= 0) {
+      util.Random.setSeed(conf.joinReorderGASeed)
+    }
+
     val startTime = System.nanoTime()
 
     val itemsWithIndex = items.zipWithIndex.map {

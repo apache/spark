@@ -1310,6 +1310,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val JOIN_REORDER_GA_SEED =
+    buildConf("spark.sql.cbo.joinReorder.ga.seed")
+        .doc("Provide a seed for the random number generator used by the algorithm so that it" +
+            " can make deterministic plan for the given input. A negative number means does not" +
+            " set the seed.")
+        .longConf
+        .createWithDefault(-1L)
+
   val JOIN_REORDER_GA_RELAX_FACTOR =
     buildConf("spark.sql.cbo.joinReorder.ga.relax-factor")
         .doc("The relax factor. Larger relax-factor may decrease the solution finding time but" +
@@ -2276,6 +2284,8 @@ class SQLConf extends Serializable with Logging {
   def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
   def joinReorderGAEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_GA_ENABLED)
+
+  def joinReorderGASeed: Long = getConf(SQLConf.JOIN_REORDER_GA_SEED)
 
   def joinReorderGARelaxFactor: Double = getConf(SQLConf.JOIN_REORDER_GA_RELAX_FACTOR)
 
