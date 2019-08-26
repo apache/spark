@@ -769,6 +769,7 @@ private[spark] class ExternalSorter[K, V, C](
         val blockId = ShuffleBlockId(shuffleId, mapId, id)
         var partitionWriter: ShufflePartitionWriter = null
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
+        var threwException = true
         try {
           partitionWriter = mapOutputWriter.getPartitionWriter(id)
           partitionPairsWriter = new ShufflePartitionPairsWriter(
@@ -782,10 +783,9 @@ private[spark] class ExternalSorter[K, V, C](
               partitionPairsWriter.write(elem._1, elem._2)
             }
           }
+          var threwException = false
         } finally {
-          if (partitionPairsWriter!= null) {
-            partitionPairsWriter.close()
-          }
+          Closeables.close(partitionPairsWriter, threwException)
         }
         if (partitionWriter != null) {
           lengths(id) = partitionWriter.getNumBytesWritten
