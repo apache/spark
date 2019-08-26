@@ -88,6 +88,7 @@ private[spark] abstract class WebUI(
     attachHandler(renderJsonHandler)
     val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
     handlers += renderHandler
+    handlers += renderJsonHandler
   }
 
   /** Attaches a handler to this UI. */

@@ -393,6 +393,29 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
   }
 
+  test("SPARK-28709 registering and de-registering of progressListener") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.ui.enabled", "true")
+
+    ssc = new StreamingContext(conf, batchDuration)
+
+    assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
+    val sparkUI = ssc.sc.ui.get
+
+    addInputStream(ssc).register()
+    ssc.start()
+
+    assert(ssc.scheduler.listenerBus.listeners.contains(ssc.progressListener))
+    assert(ssc.sc.listenerBus.listeners.contains(ssc.progressListener))
+    assert(sparkUI.getStreamingJobProgressListener.get == ssc.progressListener)
+
+    ssc.stop()
+
+    assert(!ssc.scheduler.listenerBus.listeners.contains(ssc.progressListener))
+    assert(!ssc.sc.listenerBus.listeners.contains(ssc.progressListener))
+    assert(sparkUI.getStreamingJobProgressListener.isEmpty)
+  }
+
   test("awaitTermination") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
