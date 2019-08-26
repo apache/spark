@@ -62,7 +62,9 @@ LOGGER = logging.getLogger()
 for scala in ["2.12"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):
-        SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars", "*")
+        SPARK_DIST_CLASSPATH = os.path.join(build_dir, "jars")
+        print("SPARK_DIST_CLASSPATH")
+        print(os.listdir(SPARK_DIST_CLASSPATH))
         break
 else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
