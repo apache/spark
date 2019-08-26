@@ -53,11 +53,6 @@ object ExplainUtils {
       append: String => Unit,
       startOperatorID: Int): Int = {
 
-    // ReusedSubqueryExecs are skipped over
-    if (plan.isInstanceOf[BaseSubqueryExec]) {
-      return startOperatorID
-    }
-
     val operationIDs = new mutable.ArrayBuffer[(Int, QueryPlan[_])]()
     var currentOperatorID = startOperatorID
     try {
@@ -91,19 +86,12 @@ object ExplainUtils {
       plan: => QueryPlan[T],
       append: String => Unit): Unit = {
     try {
-      val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, SparkPlan)]
+      val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
       var currentOperatorID = 0
       currentOperatorID = processPlanSkippingSubqueries(plan, append, currentOperatorID)
       getSubqueries(plan, subqueries)
       var i = 0
 
-      /**
-       * 1. [[getSubqueries]] collects the child plan [[BaseSubqueryExec]]
-       * 2. [[processPlan]] checks the collected child plan of [[BaseSubqueryExec]]. If child plan
-       *    is an instance of [[BaseSubqueryExec]] (happens in case of `ReusedSubqueryExec`), then
-       *    it skips calling [[processPlanSkippingSubqueries]] in order to avoid printing the same
-       *    subquery plan more than once.
-       */
       for (sub <- subqueries) {
         if (i == 0) {
           append("\n===== Subqueries =====\n\n")
@@ -113,11 +101,14 @@ object ExplainUtils {
           s"${getOpId(sub._1)} Hosting Expression = ${sub._2}\n")
 
         // For each subquery expression in the parent plan, process its child plan to compute
-        // the explain output.
-        currentOperatorID = processPlanSkippingSubqueries(
-          sub._3,
-          append,
-          currentOperatorID)
+        // the explain output. In case of subquery reuse, we don't print subquery plan more
+        // than once. So we skip [[ReusedSubqueryExec]] here.
+        if (!sub._3.isInstanceOf[ReusedSubqueryExec]) {
+          currentOperatorID = processPlanSkippingSubqueries(
+            sub._3.child,
+            append,
+            currentOperatorID)
+        }
         append("\n")
       }
     } finally {
@@ -199,14 +190,14 @@ object ExplainUtils {
    */
   private def getSubqueries(
       plan: => QueryPlan[_],
-      subqueries: ArrayBuffer[(SparkPlan, Expression, SparkPlan)]): Unit = {
+      subqueries: ArrayBuffer[(SparkPlan, Expression, BaseSubqueryExec)]): Unit = {
     plan.foreach {
       case p: SparkPlan =>
         p.expressions.flatMap(_.collect {
           case e: PlanExpression[_] =>
             e.plan match {
               case s: BaseSubqueryExec =>
-                subqueries += ((p, e, s.child))
+                subqueries += ((p, e, s))
                 getSubqueries(s, subqueries)
             }
           case other =>
