@@ -474,7 +474,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.HiveExternalCatalogVersionsSuite",
     "org.apache.spark.ml.classification.LogisticRegressionSuite",
     "org.apache.spark.ml.classification.LinearSVCSuite",
-    "org.apache.spark.sql.SQLQueryTestSuite"
+    "org.apache.spark.sql.SQLQueryTestSuite",
+    "org.apache.spark.sql.hive.thriftserver.ThriftServerQueryTestSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
