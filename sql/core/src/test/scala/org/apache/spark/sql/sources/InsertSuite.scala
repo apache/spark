@@ -598,6 +598,11 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         }.getMessage
         assert(msg.contains("Cannot cast 'i': TimestampType to IntegerType") &&
           msg.contains("Cannot cast 'd': TimestampType to DoubleType"))
+        msg = intercept[AnalysisException] {
+          sql("insert into t values(true, false)")
+        }.getMessage
+        assert(msg.contains("Cannot cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot cast 'd': BooleanType to DoubleType"))
       }
     }
   }
@@ -609,7 +614,9 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       withTable("t") {
         sql("create table t(i int, d float) using parquet")
         sql("insert into t values(1L, 2.0)")
-        checkAnswer(sql("select * from t"), Row(1, 2.0F))
+        sql("insert into t values(3.0, 4)")
+        sql("insert into t values(5.0, 6L)")
+        checkAnswer(sql("select * from t"), Seq(Row(1, 2.0F), Row(3, 4.0F), Row(5, 6.0F)))
       }
     }
   }

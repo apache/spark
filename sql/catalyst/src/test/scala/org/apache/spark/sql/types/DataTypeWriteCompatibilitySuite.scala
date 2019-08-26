@@ -178,6 +178,25 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
   override protected def storeAssignmentPolicy: SQLConf.StoreAssignmentPolicy.Value =
     StoreAssignmentPolicy.ANSI
 
+  test("Check atomic types: write allowed only when casting is safe") {
+    atomicTypes.foreach { w =>
+      atomicTypes.foreach { r =>
+        if ((w.isInstanceOf[NumericType] && r.isInstanceOf[NumericType]) ||
+          Cast.canANSIStoreAssign(w, r)) {
+          assertAllowed(w, r, "t", s"Should allow writing $w to $r because cast is safe")
+        } else {
+          assertSingleError(w, r, "t",
+            s"Should not allow writing $w to $r because cast is not safe") { err =>
+            assert(err.contains("'t'"), "Should include the field name context")
+            assert(err.contains("Cannot cast"), "Should identify unsafe cast")
+            assert(err.contains(s"$w"), "Should include write type")
+            assert(err.contains(s"$r"), "Should include read type")
+          }
+        }
+      }
+    }
+  }
+
   test("Check map value types: unsafe casts are not allowed") {
     val mapOfString = MapType(StringType, StringType)
     val mapOfInt = MapType(StringType, IntegerType)
