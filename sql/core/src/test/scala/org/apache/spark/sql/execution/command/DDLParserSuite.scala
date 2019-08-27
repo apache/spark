@@ -802,17 +802,6 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       """.stripMargin)
   }
 
-  test("show databases") {
-    val sql1 = "SHOW DATABASES"
-    val sql2 = "SHOW DATABASES LIKE 'defau*'"
-    val parsed1 = parser.parsePlan(sql1)
-    val expected1 = ShowDatabasesCommand(None)
-    val parsed2 = parser.parsePlan(sql2)
-    val expected2 = ShowDatabasesCommand(Some("defau*"))
-    comparePlans(parsed1, expected1)
-    comparePlans(parsed2, expected2)
-  }
-
   test("show tblproperties") {
     val parsed1 = parser.parsePlan("SHOW TBLPROPERTIES tab1")
     val expected1 = ShowTablePropertiesCommand(TableIdentifier("tab1", None), None)
