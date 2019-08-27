@@ -121,7 +121,7 @@ private[spark] class BasicDriverFeatureStep(
         .endMetadata()
       .withNewSpec()
         .withRestartPolicy("Never")
-        .withNodeSelector(conf.nodeSelector().asJava)
+        .withNodeSelector(conf.driverNodeSelector().asJava)
         .addToImagePullSecrets(conf.imagePullSecrets(): _*)
         .endSpec()
       .build()

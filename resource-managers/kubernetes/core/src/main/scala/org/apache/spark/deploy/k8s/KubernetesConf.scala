@@ -95,8 +95,13 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
       }
   }
 
-  def nodeSelector(): Map[String, String] =
-    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
+  def driverNodeSelector(): Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX) ++
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
+
+  def executorNodeSelector(): Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX) ++
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX)
 
   def get[T](config: ConfigEntry[T]): T = sparkConf.get(config)
 

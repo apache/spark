@@ -717,6 +717,26 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the node selector of the driver pod, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the driver pod having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.node.selector.[labelKey]</code></td>
+  <td>(none)</td>
+  <td>
+    Adds to the node selector of the executor pods, with key <code>labelKey</code> and the value as the
+    configuration's value. For example, setting <code>spark.kubernetes.node.selector.identifier</code> to <code>myIdentifier</code>
+    will result in the executor pods having a node selector with key <code>identifier</code> and value
+     <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
