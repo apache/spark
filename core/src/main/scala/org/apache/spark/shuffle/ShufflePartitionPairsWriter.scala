@@ -37,7 +37,7 @@ private[spark] class ShufflePartitionPairsWriter(
     writeMetrics: ShuffleWriteMetricsReporter)
   extends PairsWriter with Closeable {
 
-  private var isOpen = false
+  private var isClosed = false
   private var partitionStream: OutputStream = _
   private var wrappedStream: OutputStream = _
   private var objOut: SerializationStream = _
@@ -45,9 +45,11 @@ private[spark] class ShufflePartitionPairsWriter(
   private var curNumBytesWritten = 0L
 
   override def write(key: Any, value: Any): Unit = {
-    if (!isOpen) {
+    if (isClosed) {
+      throw new IOException("Partition pairs writer is already closed.")
+    }
+    if (objOut == null) {
       open()
-      isOpen = true
     }
     objOut.writeKey(key)
     objOut.writeValue(value)
@@ -69,17 +71,22 @@ private[spark] class ShufflePartitionPairsWriter(
   }
 
   override def close(): Unit = {
-    Utils.tryWithSafeFinally {
-      objOut = closeIfNonNull(objOut)
-    } {
+    if (!isClosed) {
       Utils.tryWithSafeFinally {
-        wrappedStream = closeIfNonNull(wrappedStream)
+        Utils.tryWithSafeFinally {
+          objOut = closeIfNonNull(objOut)
+        } {
+          Utils.tryWithSafeFinally {
+            wrappedStream = closeIfNonNull(wrappedStream)
+          } {
+            partitionStream = closeIfNonNull(partitionStream)
+          }
+        }
+        updateBytesWritten()
       } {
-        partitionStream = closeIfNonNull(partitionStream)
+        isClosed = true
       }
     }
-    isOpen = false
-    updateBytesWritten()
   }
 
   private def closeIfNonNull[T <: Closeable](closeable: T): T = {
@@ -87,21 +94,6 @@ private[spark] class ShufflePartitionPairsWriter(
       closeable.close()
     }
     null.asInstanceOf[T]
-  }
-
-  private def tryCloseOrAddSuppressed(
-      closeable: Closeable, prevException: Option[IOException]): Option[IOException] = {
-    var resolvedException = prevException
-    try {
-      closeable.close()
-    } catch {
-      case e: IOException =>
-        resolvedException = prevException.map(presentPrev => {
-          presentPrev.addSuppressed(e)
-          presentPrev
-        }).orElse(Some(e))
-    }
-    resolvedException
   }
 
   /**

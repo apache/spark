@@ -32,6 +32,7 @@ import org.apache.spark.serializer._
 import org.apache.spark.shuffle.ShufflePartitionPairsWriter
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
+import org.apache.spark.util.{Utils => TryUtils}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -737,8 +738,7 @@ private[spark] class ExternalSorter[K, V, C](
         val partitionId = it.nextPartition()
         var partitionWriter: ShufflePartitionWriter = null
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
-        var threwException = true
-        try {
+        TryUtils.tryWithSafeFinally {
           partitionWriter = mapOutputWriter.getPartitionWriter(partitionId)
           val blockId = ShuffleBlockId(shuffleId, mapId, partitionId)
           partitionPairsWriter = new ShufflePartitionPairsWriter(
@@ -750,10 +750,11 @@ private[spark] class ExternalSorter[K, V, C](
           while (it.hasNext && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
           }
-          threwException = false
-        } finally {
+        } {
           if (partitionPairsWriter != null) {
-            Closeables.close(partitionPairsWriter, threwException)
+            partitionPairsWriter.close()
+          }
+          if (partitionWriter != null) {
           }
         }
         nextPartitionId = partitionId + 1
@@ -764,8 +765,7 @@ private[spark] class ExternalSorter[K, V, C](
         val blockId = ShuffleBlockId(shuffleId, mapId, id)
         var partitionWriter: ShufflePartitionWriter = null
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
-        var threwException = true
-        try {
+        TryUtils.tryWithSafeFinally {
           partitionWriter = mapOutputWriter.getPartitionWriter(id)
           partitionPairsWriter = new ShufflePartitionPairsWriter(
             partitionWriter,
@@ -778,9 +778,10 @@ private[spark] class ExternalSorter[K, V, C](
               partitionPairsWriter.write(elem._1, elem._2)
             }
           }
-          var threwException = false
-        } finally {
-          Closeables.close(partitionPairsWriter, threwException)
+        } {
+          if (partitionPairsWriter != null) {
+            partitionPairsWriter.close()
+          }
         }
         nextPartitionId = id + 1
       }
