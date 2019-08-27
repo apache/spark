@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.ExperimentalMethods
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
+import org.apache.spark.sql.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning}
 import org.apache.spark.sql.execution.datasources.PruneFileSourcePartitions
 import org.apache.spark.sql.execution.datasources.SchemaPruning
 import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs}
@@ -32,7 +33,15 @@ class SparkOptimizer(
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions) :+
-    Batch("Schema Pruning", Once, SchemaPruning)) ++
+    Batch("Schema Pruning", Once, SchemaPruning) :+
+    Batch("PartitionPruning", Once,
+      PartitionPruning,
+      OptimizeSubqueries) :+
+    Batch("Pushdown Filters from PartitionPruning", fixedPoint,
+      PushDownPredicates) :+
+    Batch("Cleanup filters that cannot be pushed down", Once,
+      CleanupDynamicPruningFilters,
+      PruneFilters)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,

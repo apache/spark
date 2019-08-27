@@ -216,6 +216,35 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
+      .doc("When true, we will generate predicate for partition column when it's used as join key")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_WITH_STATS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruningWithStats")
+      .internal()
+      .doc("When true, distinct count statistics will be used to evaluate the " +
+        "selectivity and the benefit of the dynamic partition pruning filter.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val JOIN_FILTER_RATIO = buildConf("spark.sql.optimizer.joinFilterRatio")
+    .internal()
+    .doc("We run a subquery for dynamic partition pruning inserted if the estimated size of " +
+      "the filtered data on the partitioned table exceeds the estimated size of the other table.")
+    .doubleConf
+    .createWithDefault(0.5)
+
+  val DYNAMIC_PRUNING_REUSE_BROADCAST =
+    buildConf("spark.sql.optimizer.dynamicPruningReuseBroadcast")
+      .internal()
+      .doc("When set to true, dynamic pruning rules both for partitioned and non-partitioned " +
+        "columns will seek to reuse the broadcast results from a broadcast hash join operation.")
+      .booleanConf
+      .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -1966,6 +1995,14 @@ class SQLConf extends Serializable with Logging {
   def optimizerPlanChangeRules: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_RULES)
 
   def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
+
+  def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
+
+  def dynamicPartitionPruningWithStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_WITH_STATS)
+
+  def joinFilterRatio: Double = getConf(JOIN_FILTER_RATIO)
+
+  def dynamicPruningReuseBroadcast: Boolean = getConf(DYNAMIC_PRUNING_REUSE_BROADCAST)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
