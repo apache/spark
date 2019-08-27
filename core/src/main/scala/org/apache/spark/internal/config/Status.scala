@@ -24,7 +24,7 @@ import org.apache.spark.network.util.ByteUnit
 private[spark] object Status {
 
   val IMS_CHECKPOINT_ENABLED =
-    ConfigBuilder("spark.appStateStore.ims.checkpoint.enabled")
+    ConfigBuilder("spark.appStateStore.checkpoint.enabled")
       .doc("Whether to checkpoint InMemoryStore in a live AppStatusListener, in order to " +
         "accelerate the startup speed of History Server.")
       .booleanConf
