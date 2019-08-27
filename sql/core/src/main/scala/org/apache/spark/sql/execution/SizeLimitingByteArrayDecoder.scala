@@ -42,7 +42,7 @@ private[spark] class SizeLimitingByteArrayDecoder(
   private val limitUncompressedMaxResultSize = sqlConf.limitUncompressedResultSize
 
   /**
-   * Decodes the byte arrays back to UnsafeRows and put them into buffer.
+   * Decodes the byte arrays back to UnsafeRows and puts them into buffer.
    */
   def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
     val codec = CompressionCodec.createCodec(SparkEnv.get.conf)

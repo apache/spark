@@ -1863,9 +1863,9 @@ object SQLConf {
     .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
   val LIMIT_UNCOMPRESSED_RESULT_SIZE = buildConf("spark.sql.driver.limitUncompressedResultSize")
-    .doc("If set to true then the value of spark.driver.maxResultSize, will be used for limiting the " +
-      "total size of uncompressed results of all partitions for each Spark action (e.g. collect)." +
-      "This can help protect the driver from out-of-memory errors.")
+    .doc("If set to true then the value of spark.driver.maxResultSize will be used for " +
+      "limiting the total size of uncompressed results of all partitions for each Spark " +
+      "action (e.g. collect). This can help protect the driver from out-of-memory errors.")
     .booleanConf
     .createWithDefault(false)
 
