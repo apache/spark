@@ -76,85 +76,6 @@ class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBa
       assert(err.contains("Cannot safely cast"))
     }
   }
-
-  test("Check types with multiple errors") {
-    val readType = StructType(Seq(
-      StructField("a", ArrayType(DoubleType, containsNull = false)),
-      StructField("arr_of_structs", ArrayType(point2, containsNull = false)),
-      StructField("bad_nested_type", ArrayType(StringType)),
-      StructField("m", MapType(LongType, FloatType, valueContainsNull = false)),
-      StructField("map_of_structs", MapType(StringType, point3, valueContainsNull = false)),
-      StructField("x", IntegerType, nullable = false),
-      StructField("missing1", StringType, nullable = false),
-      StructField("missing2", StringType)
-    ))
-
-    val missingMiddleField = StructType(Seq(
-      StructField("x", FloatType, nullable = false),
-      StructField("z", FloatType, nullable = false)))
-
-    val writeType = StructType(Seq(
-      StructField("a", ArrayType(StringType)),
-      StructField("arr_of_structs", ArrayType(point3)),
-      StructField("bad_nested_type", point3),
-      StructField("m", MapType(DoubleType, DoubleType)),
-      StructField("map_of_structs", MapType(StringType, missingMiddleField)),
-      StructField("y", LongType)
-    ))
-
-    assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
-      assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
-      assert(errs(0).contains("Cannot safely cast"))
-      assert(errs(0).contains("StringType to DoubleType"))
-
-      assert(errs(1).contains("'top.a'"), "Should identify bad type")
-      assert(errs(1).contains("Cannot write nullable elements to array of non-nulls"))
-
-      assert(errs(2).contains("'top.arr_of_structs.element'"), "Should identify bad type")
-      assert(errs(2).contains("'z'"), "Should identify bad field")
-      assert(errs(2).contains("Cannot write extra fields to struct"))
-
-      assert(errs(3).contains("'top.arr_of_structs'"), "Should identify bad type")
-      assert(errs(3).contains("Cannot write nullable elements to array of non-nulls"))
-
-      assert(errs(4).contains("'top.bad_nested_type'"), "Should identify bad type")
-      assert(errs(4).contains("is incompatible with"))
-
-      assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
-      assert(errs(5).contains("Cannot safely cast"))
-      assert(errs(5).contains("DoubleType to LongType"))
-
-      assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
-      assert(errs(6).contains("Cannot safely cast"))
-      assert(errs(6).contains("DoubleType to FloatType"))
-
-      assert(errs(7).contains("'top.m'"), "Should identify bad type")
-      assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
-
-      assert(errs(8).contains("'top.map_of_structs.value'"), "Should identify bad type")
-      assert(errs(8).contains("expected 'y', found 'z'"), "Should detect name mismatch")
-      assert(errs(8).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(9).contains("'top.map_of_structs.value'"), "Should identify bad type")
-      assert(errs(9).contains("'z'"), "Should identify missing field")
-      assert(errs(9).contains("missing fields"), "Should detect missing field")
-
-      assert(errs(10).contains("'top.map_of_structs'"), "Should identify bad type")
-      assert(errs(10).contains("Cannot write nullable values to map of non-nulls"))
-
-      assert(errs(11).contains("'top.x'"), "Should identify bad type")
-      assert(errs(11).contains("Cannot safely cast"))
-      assert(errs(11).contains("LongType to IntegerType"))
-
-      assert(errs(12).contains("'top'"), "Should identify bad type")
-      assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
-      assert(errs(12).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(13).contains("'top'"), "Should identify bad type")
-      assert(errs(13).contains("'missing1'"), "Should identify missing field")
-      assert(errs(13).contains("missing fields"), "Should detect missing field")
-    }
-  }
 }
 
 class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBaseSuite {
@@ -210,85 +131,6 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       "Should not allow map of string keys to map of int keys") { err =>
       assert(err.contains("'m.key'"), "Should identify problem with named map's key type")
       assert(err.contains("Cannot safely cast"))
-    }
-  }
-
-  test("Check types with multiple errors") {
-    val readType = StructType(Seq(
-      StructField("a", ArrayType(DoubleType, containsNull = false)),
-      StructField("arr_of_structs", ArrayType(point2, containsNull = false)),
-      StructField("bad_nested_type", ArrayType(StringType)),
-      StructField("m", MapType(LongType, FloatType, valueContainsNull = false)),
-      StructField("map_of_structs", MapType(StringType, point3, valueContainsNull = false)),
-      StructField("x", IntegerType, nullable = false),
-      StructField("missing1", StringType, nullable = false),
-      StructField("missing2", StringType)
-    ))
-
-    val missingMiddleField = StructType(Seq(
-      StructField("x", FloatType, nullable = false),
-      StructField("z", FloatType, nullable = false)))
-
-    val writeType = StructType(Seq(
-      StructField("a", ArrayType(StringType)),
-      StructField("arr_of_structs", ArrayType(point3)),
-      StructField("bad_nested_type", point3),
-      StructField("m", MapType(StringType, BooleanType)),
-      StructField("map_of_structs", MapType(StringType, missingMiddleField)),
-      StructField("y", StringType)
-    ))
-
-    assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
-      assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
-      assert(errs(0).contains("Cannot safely cast"))
-      assert(errs(0).contains("StringType to DoubleType"))
-
-      assert(errs(1).contains("'top.a'"), "Should identify bad type")
-      assert(errs(1).contains("Cannot write nullable elements to array of non-nulls"))
-
-      assert(errs(2).contains("'top.arr_of_structs.element'"), "Should identify bad type")
-      assert(errs(2).contains("'z'"), "Should identify bad field")
-      assert(errs(2).contains("Cannot write extra fields to struct"))
-
-      assert(errs(3).contains("'top.arr_of_structs'"), "Should identify bad type")
-      assert(errs(3).contains("Cannot write nullable elements to array of non-nulls"))
-
-      assert(errs(4).contains("'top.bad_nested_type'"), "Should identify bad type")
-      assert(errs(4).contains("is incompatible with"))
-
-      assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
-      assert(errs(5).contains("Cannot safely cast"))
-      assert(errs(5).contains("StringType to LongType"))
-
-      assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
-      assert(errs(6).contains("Cannot safely cast"))
-      assert(errs(6).contains("BooleanType to FloatType"))
-
-      assert(errs(7).contains("'top.m'"), "Should identify bad type")
-      assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
-
-      assert(errs(8).contains("'top.map_of_structs.value'"), "Should identify bad type")
-      assert(errs(8).contains("expected 'y', found 'z'"), "Should detect name mismatch")
-      assert(errs(8).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(9).contains("'top.map_of_structs.value'"), "Should identify bad type")
-      assert(errs(9).contains("'z'"), "Should identify missing field")
-      assert(errs(9).contains("missing fields"), "Should detect missing field")
-
-      assert(errs(10).contains("'top.map_of_structs'"), "Should identify bad type")
-      assert(errs(10).contains("Cannot write nullable values to map of non-nulls"))
-
-      assert(errs(11).contains("'top.x'"), "Should identify bad type")
-      assert(errs(11).contains("Cannot safely cast"))
-      assert(errs(11).contains("StringType to IntegerType"))
-
-      assert(errs(12).contains("'top'"), "Should identify bad type")
-      assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
-      assert(errs(12).contains("field name does not match"), "Should identify name problem")
-
-      assert(errs(13).contains("'top'"), "Should identify bad type")
-      assert(errs(13).contains("'missing1'"), "Should identify missing field")
-      assert(errs(13).contains("missing fields"), "Should detect missing field")
     }
   }
 }
@@ -523,6 +365,85 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
 
     assertAllowed(mapKeyInt, mapKeyLong, "m",
       "Should allow map of int written to map of long column")
+  }
+
+  test("Check types with multiple errors") {
+    val readType = StructType(Seq(
+      StructField("a", ArrayType(DoubleType, containsNull = false)),
+      StructField("arr_of_structs", ArrayType(point2, containsNull = false)),
+      StructField("bad_nested_type", ArrayType(StringType)),
+      StructField("m", MapType(LongType, FloatType, valueContainsNull = false)),
+      StructField("map_of_structs", MapType(StringType, point3, valueContainsNull = false)),
+      StructField("x", IntegerType, nullable = false),
+      StructField("missing1", StringType, nullable = false),
+      StructField("missing2", StringType)
+    ))
+
+    val missingMiddleField = StructType(Seq(
+      StructField("x", FloatType, nullable = false),
+      StructField("z", FloatType, nullable = false)))
+
+    val writeType = StructType(Seq(
+      StructField("a", ArrayType(StringType)),
+      StructField("arr_of_structs", ArrayType(point3)),
+      StructField("bad_nested_type", point3),
+      StructField("m", MapType(StringType, BooleanType)),
+      StructField("map_of_structs", MapType(StringType, missingMiddleField)),
+      StructField("y", StringType)
+    ))
+
+    assertNumErrors(writeType, readType, "top", "Should catch 14 errors", 14) { errs =>
+      assert(errs(0).contains("'top.a.element'"), "Should identify bad type")
+      assert(errs(0).contains("Cannot safely cast"))
+      assert(errs(0).contains("StringType to DoubleType"))
+
+      assert(errs(1).contains("'top.a'"), "Should identify bad type")
+      assert(errs(1).contains("Cannot write nullable elements to array of non-nulls"))
+
+      assert(errs(2).contains("'top.arr_of_structs.element'"), "Should identify bad type")
+      assert(errs(2).contains("'z'"), "Should identify bad field")
+      assert(errs(2).contains("Cannot write extra fields to struct"))
+
+      assert(errs(3).contains("'top.arr_of_structs'"), "Should identify bad type")
+      assert(errs(3).contains("Cannot write nullable elements to array of non-nulls"))
+
+      assert(errs(4).contains("'top.bad_nested_type'"), "Should identify bad type")
+      assert(errs(4).contains("is incompatible with"))
+
+      assert(errs(5).contains("'top.m.key'"), "Should identify bad type")
+      assert(errs(5).contains("Cannot safely cast"))
+      assert(errs(5).contains("StringType to LongType"))
+
+      assert(errs(6).contains("'top.m.value'"), "Should identify bad type")
+      assert(errs(6).contains("Cannot safely cast"))
+      assert(errs(6).contains("BooleanType to FloatType"))
+
+      assert(errs(7).contains("'top.m'"), "Should identify bad type")
+      assert(errs(7).contains("Cannot write nullable values to map of non-nulls"))
+
+      assert(errs(8).contains("'top.map_of_structs.value'"), "Should identify bad type")
+      assert(errs(8).contains("expected 'y', found 'z'"), "Should detect name mismatch")
+      assert(errs(8).contains("field name does not match"), "Should identify name problem")
+
+      assert(errs(9).contains("'top.map_of_structs.value'"), "Should identify bad type")
+      assert(errs(9).contains("'z'"), "Should identify missing field")
+      assert(errs(9).contains("missing fields"), "Should detect missing field")
+
+      assert(errs(10).contains("'top.map_of_structs'"), "Should identify bad type")
+      assert(errs(10).contains("Cannot write nullable values to map of non-nulls"))
+
+      assert(errs(11).contains("'top.x'"), "Should identify bad type")
+      assert(errs(11).contains("Cannot safely cast"))
+      assert(errs(11).contains("StringType to IntegerType"))
+
+      assert(errs(12).contains("'top'"), "Should identify bad type")
+      assert(errs(12).contains("expected 'x', found 'y'"), "Should detect name mismatch")
+      assert(errs(12).contains("field name does not match"), "Should identify name problem")
+
+      assert(errs(13).contains("'top'"), "Should identify bad type")
+      assert(errs(13).contains("'missing1'"), "Should identify missing field")
+      assert(errs(13).contains("missing fields"), "Should detect missing field")
+    }
   }
 
   // Helper functions
