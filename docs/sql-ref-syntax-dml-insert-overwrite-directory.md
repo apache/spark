@@ -19,36 +19,48 @@ license: |
   limitations under the License.
 ---
 ### Description
+The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using Spark native format. The inserted rows can be specified by value expressions or result from a query.
 
-The `INSERT OVERWRITE DIRECTORY` statement inserts the query results into a directory using Spark native format. If the specified path already exists, its contents are overwritten with the query results.
+See also:
+  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
 
 ### Syntax
-
 {% highlight sql %}
-INSERT OVERWRITE [LOCAL] DIRECTORY [directory_path]
-  USING file_format [OPTIONS (key1=val1 [, key2=val2, ...])] [AS] query
-{% endhighlight %}
-
-### Examples
-{% highlight sql %}
-INSERT OVERWRITE DIRECTORY '/tmp/destination/path'
-  USING parquet
-  OPTIONS (a 1, b 0.1, c TRUE)
-  SELECT * FROM source_table
-
-INSERT OVERWRITE LOCAL DIRECTORY
-  USING parquet
-  OPTIONS ('path' '/tmp/destination/path', a 1, b 0.1, c TRUE)
-  SELECT * FROM source_table
+INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
+    USING file_format [ OPTIONS ( key = val [ , ... ] ) ]
+    { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
 
 ### Parameters
-
 #### ***directory_path***:
-The destination directory. It can also be specified in `OPTIONS` using `path`. The `LOCAL` keyword is used to specify that the directory is on the local file system.
+Specifies the destination directory. It can also be specified in `OPTIONS` using `path`. The `LOCAL` keyword is used to specify that the directory is on the local file system.
 
 #### ***file_format***:
-The file format to use for the insert. Valid options are `TEXT`, `CSV`, `JSON`, `JDBC`, `PARQUET`, `ORC`, `HIVE`, `DELTA`, `LIBSVM`, or a fully qualified class name of a custom implementation of `org.apache.spark.sql.sources.DataSourceRegister`.
+Specifies the file format to use for the insert. Valid options are `TEXT`, `CSV`, `JSON`, `JDBC`, `PARQUET`, `ORC`, `HIVE`, `DELTA`, `LIBSVM`, or a fully qualified class name of a custom implementation of `org.apache.spark.sql.sources.DataSourceRegister`.
+
+#### ***OPTIONS ( key = val [ , ... ] )***:
+Specifies one or more table property key and value pairs.
+
+#### ***VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]***:
+Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
 
 #### ***query***:
-A `SELECT` statement that provides the rows to be inserted.
+A query that produces the rows to be inserted. It can be in one of following formats:
+- a `SELECT` statement
+- a table
+- a `FROM` statement
+
+### Examples
+{% highlight sql %}
+INSERT OVERWRITE DIRECTORY '/tmp/destination'
+    USING parquet
+    OPTIONS (col1 1, col2 2, col3 'test')
+    SELECT * FROM test_table
+
+INSERT OVERWRITE DIRECTORY
+    USING parquet
+    OPTIONS ('path' '/tmp/destination', col1 1, col2 2, col3 'test')
+    SELECT * FROM test_table
+{% endhighlight %}

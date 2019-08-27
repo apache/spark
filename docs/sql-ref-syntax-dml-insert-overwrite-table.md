@@ -21,45 +21,160 @@ license: |
 
 ### Description
 
-The `INSERT OVERWRITE` statement overwrites the existing data in the table using the new values.
+The `INSERT OVERWRITE` statement overwrites the existing data in the table using the new values. The inserted rows can be specified by value expressions or result from a query.
+
+See also:
+  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
+  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
 
 ### Syntax
 {% highlight sql %}
-INSERT OVERWRITE [TABLE] [db_name.]table_name [partition_spec [IF NOT EXISTS]]
-  valueClause | query
-
-partition_spec:
-    (part_col_name1[=val1] [, part_col_name2[=val2], ...])
-
-value_clause:
-    : VALUES values_row [, values_row ...]
-
-    values_row:
-        : (val1 [, val2, ...])
+INSERT OVERWRITE [TABLE] table_name
+    [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) [ IF NOT EXISTS ] ]
+    { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
 
-### Examples
-{% highlight sql %}
- CREATE TABLE employees (name VARCHAR(64), age INT, salary DECIMAL(9,2))
-   USING PARQUET PARTITIONED BY (age)
-
- INSERT OVERWRITE TABLE employees
-   VALUES ('Cathy Johnson', 35, 200000.00)
-
- INSERT OVERWRITE TABLE employees PARTITION (age = 35)
-   SELECT * FROM candidates WHERE name = "Bob Doe"
-
-{% endhighlight %}
 ### Parameters
-
 #### ***table_name***:
 The name of an existing table.
 
-#### ***partition_spec***:
-Partition column specification.
+#### ***PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )***:
+Specifies one or more partition column and value pairs. The partition value is optional.
 
-#### ***value_clause***:
-Specify the values to be inserted.
+#### ***VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]***:
+Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
 
 #### ***query***:
-A `SELECT` statement that provides the rows to be inserted.
+A query that produces the rows to be inserted. It can be in one of following formats:
+- a `SELECT` statement
+- a table
+- a `FROM` statement
+
+### Examples
+#### Insert Using a VALUES Clause
+
+Assuming the `students` table has already been created and populated.
+
+{% highlight sql %}
+ SELECT * FROM students
+
+     + -------------- + ------------------------------ + -------------- +
+     | Name           | Address                        | StudentID      |
+     + -------------- + ------------------------------ + -------------- +
+     | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
+     + -------------- + ------------------------------ + -------------- +
+     | Bob Brown      | 456 Taylor St, Cupertino       | 222222         |
+     + -------------- + ------------------------------ + -------------- +
+     | Cathy Johnson  | 789 Race Ave, Palo Alto        | 333333         |
+     + -------------- + ------------------------------ + -------------- +
+     | Dora Williams  | 134 Forest Ave, Melo Park      | 444444         |
+     + -------------- + ------------------------------ + -------------- +
+     | Fleur Laurent  | 345 Copper St, London          | 777777         |
+     + -------------- + ------------------------------ + -------------- +
+     | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
+     + -------------- + ------------------------------ + -------------- +
+     | Helen Davis    | 469 Mission St, San Diego      | 999999         |
+     + -------------- + ------------------------------ + -------------- +
+     | Jason Wang     | 908 Bird St, Saratoga          | 121212         |
+     + -------------- + ------------------------------ + -------------- +
+
+ INSERT OVERWRITE students
+     VALUES ('Ashua Hill', '456 Erica Ct, Cupertino', 111111),
+            ('Brian Reed', '723 Kern Ave, Palo Alto', 222222)
+
+ SELECT * FROM students
+
+     + -------------- + ------------------------------ + -------------- +
+     | Name           | Address                        | StudentID      |
+     + -------------- + ------------------------------ + -------------- +
+     | Ashua Hill     | 456 Erica Ct, Cupertino        | 111111         |
+     + -------------- + ------------------------------ + -------------- +
+     | Brian Reed     | 723 Kern Ave, Palo Alto        | 222222         |
+     + -------------- + ------------------------------ + -------------- +
+{% endhighlight %}
+
+#### Insert Using a SELECT Statement
+Assuming the `persons` table has already been created and populated.
+
+{% highlight sql %}
+ SELECT * FROM persons
+
+      + -------------- + ------------------------------ + -------------- +
+      | Name           | Address                        | SSN            |
+      + -------------- + ------------------------------ + -------------- +
+      | Dora Williams  | 134 Forest Ave, Melo Park      | 123456789      |
+      + -------------- + ------------------------------ + -------------- +
+      | Eddie Davis    | 245 Market St, Milpitas        | 345678901      |
+      + -------------- + ------------------------------ + ---------------+
+
+ INSERT OVERWRITE students PARTITION (StudentID = 222222)
+     SELECT Name, Address FROM persons WHERE name = "Dora Williams"
+
+ SELECT * FROM students
+
+      + -------------- + ------------------------------ + -------------- +
+      | Name           | Address                        | StudentID      |
+      + -------------- + ------------------------------ + -------------- +
+      | Ashua Hill     | 456 Erica Ct, Cupertino        | 111111         |
+      + -------------- + ------------------------------ + -------------- +
+      | Dora Williams  | 134 Forest Ave, Melo Park      | 222222         |
+      + -------------- + ------------------------------ + -------------- +
+{% endhighlight %}
+
+#### Insert Using a Table
+Assuming the `visitingStudents` table has already been created and populated.
+
+{% highlight sql %}
+ SELECT * FROM visitingStudents
+
+      + -------------- + ------------------------------ + -------------- +
+      | Name           | Address                        | StudentID      |
+      + -------------- + ------------------------------ + -------------- +
+      | Fleur Laurent  | 345 Copper St, London          | 777777         |
+      + -------------- + ------------------------------ + -------------- +
+      | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
+      + -------------- + ------------------------------ + -------------- +
+
+ INSERT OVERWRITE students TABLE visitingStudents
+
+ SELECT * FROM students
+
+      + -------------- + ------------------------------ + -------------- +
+      | Name           | Address                        | StudentID      |
+      + -------------- + ------------------------------ + -------------- +
+      | Fleur Laurent  | 345 Copper St, London          | 777777         |
+      + -------------- + ------------------------------ + -------------- +
+      | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
+      + -------------- + ------------------------------ + -------------- +
+{% endhighlight %}
+
+#### Insert Using a FROM Statement
+Assuming the `applicants` table has already been created and populated.
+
+{% highlight sql %}
+ SELECT * FROM applicants
+
+     + -------------- + ------------------------------ + -------------- + -------------- +
+     | Name           | Address                        | StudentID      | Qualified      |
+     + -------------- + ------------------------------ + -------------- + -------------- +
+     | Helen Davis    | 469 Mission St, San Diego      | 999999         | true           |
+     + -------------- + ------------------------------ + -------------- + -------------- +
+     | Ivy King       | 367 Leigh Ave, Santa Clara     | 101010         | false          |
+     + -------------- + ------------------------------ + -------------- + -------------- +
+     | Jason Wang     | 908 Bird St, Saratoga          | 121212         | true           |
+     + -------------- + ------------------------------ + -------------- + -------------- +
+
+ INSERT OVERWRITE students
+      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE
+
+ SELECT * FROM students
+
+     + -------------- + ------------------------------ + -------------- +
+     | Name           | Address                        | StudentID      |
+     + -------------- + ------------------------------ + -------------- +
+     | Helen Davis    | 469 Mission St, San Diego      | 999999         |
+     + -------------- + ------------------------------ + -------------- +
+     | Jason Wang     | 908 Bird St, Saratoga          | 121212         |
+     + -------------- + ------------------------------ + -------------- +
+{% endhighlight %}
