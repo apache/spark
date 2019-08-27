@@ -7,15 +7,17 @@
 --
 
 SELECT 'trailing' AS first; -- trailing single line
-SELECT /* embedded single line */ 'embedded' AS second;
+SELECT /* embedded single line */ 'embedded' AS `second`;
 SELECT /* both embedded and trailing single line */ 'both' AS third; -- trailing single line
 
 SELECT 'before multi-line' AS fourth;
+-- [SPARK-28880] ANSI SQL: Bracketed comments
 /* This is an example of SQL which should not execute:
  * select 'multi-line';
  */
 SELECT 'after multi-line' AS fifth;
 
+-- [SPARK-28880] ANSI SQL: Bracketed comments
 --
 -- Nested comments
 --
