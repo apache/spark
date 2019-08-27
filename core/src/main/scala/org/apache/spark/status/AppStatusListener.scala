@@ -1289,6 +1289,8 @@ private[spark] class AppStatusListener(
   }
 
   private def cleanupTasks(stage: LiveStage): Unit = {
+    if (imsCheckpoint.isDefined && !imsCheckpoint.get.isDone) return
+
     val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage).toInt
     if (countToDelete > 0) {
       val stageKey = Array(stage.info.stageId, stage.info.attemptNumber)
