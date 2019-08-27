@@ -22,6 +22,7 @@ import java.io.{Closeable, IOException, OutputStream}
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.api.ShufflePartitionWriter
 import org.apache.spark.storage.BlockId
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.PairsWriter
 
 /**
@@ -54,32 +55,40 @@ private[spark] class ShufflePartitionPairsWriter(
   }
 
   private def open(): Unit = {
-    partitionStream = partitionWriter.openStream
-    wrappedStream = serializerManager.wrapStream(blockId, partitionStream)
-    objOut = serializerInstance.serializeStream(wrappedStream)
+    try {
+      partitionStream = partitionWriter.openStream
+      wrappedStream = serializerManager.wrapStream(blockId, partitionStream)
+      objOut = serializerInstance.serializeStream(wrappedStream)
+    } catch {
+      case e: Exception =>
+        Utils.tryLogNonFatalError {
+          close()
+        }
+        throw e
+    }
   }
 
   override def close(): Unit = {
-    var thrownException: Option[IOException] = None
-    if (objOut != null) {
-      thrownException = tryCloseOrAddSuppressed(objOut, thrownException)
-      objOut = null
+    Utils.tryWithSafeFinally {
+      objOut = closeIfNonNull(objOut)
+    } {
+      Utils.tryWithSafeFinally {
+        wrappedStream = closeIfNonNull(wrappedStream)
+      } {
+        Utils.tryWithSafeFinally {
+          partitionStream = closeIfNonNull(partitionStream)
+        }
+      }
     }
-
-    if (wrappedStream != null) {
-      thrownException = tryCloseOrAddSuppressed(wrappedStream, thrownException)
-      wrappedStream = null
-    }
-
-    if (partitionStream != null) {
-      thrownException = tryCloseOrAddSuppressed(partitionStream, thrownException)
-      partitionStream = null
-    }
-
-    thrownException.foreach(throw _)
-
     isOpen = false
     updateBytesWritten()
+  }
+
+  private def closeIfNonNull[T <: Closeable](closeable: T): T = {
+    if (closeable != null) {
+      closeable.close()
+    }
+    null.asInstanceOf[T]
   }
 
   private def tryCloseOrAddSuppressed(

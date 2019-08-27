@@ -727,9 +727,7 @@ private[spark] class ExternalSorter[K, V, C](
   def writePartitionedMapOutput(
       shuffleId: Int,
       mapId: Int,
-      mapOutputWriter: ShuffleMapOutputWriter): Array[Long] = {
-    // Track location of each range in the map output
-    val lengths = new Array[Long](numPartitions)
+      mapOutputWriter: ShuffleMapOutputWriter): Unit = {
     var nextPartitionId = 0
     if (spills.isEmpty) {
       // Case where we only have in-memory data
@@ -758,9 +756,6 @@ private[spark] class ExternalSorter[K, V, C](
             Closeables.close(partitionPairsWriter, threwException)
           }
         }
-        if (partitionWriter != null) {
-          lengths(partitionId) = partitionWriter.getNumBytesWritten
-        }
         nextPartitionId = partitionId + 1
       }
     } else {
@@ -787,9 +782,6 @@ private[spark] class ExternalSorter[K, V, C](
         } finally {
           Closeables.close(partitionPairsWriter, threwException)
         }
-        if (partitionWriter != null) {
-          lengths(id) = partitionWriter.getNumBytesWritten
-        }
         nextPartitionId = id + 1
       }
     }
@@ -797,8 +789,6 @@ private[spark] class ExternalSorter[K, V, C](
     context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
     context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
-
-    lengths
   }
 
   def stop(): Unit = {
