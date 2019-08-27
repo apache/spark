@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -85,6 +85,15 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 
   override def outputOrdering: Seq[SortOrder] = {
     child.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val cdgen = ExplainUtils.getCodegenId(this)
+    val reuse_op_str = ExplainUtils.getOpId(child)
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
+       |Output : ${output}
+     """.stripMargin
   }
 }
 

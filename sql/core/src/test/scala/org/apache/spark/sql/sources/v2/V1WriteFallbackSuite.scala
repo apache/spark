@@ -24,8 +24,9 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter, InsertableRelation}
 import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
 import org.apache.spark.sql.sources.v2.writer.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
@@ -68,12 +69,24 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 }
 
 class V1WriteFallbackSessionCatalogSuite
-  extends SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+  extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
+  with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+
   override protected val v2Format = classOf[InMemoryV1Provider].getName
   override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName
+  override protected val catalogAndNamespace: String = ""
 
   override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
     checkAnswer(InMemoryV1Provider.getTableData(spark, s"default.$tableName"), expected)
+  }
+
+  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
   }
 }
 
