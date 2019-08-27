@@ -35,7 +35,9 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *
  * Along with CacheKey, it receives desired start offset to find cached FetchedData which
  * may be stored from previous batch. If it can't find one to match, it will create
- * a new FetchedData.
+ * a new FetchedData. As "desired start offset" plays as second level of key which can be
+ * modified in same instance, this class cannot be replaced with general pool implementations
+ * including Apache Commons Pool which pools KafkaConsumer.
  */
 private[kafka010] class FetchedDataPool(
     executorService: ScheduledExecutorService,
