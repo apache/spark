@@ -22,10 +22,11 @@ import java.util
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalog.v2.CatalogPlugin
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
+import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
@@ -98,6 +99,29 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       properties: util.Map[String, String]): InMemoryTable = {
     new InMemoryTable(name, schema, partitions, properties)
   }
+
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = {
+    val fullIdent = fullIdentifier(ident)
+    Option(tables.get(fullIdent)) match {
+      case Some(table) =>
+        val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
+        val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
+
+        // fail if the last column in the schema was dropped
+        if (schema.fields.isEmpty) {
+          throw new IllegalArgumentException(s"Cannot drop all fields")
+        }
+
+        val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
+          .withData(table.data)
+
+        tables.put(fullIdent, newTable)
+
+        newTable
+      case _ =>
+        throw new NoSuchTableException(ident)
+    }
+  }
 }
 
 private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalogBase[T]]
@@ -109,7 +133,7 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
     spark.sessionState.catalogManager.catalog(name)
   }
 
-  protected val v2Format = classOf[InMemoryTableProvider].getName
+  protected val v2Format: String = classOf[InMemoryTableProvider].getName
 
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 

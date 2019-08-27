@@ -43,7 +43,7 @@ private[v2] trait TestV2SessionCatalogBase[T <: Table] extends V2SessionCatalog 
       partitions: Array[Transform],
       properties: util.Map[String, String]): T
 
-  private def fullIdentifier(ident: Identifier): Identifier = {
+  protected def fullIdentifier(ident: Identifier): Identifier = {
     if (ident.namespace().isEmpty) {
       Identifier.of(Array("default"), ident.name())
     } else {

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.AlterTableDropColumnsStatement
+import org.apache.spark.sql.catalyst.plans.logical.sql.AlterTableStatement
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -355,7 +355,7 @@ trait CheckAnalysis extends PredicateHelper {
               case _ =>
             }
 
-          case alter: AlterTableDropColumnsStatement =>
+          case alter: AlterTableStatement =>
             alter.failAnalysis(s"Table or view not found: ${alter.tableName.quoted}")
 
           case alter: AlterTable if alter.childrenResolved =>

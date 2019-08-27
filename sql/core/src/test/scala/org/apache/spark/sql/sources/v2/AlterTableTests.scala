@@ -32,6 +32,14 @@ trait AlterTableTests extends SharedSparkSession {
 
   protected val v2Format: String
 
+  private def fullTableName(tableName: String): String = {
+    if (catalogAndNamespace.isEmpty) {
+      s"default.$tableName"
+    } else {
+      s"${catalogAndNamespace}table_name"
+    }
+  }
+
   test("AlterTable: table does not exist") {
     val t2 = s"${catalogAndNamespace}fake_table"
     withTable(t2) {
@@ -40,12 +48,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE ${catalogAndNamespace}table_name DROP COLUMN id")
       }
 
-      val errorIdent = if (catalogAndNamespace.isEmpty) {
-        "default.table_name"
-      } else {
-        s"${catalogAndNamespace}table_name"
-      }
-      assert(exc.getMessage.contains(errorIdent))
+      assert(exc.getMessage.contains(s"${catalogAndNamespace}table_name"))
       assert(exc.getMessage.contains("Table or view not found"))
     }
   }
@@ -64,7 +67,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("id", IntegerType))
     }
   }
@@ -77,7 +80,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("id", IntegerType).add("data", StringType))
     }
   }
@@ -90,7 +93,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === StructType(Seq(
         StructField("id", IntegerType),
         StructField("data", StringType).withComment("doc"))))
@@ -105,7 +108,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === StructType(Seq(
         StructField("id", IntegerType),
         StructField("data", StringType).withComment("doc"),
@@ -121,7 +124,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", StructType(Seq(
@@ -140,7 +143,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StructType(Seq(
@@ -159,7 +162,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StringType, StructType(Seq(
@@ -177,7 +180,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -195,7 +198,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -212,7 +215,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -244,7 +247,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("id", LongType))
     }
   }
@@ -257,7 +260,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", StructType(Seq(
@@ -280,7 +283,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", StructType(Seq(
@@ -302,7 +305,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(IntegerType)))
@@ -317,7 +320,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(LongType)))
@@ -337,7 +340,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("m", MapType(StringType, IntegerType)))
@@ -352,7 +355,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("m", MapType(StringType, LongType)))
@@ -368,7 +371,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StructType(Seq(
@@ -386,7 +389,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StringType, StructType(Seq(
@@ -403,7 +406,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -462,7 +465,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === StructType(Seq(StructField("id", IntegerType).withComment("doc"))))
     }
   }
@@ -475,7 +478,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === StructType(Seq(StructField("id", LongType).withComment("doc"))))
     }
   }
@@ -488,7 +491,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", StructType(Seq(
@@ -506,7 +509,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StructType(Seq(
@@ -524,7 +527,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StringType, StructType(Seq(
@@ -541,7 +544,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -586,7 +589,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("user_id", IntegerType))
     }
   }
@@ -599,7 +602,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", StructType(Seq(
@@ -617,7 +620,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", MapType(StructType(Seq(
@@ -635,7 +638,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StringType, StructType(Seq(
@@ -652,7 +655,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -697,7 +700,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType().add("id", IntegerType))
     }
   }
@@ -711,7 +714,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", StructType(Seq(
@@ -729,7 +732,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("point", MapType(StructType(Seq(
@@ -746,7 +749,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", MapType(StringType, StructType(Seq(
@@ -762,7 +765,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.schema === new StructType()
         .add("id", IntegerType)
         .add("points", ArrayType(StructType(Seq(
@@ -806,7 +809,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.properties ===
         Map("provider" -> v2Format, "location" -> "s3://bucket/path").asJava)
     }
@@ -820,7 +823,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
     }
   }
@@ -832,14 +835,14 @@ trait AlterTableTests extends SharedSparkSession {
 
       val table = getTableMetadata(t)
 
-      assert(table.name === s"${catalogAndNamespace}table_name")
+      assert(table.name === fullTableName(t))
       assert(table.properties === Map("provider" -> v2Format, "test" -> "34").asJava)
 
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('test')")
 
       val updated = getTableMetadata(t)
 
-      assert(updated.name === s"${catalogAndNamespace}table_name")
+      assert(updated.name === fullTableName(t))
       assert(updated.properties === Map("provider" -> v2Format).asJava)
     }
   }
