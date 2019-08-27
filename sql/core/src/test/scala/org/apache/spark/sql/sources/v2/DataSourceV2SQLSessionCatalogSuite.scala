@@ -17,22 +17,6 @@
 
 package org.apache.spark.sql.sources.v2
 
-<<<<<<< HEAD
-import org.apache.spark.sql.catalog.v2.Identifier
-
-class DataSourceV2SQLSessionCatalogSuite
-  extends AlterTableSQLTests
-  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
-
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
-
-  override val catalogAndNamespace = "default."
-  override protected val v2Source: String = classOf[InMemoryTableProvider].getName
-
-  override def loadAlterTableMetadata(tableName: String): Table = {
-    spark.sessionState.catalogManager.v2SessionCatalog.get.asTableCatalog
-      .loadTable(Identifier.of(Array(), tableName))
-=======
 import org.apache.spark.sql.{DataFrame, SaveMode}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 
@@ -58,6 +42,5 @@ class DataSourceV2SQLSessionCatalogSuite
     checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
     checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
     checkAnswer(sql(s"TABLE $tableName"), expected)
->>>>>>> 90b10b4f7a54caaf0962424a111fddbd42b107b1
   }
 }
