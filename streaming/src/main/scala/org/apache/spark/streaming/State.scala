@@ -19,7 +19,10 @@ package org.apache.spark.streaming
 
 import scala.language.implicitConversions
 
+import org.apache.spark.annotation.Experimental
+
 /**
+ * :: Experimental ::
  * Abstract class for getting and updating the state in mapping function used in the `mapWithState`
  * operation of a [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala)
  * or a [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
@@ -75,6 +78,7 @@ import scala.language.implicitConversions
  *
  * @tparam S Class of the state
  */
+@Experimental
 sealed abstract class State[S] {
 
   /** Whether the state already exists */

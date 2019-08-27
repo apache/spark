@@ -29,6 +29,7 @@ NULL
 #'
 #' @param ssq A Java object reference to the backing Scala StreamingQuery
 #' @note StreamingQuery since 2.2.0
+#' @note experimental
 setClass("StreamingQuery",
          slots = list(ssq = "jobj"))
 
@@ -70,6 +71,7 @@ setMethod("show", "StreamingQuery",
 #' @examples
 #' \dontrun{ queryName(sq) }
 #' @note queryName(StreamingQuery) since 2.2.0
+#' @note experimental
 setMethod("queryName",
           signature(x = "StreamingQuery"),
           function(x) {
@@ -101,6 +103,7 @@ setMethod("explain",
 #' @examples
 #' \dontrun{ lastProgress(sq) }
 #' @note lastProgress(StreamingQuery) since 2.2.0
+#' @note experimental
 setMethod("lastProgress",
           signature(x = "StreamingQuery"),
           function(x) {
@@ -124,6 +127,7 @@ setMethod("lastProgress",
 #' @examples
 #' \dontrun{ status(sq) }
 #' @note status(StreamingQuery) since 2.2.0
+#' @note experimental
 setMethod("status",
           signature(x = "StreamingQuery"),
           function(x) {
@@ -143,6 +147,7 @@ setMethod("status",
 #' @examples
 #' \dontrun{ isActive(sq) }
 #' @note isActive(StreamingQuery) since 2.2.0
+#' @note experimental
 setMethod("isActive",
           signature(x = "StreamingQuery"),
           function(x) {
@@ -168,6 +173,7 @@ setMethod("isActive",
 #' @examples
 #' \dontrun{ awaitTermination(sq, 10000) }
 #' @note awaitTermination(StreamingQuery) since 2.2.0
+#' @note experimental
 setMethod("awaitTermination",
           signature(x = "StreamingQuery"),
           function(x, timeout = NULL) {
@@ -191,6 +197,7 @@ setMethod("awaitTermination",
 #' @examples
 #' \dontrun{ stopQuery(sq) }
 #' @note stopQuery(StreamingQuery) since 2.2.0
+#' @note experimental
 setMethod("stopQuery",
           signature(x = "StreamingQuery"),
           function(x) {

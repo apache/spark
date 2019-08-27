@@ -700,6 +700,7 @@ read.jdbc <- function(url, tableName,
 #' }
 #' @name read.stream
 #' @note read.stream since 2.2.0
+#' @note experimental
 read.stream <- function(source = NULL, schema = NULL, ...) {
   sparkSession <- getSparkSession()
   if (!is.null(source) && !is.character(source)) {

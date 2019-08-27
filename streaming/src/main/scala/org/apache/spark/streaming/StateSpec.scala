@@ -18,12 +18,14 @@
 package org.apache.spark.streaming
 
 import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.{JavaPairRDD, JavaUtils, Optional}
 import org.apache.spark.api.java.function.{Function3 => JFunction3, Function4 => JFunction4}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ClosureCleaner
 
 /**
+ * :: Experimental ::
  * Abstract class representing all the specifications of the DStream transformation
  * `mapWithState` operation of a
  * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
@@ -65,6 +67,7 @@ import org.apache.spark.util.ClosureCleaner
  * @tparam StateType  Class of the state data
  * @tparam MappedType Class of the mapped elements
  */
+@Experimental
 sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] extends Serializable {
 
   /**
@@ -100,6 +103,7 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] exten
 
 
 /**
+ * :: Experimental ::
  * Builder object for creating instances of `org.apache.spark.streaming.StateSpec`
  * that is used for specifying the parameters of the DStream transformation `mapWithState`
  * that is used for specifying the parameters of the DStream transformation
@@ -136,6 +140,7 @@ sealed abstract class StateSpec[KeyType, ValueType, StateType, MappedType] exten
  *        keyValueDStream.mapWithState(StateSpec.function(mappingFunc));
  *}}}
  */
+@Experimental
 object StateSpec {
   /**
    * Create a [[org.apache.spark.streaming.StateSpec StateSpec]] for setting all the specifications
