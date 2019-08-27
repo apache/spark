@@ -164,6 +164,16 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
+  <td><code>spark.sql.driver.limitUncompressedResultSize</code></td>
+  <td>false</td>
+  <td>
+    If set to true then the value of spark.driver.maxResultSize will also be used for limiting the
+    the total size of the uncompressed results that are produced by actions on sql dataframes. 
+    This can further help protect the driver from out-of-memory errors because the compressed,
+    serialized size can be much smaller than the uncompressed size.
+  </td>
+</tr>
+<tr>
   <td><code>spark.driver.memory</code></td>
   <td>1g</td>
   <td>

@@ -27,6 +27,12 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
+/**
+ * Provides methods for converting compressed byte arrays back to UnsafeRows.
+ * Additionally, can enforce a limit on the total, decoded size of all decoded UnsafeRows.
+ * Enforcing the limit is controlled via a sql config and if it is turned on the encoder will
+ * throw a SparkException when the limit is reached.
+ */
 private[spark] class SizeLimitingByteArrayDecoder(
      nFields: Int,
      conf: SparkConf,
@@ -37,7 +43,6 @@ private[spark] class SizeLimitingByteArrayDecoder(
 
   /**
    * Decodes the byte arrays back to UnsafeRows and put them into buffer.
-   * Fails if size limiting is enabled and the size is bigger than the maximum allowed size.
    */
   def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
     val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
