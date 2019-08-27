@@ -77,8 +77,8 @@ private[spark] class InMemoryStoreCheckpoint(
 
   def eventInc(finish: Boolean = false): Unit = {
     processedEventsNum += 1
-    val shouldCheckpoint = !finished && (processedEventsNum - lastRecordEventsNum >=
-      batchSize || finish)
+    val shouldCheckpoint = isDone && (finish || processedEventsNum - lastRecordEventsNum >=
+      batchSize)
     if (shouldCheckpoint) {
       // flush to make sure that all processed events' related data have write into InMemoryStore
       listener.flush(listener.update(_, System.nanoTime()))
