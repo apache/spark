@@ -19,4 +19,39 @@ license: |
   limitations under the License.
 ---
 
-**This page is under construction**
+### Description
+Creates a database with the given name. If database with the same name exists an exception will be thrown.
+
+### Syntax
+{% highlight sql %}
+CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
+  [COMMENT database_comment]
+  [LOCATION database_directory]
+  [WITH DBPROPERTIES (property_name=property_value, ...)]
+
+{% endhighlight %}
+
+### Parameters
+- ##### ***IF NOT EXISTS***:
+Creates a database with the given name if it doesn't exists. If a database with the same name already exists, nothing will happen.
+- ##### ***LOCATION***:
+Path of the file system in which database to be created. If the specified path does not exist in the underlying file system, this command creates a directory with the path.
+- ##### ***COMMENT***:
+Description for the Database.
+- ##### ***WITH DBPROPERTIES***:
+Properties for the database in key-value pair.
+
+### Examples
+{% highlight sql %}
+-- Create database `customer_db`. This throws exception if database with name customer_db already exists.
+CREATE DATABASE customer_db;
+-- Create database `customer_db` only if database with same name doesn't exist.
+CREATE DATABASE IF NOT EXISTS customer_db;
+-- Create database `customer_db` only if database with same name doesn't exist with `Comments`, `Specific Location` and `Database properties`.
+CREATE DATABASE IF NOT EXISTS customer_db COMMENT 'This is customer database' LOCATION '/user' WITH DBPROPERTIES (ID=001, Name='John');
+{% endhighlight %}
+
+
+### Related statements.
+- [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
+
