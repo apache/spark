@@ -474,6 +474,7 @@ private[spark] class AppStatusListener(
         graph.outgoingEdges,
         graph.incomingEdges,
         newRDDOperationCluster(graph.rootCluster))
+      imsCheckpoint.foreach(_.await())
       kvstore.write(uigraph)
     }
     imsCheckpoint.foreach(_.eventInc())
@@ -546,6 +547,7 @@ private[spark] class AppStatusListener(
       update(job, now, last = true)
       if (job.status == JobExecutionStatus.SUCCEEDED) {
         appSummary = new AppSummary(appSummary.numCompletedJobs + 1, appSummary.numCompletedStages)
+        imsCheckpoint.foreach(_.await())
         kvstore.write(appSummary)
       }
     }
@@ -839,6 +841,7 @@ private[spark] class AppStatusListener(
       }
       if (stage.status == v1.StageStatus.COMPLETE) {
         appSummary = new AppSummary(appSummary.numCompletedJobs, appSummary.numCompletedStages + 1)
+        imsCheckpoint.foreach(_.await())
         kvstore.write(appSummary)
       }
     }
@@ -905,6 +908,7 @@ private[spark] class AppStatusListener(
       }
     }
 
+    imsCheckpoint.foreach(_.await())
     kvstore.delete(classOf[RDDStorageInfoWrapper], event.rddId)
     imsCheckpoint.foreach(_.eventInc())
   }
@@ -1125,8 +1129,10 @@ private[spark] class AppStatusListener(
         storageLevel.deserialized,
         event.blockUpdatedInfo.memSize,
         event.blockUpdatedInfo.diskSize)
+      imsCheckpoint.foreach(_.await())
       kvstore.write(data)
     } else {
+      imsCheckpoint.foreach(_.await())
       kvstore.delete(classOf[StreamBlockData],
         Array(stream.name, event.blockUpdatedInfo.blockManagerId.executorId))
     }
