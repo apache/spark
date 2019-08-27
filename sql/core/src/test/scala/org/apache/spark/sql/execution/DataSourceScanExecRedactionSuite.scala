@@ -69,7 +69,7 @@ abstract class DataSourceScanRedactionTest extends QueryTest with SharedSparkSes
  */
 class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set(SQLConf.USE_V1_SOURCE_READER_LIST.key, "orc")
+    .set(SQLConf.USE_V1_SOURCE_LIST.key, "orc")
 
   override protected def getRootPath(df: DataFrame): Path =
     df.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
@@ -121,7 +121,7 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 class DataSourceV2ScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set(SQLConf.USE_V1_SOURCE_READER_LIST.key, "")
+    .set(SQLConf.USE_V1_SOURCE_LIST.key, "")
 
   override protected def getRootPath(df: DataFrame): Path =
     df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
