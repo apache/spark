@@ -517,19 +517,12 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
   override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val (inputType, replaceType, posType, lenType) =
-      (input.dataType, replace.dataType, pos.dataType, len.dataType)
-    (inputType, replaceType) match {
-      case (StringType, StringType) | (BinaryType, BinaryType) =>
-      case (inputType, replaceType) =>
-        return TypeCheckResult.TypeCheckFailure(s"Invalid data type ${inputType.simpleString}" +
-          s" and ${replaceType.simpleString}. The result type of the input expression and the" +
-          "replace expression are either String or Byte Array.")
-    }
-    if (IntegerType.acceptsType(posType) && IntegerType.acceptsType(lenType)) {
-      TypeCheckResult.TypeCheckSuccess
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      TypeUtils.checkForSameTypeInputExpr(
+        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
     } else {
-      TypeCheckResult.TypeCheckFailure("Pos expression and len expression must be integer type.")
+      inputTypeCheck
     }
   }
 
