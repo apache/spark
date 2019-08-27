@@ -1637,14 +1637,15 @@ object SQLConf {
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
   object StoreAssignmentPolicy extends Enumeration {
-    val LEGACY, STRICT = Value
+    val ANSI, LEGACY, STRICT = Value
   }
 
   val STORE_ASSIGNMENT_POLICY =
     buildConf("spark.sql.storeAssignmentPolicy")
       .doc("When inserting a value into a column with different data type, Spark will perform " +
-        "type coercion. Currently we support 2 policies for the type coercion rules: legacy and " +
-        "strict. With legacy policy, Spark allows casting any value to any data type. " +
+        "type coercion. Currently we support 3 policies for the type coercion rules: ansi, " +
+        "legacy and strict. With ansi policy, Spark performs the type coercion as per ANSI SQL. " +
+        "With legacy policy, Spark allows casting any value to any data type. " +
         "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
         "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
         "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."

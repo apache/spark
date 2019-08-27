@@ -158,6 +158,36 @@ object Cast {
     case _ => false
   }
 
+  def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
+    case _ if from == to => true
+    case (_: NumericType, _: NumericType) => true
+    case (_: AtomicType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
+    case (DateType, TimestampType) => true
+    case (TimestampType, DateType) => true
+    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
+    // `timestampToLong` for details.
+    case (TimestampType, LongType) => true
+    case (LongType, TimestampType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      resolvableNullability(fn, tn) && canANSIStoreAssign(fromKey, toKey) &&
+        canANSIStoreAssign(fromValue, toValue)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (f1, f2) =>
+            resolvableNullability(f1.nullable, f2.nullable) &&
+              canANSIStoreAssign(f1.dataType, f2.dataType)
+        }
+
+    case _ => false
+  }
+
   private def legalNumericPrecedence(from: DataType, to: DataType): Boolean = {
     val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
     val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)

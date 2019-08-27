@@ -31,6 +31,8 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
 import org.apache.spark.util.Utils
 
 /**
@@ -371,12 +373,14 @@ object DataType {
       byName: Boolean,
       resolver: Resolver,
       context: String,
+      storeAssignmentPolicy: StoreAssignmentPolicy.Value,
       addError: String => Unit): Boolean = {
     (write, read) match {
       case (wArr: ArrayType, rArr: ArrayType) =>
         // run compatibility check first to produce all error messages
         val typesCompatible = canWrite(
-          wArr.elementType, rArr.elementType, byName, resolver, context + ".element", addError)
+          wArr.elementType, rArr.elementType, byName, resolver, context + ".element",
+          storeAssignmentPolicy, addError)
 
         if (wArr.containsNull && !rArr.containsNull) {
           addError(s"Cannot write nullable elements to array of non-nulls: '$context'")
@@ -391,9 +395,11 @@ object DataType {
 
         // run compatibility check first to produce all error messages
         val keyCompatible = canWrite(
-          wMap.keyType, rMap.keyType, byName, resolver, context + ".key", addError)
+          wMap.keyType, rMap.keyType, byName, resolver, context + ".key",
+          storeAssignmentPolicy, addError)
         val valueCompatible = canWrite(
-          wMap.valueType, rMap.valueType, byName, resolver, context + ".value", addError)
+          wMap.valueType, rMap.valueType, byName, resolver, context + ".value",
+          storeAssignmentPolicy, addError)
 
         if (wMap.valueContainsNull && !rMap.valueContainsNull) {
           addError(s"Cannot write nullable values to map of non-nulls: '$context'")
@@ -409,7 +415,8 @@ object DataType {
             val nameMatch = resolver(wField.name, rField.name) || isSparkGeneratedName(wField.name)
             val fieldContext = s"$context.${rField.name}"
             val typesCompatible = canWrite(
-              wField.dataType, rField.dataType, byName, resolver, fieldContext, addError)
+              wField.dataType, rField.dataType, byName, resolver, fieldContext,
+              storeAssignmentPolicy, addError)
 
             if (byName && !nameMatch) {
               addError(s"Struct '$context' $i-th field name does not match " +
@@ -441,8 +448,16 @@ object DataType {
 
         fieldCompatible
 
-      case (w: AtomicType, r: AtomicType) =>
+      case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == STRICT =>
         if (!Cast.canUpCast(w, r)) {
+          addError(s"Cannot safely cast '$context': $w to $r")
+          false
+        } else {
+          true
+        }
+
+      case (w: AtomicType, r: AtomicType) if storeAssignmentPolicy == ANSI =>
+        if (!Cast.canANSIStoreAssign(w, r)) {
           addError(s"Cannot safely cast '$context': $w to $r")
           false
         } else {
