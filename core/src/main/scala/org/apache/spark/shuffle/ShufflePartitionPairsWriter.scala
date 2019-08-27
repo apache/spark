@@ -75,9 +75,7 @@ private[spark] class ShufflePartitionPairsWriter(
       Utils.tryWithSafeFinally {
         wrappedStream = closeIfNonNull(wrappedStream)
       } {
-        Utils.tryWithSafeFinally {
-          partitionStream = closeIfNonNull(partitionStream)
-        }
+        partitionStream = closeIfNonNull(partitionStream)
       }
     }
     isOpen = false
