@@ -18,26 +18,43 @@
 package org.apache.spark.sql.sources.v2
 
 import java.util
-import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.catalog.v2.CatalogPlugin
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
 import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2DataFrameSessionCatalogSuite
-  extends SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
+
+  import testImplicits._
+
+  override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+    val dfw = insert.write.format(v2Format)
+    if (mode != null) {
+      dfw.mode(mode)
+    }
+    dfw.insertInto(tableName)
+  }
+
+  override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+    checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
+    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
+    checkAnswer(sql(s"TABLE $tableName"), expected)
+  }
+
+  override protected val catalogAndNamespace: String = ""
 
   test("saveAsTable: Append mode should not fail if the table already exists " +
     "and a same-name temp view exist") {
@@ -97,21 +114,16 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
   protected val catalogClassName: String = classOf[InMemoryTableSessionCatalog].getName
 
   before {
-    spark.conf.set(SQLConf.V2_SESSION_CATALOG.key, catalogClassName)
+    spark.conf.set(V2_SESSION_CATALOG.key, catalogClassName)
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
     catalog("session").asInstanceOf[Catalog].clearTables()
-    spark.conf.set(SQLConf.V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
+    spark.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
   }
 
-  protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
-    checkAnswer(spark.table(tableName), expected)
-    checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
-    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
-    checkAnswer(sql(s"TABLE $tableName"), expected)
-  }
+  protected def verifyTable(tableName: String, expected: DataFrame): Unit
 
   import testImplicits._
 
