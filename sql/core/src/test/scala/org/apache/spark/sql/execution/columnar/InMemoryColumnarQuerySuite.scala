@@ -507,7 +507,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
         SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1SourceReaderList) {
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { workDir =>
           withTable("table1") {
             val workDirPath = workDir.getAbsolutePath

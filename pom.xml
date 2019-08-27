@@ -423,7 +423,7 @@
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
         <version>2.3.2</version>
-        <scope>runtime</scope>
+        <scope>compile</scope>
         <exclusions>
           <!-- for now, we only write XML in PMML export, and these can be excluded -->
           <exclusion>

@@ -415,7 +415,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
 
   test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
     Seq("orc", "").foreach { useV1ReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1ReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1ReaderList) {
         withTempPath { path =>
           val tempDir = path.getCanonicalPath
           spark.range(100)
