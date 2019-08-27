@@ -24,6 +24,7 @@ class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
 
   val parent = sparkUI
+  val conf = parent.conf
 
   attachPage(new AllExecutionsPage(this))
   attachPage(new ExecutionPage(this))

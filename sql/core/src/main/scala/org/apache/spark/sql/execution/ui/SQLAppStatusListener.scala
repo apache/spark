@@ -297,7 +297,23 @@ class SQLAppStatusListener(
     val SparkListenerSQLExecutionStart(executionId, description, details,
       physicalPlanDescription, sparkPlanInfo, time) = event
 
-    val planGraph = SparkPlanGraph(sparkPlanInfo)
+    def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
+      nodes.map {
+        case cluster: SparkPlanGraphCluster =>
+          val storedCluster = new SparkPlanGraphClusterWrapper(
+            cluster.id,
+            cluster.name,
+            cluster.desc,
+            toStoredNodes(cluster.nodes),
+            cluster.metrics)
+          new SparkPlanGraphNodeWrapper(null, storedCluster)
+
+        case node =>
+          new SparkPlanGraphNodeWrapper(node, null)
+      }
+    }
+
+    val planGraph = SparkPlanGraph(sparkPlanInfo, conf)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
       node.metrics.map { metric => (metric.accumulatorId, metric) }
     }.toMap.values.toList
@@ -321,7 +337,7 @@ class SQLAppStatusListener(
     val SparkListenerSQLAdaptiveExecutionUpdate(
       executionId, physicalPlanDescription, sparkPlanInfo) = event
 
-    val planGraph = SparkPlanGraph(sparkPlanInfo)
+    val planGraph = SparkPlanGraph(sparkPlanInfo, conf)
     val sqlPlanMetrics = planGraph.allNodes.flatMap { node =>
       node.metrics.map { metric => (metric.accumulatorId, metric) }
     }.toMap.values.toList

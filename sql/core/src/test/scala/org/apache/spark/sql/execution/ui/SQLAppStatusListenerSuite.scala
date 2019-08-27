@@ -165,7 +165,7 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     val executionId = 0
     val df = createTestDataFrame
     val accumulatorIds =
-      SparkPlanGraph(SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan))
+      SparkPlanGraph(SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan), sparkConf)
         .allNodes.flatMap(_.metrics.map(_.accumulatorId))
     // Assume all accumulators are long
     var accumulatorValue = 0L

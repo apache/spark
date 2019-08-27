@@ -23,6 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
@@ -100,7 +101,22 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   private def planVisualization(
       request: HttpServletRequest,
       metrics: Map[Long, String],
-      graph: SparkPlanGraph): Seq[Node] = {
+      inputGraph: SparkPlanGraph): Seq[Node] = {
+    val updater = new SparkPlanGraphUpdater(metrics)
+    val unfilteredGraph =
+      if (parent.conf.get(SQLConf.PRUNE_CACHED_IN_MEMORY_RELATION)) {
+        val prunedGraph = updater.pruneHiddenNodes(inputGraph)
+        // renderPlanViz requires the node ids to be ordered from 0 to nodes.size
+        if (!prunedGraph.idsAreConsecutiveFromZero) {
+          updater.reassignNodeIds(prunedGraph)
+        } else {
+          prunedGraph
+        }
+      } else {
+        inputGraph
+      }
+    val graph = updater.filterHiddenMetrics(unfilteredGraph)
+
     val metadata = graph.allNodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
       <div id={nodeId}>{node.desc}</div>

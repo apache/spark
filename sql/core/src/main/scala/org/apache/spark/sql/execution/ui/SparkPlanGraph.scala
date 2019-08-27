@@ -23,7 +23,9 @@ import scala.collection.mutable
 
 import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -53,6 +55,24 @@ case class SparkPlanGraph(
       case node => Seq(node)
     }
   }
+
+  /**
+   * Returns a map that gives the children for each node, or the empty set if a node has no
+   * children.
+   */
+  lazy val childrenForEachNode: Map[Long, Set[Long]] = {
+    val defaultForEachNode = allNodes.map(_.id -> Set.empty[Long]).toMap
+    defaultForEachNode ++ edges.groupBy(_.toId)
+      .map { case (k, v) => k -> v.map(_.fromId).toSet }
+  }
+
+  /**
+   * Whether the graph ids increase consecutively from 0 or not.
+   */
+  lazy val idsAreConsecutiveFromZero: Boolean = {
+    val sortedIds = allNodes.map(_.id).sorted
+    sortedIds == sortedIds.indices
+  }
 }
 
 object SparkPlanGraph {
@@ -60,12 +80,12 @@ object SparkPlanGraph {
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
-  def apply(planInfo: SparkPlanInfo): SparkPlanGraph = {
+  def apply(planInfo: SparkPlanInfo, conf: SparkConf): SparkPlanGraph = {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    val exchanges = mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]()
-    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges)
+    val reusedPlans = mutable.HashMap[SparkPlanNodeKey, SparkPlanGraphNode]()
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, reusedPlans)(conf)
     new SparkPlanGraph(nodes, edges)
   }
 
@@ -76,7 +96,8 @@ object SparkPlanGraph {
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
       parent: SparkPlanGraphNode,
       subgraph: SparkPlanGraphCluster,
-      exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
+      reusedPlans: mutable.HashMap[SparkPlanNodeKey, SparkPlanGraphNode])
+                                     (implicit conf: SparkConf): Unit = {
     planInfo.nodeName match {
       case name if name.startsWith("WholeStageCodegen") =>
         val metrics = planInfo.metrics.map { metric =>
@@ -92,34 +113,34 @@ object SparkPlanGraph {
         nodes += cluster
 
         buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster, exchanges)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster, reusedPlans)
       case "InputAdapter" =>
         buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, reusedPlans)
       case "BroadcastQueryStage" | "ShuffleQueryStage" =>
-        if (exchanges.contains(planInfo.children.head)) {
+        if (reusedPlans.contains(planInfo.children.head.getNodeKey)) {
           // Point to the re-used exchange
-          val node = exchanges(planInfo.children.head)
+          val node = reusedPlans(planInfo.children.head.getNodeKey)
           edges += SparkPlanGraphEdge(node.id, parent.id)
         } else {
           buildSparkPlanGraphNode(
-            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, reusedPlans)
         }
-      case "Subquery" if subgraph != null =>
-        // Subquery should not be included in WholeStageCodegen
-        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
-      case "Subquery" if exchanges.contains(planInfo) =>
-        // Point to the re-used subquery
-        val node = exchanges(planInfo)
+      case "Subquery" | "InMemoryRelation" if subgraph != null =>
+        // Subquery/relation should not be included in WholeStageCodegen
+        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, reusedPlans)
+      case "Subquery" | "InMemoryRelation" if reusedPlans.contains(planInfo.getNodeKey) =>
+        // Point to the re-used subquery/relation
+        val node = reusedPlans(planInfo.getNodeKey)
         edges += SparkPlanGraphEdge(node.id, parent.id)
       case "ReusedSubquery" =>
         // Re-used subquery might appear before the original subquery, so skip this node and let
         // the previous `case` make sure the re-used and the original point to the same node.
         buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, subgraph, exchanges)
-      case "ReusedExchange" if exchanges.contains(planInfo.children.head) =>
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, subgraph, reusedPlans)
+      case "ReusedExchange" if reusedPlans.contains(planInfo.children.head.getNodeKey) =>
         // Point to the re-used exchange
-        val node = exchanges(planInfo.children.head)
+        val node = reusedPlans(planInfo.children.head.getNodeKey)
         edges += SparkPlanGraphEdge(node.id, parent.id)
       case name =>
         val metrics = planInfo.metrics.map { metric =>
@@ -133,19 +154,43 @@ object SparkPlanGraph {
         } else {
           subgraph.nodes += node
         }
-        if (name.contains("Exchange") || name == "Subquery") {
-          exchanges += planInfo -> node
+
+        if (name.contains("Exchange") || name == "Subquery" || name == "InMemoryRelation") {
+          reusedPlans += planInfo.getNodeKey -> node
         }
 
         if (parent != null) {
           edges += SparkPlanGraphEdge(node.id, parent.id)
         }
-        planInfo.children.foreach(
-          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph, exchanges))
+
+        def isNotBlacklistedChild(childInfo: SparkPlanInfo): Boolean = {
+          conf.get(SQLConf.UI_EXTENDED_INFO) ||
+            !(name == "InMemoryTableScan" && childInfo.nodeName == "InMemoryRelation")
+        }
+
+        planInfo.children.filter(isNotBlacklistedChild).foreach(
+          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph, reusedPlans))
+    }
+  }
+
+  private case class SparkPlanNodeKey(nodeName: String,
+                                      simpleString: String,
+                                      children: Seq[SparkPlanNodeKey],
+                                      metadata: Map[String, String])
+
+  private implicit class SparkPlanInfoAdditions(info: SparkPlanInfo) {
+    def getNodeKey: SparkPlanNodeKey = {
+      // InMemoryRelation has its simpleString replaced to ensure that InMemoryRelations with
+      // different simpleStrings are merged correctly
+      val simpleString = info.nodeName match {
+        case "InMemoryRelation" => "InMemoryRelation"
+        case _ => info.simpleString
+      }
+      val children = info.children.map(_.getNodeKey)
+      SparkPlanNodeKey(info.nodeName, simpleString, children, info.metadata)
     }
   }
 }
-
 /**
  * Represent a node in the SparkPlan tree, along with its metrics.
  *
@@ -179,6 +224,12 @@ private[ui] class SparkPlanGraphNode(
 
     s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
+
+  def copy(newId: Long = id,
+           newName: String = name,
+           newDesc: String = desc,
+           newMetrics: Seq[SQLPlanMetric] = metrics): SparkPlanGraphNode =
+    new SparkPlanGraphNode(newId, newName, newDesc, newMetrics)
 }
 
 /**
@@ -211,6 +262,18 @@ private[ui] class SparkPlanGraphCluster(
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
      """.stripMargin
+  }
+
+  override def copy(newId: Long = id,
+                    newName: String = name,
+                    newDesc: String = desc,
+                    newMetrics: Seq[SQLPlanMetric] = metrics): SparkPlanGraphCluster =
+    new SparkPlanGraphCluster(newId, newName, newDesc, nodes, newMetrics)
+
+  def updateNodes(newNodes: Seq[SparkPlanGraphNode]): SparkPlanGraphCluster = {
+    this.nodes.clear()
+    this.nodes ++= newNodes
+    this
   }
 }
 

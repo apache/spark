@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import java.util.concurrent.atomic.AtomicLong
+
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.network.util.JavaUtils
@@ -29,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
 
@@ -43,6 +46,10 @@ import org.apache.spark.util.LongAccumulator
 private[columnar]
 case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
+object CachedRDDBuilder {
+  private val cacheBuilderIdGenerator = new AtomicLong(0)
+}
+
 case class CachedRDDBuilder(
     useCompression: Boolean,
     batchSize: Int,
@@ -52,11 +59,23 @@ case class CachedRDDBuilder(
 
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
 
+  val id: Long = CachedRDDBuilder.cacheBuilderIdGenerator.getAndIncrement()
+
   val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
   val rowCountStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024))
+
+  lazy val metrics: Map[String, SQLMetric] = Map(
+    "numComputedRows" ->
+      SQLMetrics.createMetric(cachedPlan.sqlContext.sparkContext, "number of computed rows"),
+    "numComputedPartitions" ->
+    // This is a hidden metric used on UI generation to decide whether or not to show the children
+    // of this operator, so its name is preferred to be simple for retrieval later
+      SQLMetrics.createMetric(cachedPlan.sqlContext.sparkContext, "numComputedPartitions"))
+
+  lazy val metadata: Map[String, String] = Map("cacheBuilderId" -> id.toString)
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
@@ -85,8 +104,11 @@ case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
+    val numComputedRows = metrics("numComputedRows")
+    val numComputedPartitions = metrics("numComputedPartitions")
     val output = cachedPlan.output
     val cached = cachedPlan.execute().mapPartitionsInternal { rowIterator =>
+      numComputedPartitions.add(1)
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -119,6 +141,7 @@ case class CachedRDDBuilder(
             rowCount += 1
           }
 
+          numComputedRows += rowCount
           sizeInBytesStats.add(totalSize)
           rowCountStats.add(rowCount)
 
@@ -180,6 +203,10 @@ case class InMemoryRelation(
   @volatile var statsOfPlanToCache: Statistics = null
 
   override def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
+
+  def metrics: Map[String, SQLMetric] = cacheBuilder.metrics
+
+  def metadata: Map[String, String] = cacheBuilder.metadata
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExpressions(_, cachedPlan.output)),

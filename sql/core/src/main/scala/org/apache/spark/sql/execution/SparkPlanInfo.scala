@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, LocalShuffleReaderExec, QueryStageExec}
+import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
-import org.apache.spark.sql.execution.metric.SQLMetricInfo
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetricInfo}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,6 +44,9 @@ class SparkPlanInfo(
 
   override def equals(other: Any): Boolean = other match {
     case o: SparkPlanInfo =>
+      // As SparkPlanInfo is no longer used as the key for determining plan reuse in SparkPlanGraph,
+      // changes to this equals method that are intended to change plan reuse should instead be made
+      // in SparkPlanGraph.{SparkPlanNodeKey, SparkPlanInfoAdditions.getNodeKey}
       nodeName == o.nodeName && simpleString == o.simpleString && children == o.children
     case _ => false
   }
@@ -58,9 +62,7 @@ private[execution] object SparkPlanInfo {
       case stage: QueryStageExec => stage.plan :: Nil
       case _ => plan.children ++ plan.subqueries
     }
-    val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
-    }
+    val metrics = convertMetrics(plan.metrics)
 
     val nodeName = plan match {
       case physicalOperator: WholeStageCodegenExec =>
@@ -73,11 +75,33 @@ private[execution] object SparkPlanInfo {
       case fileScan: FileSourceScanExec => fileScan.metadata
       case _ => Map[String, String]()
     }
+    val allChildrenInfo = children.map(fromSparkPlan) ++ getInnerChildrenInfo(plan)
     new SparkPlanInfo(
       nodeName,
       plan.simpleString(SQLConf.get.maxToStringFields),
-      children.map(fromSparkPlan),
+      allChildrenInfo,
       metadata,
       metrics)
   }
+
+  private def getInnerChildrenInfo(plan: SparkPlan): Seq[SparkPlanInfo] = Seq(plan) collect {
+    case scan: InMemoryTableScanExec if plan.conf.extendedEventInfo =>
+      fromInMemoryRelation(scan.relation)
+  }
+
+  private def fromInMemoryRelation(relation: InMemoryRelation): SparkPlanInfo = {
+    val children = Seq(fromSparkPlan(relation.cachedPlan))
+    val metrics = convertMetrics(relation.metrics)
+    val metadata = relation.metadata
+    new SparkPlanInfo(relation.nodeName,
+      relation.simpleString(SQLConf.get.maxToStringFields),
+      children,
+      metadata,
+      metrics)
+  }
+
+  private def convertMetrics(metrics: Map[String, SQLMetric]): Seq[SQLMetricInfo] =
+    metrics.toSeq.map { case (key, metric) =>
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
+    }
 }
