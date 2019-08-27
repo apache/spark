@@ -444,6 +444,8 @@ class SQLContext(object):
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
+        .. note:: Evolving.
+
         :return: :class:`DataStreamReader`
 
         >>> text_sdf = sqlContext.readStream.text(tempfile.mkdtemp())
@@ -457,6 +459,8 @@ class SQLContext(object):
     def streams(self):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
+
+        .. note:: Evolving.
         """
         from pyspark.sql.streaming import StreamingQueryManager
         return StreamingQueryManager(self._ssql_ctx.streams())
