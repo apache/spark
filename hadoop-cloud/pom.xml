@@ -40,6 +40,17 @@
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
   </build>
+  
+  <!-- Manage the AWS SDK version to match Kinesis et al -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.amazonaws</groupId>
+        <artifactId>aws-java-sdk</artifactId>
+        <version>${aws.java.sdk.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <!--used during compilation but not exported as transitive dependencies-->
@@ -99,10 +110,6 @@
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-annotations</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.amazonaws</groupId>
-          <artifactId>aws-java-sdk</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
