@@ -39,11 +39,6 @@ abstract class ExecSubqueryExpression extends PlanExpression[BaseSubqueryExec] {
 
   /** Updates the expression with a new plan. */
   override def withNewPlan(plan: BaseSubqueryExec): ExecSubqueryExpression
-
-  override def canonicalize(attrs: AttributeSeq): ExecSubqueryExpression = {
-    withNewPlan(plan.canonicalized.asInstanceOf[BaseSubqueryExec])
-      .asInstanceOf[ExecSubqueryExpression]
-  }
 }
 
 object ExecSubqueryExpression {

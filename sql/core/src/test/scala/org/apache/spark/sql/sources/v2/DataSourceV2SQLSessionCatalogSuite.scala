@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources.v2
 
+<<<<<<< HEAD
 import org.apache.spark.sql.catalog.v2.Identifier
 
 class DataSourceV2SQLSessionCatalogSuite
@@ -31,5 +32,32 @@ class DataSourceV2SQLSessionCatalogSuite
   override def loadAlterTableMetadata(tableName: String): Table = {
     spark.sessionState.catalogManager.v2SessionCatalog.get.asTableCatalog
       .loadTable(Identifier.of(Array(), tableName))
+=======
+import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
+
+class DataSourceV2SQLSessionCatalogSuite
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
+  with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
+
+  import testImplicits._
+
+  override protected val catalogAndNamespace = ""
+
+  override protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  override protected def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+    checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
+    checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
+    checkAnswer(sql(s"TABLE $tableName"), expected)
+>>>>>>> 90b10b4f7a54caaf0962424a111fddbd42b107b1
   }
 }

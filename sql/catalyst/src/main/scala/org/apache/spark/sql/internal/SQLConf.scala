@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -730,10 +731,11 @@ object SQLConf {
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
+    .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
@@ -1588,21 +1590,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
+  val USE_V1_SOURCE_LIST = buildConf("spark.sql.sources.useV1SourceList")
     .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 read paths are disabled. Reads from these" +
-      " sources will fall back to the V1 sources.")
+    .doc("A comma-separated list of data source short names or fully qualified data source " +
+      "implementation class names for which Data Source V2 code path is disabled. These data " +
+      "sources will fallback to Data Source V1 code path.")
     .stringConf
     .createWithDefault("")
-
-  val USE_V1_SOURCE_WRITER_LIST = buildConf("spark.sql.sources.write.useV1SourceList")
-    .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 write paths are disabled. Writes from these" +
-      " sources will fall back to the V1 sources.")
-    .stringConf
-    .createWithDefault("csv,json,orc,text,parquet")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1641,6 +1635,25 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+
+  object StoreAssignmentPolicy extends Enumeration {
+    val ANSI, LEGACY, STRICT = Value
+  }
+
+  val STORE_ASSIGNMENT_POLICY =
+    buildConf("spark.sql.storeAssignmentPolicy")
+      .doc("When inserting a value into a column with different data type, Spark will perform " +
+        "type coercion. Currently we support 3 policies for the type coercion rules: ansi, " +
+        "legacy and strict. With ansi policy, Spark performs the type coercion as per ANSI SQL. " +
+        "With legacy policy, Spark allows casting any value to any data type. " +
+        "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
+        "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
+        "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."
+      )
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(StoreAssignmentPolicy.values.map(_.toString))
+      .createOptional
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
@@ -1805,9 +1818,9 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW =
-    buildConf("spark.sql.arithmeticOperations.failOnOverFlow")
-      .doc("If it is set to true, all arithmetic operations on non-decimal fields throw an " +
+  val FAIL_ON_INTEGRAL_TYPE_OVERFLOW =
+    buildConf("spark.sql.failOnIntegralTypeOverflow")
+      .doc("If it is set to true, all operations on integral fields throw an " +
         "exception if an overflow occurs. If it is false (default), in case of overflow a wrong " +
         "result is returned.")
       .internal()
@@ -2321,7 +2334,7 @@ class SQLConf extends Serializable with Logging {
 
   def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
-  def arithmeticOperationsFailOnOverflow: Boolean = getConf(ARITHMETIC_OPERATIONS_FAIL_ON_OVERFLOW)
+  def failOnIntegralTypeOverflow: Boolean = getConf(FAIL_ON_INTEGRAL_TYPE_OVERFLOW)
 
   def literalPickMinimumPrecision: Boolean = getConf(LITERAL_PICK_MINIMUM_PRECISION)
 
@@ -2332,10 +2345,6 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
-
-  def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
-
-  def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
@@ -2355,6 +2364,9 @@ class SQLConf extends Serializable with Logging {
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
+
+  def storeAssignmentPolicy: Option[StoreAssignmentPolicy.Value] =
+    getConf(STORE_ASSIGNMENT_POLICY).map(StoreAssignmentPolicy.withName)
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 

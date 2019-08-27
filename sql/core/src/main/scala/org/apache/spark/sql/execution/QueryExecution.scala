@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -127,10 +128,16 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
-  def simpleString: String = withRedaction {
+  def simpleString: String = simpleString(false)
+
+  def simpleString(formatted: Boolean): String = withRedaction {
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    if (formatted) {
+      ExplainUtils.processPlan(executedPlan, concat.append)
+    } else {
+      QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    }
     concat.append("\n")
     concat.toString
   }
