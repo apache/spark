@@ -79,8 +79,8 @@ import org.apache.spark.streaming.Durations;
  *   };
  * kafka_driver_jaas.conf (used by yarn client) and kafka_jaas.conf are basically the same
  * except for some differences at 'keyTab'. In kafka_driver_jaas.conf, 'keyTab' should be
- * "${keytab_path}/kafka.service.keytab". 
- * In addition, for IBM JVMs, please use 'com.ibm.security.auth.module.Krb5LoginModule' 
+ * "${keytab_path}/kafka.service.keytab".
+ * In addition, for IBM JVMs, please use 'com.ibm.security.auth.module.Krb5LoginModule'
  * instead of 'com.sun.security.auth.module.Krb5LoginModule'.
  *
  * Note that this example uses SASL_PLAINTEXT for simplicity; however,
