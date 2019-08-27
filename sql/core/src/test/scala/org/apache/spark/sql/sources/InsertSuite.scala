@@ -585,7 +585,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("Throw exception on unsafe cast with ANSI casting policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
@@ -610,7 +610,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("Allow on writing any numeric value to numeric type with ANSI policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(i int, d float) using parquet")
@@ -624,7 +624,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
 
   test("Allow on writing timestamp value to date type with ANSI policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
       withTable("t") {
         sql("create table t(i date) using parquet")
