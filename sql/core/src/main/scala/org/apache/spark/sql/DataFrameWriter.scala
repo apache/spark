@@ -352,8 +352,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     val session = df.sparkSession
-    val provider = DataSource.lookupDataSource(source, session.sessionState.conf)
-    val canUseV2 = canUseV2Source(session, provider)
+    val canUseV2 = lookupV2Provider().isDefined
     val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
