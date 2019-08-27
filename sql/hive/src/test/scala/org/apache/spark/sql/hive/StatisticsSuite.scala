@@ -1489,7 +1489,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     Seq(true, false).foreach { fallBackToHdfs =>
       withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHdfs",
         HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-        withTempDir { tableDir =>
+        withTempDir { dir =>
+          val tableDir = new File(dir, "table")
+          val partitionDir = new File(dir, "partition")
           withTable("spark_28876") {
             sql(
               s"""
@@ -1498,24 +1500,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
                  |STORED AS PARQUET
                  |LOCATION '${tableDir.toURI}'
              """.stripMargin)
-            withTempDir { partitionDir =>
-              spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
-              sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
 
-              val table = getCatalogTable("spark_28876")
-              assert(table.stats.isEmpty)
-              val partitions = spark.sessionState.catalog.listPartitions(table.identifier)
-              assert(partitions.size === 1)
-              partitions.foreach { p =>
-                // Partition directory is outside of the table directory
-                assert(!p.storage.locationUri.get.toString.stripSuffix("/")
-                  .startsWith(table.location.toString.stripSuffix("/")))
-              }
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+            sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
 
-              val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
-                .asInstanceOf[HiveTableRelation].stats.sizeInBytes
-              assert(sizeInBytes === conf.defaultSizeInBytes)
-            }
+            assert(getCatalogTable("spark_28876").stats.isEmpty)
+            val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
+              .asInstanceOf[HiveTableRelation].stats.sizeInBytes
+            assert(sizeInBytes === conf.defaultSizeInBytes)
+            assert(spark.table("spark_28876").count() === 5)
           }
         }
       }
