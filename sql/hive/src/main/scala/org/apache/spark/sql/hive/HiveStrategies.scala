@@ -117,6 +117,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
     case relation @ HiveTableRelation(table, _, partitionCols)
       if DDLUtils.isHiveTable(table) && table.stats.isEmpty =>
       val conf = session.sessionState.conf
+      // For partitioned tables, the partition directory may be outside of the table directory.
+      // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
       val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
         try {
           val hadoopConf = session.sessionState.newHadoopConf()
