@@ -308,7 +308,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
   test("Throw exception on unsafe table insertion with strict casting policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
