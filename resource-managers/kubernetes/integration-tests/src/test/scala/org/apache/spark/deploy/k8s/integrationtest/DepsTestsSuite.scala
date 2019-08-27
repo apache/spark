@@ -227,7 +227,8 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
     val fuzzyUrlMatcher = """^(.*?)([a-zA-Z]+://.*?)(\s*)$""".r
     Eventually.eventually(TIMEOUT, INTERVAL) {
       // ns is always available either random or provided by the user
-      val rawUrl = Minikube.minikubeServiceAction(serviceName, "-n", kubernetesTestComponents.namespace, "--url")
+      val rawUrl = Minikube.minikubeServiceAction(
+        serviceName, "-n", kubernetesTestComponents.namespace, "--url")
       val url = rawUrl match {
         case fuzzyUrlMatcher(junk, url, extra) =>
           logDebug(s"Service url matched junk ${junk} - url ${url} - extra ${extra}")
