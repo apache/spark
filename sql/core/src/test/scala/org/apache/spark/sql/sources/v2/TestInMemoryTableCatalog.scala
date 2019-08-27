@@ -135,7 +135,7 @@ class TestInMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
   }
 
   override def listNamespaces: Array[Array[String]] = {
-    allNamespaces.map(_.head).distinct.map(Array(_)).toArray
+    allNamespaces.filter(_.nonEmpty).map(_.head).distinct.map(Array(_)).toArray
   }
 
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {

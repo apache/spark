@@ -1836,6 +1836,45 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
     assert(expected === df.collect())
   }
 
+  test("ShowDatabases: use v2 catalog if the default catalog is set") {
+    spark.conf.set("spark.sql.default.catalog", "testcat")
+
+    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_1.ns1_2.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.ns2_1.ns2_2.table (id bigint) USING foo")
+
+    runShowDatabasesSql(
+      "SHOW DATABASES",
+      Seq("ns1", "ns1.ns1_1", "ns1.ns1_1.ns1_2", "ns2", "ns2.ns2_1", "ns2.ns2_1.ns2_2"))
+
+    runShowDatabasesSql(
+      "SHOW DATABASES LIKE '*_*'",
+      Seq("ns1.ns1_1", "ns1.ns1_1.ns1_2", "ns2.ns2_1", "ns2.ns2_1.ns2_2"))
+  }
+
+  test("ShowDatabases: fallback to v1 catalog if no default catalog is set") {
+    spark.sql("CREATE TABLE testcat.ns.table (id bigint, data string) USING foo")
+
+    runShowDatabasesSql("SHOW DATABASES", Seq("default"), false)
+  }
+
+  private def runShowDatabasesSql(
+      sqlText: String,
+      expected: Seq[String],
+      expectV2Catalog: Boolean = true): Unit = {
+    val schema = if (expectV2Catalog) {
+      new StructType().add("namespace", StringType, nullable = false)
+    } else {
+      new StructType().add("databaseName", StringType, nullable = false)
+    }
+
+    val df = spark.sql(sqlText)
+    assert(df.schema === schema)
+    assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
+  }
+
   test("tableCreation: partition column case insensitive resolution") {
     val testCatalog = catalog("testcat").asTableCatalog
     val sessionCatalog = catalog("session").asTableCatalog
