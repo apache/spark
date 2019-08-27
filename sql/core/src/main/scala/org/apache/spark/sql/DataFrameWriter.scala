@@ -818,7 +818,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def modeForDSV2 = mode.getOrElse(SaveMode.Append)
 
-  private def lookupV2Provider() = {
+  private def lookupV2Provider(): Option[TableProvider] = {
     DataSource.lookupDataSourceV2(source, df.sparkSession.sessionState.conf) match {
       // TODO(SPARK-28396): File source v2 write path is currently broken.
       case Some(_: FileDataSourceV2) => None

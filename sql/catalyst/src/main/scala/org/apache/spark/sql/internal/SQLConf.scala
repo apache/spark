@@ -1593,7 +1593,7 @@ object SQLConf {
     .internal()
     .doc("A comma-separated list of data source short names or fully qualified data source " +
       "implementation class names for which Data Source V2 code path is disabled. These data " +
-      "source will fallback to Data Source V1 code path.")
+      "sources will fallback to Data Source V1 code path.")
     .stringConf
     .createWithDefault("")
 

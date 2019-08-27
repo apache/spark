@@ -59,7 +59,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSparkSession with Before
   after {
     spark.sessionState.catalog.reset()
     spark.sessionState.catalogManager.reset()
-    spark.sessionState.catalog.reset()
     spark.sessionState.conf.clear()
   }
 
