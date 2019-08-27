@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.sql.Date
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
@@ -591,18 +592,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         var msg = intercept[AnalysisException] {
           sql("insert into t values('a', 'b')")
         }.getMessage
-        assert(msg.contains("Cannot cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(now(), now())")
         }.getMessage
-        assert(msg.contains("Cannot cast 'i': TimestampType to IntegerType") &&
-          msg.contains("Cannot cast 'd': TimestampType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': TimestampType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': TimestampType to DoubleType"))
         msg = intercept[AnalysisException] {
           sql("insert into t values(true, false)")
         }.getMessage
-        assert(msg.contains("Cannot cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
       }
     }
   }
@@ -617,6 +618,18 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
         sql("insert into t values(3.0, 4)")
         sql("insert into t values(5.0, 6L)")
         checkAnswer(sql("select * from t"), Seq(Row(1, 2.0F), Row(3, 4.0F), Row(5, 6.0F)))
+      }
+    }
+  }
+
+  test("Allow on writing timestamp value to date type with ANSI policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i date) using parquet")
+        sql("insert into t values(TIMESTAMP('2010-09-02 14:10:10'))")
+        checkAnswer(sql("select * from t"), Seq(Row(Date.valueOf("2010-09-02"))))
       }
     }
   }

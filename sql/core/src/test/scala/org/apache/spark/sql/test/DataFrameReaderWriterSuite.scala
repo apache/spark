@@ -337,14 +337,14 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         var msg = intercept[AnalysisException] {
           Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot cast 'i': StringType to IntegerType") &&
-          msg.contains("Cannot cast 'd': StringType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
 
         msg = intercept[AnalysisException] {
           Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
         }.getMessage
-        assert(msg.contains("Cannot cast 'i': BooleanType to IntegerType") &&
-          msg.contains("Cannot cast 'd': BooleanType to DoubleType"))
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
       }
     }
   }
