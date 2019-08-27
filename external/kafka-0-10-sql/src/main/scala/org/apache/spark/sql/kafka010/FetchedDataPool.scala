@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.{ScheduledFuture, TimeUnit}
+import java.util.concurrent.{ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import java.util.concurrent.atomic.LongAdder
 
 import scala.collection.mutable
@@ -28,7 +28,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.{CacheKey, UNKNOWN_OFFSET}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
  * Provides object pool for [[FetchedData]] which is grouped by [[CacheKey]].
@@ -37,7 +37,9 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * may be stored from previous batch. If it can't find one to match, it will create
  * a new FetchedData.
  */
-private[kafka010] class FetchedDataPool extends Logging {
+private[kafka010] class FetchedDataPool(
+    executorService: ScheduledExecutorService,
+    clock: Clock) extends Logging {
   import FetchedDataPool._
 
   private val cache: mutable.Map[CacheKey, CachedFetchedDataList] = mutable.HashMap.empty
@@ -50,9 +52,6 @@ private[kafka010] class FetchedDataPool extends Logging {
 
     (minEvictIdleTime, evictorThreadInterval)
   }
-
-  private val executorService = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-    "kafka-fetched-data-cache-evictor")
 
   private def startEvictorThread(): ScheduledFuture[_] = {
     executorService.scheduleAtFixedRate(new Runnable {
@@ -88,7 +87,7 @@ private[kafka010] class FetchedDataPool extends Logging {
       numTotalElements.increment()
     }
 
-    cachedFetchedData.lastAcquiredTimestamp = System.currentTimeMillis()
+    cachedFetchedData.lastAcquiredTimestamp = clock.getTimeMillis()
     cachedFetchedData.inUse = true
 
     cachedFetchedData.getObject
@@ -118,7 +117,7 @@ private[kafka010] class FetchedDataPool extends Logging {
         } else {
           val cachedFetchedData = cachedFetchedDataOption.get
           cachedFetchedData.inUse = false
-          cachedFetchedData.lastReleasedTimestamp = System.nanoTime()
+          cachedFetchedData.lastReleasedTimestamp = clock.getTimeMillis()
         }
 
       case None =>
@@ -141,12 +140,14 @@ private[kafka010] class FetchedDataPool extends Logging {
   }
 
   private def removeIdleFetchedData(): Unit = synchronized {
-    val timestamp = System.nanoTime()
-    val minEvictableIdleTimeNanos = TimeUnit.MILLISECONDS.toNanos(minEvictableIdleTimeMillis)
-    val maxAllowedIdleTimestamp = timestamp - minEvictableIdleTimeNanos
+    val timestamp = clock.getTimeMillis()
+    val maxAllowedIdleTimestamp = timestamp - minEvictableIdleTimeMillis
     cache.values.foreach { p: CachedFetchedDataList =>
-      val expired = p.filter {
-        q => !q.inUse && q.lastReleasedTimestamp < maxAllowedIdleTimestamp
+      val expired = p.filter { q =>
+        // also check timestamp is bigger than last released timestamp to avoid
+        // the case System.currentTimeInMillis looking as "move back"
+        !q.inUse && timestamp > q.lastReleasedTimestamp &&
+          q.lastReleasedTimestamp < maxAllowedIdleTimestamp
       }
       expired.foreach {
         idle => p -= idle
@@ -178,5 +179,12 @@ private[kafka010] object FetchedDataPool {
 
   private[kafka010] type CachedFetchedDataList = mutable.ListBuffer[CachedFetchedData]
 
-  def build: FetchedDataPool = new FetchedDataPool()
+  def build(executorService: ScheduledExecutorService, clock: Clock): FetchedDataPool = {
+    new FetchedDataPool(executorService, clock)
+  }
+
+  def build: FetchedDataPool = {
+    build(ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "kafka-fetched-data-cache-evictor"), new SystemClock)
+  }
 }

@@ -18,17 +18,20 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
+import org.jmock.lib.concurrent.DeterministicScheduler
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.ManualClock
 
 class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   import FetchedDataPool._
@@ -203,9 +206,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("evict idle fetched data") {
-    import org.scalatest.time.SpanSugar._
-
-    val minEvictableIdleTimeMillis = 1000
+    val minEvictableIdleTimeMillis = 2000
     val evictorThreadRunIntervalMillis = 500
 
     val newConf = Seq(
@@ -214,7 +215,9 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
         evictorThreadRunIntervalMillis.toString)
 
     withSparkConf(newConf: _*) {
-      val dataPool = FetchedDataPool.build
+      val scheduler = new DeterministicScheduler()
+      val clock = new ManualClock()
+      val dataPool = FetchedDataPool.build(scheduler, clock)
 
       val cacheKeys = (0 until 10).map { partId =>
         CacheKey("testgroup", new TopicPartition("topic", partId))
@@ -229,19 +232,38 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
       }
 
       val dataToEvict = dataList.take(3)
+      // release key with around 500 ms delay, so that we can check eviction per key
       dataToEvict.foreach { case (key, data) =>
         dataPool.release(key, data)
+        clock.advance(500)
       }
 
-      // wait up to twice than minEvictableIdleTimeMillis to ensure evictor thread to clear up
-      // idle objects
-      eventually(timeout((minEvictableIdleTimeMillis.toLong * 2).milliseconds),
-        interval(evictorThreadRunIntervalMillis.milliseconds)) {
-        // idle objects should be evicted
-        dataToEvict.map { case (key, _) =>
-          assert(getCache(dataPool)(key).isEmpty)
-        }
-      }
+      // time elapsed after releasing
+      // first key: 1500ms, second key: 1000 ms, third key: 500 ms
+
+      // advancing - first key: 2100ms, second key: 1600 ms, third key: 1100 ms
+      clock.advance(600)
+
+      scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
+      assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
+      assert(getCache(dataPool)(dataToEvict(1)._1).nonEmpty)
+      assert(getCache(dataPool)(dataToEvict(2)._1).nonEmpty)
+
+      // advancing - second key: 2100 ms, third key: 1600 ms
+      clock.advance(500)
+
+      scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
+      assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
+      assert(getCache(dataPool)(dataToEvict(1)._1).isEmpty)
+      assert(getCache(dataPool)(dataToEvict(2)._1).nonEmpty)
+
+      // advancing - third key: 2300 ms
+      clock.advance(500)
+
+      scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
+      assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
+      assert(getCache(dataPool)(dataToEvict(1)._1).isEmpty)
+      assert(getCache(dataPool)(dataToEvict(2)._1).isEmpty)
 
       assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 7)
       assert(getCache(dataPool).values.map(_.size).sum === dataList.size - dataToEvict.size)
@@ -250,11 +272,19 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
         dataPool.release(key, data)
       }
 
-      // ensure releasing more objects don't trigger eviction immediately
+      // add objects to be candidates for eviction
+      clock.advance(minEvictableIdleTimeMillis + 100)
+
+      // ensure releasing more objects don't trigger eviction unless evictor runs
       assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 7)
       assert(getCache(dataPool).values.map(_.size).sum === dataList.size - dataToEvict.size)
 
-      dataPool.shutdown()
+      try {
+        dataPool.shutdown()
+      } catch {
+        // ignore as it's known issue, DeterministicScheduler doesn't support shutdown
+        case _: UnsupportedOperationException =>
+      }
     }
   }
 
