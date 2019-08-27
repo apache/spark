@@ -1002,6 +1002,18 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.directory.api</groupId>
+            <artifactId>api-ldap-schema-data</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>

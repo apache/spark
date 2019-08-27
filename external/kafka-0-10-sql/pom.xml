@@ -95,14 +95,6 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-minikdc</artifactId>
-      <version>${hadoop.version}</version>
-      <scope>test</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.directory.api</groupId>
-          <artifactId>api-ldap-schema-data</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <!-- Kafka embedded server uses Zookeeper 3.4.7 API -->
     <dependency>

@@ -127,13 +127,13 @@ class KafkaTestUtils(
 
   private def setUpMiniKdc(): Unit = {
     val kdcDir = Utils.createTempDir()
-    val kdcConf = MiniKdc.createConf
+    val kdcConf = MiniKdc.createConf()
     kdc = new MiniKdc(kdcConf, kdcDir)
     kdc.start()
     kdcReady = true
   }
 
-  private def createJaasConfigFile(): String = {
+  private def createKeytabsAndJaasConfigFile(): String = {
     assert(kdcReady, "KDC should be set up beforehand")
     val baseDir = Utils.createTempDir()
 
@@ -207,12 +207,7 @@ class KafkaTestUtils(
   private def setupEmbeddedKafkaServer(): Unit = {
     assert(zkReady, "Zookeeper should be set up beforehand")
 
-    val protocolName = if (!secure) {
-      PLAINTEXT.name
-    }
-    else {
-      SASL_PLAINTEXT.name
-    }
+    val protocolName = if (!secure) PLAINTEXT.name else SASL_PLAINTEXT.name
 
     // Kafka broker startup
     Utils.startServiceOnPort(brokerPort, port => {
@@ -239,7 +234,7 @@ class KafkaTestUtils(
 
     if (secure) {
       setUpMiniKdc()
-      val jaasConfigFile = createJaasConfigFile()
+      val jaasConfigFile = createKeytabsAndJaasConfigFile()
       System.setProperty(JAVA_AUTH_CONFIG, jaasConfigFile)
       Configuration.getConfiguration.refresh()
     } else {
