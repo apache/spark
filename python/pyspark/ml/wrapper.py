@@ -361,3 +361,68 @@ class JavaModel(JavaTransformer, Model):
             self._create_params_from_java()
 
             self._resetUid(java_model.uid())
+
+
+@inherit_doc
+class JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
+    """
+    (Private) Trait for parameters for prediction (regression and classification)
+    """
+    pass
+
+
+@inherit_doc
+class JavaPredictor(JavaPredictorParams):
+    """
+    (Private) Java Estimator for prediction tasks (regression and classification).
+    """
+
+    @since("3.0.0")
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+
+@inherit_doc
+class JavaPredictionModel(JavaModel, JavaPredictorParams):
+    """
+    (Private) Java Model for prediction tasks (regression and classification).
+    """
+
+    @since("3.0.0")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.0.0")
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    @property
+    @since("2.1.0")
+    def numFeatures(self):
+        """
+        Returns the number of features the model was trained on. If unknown, returns -1
+        """
+        return self._call_java("numFeatures")
