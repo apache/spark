@@ -445,8 +445,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             // reading a garbage file is safe, but we would log an error which can be scary to
             // the end-user.
             !entry.getPath().getName().startsWith(".") &&
-            !entry.getPath().getName().endsWith(".ckp") &&
-            !entry.getPath().getName().endsWith(".ckp.tmp") &&
+            !entry.getPath().getName().endsWith(EventLoggingListener.CHECKPOINT) &&
+            !entry.getPath().getName().endsWith(s"${EventLoggingListener.CHECKPOINT}.tmp") &&
             !isBlacklisted(entry.getPath)
         }
         .filter { entry =>
@@ -1105,7 +1105,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private def getOrCreateInMemoryStoreSnapshot(attempt: AttemptInfoWrapper)
     : InMemoryStoreSnapshot = {
     if (conf.get(IMS_CHECKPOINT_ENABLED)) {
-      val ckpPath = new Path(logDir, attempt.logPath + ".ckp")
+      val ckpPath = new Path(logDir, attempt.logPath + EventLoggingListener.CHECKPOINT)
       if (fs.exists(ckpPath)) {
         try {
           logInfo(s"Loading InMemoryStore checkpoint file: $ckpPath")

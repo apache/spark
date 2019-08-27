@@ -104,7 +104,8 @@ private[spark] class InMemoryStoreCheckpoint(
         assert(appInfo != null, "appInfo is null")
         val uri = new Path(ckpPath).toUri
         val ckpFile = new Path(uri.getPath +
-          (if (!finished) EventLoggingListener.IN_PROGRESS else "") + EventLoggingListener.CKP)
+          (if (!finished) EventLoggingListener.IN_PROGRESS else "") +
+          EventLoggingListener.CHECKPOINT)
         val tmpFile = new Path(ckpFile + ".tmp")
         val fileOut = fileSystem.create(tmpFile)
         val bufferOut = new BufferedOutputStream(fileOut, bufferSize)
@@ -116,7 +117,7 @@ private[spark] class InMemoryStoreCheckpoint(
         FileUtil.copy(fileSystem, tmpFile, fileSystem, ckpFile, true, hadoopConf)
         if (finished) {
           val inProgressCkpFile = new Path(uri.getPath + EventLoggingListener.IN_PROGRESS +
-            EventLoggingListener.CKP)
+            EventLoggingListener.CHECKPOINT)
           if (!fileSystem.delete(inProgressCkpFile, true)) {
             logWarning(s"Failed to delete $inProgressCkpFile")
           }
