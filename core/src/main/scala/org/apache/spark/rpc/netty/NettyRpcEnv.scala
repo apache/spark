@@ -272,13 +272,13 @@ private[netty] class NettyRpcEnv(
    * Returns [[SerializationStream]] that forwards the serialized bytes to `out`.
    */
   private[netty] def serializeStream(out: OutputStream): SerializationStream = {
-    serializer.get.serializeStream(out)
+    serializer.get().serializeStream(out)
   }
 
   private[netty] def deserialize[T: ClassTag](client: TransportClient, bytes: ByteBuffer): T = {
     NettyRpcEnv.currentClient.withValue(client) {
       deserialize { () =>
-        serializer.get.deserialize[T](bytes)
+        serializer.get().deserialize[T](bytes)
       }
     }
   }
