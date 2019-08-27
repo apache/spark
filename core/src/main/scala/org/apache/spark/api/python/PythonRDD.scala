@@ -440,6 +440,29 @@ private[spark] object PythonRDD extends Logging {
     Array(port, secret)
   }
 
+  /**
+   * Create a socket server object and background thread to execute the writeFunc
+   * with the given OutputStream.
+   *
+   * This is the same as serveToStream, only it returns a server object that
+   * can be used to sync in Python.
+   */
+  private[spark] def serveToStreamWithSync(
+      threadName: String)(writeFunc: OutputStream => Unit): Array[Any] = {
+
+    val handleFunc = (sock: Socket) => {
+      val out = new BufferedOutputStream(sock.getOutputStream())
+      Utils.tryWithSafeFinally {
+        writeFunc(out)
+      } {
+        out.close()
+      }
+    }
+
+    val server = new SocketFuncServer(authHelper, threadName, handleFunc)
+    Array(server.port, server.secret, server)
+  }
+
   private def getMergedConf(confAsMap: java.util.HashMap[String, String],
       baseConf: Configuration): Configuration = {
     val conf = PythonHadoopUtil.mapToConf(confAsMap)
@@ -957,3 +980,17 @@ private[spark] class PythonParallelizeServer(sc: SparkContext, parallelism: Int)
   }
 }
 
+/**
+ * Create a socket server class and run user function on the socket in a background thread.
+ * This is the same as calling SocketAuthServer.setupOneConnectionServer except it creates
+ * a server object that can then be synced from Python.
+ */
+private [spark] class SocketFuncServer(
+    authHelper: SocketAuthHelper,
+    threadName: String,
+    func: Socket => Unit) extends PythonServer[Unit](authHelper, threadName) {
+
+  override def handleConnection(sock: Socket): Unit = {
+    func(sock)
+  }
+}

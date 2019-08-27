@@ -2175,9 +2175,13 @@ class DataFrame(object):
 
         .. note:: Experimental.
         """
-        with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.collectAsArrowToPython()
-        return list(_load_from_socket(sock_info, ArrowStreamSerializer()))
+        with SCCallSiteSync(self._sc):
+            from pyspark.rdd import _load_from_socket
+            port, auth_secret, jsocket_auth_server = self._jdf.collectAsArrowToPython()
+            try:
+                return list(_load_from_socket((port, auth_secret), ArrowStreamSerializer()))
+            finally:
+                jsocket_auth_server.getResult()  # Join serving thread and raise any exceptions
 
     ##########################################################################################
     # Pandas compatibility
