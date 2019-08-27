@@ -65,6 +65,7 @@ object StringUtils extends Logging {
     "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
   }
 
+  // "true", "yes", "1", "false", "no", "0", and unique prefixes of these strings are accepted.
   private[this] val trueStrings =
     Set("true", "tru", "tr", "t", "yes", "ye", "y", "on", "1").map(UTF8String.fromString)
 
