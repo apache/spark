@@ -1225,12 +1225,12 @@ object SQLConf {
     .createWithDefault(Long.MaxValue)
 
   val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
-    .doc("This flag is effective only if it is Hive table. When true, it will fall back to HDFS " +
-      "if the table statistics are not available from table metadata. This is useful in " +
-      "determining if a table is small enough to use auto broadcast joins. " +
+    .doc("When true, it will fall back to HDFS if the table statistics are not available from " +
+      "table metadata. This is useful in determining if a table is small enough to use auto " +
+      "broadcast joins. This flag is effective only if it is non-partitioned Hive table. " +
       "For non-partitioned data source table, it will be automatically recalculated if table " +
-      "statistics are not available. For partitioned data source table, It is " +
-      s"'${DEFAULT_SIZE_IN_BYTES.key}' if table statistics are not available.")
+      "statistics are not available. For partitioned data source and partitioned Hive table, " +
+      s"It is '${DEFAULT_SIZE_IN_BYTES.key}' if table statistics are not available.")
     .booleanConf
     .createWithDefault(false)
 
