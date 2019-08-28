@@ -128,6 +128,11 @@ private[kafka010] class InternalKafkaConsumerPool(
 
   def size(key: CacheKey): Int = numIdle(key) + numActive(key)
 
+  // TODO: revisit the relation between CacheKey and kafkaParams - for now it looks a bit weird
+  //   as we force all consumers having same (groupId, topicPartition) to have same kafkaParams
+  //   which might be viable in performance perspective (kafkaParams might be too huge to use
+  //   as a part of key), but there might be the case kafkaParams could be different -
+  //   cache key should be differentiated for both kafkaParams.
   private def updateKafkaParamForKey(key: CacheKey, kafkaParams: ju.Map[String, Object]): Unit = {
     // We can assume that kafkaParam should not be different for same cache key,
     // otherwise we can't reuse the cached object and cache key should contain kafkaParam.
