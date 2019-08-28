@@ -18,12 +18,11 @@ package org.apache.spark.io;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.RandomUtils;
-import org.apache.hadoop.fs.Path;
+import org.apache.spark.util.Utils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import sun.security.action.GetPropertyAction;
 
 import java.io.File;
 import java.io.IOException;
@@ -39,19 +38,14 @@ public class FileUtilitySuite {
 
   @Before
   public void setUp() throws IOException {
-    File tmpLocation = new File(
-      GetPropertyAction.privilegedGetProperty("java.io.tmpdir"));
-    Path sourceFolderPath = new Path(tmpLocation.toString(),
+    sourceFolder = Utils.createTempDir(System.getProperty("java.io.tmpdir"),
       "FileUtilTest" + RandomUtils.nextLong());
-    sourceFolder = new File(sourceFolderPath.toString());
-    sourceFolder.mkdirs();
     destTarLoc = File.createTempFile("dest-tar", ".tar");
     destFile = File.createTempFile("dest-file", ".tmp");
   }
 
   @After
   public void tearDown() {
-    sourceFolder.delete();
     destTarLoc.delete();
     destFile.delete();
   }
