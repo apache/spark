@@ -33,9 +33,7 @@ ALTER {DATABASE | SCHEMA} database_name SET DBPROPERTIES (propery_name=property_
 ### Parameters
 <dl>
   <dt><code><em>database_name</em></code></dt>
-  <dd>
-    Specifies the name of the database to be altered.
-  </dd>
+  <dd>Specifies the name of the database to be altered.</dd>
 </dl>
 
 ### Examples
