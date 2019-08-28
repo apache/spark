@@ -210,8 +210,8 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     val evictorThreadRunIntervalMillis = 500L
 
     val conf = new SparkConf()
-    conf.set(CONSUMER_CACHE_TIMEOUT, minEvictableIdleTimeMillis)
-    conf.set(CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, evictorThreadRunIntervalMillis)
+    conf.set(FETCHED_DATA_CACHE_TIMEOUT, minEvictableIdleTimeMillis)
+    conf.set(FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL, evictorThreadRunIntervalMillis)
 
     val scheduler = new DeterministicScheduler()
     val clock = new ManualClock()
