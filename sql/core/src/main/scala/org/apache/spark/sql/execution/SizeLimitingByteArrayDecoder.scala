@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{ByteArrayInputStream, DataInputStream}
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,11 +35,9 @@ import org.apache.spark.util.Utils
  */
 private[spark] class SizeLimitingByteArrayDecoder(
      nFields: Int,
-     conf: SparkConf,
      sqlConf: SQLConf) extends Logging {
   private var totalUncompressedResultSize = 0L
-  private val maxResultSize = conf.get(config.MAX_RESULT_SIZE)
-  private val limitUncompressedMaxResultSize = sqlConf.limitUncompressedResultSize
+  private val maxUncompressedResultSize = sqlConf.maxUncompressedResultSize
 
   /**
    * Decodes the byte arrays back to UnsafeRows and puts them into buffer.
@@ -68,12 +66,15 @@ private[spark] class SizeLimitingByteArrayDecoder(
 
   private def ensureCanFetchMoreResults(sizeOfNextRow: Int): Unit = {
     totalUncompressedResultSize += sizeOfNextRow
-    if (limitUncompressedMaxResultSize && totalUncompressedResultSize > maxResultSize) {
-      val msg = s"Total size of uncompressed results " +
-        s"(${Utils.bytesToString(totalUncompressedResultSize)}) " +
-        s"is bigger than ${config.MAX_RESULT_SIZE.key} (${Utils.bytesToString(maxResultSize)})"
-      logError(msg)
-      throw new SparkException(msg)
+    maxUncompressedResultSize match {
+      case Some(maxSize) => if (totalUncompressedResultSize > maxSize) {
+        val msg = s"Total size of uncompressed results " +
+          s"(${Utils.bytesToString(totalUncompressedResultSize)}) " +
+          s"is bigger than ${config.MAX_RESULT_SIZE.key} (${Utils.bytesToString(maxSize)})"
+        logError(msg)
+        throw new SparkException(msg)
+      }
+      case _ =>
     }
   }
 }
