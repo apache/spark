@@ -75,9 +75,18 @@ private[spark] class ShufflePartitionPairsWriter(
       Utils.tryWithSafeFinally {
         Utils.tryWithSafeFinally {
           objOut = closeIfNonNull(objOut)
+          // Setting these to null will prevent the underlying streams from being closed twice
+          // just in case any stream's close() implementation is not idempotent.
+          wrappedStream = null
+          partitionStream = null
         } {
+          // Normally closing objOut would close the inner streams as well, but just in case there
+          // was an error in initialization etc. we make sure we clean the other streams up too.
           Utils.tryWithSafeFinally {
             wrappedStream = closeIfNonNull(wrappedStream)
+            // Same as above - if wrappedStream closes then assume it closes underlying
+            // partitionStream and don't close again in the finally
+            partitionStream = null
           } {
             partitionStream = closeIfNonNull(partitionStream)
           }
