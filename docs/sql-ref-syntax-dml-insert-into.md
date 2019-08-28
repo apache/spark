@@ -23,12 +23,6 @@ license: |
 
 The `INSERT INTO` statement inserts new rows into a table. The inserted rows can be specified by value expressions or result from a query.
 
-See also:
-  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
-  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
-
-
 ### Syntax
 {% highlight sql %}
 INSERT INTO [ TABLE ] table_name
@@ -49,19 +43,19 @@ Specifies the values to be inserted. Either an explicitly specified value or a N
 #### ***query***:
 A query that produces the rows to be inserted. It can be in one of following formats:
 - a `SELECT` statement
-- a table
+- a `TABLE` statement
 - a `FROM` statement
 
 ### Examples
 #### Single Row Insert Using a VALUES Clause
 {% highlight sql %}
  CREATE TABLE students (Name VARCHAR(64), Address VARCHAR(64), StudentID INT)
-     USING PARQUET PARTITIONED BY (StudentID)
+     USING PARQUET PARTITIONED BY (StudentID);
 
  INSERT INTO students
-     VALUES ('Amy Smith', '123 Park Ave, San Jose', 111111)
+     VALUES ('Amy Smith', '123 Park Ave, San Jose', 111111);
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -74,9 +68,9 @@ A query that produces the rows to be inserted. It can be in one of following for
 {% highlight sql %}
  INSERT INTO students
      VALUES ('Bob Brown', '456 Taylor St, Cupertino', 222222),
-            ('Cathy Johnson', '789 Race Ave, Palo Alto', 333333)
+            ('Cathy Johnson', '789 Race Ave, Palo Alto', 333333);
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -93,7 +87,7 @@ A query that produces the rows to be inserted. It can be in one of following for
 Assuming the `persons` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM persons
+ SELECT * FROM persons;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | SSN            |
@@ -104,9 +98,9 @@ Assuming the `persons` table has already been created and populated.
      + -------------- + ------------------------------ + ---------------+
 
  INSERT INTO students PARTITION (StudentID = 444444)
-     SELECT Name, Address FROM persons WHERE name = "Dora Williams"
+     SELECT Name, Address FROM persons WHERE name = "Dora Williams";
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -121,11 +115,11 @@ Assuming the `persons` table has already been created and populated.
      + -------------- + ------------------------------ + -------------- +
 {% endhighlight %}
 
-#### Insert Using a Table
+#### Insert Using a TABLE Statement
 Assuming the `visitingStudents` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM visitingStudents
+ SELECT * FROM visitingStudents;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -135,9 +129,9 @@ Assuming the `visitingStudents` table has already been created and populated.
      | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
      + -------------- + ------------------------------ + -------------- +
 
- INSERT INTO students TABLE visitingStudents
+ INSERT INTO students TABLE visitingStudents;
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -160,7 +154,7 @@ Assuming the `visitingStudents` table has already been created and populated.
 Assuming the `applicants` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM applicants
+ SELECT * FROM applicants;
 
      + -------------- + ------------------------------ + -------------- + -------------- +
      | Name           | Address                        | StudentID      | Qualified      |
@@ -173,9 +167,9 @@ Assuming the `applicants` table has already been created and populated.
      + -------------- + ------------------------------ + -------------- + -------------- +
 
  INSERT INTO students
-      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE
+      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE;
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -197,3 +191,8 @@ Assuming the `applicants` table has already been created and populated.
      | Jason Wang     | 908 Bird St, Saratoga          | 121212         |
      + -------------- + ------------------------------ + -------------- +
 {% endhighlight %}
+
+Related Statements:
+  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
+  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)

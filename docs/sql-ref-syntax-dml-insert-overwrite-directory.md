@@ -21,11 +21,6 @@ license: |
 ### Description
 The `INSERT OVERWRITE DIRECTORY` statement overwrites the existing data in the directory with the new values using Spark native format. The inserted rows can be specified by value expressions or result from a query.
 
-See also:
-  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
-
 ### Syntax
 {% highlight sql %}
 INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
@@ -49,7 +44,7 @@ Specifies the values to be inserted. Either an explicitly specified value or a N
 #### ***query***:
 A query that produces the rows to be inserted. It can be in one of following formats:
 - a `SELECT` statement
-- a table
+- a `TABLE` statement
 - a `FROM` statement
 
 ### Examples
@@ -57,10 +52,15 @@ A query that produces the rows to be inserted. It can be in one of following for
 INSERT OVERWRITE DIRECTORY '/tmp/destination'
     USING parquet
     OPTIONS (col1 1, col2 2, col3 'test')
-    SELECT * FROM test_table
+    SELECT * FROM test_table;
 
 INSERT OVERWRITE DIRECTORY
     USING parquet
     OPTIONS ('path' '/tmp/destination', col1 1, col2 2, col3 'test')
-    SELECT * FROM test_table
+    SELECT * FROM test_table;
 {% endhighlight %}
+
+Related Statements:
+  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)

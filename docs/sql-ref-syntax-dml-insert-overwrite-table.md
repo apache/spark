@@ -23,11 +23,6 @@ license: |
 
 The `INSERT OVERWRITE` statement overwrites the existing data in the table using the new values. The inserted rows can be specified by value expressions or result from a query.
 
-See also:
-  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
-  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
-
 ### Syntax
 {% highlight sql %}
 INSERT OVERWRITE [TABLE] table_name
@@ -48,7 +43,7 @@ Specifies the values to be inserted. Either an explicitly specified value or a N
 #### ***query***:
 A query that produces the rows to be inserted. It can be in one of following formats:
 - a `SELECT` statement
-- a table
+- a `TABLE` statement
 - a `FROM` statement
 
 ### Examples
@@ -57,7 +52,7 @@ A query that produces the rows to be inserted. It can be in one of following for
 Assuming the `students` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -81,9 +76,9 @@ Assuming the `students` table has already been created and populated.
 
  INSERT OVERWRITE students
      VALUES ('Ashua Hill', '456 Erica Ct, Cupertino', 111111),
-            ('Brian Reed', '723 Kern Ave, Palo Alto', 222222)
+            ('Brian Reed', '723 Kern Ave, Palo Alto', 222222);
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -98,7 +93,7 @@ Assuming the `students` table has already been created and populated.
 Assuming the `persons` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM persons
+ SELECT * FROM persons;
 
       + -------------- + ------------------------------ + -------------- +
       | Name           | Address                        | SSN            |
@@ -109,9 +104,9 @@ Assuming the `persons` table has already been created and populated.
       + -------------- + ------------------------------ + ---------------+
 
  INSERT OVERWRITE students PARTITION (StudentID = 222222)
-     SELECT Name, Address FROM persons WHERE name = "Dora Williams"
+     SELECT Name, Address FROM persons WHERE name = "Dora Williams";
 
- SELECT * FROM students
+ SELECT * FROM students;
 
       + -------------- + ------------------------------ + -------------- +
       | Name           | Address                        | StudentID      |
@@ -122,11 +117,11 @@ Assuming the `persons` table has already been created and populated.
       + -------------- + ------------------------------ + -------------- +
 {% endhighlight %}
 
-#### Insert Using a Table
+#### Insert Using a TABLE Statement
 Assuming the `visitingStudents` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM visitingStudents
+ SELECT * FROM visitingStudents;
 
       + -------------- + ------------------------------ + -------------- +
       | Name           | Address                        | StudentID      |
@@ -136,9 +131,9 @@ Assuming the `visitingStudents` table has already been created and populated.
       | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
       + -------------- + ------------------------------ + -------------- +
 
- INSERT OVERWRITE students TABLE visitingStudents
+ INSERT OVERWRITE students TABLE visitingStudents;
 
- SELECT * FROM students
+ SELECT * FROM students;
 
       + -------------- + ------------------------------ + -------------- +
       | Name           | Address                        | StudentID      |
@@ -153,7 +148,7 @@ Assuming the `visitingStudents` table has already been created and populated.
 Assuming the `applicants` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM applicants
+ SELECT * FROM applicants;
 
      + -------------- + ------------------------------ + -------------- + -------------- +
      | Name           | Address                        | StudentID      | Qualified      |
@@ -165,10 +160,10 @@ Assuming the `applicants` table has already been created and populated.
      | Jason Wang     | 908 Bird St, Saratoga          | 121212         | true           |
      + -------------- + ------------------------------ + -------------- + -------------- +
 
- INSERT OVERWRITE students
-      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE
+ INSERT OVERWRITE students;
+      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE;
 
- SELECT * FROM students
+ SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
      | Name           | Address                        | StudentID      |
@@ -178,3 +173,8 @@ Assuming the `applicants` table has already been created and populated.
      | Jason Wang     | 908 Bird St, Saratoga          | 121212         |
      + -------------- + ------------------------------ + -------------- +
 {% endhighlight %}
+
+Related Statements:
+  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
+  * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)

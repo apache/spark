@@ -20,13 +20,8 @@ license: |
 ---
 
 ### Description
-The `INSERT OVERWRITE DIRECTORY` with Hive format overwrites the existing data in the directory with the new values using Hive `SERDE`.
+The `INSERT OVERWRITE DIRECTORY` with Hive format overwrites the existing data in the directory with the new values using Hive `SerDe`.
 Hive support must be enabled to use this command. The inserted rows can be specified by value expressions or result from a query.
-
-See also:
-  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
-  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
-  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
 
 ### Syntax
 {% highlight sql %}
@@ -40,7 +35,7 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
 Specifies the destination directory.
 
 #### ***row_format***:
-Specifies the row format for this insert. `SERDE` clause can be used to specify a custom `SERDE` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SERDE` and state the delimiter, escape character, null character, and so on.
+Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
 
 #### ***file_format***:
 Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
@@ -51,16 +46,21 @@ Specifies the values to be inserted. Either an explicitly specified value or a N
 #### ***query***:
 A query that produces the rows to be inserted. It can be in one of following formats:
 - a `SELECT` statement
-- a table
+- a `TABLE` statement
 - a `FROM` statement
 
 ### Examples
 {% highlight sql %}
  INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
      STORED AS orc
-     SELECT * FROM test_table
+     SELECT * FROM test_table;
 
  INSERT OVERWRITE LOCAL DIRECTORY '/tmp/destination'
      ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-     SELECT * FROM test_table
+     SELECT * FROM test_table;
 {% endhighlight %}
+
+Related Statements:
+  * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
+  * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
+  * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
