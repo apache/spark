@@ -205,6 +205,39 @@ The Executors tab displays summary information about the executors that were cre
 application, including memory and disk usage and task and shuffle information. The Storage Memory
 column shows the amount of memory used and reserved for caching data.
 
+<p style="text-align: center;">
+  <img src="img/webui-exe-tab.png"
+       title="Executors Tab"
+       alt="Executors Tab"
+       width="80%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+The Executors tab provides not only resource information (amount of memory, disk, and cores used by each executor)
+but also performance information ([GC time](tuning.html#garbage-collection-tuning) and shuffle information).
+
+<p style="text-align: center;">
+  <img src="img/webui-exe-err.png"
+       title="Stderr Log"
+       alt="Stderr Log"
+       width="80%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+Clicking the 'stderr' link of executor 0 displays detailed [standard error log](spark-standalone.html#monitoring-and-logging)
+in its console.
+
+<p style="text-align: center;">
+  <img src="img/webui-exe-thread.png"
+       title="Thread Dump"
+       alt="Thread Dump"
+       width="80%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+Clicking the 'Thread Dump' link of executor 0 displays the thread dump of JVM on executor 0, which is pretty useful
+for performance analysis.
+
 ## SQL Tab
 If the application executes Spark SQL queries, the SQL tab displays information, such as the duration,
 jobs, and physical and logical plans for the queries. Here we include a basic example to illustrate
