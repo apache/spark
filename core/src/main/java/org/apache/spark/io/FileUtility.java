@@ -32,19 +32,19 @@ public class FileUtility {
   public static final String ENCODING = "utf-8";
 
   public static void extractTarFile(String inputTarFileLoc, String destDirLoc)
-      throws IllegalStateException {
+    throws IllegalStateException {
     File inputFile = new File(inputTarFileLoc);
     if (!inputTarFileLoc.endsWith(".tar")) {
       throw new IllegalStateException(String.format(
-          "Input File[%s] should end with tar extension.", inputTarFileLoc));
+        "Input File[%s] should end with tar extension.", inputTarFileLoc));
     }
     File destDir = new File(destDirLoc);
     if (destDir.exists() && !destDir.delete()) {
       throw new IllegalStateException(String.format(
-          "Couldn't delete the existing destination directory[%s] ", destDirLoc));
+        "Couldn't delete the existing destination directory[%s] ", destDirLoc));
     } else if (!destDir.mkdir()) {
       throw new IllegalStateException(String.format(
-          "Couldn't create directory  %s ", destDirLoc));
+        "Couldn't create directory  %s ", destDirLoc));
     }
 
     try (InputStream is = new FileInputStream(inputFile);
@@ -55,7 +55,7 @@ public class FileUtility {
         if (entry.isDirectory()) {
           if (!outputFile.exists() && !outputFile.mkdirs()) {
             throw new IllegalStateException(String.format(
-                "Couldn't create directory %s.", outputFile.getAbsolutePath()));
+              "Couldn't create directory %s.", outputFile.getAbsolutePath()));
           }
         } else {
           try (OutputStream outputFileStream = new FileOutputStream(outputFile)) {
@@ -65,7 +65,7 @@ public class FileUtility {
       }
     } catch (IOException e){
       throw new IllegalStateException(String.format(
-          "extractTarFile failed with exception %s.", e.getMessage()));
+        "extractTarFile failed with exception %s.", e.getMessage()));
     }
   }
 
@@ -78,16 +78,16 @@ public class FileUtility {
    */
 
   public static void createTarFile(String source, String destFileLoc)
-      throws IllegalStateException {
+    throws IllegalStateException {
     File f = new File(destFileLoc);
     if (f.exists() && !f.delete()) {
       throw new IllegalStateException(String.format(
-          "Couldn't delete the destination file location[%s]", destFileLoc));
+        "Couldn't delete the destination file location[%s]", destFileLoc));
     }
     File folder = new File(source);
     if (!folder.exists()) {
       throw new IllegalStateException(String.format(
-          "Source folder[%s] does not exist", source));
+        "Source folder[%s] does not exist", source));
     }
 
     try (FileOutputStream fos = new FileOutputStream(destFileLoc);
@@ -105,7 +105,7 @@ public class FileUtility {
       tarOs.finish();
     } catch (IOException e) {
       throw new IllegalStateException(String.format(
-          "createTarFile failed with exception %s.", e.getMessage()));
+        "createTarFile failed with exception %s.", e.getMessage()));
     }
   }
 

@@ -31,6 +31,7 @@ import org.rocksdb.RocksDB
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.state.RocksDbStateStoreProvider.ROCKS_DB_STATE_STORE_CONF_PREFIX
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -197,19 +198,19 @@ class RocksDbInstance(
 
   private val dataBlockSize = conf
     .getOrElse(
-      "spark.sql.streaming.stateStore.rocksDb.blockSizeInKB".toLowerCase(Locale.ROOT),
+      s"${ROCKS_DB_STATE_STORE_CONF_PREFIX}.blockSizeInKB".toLowerCase(Locale.ROOT),
       "32")
     .toInt
 
   private val memTableMemoryBudget = conf
     .getOrElse(
-      "spark.sql.streaming.stateStore.rocksDb.memtableBudgetInMB".toLowerCase(Locale.ROOT),
+      s"${ROCKS_DB_STATE_STORE_CONF_PREFIX}.memtableBudgetInMB".toLowerCase(Locale.ROOT),
       "1024")
     .toInt
 
   private val enableStats = conf
     .getOrElse(
-      "spark.sql.streaming.stateStore.rocksDb.enableDbStats".toLowerCase(Locale.ROOT),
+      s"${ROCKS_DB_STATE_STORE_CONF_PREFIX}.enableDbStats".toLowerCase(Locale.ROOT),
       "false")
     .toBoolean
 
@@ -427,7 +428,7 @@ object RocksDbInstance {
 
   private val rocksDbCacheSizeInMB: Int = if (SparkEnv.get != null) {
     SparkEnv.get.conf.getInt(
-      "spark.sql.streaming.stateStore.rocksDb.cacheSizeInMB",
+      s"${ROCKS_DB_STATE_STORE_CONF_PREFIX}.cacheSizeInMB",
       DEFAULT_ROCKSDB_CACHE_SIZE_IN_MB)
   } else {
     DEFAULT_ROCKSDB_CACHE_SIZE_IN_MB

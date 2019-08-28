@@ -143,7 +143,7 @@ class RocksDbStateStoreSuite
     }
 
     // New updates to the reloaded store with new version, and does not change old version
-    val reloadedProvider = newStoreProvider(store.id, provider.getLocalDirectory)
+    val reloadedProvider = newStoreProvider(store.id, provider.getLocalDir)
     val reloadedStore = reloadedProvider.getStore(1)
     put(reloadedStore, "c", 4)
     assert(reloadedStore.commit() === 2)
@@ -536,7 +536,7 @@ class RocksDbStateStoreSuite
   override def getData(
       provider: RocksDbStateStoreProvider,
       version: Int = -1): Set[(String, Int)] = {
-    val reloadedProvider = newStoreProvider(provider.stateStoreId, provider.getLocalDirectory)
+    val reloadedProvider = newStoreProvider(provider.stateStoreId, provider.getLocalDir)
     if (version < 0) {
       reloadedProvider.latestIterator().map(rowsToStringInt).toSet
     } else {
@@ -556,7 +556,7 @@ class RocksDbStateStoreSuite
     sqlConf.setConf(SQLConf.STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT, minDeltasForSnapshot)
     sqlConf.setConf(SQLConf.MAX_BATCHES_TO_RETAIN_IN_MEMORY, numOfVersToRetainInMemory)
     sqlConf.setConf(SQLConf.MIN_BATCHES_TO_RETAIN, 2)
-    sqlConf.setConfString("spark.sql.streaming.stateStore.rocksDb.localDirectory", localDir)
+    sqlConf.setConfString("spark.sql.streaming.stateStore.rocksDb.localDir", localDir)
     val provider = new RocksDbStateStoreProvider
     provider.init(
       StateStoreId(dir, opId, partition),

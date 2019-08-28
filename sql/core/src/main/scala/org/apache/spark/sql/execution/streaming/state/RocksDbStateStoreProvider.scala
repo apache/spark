@@ -22,6 +22,7 @@ import java.util
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.io.Source
 import scala.util.control.NonFatal
 
 import org.apache.commons.io.FileUtils
@@ -36,6 +37,30 @@ import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
+/**
+ * An implementation of [[StateStoreProvider]] and [[StateStore]] using RocksDB as the storage
+ * engine. In RocksDB, new writes are inserted into a memtable which is flushed into local storage
+ * when the memtable fills up. It improves scalability as compared to
+ * [[HDFSBackedStateStoreProvider]] since now the state data which was large enough to fit in the
+ * executor memory can be written into the combination of memtable and local storage.The data is
+ * backed in a HDFS-compatible file system just like [[HDFSBackedStateStoreProvider]]
+ *
+ * Fault-tolerance model:
+ * - Every set of updates is written to a delta file before committing.
+ * - The state store is responsible for managing, collapsing and cleaning up of delta files.
+ * - Updates are committed in the db atomically
+ *
+ * Backup Model:
+ * - Delta file is written in a HDFS-compatible file system on batch commit
+ * - RocksDB state is check-pointed into a separate folder on batch commit
+ * - Maintenance thread periodically takes a snapshot of the latest check-pointed version of
+ *   rocksDB state which is written to a HDFS-compatible file system.
+ *
+ * Isolation Guarantee:
+ * - writes are committed in the transaction.
+ * - writer thread which started the transaction can read all un-committed updates
+ * - any other reader thread cannot read any un-committed updates
+ */
 private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Logging {
 
   /* Internal fields and methods */
@@ -45,7 +70,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
   @volatile private var numberOfVersionsToRetain: Int = _
-  @volatile private var localDirectory: String = _
+  @volatile private var localDir: String = _
 
   /*
    * Additional configurations related to rocksDb. This will capture all configs in
@@ -60,6 +85,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
   import WALUtils._
+  import RocksDbStateStoreProvider._
 
   /** Implementation of [[StateStore]] API which is backed by RocksDB and HDFS */
   class RocksDbStateStore(val version: Long) extends StateStore with Logging {
@@ -102,8 +128,8 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
           newVersion.toString,
           rocksDbConf)
         rocksDbWriteInstance.open(rocksDbPath)
-        state = UPDATING
         rocksDbWriteInstance.startTransactions()
+        state = UPDATING
       }
     }
 
@@ -114,7 +140,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
       initTransaction()
-      verify(state == UPDATING, s"Cannot put after already committed or aborted")
+      require(state == UPDATING, s"Cannot put after already committed or aborted")
       val keyCopy = key.copy()
       val valueCopy = value.copy()
       rocksDbWriteInstance.put(keyCopy, valueCopy)
@@ -123,7 +149,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
 
     override def remove(key: UnsafeRow): Unit = {
       initTransaction()
-      verify(state == UPDATING, "Cannot remove after already committed or aborted")
+      require(state == UPDATING, "Cannot remove after already committed or aborted")
       rocksDbWriteInstance.remove(key)
       writeRemoveToDeltaFile(compressedStream, key)
     }
@@ -131,14 +157,14 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     override def getRange(
         start: Option[UnsafeRow],
         end: Option[UnsafeRow]): Iterator[UnsafeRowPair] = {
-      verify(state == UPDATING, "Cannot getRange after already committed or aborted")
+      require(state == UPDATING, "Cannot getRange after already committed or aborted")
       iterator()
     }
 
     /** Commit all the updates that have been made to the store, and return the new version. */
     override def commit(): Long = {
       initTransaction()
-      verify(state == UPDATING, s"Cannot commit after already committed or aborted")
+      require(state == UPDATING, s"Cannot commit after already committed or aborted")
       try {
         synchronized {
           rocksDbWriteInstance.commit(Some(getCheckpointPath(newVersion)))
@@ -279,13 +305,13 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     this.numberOfVersionsToRetain = storeConfs.maxVersionsToRetainInMemory
     fm.mkdirs(baseDir)
     this.rocksDbConf = storeConf.confs
-      .filter(_._1.startsWith("spark.sql.streaming.stateStore.rocksDb"))
+      .filter(_._1.startsWith(ROCKS_DB_STATE_STORE_CONF_PREFIX))
       .map {
         case (k, v) => (k.toLowerCase(Locale.ROOT), v)
       }
-    this.localDirectory = this.rocksDbConf
+    this.localDir = this.rocksDbConf
       .getOrElse(
-        "spark.sql.streaming.stateStore.rocksDb.localDirectory".toLowerCase(Locale.ROOT),
+        s"${ROCKS_DB_STATE_STORE_CONF_PREFIX}.localDir".toLowerCase(Locale.ROOT),
         Utils.createTempDir().getAbsoluteFile.toString)
   }
 
@@ -394,7 +420,7 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     val f = new File(rocksDbPath, RocksDbInstance.COMMIT_FILE_NAME)
     if (f.exists()) {
       try {
-        val fileContents = scala.io.Source.fromFile(f.getAbsolutePath).getLines.mkString
+        val fileContents = Source.fromFile(f.getAbsolutePath).getLines.mkString
         return fileContents.toLong
       } catch {
         case e: Exception =>
@@ -598,45 +624,45 @@ private[sql] class RocksDbStateStoreProvider extends StateStoreProvider with Log
     Iterator.empty
   }
 
-  private[sql] def getLocalDirectory: String = localDirectory
+  private[sql] def getLocalDir: String = localDir
 
   private[sql] lazy val rocksDbPath: String = {
     getPath("db")
   }
 
   private def getCheckpointPath(version: Long): String = {
-    getPath("checkpoint", version.toString)
+    getPath("checkpoint", Some(version.toString))
   }
 
   private def getTempPath(version: Long): String = {
-    getPath("tmp", version.toString)
+    getPath("tmp", Some(version.toString))
   }
 
-  private def getPath(parentFolderName: String, version: String = null): String = {
+  private def getPath(subFolderName: String, version: Option[String] = None): String = {
     val checkpointRootLocationPath = new Path(stateStoreId.checkpointRootLocation)
 
-    val basePath = new Path(
-      localDirectory,
-      new Path(
-        parentFolderName,
-        checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()))
-
     val dirPath = new Path(
-      basePath,
-      new Path(stateStoreId_.operatorId.toString, stateStoreId_.partitionId.toString))
+      localDir,
+      new Path(
+        new Path(
+          subFolderName,
+          checkpointRootLocationPath.getName + "_" + checkpointRootLocationPath.hashCode()),
+        new Path(stateStoreId_.operatorId.toString, stateStoreId_.partitionId.toString)))
 
     val f: File = new File(dirPath.toString)
-    if (!f.exists()) {
-      logInfo(s"creating rocksDb directory at : ${dirPath.toString}")
-      f.mkdirs()
+    if (!f.exists() && !f.mkdirs()) {
+      throw new IllegalStateException(s"Couldn't create directory ${dirPath.toString}")
     }
 
-    val path = if (version != null) {
-      new Path(dirPath, version)
+    if (version.isEmpty) {
+      dirPath.toString
     } else {
-      dirPath
+      new Path(dirPath, version.get).toString
     }
-    path.toString
   }
 
+}
+
+object RocksDbStateStoreProvider {
+  val ROCKS_DB_STATE_STORE_CONF_PREFIX = "spark.sql.streaming.stateStore.rocksDb"
 }

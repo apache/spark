@@ -51,7 +51,7 @@ object WALUtils {
         val deltaFiles = allFiles.filter { file =>
           file.version > snapshotFile.version && file.version <= version
         }.toList
-        verify(
+        require(
           deltaFiles.size == version - snapshotFile.version,
           s"Unexpected list of delta files for version $version for $this: $deltaFiles")
         deltaFiles
@@ -270,12 +270,6 @@ object WALUtils {
 
   def snapshotFile(baseDir: Path, version: Long): Path = {
     new Path(baseDir, s"$version.snapshot")
-  }
-
-  def verify(condition: => Boolean, msg: String): Unit = {
-    if (!condition) {
-      throw new IllegalStateException(msg)
-    }
   }
 
 }
