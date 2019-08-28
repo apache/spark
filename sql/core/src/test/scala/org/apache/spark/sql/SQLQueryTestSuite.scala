@@ -430,7 +430,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
-      val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+      val testFilename = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
+
+      // This is a workaround for SPARK-28894. Seems scalatest produces JUnit XML report
+      // correctly; however, Jenkins seems misunderstanding the dot in the test name.
+      val testCaseName = testFilename.stripSuffix(".sql")
 
       if (file.getAbsolutePath.startsWith(
         s"$inputFilePath${File.separator}udf${File.separator}pgSQL")) {
