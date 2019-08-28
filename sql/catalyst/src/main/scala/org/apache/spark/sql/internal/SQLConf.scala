@@ -1645,8 +1645,9 @@ object SQLConf {
       .doc("When inserting a value into a column with different data type, Spark will perform " +
         "type coercion. Currently, we support 3 policies for the type coercion rules: ANSI, " +
         "legacy and strict. With ANSI policy, Spark performs the type coercion as per ANSI SQL. " +
-        "In practice, it follows PostgreSQL. It disallows certain unreasonable type conversions " +
-        "such as converting `string` to `int` or `double` to `boolean`. " +
+        "In practice, the behavior is mostly the same as PostgreSQL. " +
+        "It disallows certain unreasonable type conversions such as converting " +
+        "`string` to `int` or `double` to `boolean`. " +
         "With legacy policy, Spark allows the type coercion as long as it is a valid `Cast`, " +
         "which is very loose. e.g. converting `string` to `int` or `double` to `boolean` is " +
         "allowed. It is also the only behavior in Spark 2.x and it is compatible with Hive. " +
