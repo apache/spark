@@ -30,12 +30,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
-import org.apache.spark.{SparkConf, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.k8s.Config.{KUBERNETES_FILE_UPLOAD_PATH, KUBERNETES_HADOOP_CONF_CONFIG_MAP}
-import org.apache.spark.internal.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
 import org.apache.spark.util.{Clock, SystemClock, Utils}
@@ -275,14 +275,19 @@ private[spark] object KubernetesUtils extends Logging {
     conf.get(KUBERNETES_FILE_UPLOAD_PATH) match {
       case Some(path) =>
         val hadoopConf = new Configuration()
-        // Add
+        // When spark.kubernetes.file.upload.path is set, we need a cluster specific hadoop config,
+        // and if we use spark.kubernetes.hadoop.configMapName to configure not HADOOP_CONF_DIR, we
+        // should download the configmap to our client side.
+        // 1. add configurations from k8s configmap to hadoopConf
         conf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP).foreach { cm =>
           val hadoopConfFiles = client.configMaps().withName(cm).get().getData.asScala
           for ((name, content) <- hadoopConfFiles if name.endsWith(".xml")) {
             hadoopConf.addResource(new ByteArrayInputStream(content.getBytes), name)
           }
         }
+        // 2. add configurations from arguments or spark properties file to hadoopConf
         SparkHadoopUtil.appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+        // 3. set or rest user group information
         UserGroupInformation.setConfiguration(hadoopConf)
         if (UserGroupInformation.isSecurityEnabled &&
           UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
