@@ -138,7 +138,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val STARTED, COMPILED, FAILED, FINISHED, CLOSED = Value
+    val STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
     type ExecutionState = Value
   }
 
@@ -237,6 +237,14 @@ object HiveThriftServer2 extends Logging {
     def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
       executionList(id).executePlan = executionPlan
       executionList(id).state = ExecutionState.COMPILED
+    }
+
+    def onStatementCanceled(id: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.CANCELED
+      totalRunning -= 1
+      // for progress bar
+      trimExecutionIfNecessary()
     }
 
     def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
