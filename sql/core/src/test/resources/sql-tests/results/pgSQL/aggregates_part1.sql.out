@@ -7,7 +7,7 @@ SELECT avg(four) AS avg_1 FROM onek
 -- !query 0 schema
 struct<avg_1:double>
 -- !query 0 output
-1.5
+1.51
 
 
 -- !query 1

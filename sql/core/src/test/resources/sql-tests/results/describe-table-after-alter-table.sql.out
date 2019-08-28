@@ -60,7 +60,7 @@ Type                	MANAGED
 Provider            	parquet             	                    
 Comment             	modified comment    	                    
 Table Properties    	[type=parquet]      	                    
-Location [not included in comparison]sql/core/spark-warehouse/table_with_comment
+Location [not included in comparison]sql/core/spark-warehouse/table_with_comment1
 
 
 -- !query 4

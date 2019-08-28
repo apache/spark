@@ -47,7 +47,7 @@ SELECT udf(udf(sum(b))) AS avg_431_773 FROM aggtest
 -- !query 5 schema
 struct<avg_431_773:double>
 -- !query 5 output
-431.77260909229517
+431.7726090922951711
 
 
 -- !query 6
