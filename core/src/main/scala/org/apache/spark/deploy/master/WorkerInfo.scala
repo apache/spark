@@ -31,10 +31,6 @@ private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String
   val resourceName: String = name
   val resourceAddresses: Seq[String] = this.addresses
 
-  def toResourceInformation(): ResourceInformation = {
-    new ResourceInformation(resourceName, resourceAddresses.toArray)
-  }
-
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
     acquire(allocated)
