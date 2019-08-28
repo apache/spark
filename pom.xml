@@ -2895,12 +2895,16 @@
           </execution>
         </executions>
       </plugin>
-      <!-- Couple of dependencies are coming in bundle format. If this removed build will fail. -->
+      <!--
+        Couple of dependencies are coming in bundle format (bundle is just a normal jar which
+        contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
+        any other jar. Since maven doesn't have native bundle support it needs an external plugin
+        handle it. If the plugin is not added then the build can't resolve bundle dependencies.
+      -->
       <plugin>
         <groupId>org.apache.felix</groupId>
         <artifactId>maven-bundle-plugin</artifactId>
         <version>4.2.0</version>
-        <inherited>true</inherited>
         <extensions>true</extensions>
       </plugin>
     </plugins>
