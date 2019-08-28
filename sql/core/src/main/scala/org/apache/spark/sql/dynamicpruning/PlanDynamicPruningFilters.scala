@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
-import org.apache.spark.sql.execution.joins.{HashedRelationBroadcastMode, HashJoin}
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -36,7 +36,8 @@ import org.apache.spark.sql.internal.SQLConf
 case class PlanDynamicPruningFilters(sparkSession: SparkSession)
     extends Rule[SparkPlan] with PredicateHelper {
 
-  private def reuseBroadcast: Boolean = SQLConf.get.dynamicPruningReuseBroadcast
+  private def reuseBroadcast: Boolean =
+    SQLConf.get.dynamicPruningReuseBroadcast && SQLConf.get.exchangeReuseEnabled
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.
@@ -61,16 +62,29 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
 
     plan transformAllExpressions {
       case DynamicPruningSubquery(
-          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, broadcastHint, _) =>
-        if (reuseBroadcast && (broadcastHint || canBroadcast(buildPlan)) && buildKeys.nonEmpty) {
+          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, broadcastHint, exprId) =>
+        val qe = new QueryExecution(sparkSession, buildPlan)
+        // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
+        // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
+        val canReuseExchange = reuseBroadcast &&
+          (broadcastHint || canBroadcast(buildPlan)) &&
+          buildKeys.nonEmpty &&
+          plan.find {
+            case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _) =>
+              left.sameResult(qe.sparkPlan)
+            case BroadcastHashJoinExec(_, _, _, BuildRight, _, _, right) =>
+              right.sameResult(qe.sparkPlan)
+            case _ => false
+          }.isDefined
+
+        if (canReuseExchange) {
           val mode = broadcastMode(buildKeys, buildPlan)
           // plan a broadcast exchange of the build side of the join
-          val exchange = BroadcastExchangeExec(
-            mode, new QueryExecution(sparkSession, buildPlan).executedPlan)
-          val exprId = NamedExpression.newExprId
+          val exchange = BroadcastExchangeExec(mode, qe.executedPlan)
           val name = s"dynamicpruning#${exprId.id}"
           // place the broadcast adaptor for reusing the broadcast results on the probe side
-          val broadcastValues = SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
+          val broadcastValues =
+            SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
         } else if (onlyInBroadcast) {
           // it is not worthwhile to execute the query, so we fall-back to a true literal

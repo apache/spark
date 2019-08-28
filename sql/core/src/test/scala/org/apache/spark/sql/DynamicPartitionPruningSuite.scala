@@ -87,6 +87,15 @@ class DynamicPartitionPruningSuite
       (6, "Texas", "US")
     )
 
+    val storeCode = Seq[(Int, Int)](
+      (1, 10),
+      (2, 20),
+      (3, 30),
+      (4, 40),
+      (5, 50),
+      (6, 60)
+    )
+
     spark.range(1000).select('id as 'product_id, ('id % 10) as 'store_id, ('id + 1) as 'code)
       .write
       .format(tableFormat)
@@ -120,8 +129,15 @@ class DynamicPartitionPruningSuite
       .format(tableFormat)
       .saveAsTable("dim_stats")
 
+    storeCode.toDF("store_id", "code")
+      .write
+      .partitionBy("store_id")
+      .format(tableFormat)
+      .saveAsTable("code_stats")
+
     sql("ANALYZE TABLE fact_stats COMPUTE STATISTICS FOR COLUMNS store_id")
     sql("ANALYZE TABLE dim_stats COMPUTE STATISTICS FOR COLUMNS store_id")
+    sql("ANALYZE TABLE code_stats COMPUTE STATISTICS FOR COLUMNS store_id")
   }
 
   override def afterAll(): Unit = {
@@ -1225,6 +1241,53 @@ class DynamicPartitionPruningSuite
         plan.collectInPlanAndSubqueries({ case _: SubqueryBroadcastExec => 1 }).sum
 
       assert(countSubqueryBroadcasts == 2)
+    }
+  }
+
+  test("Plan broadcast pruning only when the broadcast can be reused") {
+    Given("dynamic pruning filter on the build side")
+    withSQLConf(
+      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
+      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id, f.product_id, f.units_sold FROM fact_np f
+          |JOIN code_stats s
+          |ON f.store_id = s.store_id WHERE f.date_id <= 1030
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, false)
+
+      checkAnswer(df,
+        Row(1000, 1, 1, 10) ::
+        Row(1010, 2, 1, 10) ::
+        Row(1020, 2, 1, 10) ::
+        Row(1030, 3, 2, 10) :: Nil
+      )
+    }
+
+    Given("dynamic pruning filter on the probe side")
+    withSQLConf(
+      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
+      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      val df = sql(
+        """
+          |SELECT /*+ BROADCAST(f)*/
+          |f.date_id, f.store_id, f.product_id, f.units_sold FROM fact_np f
+          |JOIN code_stats s
+          |ON f.store_id = s.store_id WHERE f.date_id <= 1030
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df,
+        Row(1000, 1, 1, 10) ::
+        Row(1010, 2, 1, 10) ::
+        Row(1020, 2, 1, 10) ::
+        Row(1030, 3, 2, 10) :: Nil
+      )
     }
   }
 }
