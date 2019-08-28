@@ -121,8 +121,6 @@ private[spark] object Minikube extends Logging {
 
   private def executeMinikubeBackground(action: String, args: String*): Process = {
     val command = Array("bash", "-c", s"minikube $action ${args.mkString(" ")}")
-    val commandStr = command.mkString(" ")
-    println(s"Executing ${commandStr} in the background")
     new ProcessBuilder().command(command: _*).start()
   }
 
