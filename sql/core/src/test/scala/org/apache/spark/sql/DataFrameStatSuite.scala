@@ -378,13 +378,16 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
 
     val result = df.stat.freqItems(df.columns)
 
-    val nonNullableFreqItems = result.schema("non_null_freqItems").dataType.asInstanceOf[ArrayType]
-    val nullableFreqItems = result.schema("nullable_freqItems").dataType.asInstanceOf[ArrayType]
+    val nonNullableDataType = result.schema("non_null_freqItems").dataType.asInstanceOf[ArrayType]
+    val nullableDataType = result.schema("nullable_freqItems").dataType.asInstanceOf[ArrayType]
 
-    assert(nonNullableFreqItems.containsNull == false)
-    assert(nullableFreqItems.containsNull == true)
+    assert(nonNullableDataType.containsNull == false)
+    assert(nullableDataType.containsNull == true)
     // Original bug was a NullPointerException exception caused by calling collect(), test for this
-    val resultRows = result.collect()
+    val resultRow = result.collect()(0)
+
+    assert(resultRow.get(0).asInstanceOf[Seq[String]].toSet == Set("1", "2", "3"))
+    assert(resultRow.get(1).asInstanceOf[Seq[String]].toSet == Set("a", "b", null))
   }
 
   test("sampleBy") {
