@@ -175,6 +175,14 @@ private[hive] class IsolatedClientLoader(
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
 
+  lazy val hadoopAndSparkHiveConf = {
+    val newConf = new Configuration(hadoopConf)
+    sparkConf.getAllWithPrefix("spark.hive.").foreach { case (key, value) =>
+        newConf.set("hive." + key, value)
+    }
+    newConf
+  }
+
   /** All jars used by the hive specific classloader. */
   protected def allJars = execJars.toArray
 
@@ -279,9 +287,9 @@ private[hive] class IsolatedClientLoader(
 
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): HiveClient = synchronized {
-    val warehouseDir = Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname))
+    val warehouseDir = Option(hadoopAndSparkHiveConf.get(ConfVars.METASTOREWAREHOUSE.varname))
     if (!isolationOn) {
-      return new HiveClientImpl(version, warehouseDir, sparkConf, hadoopConf, config,
+      return new HiveClientImpl(version, warehouseDir, sparkConf, hadoopAndSparkHiveConf, config,
         baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
@@ -293,7 +301,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, warehouseDir, sparkConf, hadoopConf, config, classLoader, this)
+        .newInstance(version, warehouseDir, sparkConf, hadoopAndSparkHiveConf, config, classLoader, this)
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>

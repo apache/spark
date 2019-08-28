@@ -103,6 +103,15 @@ private[spark] class SparkHadoopUtil extends Logging {
     }
   }
 
+  def appendSparkHiveConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hive.foo=bar" system properties into destMap as "hive.foo=bar"
+    for ((key, value) <- srcMap if key.startsWith("spark.hive.")) {
+      destMap.put(key.substring("spark.".length), value)
+    }
+  }
+
   /**
    * Return an appropriate (subclass) of Configuration. Creating config can initialize some Hadoop
    * subsystems.
