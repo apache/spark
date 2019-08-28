@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.IntegerLiteral
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -137,46 +137,82 @@ object ResolveHints {
   }
 
   /**
-   * COALESCE Hint accepts name "COALESCE" and "REPARTITION".
-   * Its parameter includes a partition number.
+   * COALESCE Hint accepts name "COALESCE" and "REPARTITION" and "REPARTITIONBYRANGE".
+   * Its parameter includes a partition number and columns.
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
-    private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION")
+    private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION", "REPARTITIONBYRANGE")
 
-    private def createRepartitionByExpression(
-        numPartitions: Int, parameters: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
-      val exprs = parameters.drop(1)
-      val errExprs = exprs.filter(!_.isInstanceOf[UnresolvedAttribute])
-      if (errExprs.nonEmpty) throw new AnalysisException(
-        s"""Invalid type exprs : $errExprs
-           |expects UnresolvedAttribute type
-        """.stripMargin)
-      RepartitionByExpression(
-        exprs.map(_.asInstanceOf[UnresolvedAttribute]), h.child, numPartitions)
+    /**
+     * same with repartition api
+     */
+    private def createRepartition(
+        shuffle: Boolean, h: UnresolvedHint): LogicalPlan = {
+      def createRepartitionByExpression(
+           numPartitions: Int, exprs: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
+        val errExprs = exprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        if (errExprs.nonEmpty) throw new AnalysisException(
+          s"""Invalid type exprs : $errExprs
+             |expects UnresolvedAttribute type
+             |""".stripMargin)
+        RepartitionByExpression(
+          exprs.map(_.asInstanceOf[UnresolvedAttribute]), h.child, numPartitions)
+      }
+
+      h.parameters match {
+        case Seq(IntegerLiteral(numPartitions)) =>
+          Repartition(numPartitions, shuffle, h.child)
+        case Seq(numPartitions: Int) =>
+          Repartition(numPartitions, shuffle, h.child)
+
+        case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
+          createRepartitionByExpression(numPartitions, param.tail, h)
+        case param @ Seq(numPartitions: Int, _*) if shuffle =>
+          createRepartitionByExpression(numPartitions, param.tail, h)
+
+        case _ =>
+          throw new AnalysisException(s"${h.name} hint expects a partition number " +
+            "and columns")
+      }
+    }
+
+    /**
+     * same with repartitionByRange api
+     */
+    private def createRepartitionByRange(
+        h: UnresolvedHint): RepartitionByExpression = {
+      def createRepartitionByExpression(
+           numPartitions: Int, exprs: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
+        val sortOrder: Seq[SortOrder] = exprs.map {
+          case expr: SortOrder => expr
+          case expr: Expression => SortOrder(expr, Ascending)
+        }
+        RepartitionByExpression(sortOrder, h.child, numPartitions)
+      }
+
+      h.parameters match {
+        case param @ Seq(IntegerLiteral(numPartitions), _*) =>
+          createRepartitionByExpression(numPartitions, param.tail, h)
+        case param @ Seq(numPartitions: Int, _*) =>
+          createRepartitionByExpression(numPartitions, param.tail, h)
+
+        case _ =>
+          throw new AnalysisException(s"${h.name} hint expects a partition number " +
+            "and columns")
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
         val hintName = h.name.toUpperCase(Locale.ROOT)
-        val shuffle = hintName match {
-          case "REPARTITION" => true
-          case "COALESCE" => false
-        }
 
-        h.parameters match {
-          case Seq(IntegerLiteral(numPartitions)) =>
-            Repartition(numPartitions, shuffle, h.child)
-          case Seq(numPartitions: Int) =>
-            Repartition(numPartitions, shuffle, h.child)
-
-          case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-            createRepartitionByExpression(numPartitions, param, h)
-          case param @ Seq(numPartitions: Int, _*) if shuffle =>
-            createRepartitionByExpression(numPartitions, param, h)
-
-          case _ =>
-            throw new AnalysisException("Repartition hint expects a partition number " +
-              "and columns")
+        hintName match {
+          case "REPARTITION" =>
+            createRepartition(shuffle = true, h)
+          case "COALESCE" =>
+            createRepartition(shuffle = false, h)
+          case "REPARTITIONBYRANGE" =>
+            createRepartitionByRange(h)
         }
     }
   }

@@ -661,6 +661,11 @@ class PlanParserSuite extends AnalysisTest {
           UnresolvedHint("COALESCE", Seq(Literal(50)),
             UnresolvedHint("REPARTITION", Seq(Literal(300), UnresolvedAttribute("c")),
               table("t").select(star()))))))
+
+    comparePlans(
+      parsePlan("SELECT /*+ REPARTITIONBYRANGE(100, c) */ * FROM t"),
+      UnresolvedHint("REPARTITIONBYRANGE", Seq(Literal(100), UnresolvedAttribute("c")),
+        table("t").select(star())))
   }
 
   test("SPARK-20854: select hint syntax with expressions") {

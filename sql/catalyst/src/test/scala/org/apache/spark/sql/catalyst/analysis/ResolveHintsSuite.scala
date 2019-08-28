@@ -24,7 +24,7 @@ import org.apache.log4j.spi.LoggingEvent
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -151,7 +151,7 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
       Repartition(numPartitions = 200, shuffle = true, child = testRelation))
 
-    val errMsg = "Repartition hint expects a partition number and columns"
+    val errMsg = "COALESCE hint expects a partition number and columns"
 
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
@@ -163,12 +163,14 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
       Seq(errMsg))
 
+    val errMsg2 = "REPARTITION hint expects a partition number and columns"
+
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
-      Seq(errMsg))
+      Seq(errMsg2))
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
-      Seq(errMsg))
+      Seq(errMsg2))
 
     checkAnalysis(
       UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
@@ -178,28 +180,49 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("REPARTITION", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
 
+    checkAnalysis(
+      UnresolvedHint(
+        "REPARTITIONBYRANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
+
     assertAnalysisError(
       UnresolvedHint("REPARTITION", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
-      Seq(errMsg))
+      Seq(errMsg2))
 
     assertAnalysisError(
       UnresolvedHint("REPARTITION",
         Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
         table("TaBlE")),
-      Seq(errMsg))
+      Seq(errMsg2))
 
-    val errMsg2 = "expects UnresolvedAttribute type"
+    val errMsg3 = "REPARTITIONBYRANGE hint expects a partition number and columns"
+
+    assertAnalysisError(
+      UnresolvedHint(
+        "REPARTITIONBYRANGE", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
+      Seq(errMsg3))
+
+    assertAnalysisError(
+      UnresolvedHint("REPARTITIONBYRANGE",
+        Seq(Literal(1.0), AttributeReference("a", IntegerType)()),
+        table("TaBlE")),
+      Seq(errMsg3))
+
+    val errMsg4 = "expects UnresolvedAttribute type"
+
     assertAnalysisError(
       UnresolvedHint("REPARTITION",
         Seq(Literal(10), Literal(10)),
         table("TaBlE")),
-      Seq(errMsg2))
+      Seq(errMsg4))
 
     assertAnalysisError(
       UnresolvedHint("REPARTITION",
         Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
         table("TaBlE")),
-      Seq(errMsg2))
+      Seq(errMsg4))
+
   }
 
   test("log warnings for invalid hints") {
