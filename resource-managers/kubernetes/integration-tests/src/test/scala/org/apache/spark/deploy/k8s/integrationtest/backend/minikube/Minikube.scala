@@ -110,6 +110,19 @@ private[spark] object Minikube extends Logging {
     }
   }
 
+  def mount(hostPath: String, vmPath: String): Process = {
+    // Mounting blocks and needs to keep running to keep the mount.
+    val process = executeMinikubeBackground("mount", s"${hostPath}:${vmPath}")
+    process
+  }
+
+  private def executeMinikubeBackground(action: String, args: String*): Process = {
+    val command = Array("bash", "-c", s"minikube $action ${args.mkString(" ")}")
+    val commandStr = command.mkString(" ")
+    println(s"Executing ${commandStr} in the background")
+    new ProcessBuilder().command(command: _*).start()
+  }
+
   private def executeMinikube(action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
       Array("bash", "-c", s"minikube $action ${args.mkString(" ")}"),
