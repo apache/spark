@@ -217,7 +217,7 @@ class SessionCatalog(
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
-      throw new AnalysisException(s"Can not drop default database")
+      throw new AnalysisException("Can not drop default database")
     }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
@@ -450,7 +450,7 @@ class SessionCatalog(
         val tables = names.map(name => formatTableName(name.table))
         val qualifiedTableNames = dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
         throw new AnalysisException(
-          s"Only the tables/views belong to the same database can be retrieved. Querying " +
+          "Only the tables/views belong to the same database can be retrieved. Querying " +
           s"tables/views are $qualifiedTableNames"
         )
       }
@@ -1204,7 +1204,7 @@ class SessionCatalog(
       e
     } else {
       throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
-        s"Use sparkSession.udf.register(...) instead.")
+        "Use sparkSession.udf.register(...) instead.")
     }
   }
 

@@ -916,7 +916,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           case row: Row => Row.fromSeq(i +: row.toSeq)
           case null => Row.fromSeq(i +: Seq.fill(schemaForGenerator.length)(null))
           case other =>
-            fail(s"Row or null is expected to be generated, " +
+            fail("Row or null is expected to be generated, " +
               s"but a ${other.getClass.getCanonicalName} is generated.")
         }
       }

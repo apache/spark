@@ -193,7 +193,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           HiveUtils.CONVERT_METASTORE_CTAS.key -> convertCTAS.toString,
           HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertCTAS.toString) {
 
-        val df = sql(s"EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
+        val df = sql("EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
         val keywords = if (convertCTAS) {
           Seq(
             s"Execute ${Utils.getSimpleName(classOf[OptimizedCreateHiveTableAsSelectCommand])}",

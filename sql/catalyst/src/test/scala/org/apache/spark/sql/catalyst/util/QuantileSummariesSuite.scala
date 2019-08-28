@@ -101,7 +101,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
     }
 
     test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression " +
-      s"(interleaved)") {
+      "(interleaved)") {
       val s = buildCompressSummary(data, epsi, compression)
       assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
       checkQuantile(0.9999, data, s)
@@ -115,7 +115,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
       val emptyData = Seq.empty[Double]
       val s = buildSummary(emptyData, epsi, compression)
       assert(s.count == 0, s"Found count=${s.count} but data size=0")
-      assert(s.sampled.isEmpty, s"if QuantileSummaries is empty, sampled should be empty")
+      assert(s.sampled.isEmpty, "if QuantileSummaries is empty, sampled should be empty")
       checkQuantile(0.9999, emptyData, s)
       checkQuantile(0.9, emptyData, s)
       checkQuantile(0.5, emptyData, s)

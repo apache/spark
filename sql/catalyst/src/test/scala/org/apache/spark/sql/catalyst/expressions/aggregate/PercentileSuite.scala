@@ -167,7 +167,7 @@ class PercentileSuite extends SparkFunSuite {
       val child = AttributeReference("a", dataType)()
       val percentile = new Percentile(child, percentage)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 1 requires numeric type, however, " +
+        TypeCheckFailure("argument 1 requires numeric type, however, " +
             s"'`a`' is of ${dataType.simpleString} type."))
     }
 
@@ -181,7 +181,7 @@ class PercentileSuite extends SparkFunSuite {
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 1 requires numeric type, however, " +
+        TypeCheckFailure("argument 1 requires numeric type, however, " +
             s"'`a`' is of ${dataType.simpleString} type."))
     }
 
@@ -191,7 +191,7 @@ class PercentileSuite extends SparkFunSuite {
       val frq = AttributeReference("frq", frequencyType)()
       val percentile = new Percentile(child, percentage, frq)
       assertEqual(percentile.checkInputDataTypes(),
-        TypeCheckFailure(s"argument 3 requires integral type, however, " +
+        TypeCheckFailure("argument 3 requires integral type, however, " +
             s"'`frq`' is of ${frequencyType.simpleString} type."))
     }
   }
@@ -214,7 +214,7 @@ class PercentileSuite extends SparkFunSuite {
     invalidPercentages.foreach { percentage =>
       val percentile2 = new Percentile(child, percentage)
       assertEqual(percentile2.checkInputDataTypes(),
-        TypeCheckFailure(s"Percentage(s) must be between 0.0 and 1.0, " +
+        TypeCheckFailure("Percentage(s) must be between 0.0 and 1.0, " +
         s"but got ${percentage.simpleString(100)}"))
     }
 
@@ -224,7 +224,7 @@ class PercentileSuite extends SparkFunSuite {
     nonFoldablePercentage.foreach { percentage =>
       val percentile3 = new Percentile(child, percentage)
       assertEqual(percentile3.checkInputDataTypes(),
-        TypeCheckFailure(s"The percentage(s) must be a constant literal, " +
+        TypeCheckFailure("The percentage(s) must be a constant literal, " +
           s"but got ${percentage}"))
     }
 

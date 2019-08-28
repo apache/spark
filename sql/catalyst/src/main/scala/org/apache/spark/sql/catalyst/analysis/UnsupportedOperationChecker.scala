@@ -108,13 +108,13 @@ object UnsupportedOperationChecker {
         if (watermarkAttributes.isEmpty) {
           throwError(
             s"$outputMode output mode not supported when there are streaming aggregations on " +
-                s"streaming DataFrames/DataSets without watermark")(plan)
+                "streaming DataFrames/DataSets without watermark")(plan)
         }
 
       case InternalOutputModes.Complete if aggregates.isEmpty =>
         throwError(
           s"$outputMode output mode not supported when there are no streaming aggregations on " +
-            s"streaming DataFrames/Datasets")(plan)
+            "streaming DataFrames/Datasets")(plan)
 
       case _ =>
     }
@@ -205,7 +205,7 @@ object UnsupportedOperationChecker {
               } else if (collectStreamingAggregates(m).nonEmpty) {
                 throwError(
                   "flatMapGroupsWithState in append mode is not supported after " +
-                    s"aggregation on a streaming DataFrame/Dataset")
+                    "aggregation on a streaming DataFrame/Dataset")
               }
             }
           }
@@ -358,7 +358,7 @@ object UnsupportedOperationChecker {
           }.isDefined
 
           if (!aboveSinglePartitionCoalesce) {
-            throwError(s"In continuous processing mode, coalesce(1) must be called before " +
+            throwError("In continuous processing mode, coalesce(1) must be called before " +
               s"aggregate operation ${node.nodeName}.")
           }
         case node =>
@@ -370,7 +370,7 @@ object UnsupportedOperationChecker {
           case (_: CurrentTimestamp | _: CurrentDate) => true
           case _ => false
         }) {
-          throwError(s"Continuous processing does not support current time operations.")
+          throwError("Continuous processing does not support current time operations.")
         }
       }
     }

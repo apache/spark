@@ -260,8 +260,8 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
                 invalid = true
                 logWarning(
                   s"Failed to extract state value watermark from condition $exprToCollectFrom " +
-                    s"as imprecise intervals like months and years cannot be used for" +
-                    s"watermark calculation. Use interval in terms of day instead.")
+                    "as imprecise intervals like months and years cannot be used for" +
+                    "watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
                 Literal(calendarInterval.microseconds.toDouble)

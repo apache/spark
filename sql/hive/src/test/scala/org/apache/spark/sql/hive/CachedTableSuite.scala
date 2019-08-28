@@ -283,7 +283,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           assertCached(spark.table("cachedTable"))
           sql("UNCACHE TABLE cachedTable")
           assert(!spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should not be cached")
-          sql(s"CACHE TABLE cachedTable")
+          sql("CACHE TABLE cachedTable")
           assert(spark.catalog.isCached("cachedTable"), "Table 'cachedTable' should be cached")
         }
 

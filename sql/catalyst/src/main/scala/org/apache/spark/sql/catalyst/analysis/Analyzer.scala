@@ -470,11 +470,11 @@ class Analyzer(
           val gid = a.groupingExpressions.last
           if (!gid.isInstanceOf[AttributeReference]
             || gid.asInstanceOf[AttributeReference].name != VirtualColumn.groupingIdName) {
-            failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+            failAnalysis("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
           }
           a.groupingExpressions.take(a.groupingExpressions.length - 1)
       }.getOrElse {
-        failAnalysis(s"grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+        failAnalysis("grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
       }
     }
 
@@ -630,7 +630,7 @@ class Analyzer(
       case e: Attribute =>
         failAnalysis(
           s"Aggregate expression required for pivot, but '${e.sql}' " +
-          s"did not appear in any aggregate function.")
+          "did not appear in any aggregate function.")
       case e => e.children.foreach(checkValidAggregateExpression)
     }
   }
@@ -2275,7 +2275,7 @@ class Analyzer(
           // newExpressionsWithWindowFunctions only have expressions with a single
           // WindowExpression. If we reach here, we have a bug.
           failAnalysis(s"$expr has multiple Window Specifications ($distinctWindowSpec)." +
-            s"Please file a bug report with this error message, stack trace, and the query.")
+            "Please file a bug report with this error message, stack trace, and the query.")
         } else {
           val spec = distinctWindowSpec.head
           (spec.partitionSpec, spec.orderSpec, WindowFunctionType.functionType(expr))
@@ -2486,7 +2486,7 @@ class Analyzer(
       case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
         failAnalysis(s"Window function $wf requires window to be ordered, please add ORDER BY " +
           s"clause. For example SELECT $wf(value_expr) OVER (PARTITION BY window_partition " +
-          s"ORDER BY window_ordering) from table")
+          "ORDER BY window_ordering) from table")
       case WindowExpression(rank: RankLike, spec) if spec.resolved =>
         val order = spec.orderSpec.map(_.child)
         WindowExpression(rank.withOrder(order), spec)

@@ -318,7 +318,7 @@ class CodegenContext {
       assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
         s"$prevJavaType and now it is tried to define again with type $javaType.")
       assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
-        s"with different initialization statements.")
+        "with different initialization statements.")
     }
   }
 

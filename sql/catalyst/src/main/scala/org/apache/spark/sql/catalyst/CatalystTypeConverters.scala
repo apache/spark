@@ -293,7 +293,7 @@ object CatalystTypeConverters {
       case chr: Char => UTF8String.fromString(chr.toString)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the string type")
+          + "cannot be converted to the string type")
     }
     override def toScala(catalystValue: UTF8String): String =
       if (catalystValue == null) null else catalystValue.toString

@@ -118,12 +118,12 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("show tblproperties of data source tables - basic") {
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1").filter(s"key = 'my_key1'"),
+      sql("SHOW TBLPROPERTIES parquet_tab1").filter("key = 'my_key1'"),
       Row("my_key1", "v1") :: Nil
     )
 
     checkAnswer(
-      sql(s"SHOW TBLPROPERTIES parquet_tab1('my_key1')"),
+      sql("SHOW TBLPROPERTIES parquet_tab1('my_key1')"),
       Row("v1") :: Nil
     )
   }

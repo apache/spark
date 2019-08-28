@@ -161,14 +161,14 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
               queryExecution.analyzed.collectFirst {
                 case _: LogicalRelation =>
               }.getOrElse {
-                fail(s"Expecting the query plan to convert parquet to data sources, " +
+                fail("Expecting the query plan to convert parquet to data sources, " +
                   s"but got:\n$queryExecution")
               }
             } else {
               queryExecution.analyzed.collectFirst {
                 case _: HiveTableRelation =>
               }.getOrElse {
-                fail(s"Expecting no conversion from parquet to data sources, " +
+                fail("Expecting no conversion from parquet to data sources, " +
                   s"but got:\n$queryExecution")
               }
             }

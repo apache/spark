@@ -103,7 +103,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       case to: TestFailedDueToTimeoutException =>
         val historyLog = history.mkString("\n")
         fail(s"Timeout of $commandLine" +
-          s" See the log4j logs for more detail." +
+          " See the log4j logs for more detail." +
           s"\n$historyLog", to)
       case t: Throwable => throw t
     } finally {

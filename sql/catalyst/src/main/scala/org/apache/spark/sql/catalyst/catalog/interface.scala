@@ -179,7 +179,7 @@ case class BucketSpec(
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
     throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than or equal to " +
+      "Number of buckets should be greater than 0 but less than or equal to " +
         s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
   }
 

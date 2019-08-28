@@ -939,7 +939,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
       }
 
-      sql(s"INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
+      sql("INSERT OVERWRITE TABLE explodeTest SELECT explode(a) AS val FROM data")
       checkAnswer(
         sql("SELECT key from explodeTest"),
         (1 to 5).flatMap(i => Row(i) :: Row(i + 1) :: Nil)
@@ -2186,30 +2186,30 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           val m = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+          assert(m.contains("contains invalid character(s)"))
 
           val m1 = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
           }.getMessage
-          assert(m1.contains(s"contains invalid character(s)"))
+          assert(m1.contains("contains invalid character(s)"))
 
           val m2 = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
           }.getMessage
-          assert(m2.contains(s"contains invalid character(s)"))
+          assert(m2.contains("contains invalid character(s)"))
 
           withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
             val m3 = intercept[AnalysisException] {
               sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
             }.getMessage
-            assert(m3.contains(s"contains invalid character(s)"))
+            assert(m3.contains("contains invalid character(s)"))
           }
 
           sql(s"CREATE TABLE t21912(`col` INT) USING $source")
           val m4 = intercept[AnalysisException] {
             sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
           }.getMessage
-          assert(m4.contains(s"contains invalid character(s)"))
+          assert(m4.contains("contains invalid character(s)"))
         }
       }
     }

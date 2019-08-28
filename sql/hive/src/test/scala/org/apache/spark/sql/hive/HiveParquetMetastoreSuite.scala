@@ -173,7 +173,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     }
   }
 
-  test(s"conversion is working") {
+  test("conversion is working") {
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
         case _: HiveTableScanExec => true
@@ -210,13 +210,13 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     // Insert into am empty table.
     sql("insert into table test_insert_parquet select a, b from jt where jt.a > 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
+      sql("SELECT intField, stringField FROM test_insert_parquet WHERE intField < 8"),
       Row(6, "str6") :: Row(7, "str7") :: Nil
     )
     // Insert overwrite.
     sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      sql("SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
     dropTables("test_insert_parquet")
@@ -237,13 +237,13 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
     // Insert overwrite an empty table.
     sql("insert overwrite table test_insert_parquet select a, b from jt where jt.a < 5")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
+      sql("SELECT intField, stringField FROM test_insert_parquet WHERE intField > 2"),
       Row(3, "str3") :: Row(4, "str4") :: Nil
     )
     // Insert into the table.
     sql("insert into table test_insert_parquet select a, b from jt")
     checkAnswer(
-      sql(s"SELECT intField, stringField FROM test_insert_parquet"),
+      sql("SELECT intField, stringField FROM test_insert_parquet"),
       (1 to 10).map(i => Row(i, s"str$i")) ++ (1 to 4).map(i => Row(i, s"str$i"))
     )
     dropTables("test_insert_parquet")
@@ -262,7 +262,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
         """.stripMargin)
 
       checkAnswer(
-        sql(s"SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
+        sql("SELECT a, b FROM test_parquet_ctas WHERE a = 1"),
         Seq(Row(1, "str1"))
       )
 
@@ -609,7 +609,7 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
           """.stripMargin)
 
         // Create partition without data files and check whether it can be read
-        sql(s"ALTER TABLE test_added_partitions ADD PARTITION (b='1')")
+        sql("ALTER TABLE test_added_partitions ADD PARTITION (b='1')")
         // This table fetch is to fill the cache with zero leaf files
         checkAnswer(spark.table("test_added_partitions"), Seq.empty)
 

@@ -322,7 +322,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "slide duration greater than window in time window",
     testRelation2.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
-      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
+      "The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
   )
 
   errorTest(
@@ -431,7 +431,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     val errorMsg = s"Resolved attribute(s) $resolved missing from ${otherA.toString} " +
                      s"in operator !Aggregate [${aliases.mkString(", ")}]. " +
-                     s"Attribute(s) with the same name appear in the operation: a. " +
+                     "Attribute(s) with the same name appear in the operation: a. " +
                      "Please check if the right attribute(s) are used."
 
     assertAnalysisError(plan, errorMsg :: Nil)

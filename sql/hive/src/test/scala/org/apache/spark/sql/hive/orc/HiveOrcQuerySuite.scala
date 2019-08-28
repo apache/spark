@@ -52,7 +52,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
           spark.sql(
-            s"""INSERT INTO TABLE empty_orc
+            """INSERT INTO TABLE empty_orc
                |SELECT key, value FROM empty
              """.stripMargin)
 
@@ -66,7 +66,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           singleRowDF.createOrReplaceTempView("single")
 
           spark.sql(
-            s"""INSERT INTO TABLE empty_orc
+            """INSERT INTO TABLE empty_orc
                |SELECT key, value FROM single
              """.stripMargin)
 
@@ -96,7 +96,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
                  """.stripMargin)
 
               spark.sql(
-                s"""
+                """
                    |INSERT INTO TABLE dummy_orc
                    |SELECT key, value FROM single
                  """.stripMargin)
@@ -109,14 +109,14 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
                 queryExecution.analyzed.collectFirst {
                   case _: LogicalRelation => ()
                 }.getOrElse {
-                  fail(s"Expecting the query plan to convert orc to data sources, " +
+                  fail("Expecting the query plan to convert orc to data sources, " +
                     s"but got:\n$queryExecution")
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
                   case _: HiveTableRelation => ()
                 }.getOrElse {
-                  fail(s"Expecting no conversion from orc to data sources, " +
+                  fail("Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")
                 }
               }
@@ -142,7 +142,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             |partitioned by (partitionValue int)
             |stored as orc
             |location "${dir.toURI}"""".stripMargin)
-          spark.sql(s"msck repair table dummy_orc")
+          spark.sql("msck repair table dummy_orc")
           checkAnswer(spark.sql("select * from dummy_orc"), df)
         }
       }

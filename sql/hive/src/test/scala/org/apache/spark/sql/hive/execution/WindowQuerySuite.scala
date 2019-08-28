@@ -63,7 +63,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     // - Spark uses a different default stddev (sample instead of pop)
     // - Tiny numerical differences in stddev results.
     // - Different StdDev behavior when n=1 (NaN instead of 0)
-    checkAnswer(sql(s"""
+    checkAnswer(sql("""
       |select  p_mfgr,p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,

@@ -304,7 +304,7 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   require(
     partitionings.map(_.numPartitions).distinct.length == 1,
-    s"PartitioningCollection requires all of its partitionings have the same numPartitions.")
+    "PartitioningCollection requires all of its partitionings have the same numPartitions.")
 
   override def children: Seq[Expression] = partitionings.collect {
     case expr: Expression => expr

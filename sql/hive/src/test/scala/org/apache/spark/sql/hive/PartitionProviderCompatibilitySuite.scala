@@ -125,7 +125,7 @@ class PartitionProviderCompatibilitySuite
         // disabled
         withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
           val e = intercept[AnalysisException] {
-            spark.sql(s"show partitions test")
+            spark.sql("show partitions test")
           }
           assert(e.getMessage.contains("filesource partition management is disabled"))
           spark.sql("refresh table test")
@@ -265,7 +265,7 @@ class PartitionProviderCompatibilitySuite
           assert(spark.sql("select * from test").count() == 28)  // moved to empty dir
 
           // rename partition sanity check
-          spark.sql(s"""
+          spark.sql("""
             |alter table test partition (A=5, B='%')
             |rename to partition (A=100, B='%')""".stripMargin)
           assert(spark.sql("select * from test where a = 5 and b = '%'").count() == 0)
@@ -273,7 +273,7 @@ class PartitionProviderCompatibilitySuite
 
           // try with A=0 which has a custom location
           spark.sql("insert into test partition (A=0, B='%') select 1")
-          spark.sql(s"""
+          spark.sql("""
             |alter table test partition (A=0, B='%')
             |rename to partition (A=101, B='%')""".stripMargin)
           assert(spark.sql("select * from test where a = 0 and b = '%'").count() == 0)
@@ -364,7 +364,7 @@ class PartitionProviderCompatibilitySuite
       spark.sql(s"alter table test add partition (P1=0, P2=0) location '${a.toURI}'")
       spark.sql(s"alter table test add partition (P1=0, P2=1) location '${b.toURI}'")
       spark.sql(s"alter table test add partition (P1=1, P2=0) location '${c.toURI}'")
-      spark.sql(s"alter table test add partition (P1=1, P2=1)")
+      spark.sql("alter table test add partition (P1=1, P2=1)")
 
       testFn
 

@@ -2292,7 +2292,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))
       reference.orElse(literal)
-          .getOrElse(throw new ParseException(s"Invalid transform argument", ctx))
+          .getOrElse(throw new ParseException("Invalid transform argument", ctx))
     }
   }
 

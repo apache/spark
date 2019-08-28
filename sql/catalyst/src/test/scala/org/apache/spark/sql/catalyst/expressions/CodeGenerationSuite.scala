@@ -367,7 +367,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val length = 600
 
     val input = new GenericInternalRow(length)
-    val utf8Str = UTF8String.fromString(s"abc")
+    val utf8Str = UTF8String.fromString("abc")
     for (i <- 0 until length) {
       input.update(i, utf8Str)
     }

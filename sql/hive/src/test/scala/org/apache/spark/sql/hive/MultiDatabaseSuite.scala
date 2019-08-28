@@ -41,7 +41,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"saveAsTable() to non-default database - with USE - Overwrite") {
+  test("saveAsTable() to non-default database - with USE - Overwrite") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
@@ -56,7 +56,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"saveAsTable() to non-default database - without USE - Overwrite") {
+  test("saveAsTable() to non-default database - without USE - Overwrite") {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       assert(getTableNames(Option(db)).contains("t"))
@@ -66,7 +66,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"createExternalTable() to non-default database - with USE") {
+  test("createExternalTable() to non-default database - with USE") {
     withTempDatabase { db =>
       activateDatabase(db) {
         withTempPath { dir =>
@@ -92,7 +92,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"createExternalTable() to non-default database - without USE") {
+  test("createExternalTable() to non-default database - without USE") {
     withTempDatabase { db =>
       withTempPath { dir =>
         val path = dir.getCanonicalPath
@@ -116,7 +116,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"saveAsTable() to non-default database - with USE - Append") {
+  test("saveAsTable() to non-default database - with USE - Append") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
@@ -132,7 +132,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"saveAsTable() to non-default database - without USE - Append") {
+  test("saveAsTable() to non-default database - without USE - Append") {
     withTempDatabase { db =>
       df.write.mode(SaveMode.Overwrite).saveAsTable(s"$db.t")
       df.write.mode(SaveMode.Append).saveAsTable(s"$db.t")
@@ -143,7 +143,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"insertInto() non-default database - with USE") {
+  test("insertInto() non-default database - with USE") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
@@ -155,7 +155,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     }
   }
 
-  test(s"insertInto() non-default database - without USE") {
+  test("insertInto() non-default database - without USE") {
     withTempDatabase { db =>
       activateDatabase(db) {
         df.write.mode(SaveMode.Overwrite).saveAsTable("t")
@@ -183,7 +183,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   test("Drops a table in a non-default database") {
     withTempDatabase { db =>
       activateDatabase(db) {
-        sql(s"CREATE TABLE t (key INT)")
+        sql("CREATE TABLE t (key INT)")
         assert(getTableNames().contains("t"))
         assert(!getTableNames(Option("default")).contains("t"))
       }
@@ -192,7 +192,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       assert(getTableNames(Option(db)).contains("t"))
 
       activateDatabase(db) {
-        sql(s"DROP TABLE t")
+        sql("DROP TABLE t")
         assert(!getTableNames().contains("t"))
         assert(!getTableNames(Option("default")).contains("t"))
       }

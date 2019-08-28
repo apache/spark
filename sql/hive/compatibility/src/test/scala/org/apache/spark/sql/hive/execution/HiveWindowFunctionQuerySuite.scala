@@ -116,7 +116,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // Results of the original query file are not deterministic.
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing_multipartitioning.q (deterministic) 1",
-    s"""
+    """
       |select s,
       |rank() over (partition by s order by si) r,
       |sum(b) over (partition by s order by si) sum
@@ -137,26 +137,26 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   */
 
   createQueryTest("windowing_multipartitioning.q (deterministic) 3",
-    s"""
+    """
       |select s, sum(i) over (partition by s), sum(f) over (partition by si)
       |from over1k where s = 'tom allen' or s = 'bob steinbeck';
      """.stripMargin, reset = false)
 
   createQueryTest("windowing_multipartitioning.q (deterministic) 4",
-    s"""
+    """
       |select s, rank() over (partition by s order by bo),
       |rank() over (partition by si order by bin desc) from over1k
       |where s = 'tom allen' or s = 'bob steinbeck';
      """.stripMargin, reset = false)
 
   createQueryTest("windowing_multipartitioning.q (deterministic) 5",
-    s"""
+    """
       |select s, sum(f) over (partition by i), row_number() over (order by f)
       |from over1k where s = 'tom allen' or s = 'bob steinbeck';
      """.stripMargin, reset = false)
 
   createQueryTest("windowing_multipartitioning.q (deterministic) 6",
-    s"""
+    """
       |select s, rank() over w1,
       |rank() over w2
       |from over1k
@@ -173,7 +173,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // select i, lead(s) over (partition by bin order by d,i desc) from over1k ;
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing_navfn.q (deterministic)",
-    s"""
+    """
       |select s, row_number() over (partition by d order by dec) rn from over1k
       |order by s, rn desc;
       |select i, lead(s) over (partition by cast(bin as string) order by d,i desc) as l
@@ -194,7 +194,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // Results of the original query file are not deterministic.
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing_ntile.q (deterministic)",
-    s"""
+    """
       |select i, ntile(10) over (partition by s order by i) n from over1k
       |order by i, n;
       |select s, ntile(100) over (partition by i order by s) n from over1k
@@ -210,7 +210,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // Results of the original query file are not deterministic.
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing_udaf.q (deterministic)",
-    s"""
+    """
       |select s, min(i) over (partition by s) m from over1k
       |order by s, m;
       |select s, avg(f) over (partition by si order by s) a from over1k
@@ -228,7 +228,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // Results of the original query file are not deterministic.
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing_windowspec.q (deterministic)",
-    s"""
+    """
       |select s, sum(b) over (partition by i order by s,b rows unbounded preceding) as sum
       |from over1k order by s, sum;
       |select s, sum(f) over (partition by d order by s,f rows unbounded preceding) as sum
@@ -259,7 +259,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // Results of the original query file are not deterministic.
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing_rank.q (deterministic) 1",
-    s"""
+    """
       |select s, rank() over (partition by f order by t) r from over1k order by s, r;
       |select s, dense_rank() over (partition by ts order by i,s desc) as r from over1k
       |order by s desc, r desc;
@@ -270,7 +270,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
      """.stripMargin, reset = false)
 
   createQueryTest("windowing_rank.q (deterministic) 2",
-    s"""
+    """
       |select ts, dec, rnk
       |from
       |  (select ts, dec,
@@ -286,7 +286,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
      """.stripMargin, reset = false)
 
   createQueryTest("windowing_rank.q (deterministic) 3",
-    s"""
+    """
       |select ts, dec, rnk
       |from
       |  (select ts, dec,
@@ -302,7 +302,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
      """.stripMargin, reset = false)
 
   createQueryTest("windowing_rank.q (deterministic) 4",
-    s"""
+    """
       |select ts, dec, rnk
       |from
       |  (select ts, dec,
@@ -325,7 +325,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
   // is not supported right now.
   /////////////////////////////////////////////////////////////////////////////
   createQueryTest("windowing.q -- 1. testWindowing",
-    s"""
+    """
       |select p_mfgr, p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,
@@ -335,7 +335,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 2. testGroupByWithPartitioning",
-    s"""
+    """
       |select p_mfgr, p_name, p_size,
       |min(p_retailprice),
       |rank() over(distribute by p_mfgr sort by p_name)as r,
@@ -346,7 +346,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 3. testGroupByHavingWithSWQ",
-    s"""
+    """
       |select p_mfgr, p_name, p_size, min(p_retailprice),
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,
@@ -357,14 +357,14 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 4. testCount",
-    s"""
+    """
       |select p_mfgr, p_name,
       |count(p_size) over(distribute by p_mfgr sort by p_name) as cd
       |from part
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 5. testCountWithWindowingUDAF",
-    s"""
+    """
       |select p_mfgr, p_name,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,
@@ -376,7 +376,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 6. testCountInSubQ",
-    s"""
+    """
       |select sub1.r, sub1.dr, sub1.cd, sub1.s1, sub1.deltaSz
       |from (select p_mfgr, p_name,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
@@ -390,14 +390,14 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 8. testMixedCaseAlias",
-    s"""
+    """
       |select p_mfgr, p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name, p_size desc) as R
       |from part
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 9. testHavingWithWindowingNoGBY",
-    s"""
+    """
       |select p_mfgr, p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,
@@ -407,7 +407,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 10. testHavingWithWindowingCondRankNoGBY",
-    s"""
+    """
       |select p_mfgr, p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,
@@ -417,7 +417,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 11. testFirstLast",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |sum(p_size) over (distribute by p_mfgr sort by p_name
       |rows between current row and current row) as s2,
@@ -428,7 +428,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 12. testFirstLastWithWhere",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |sum(p_size) over (distribute by p_mfgr sort by p_name
@@ -441,7 +441,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 13. testSumWindow",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |sum(p_size) over w1 as s1,
       |sum(p_size) over (distribute by p_mfgr  sort by p_name
@@ -451,7 +451,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 14. testNoSortClause",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr
@@ -482,7 +482,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
   */
   createQueryTest("windowing.q -- 16. testMultipleWindows",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |rank() over(distribute by p_mfgr sort by p_name) as r,
       |dense_rank() over(distribute by p_mfgr sort by p_name) as dr,
@@ -499,7 +499,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
 
 
   createQueryTest("windowing.q -- 17. testCountStar",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |count(*) over(distribute by p_mfgr sort by p_name ) as c,
       |count(p_size) over(distribute by p_mfgr sort by p_name) as ca,
@@ -510,7 +510,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     """.stripMargin, reset = false)
 
   createQueryTest("windowing.q -- 18. testUDAFs",
-    s"""
+    """
       |select  p_mfgr,p_name, p_size,
       |sum(p_retailprice) over w1 as s,
       |min(p_retailprice) over w1 as mi,

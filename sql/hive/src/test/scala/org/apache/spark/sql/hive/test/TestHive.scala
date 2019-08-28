@@ -382,7 +382,7 @@ private[hive] class TestHiveSparkSession(
          """.stripMargin.cmd,
         "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
       TestTable("episodes",
-        s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
+        """CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
            |STORED AS avro
            |TBLPROPERTIES (
            |  'avro.schema.literal'='{
@@ -417,7 +417,7 @@ private[hive] class TestHiveSparkSession(
       // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC
       // PARTITIONING IS NOT YET SUPPORTED
       TestTable("episodes_part",
-        s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
+        """CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
            |PARTITIONED BY (doctor_pt INT)
            |STORED AS avro
            |TBLPROPERTIES (
@@ -447,7 +447,7 @@ private[hive] class TestHiveSparkSession(
          """.stripMargin.cmd,
         // WORKAROUND: Required to pass schema to SerDe for partitioned tables.
         // TODO: Pass this automatically from the table to partitions.
-        s"""
+        """
            |ALTER TABLE episodes_part SET SERDEPROPERTIES (
            |  'avro.schema.literal'='{
            |    "type": "record",
@@ -473,13 +473,13 @@ private[hive] class TestHiveSparkSession(
            |  }'
            |)
           """.stripMargin.cmd,
-        s"""
+        """
           INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
           SELECT title, air_date, doctor FROM episodes
         """.cmd
         ),
       TestTable("src_json",
-        s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
+        """CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
          """.stripMargin.cmd,
         s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
     )

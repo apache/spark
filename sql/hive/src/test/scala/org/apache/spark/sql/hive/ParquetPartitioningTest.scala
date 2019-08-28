@@ -71,7 +71,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
     sparkContext
       .makeRDD(1 to 10)
-      .map(i => ParquetData(i, s"part-1"))
+      .map(i => ParquetData(i, "part-1"))
       .toDF()
       .write.parquet(new File(normalTableDir, "normal").getCanonicalPath)
 

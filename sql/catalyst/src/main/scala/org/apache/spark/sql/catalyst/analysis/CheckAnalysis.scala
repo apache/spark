@@ -71,7 +71,7 @@ trait CheckAnalysis extends PredicateHelper {
         "The limit expression must evaluate to a constant value, but got " +
           limitExpr.sql)
       case e if e.dataType != IntegerType => failAnalysis(
-        s"The limit expression must be integer type, but got " +
+        "The limit expression must be integer type, but got " +
           e.dataType.catalogString)
       case e =>
         e.eval() match {
@@ -164,7 +164,7 @@ trait CheckAnalysis extends PredicateHelper {
               case _: TimestampType =>
               case _ =>
                 failAnalysis(
-                  s"Event time must be defined on a window or a timestamp, but " +
+                  "Event time must be defined on a window or a timestamp, but " +
                   s"${etw.eventTime.name} is of type ${etw.eventTime.dataType.catalogString}")
             }
           case f: Filter if f.condition.dataType != BooleanType =>
@@ -196,16 +196,16 @@ trait CheckAnalysis extends PredicateHelper {
                   child.foreach {
                     case expr: Expression if isAggregateExpression(expr) =>
                       failAnalysis(
-                        s"It is not allowed to use an aggregate function in the argument of " +
-                          s"another aggregate function. Please use the inner aggregate function " +
-                          s"in a sub-query.")
+                        "It is not allowed to use an aggregate function in the argument of " +
+                          "another aggregate function. Please use the inner aggregate function " +
+                          "in a sub-query.")
                     case other => // OK
                   }
 
                   if (!child.deterministic) {
                     failAnalysis(
                       s"nondeterministic expression ${expr.sql} should not " +
-                        s"appear in the arguments of an aggregate function.")
+                        "appear in the arguments of an aggregate function.")
                   }
                 }
               case e: Attribute if groupingExprs.isEmpty =>
@@ -214,16 +214,16 @@ trait CheckAnalysis extends PredicateHelper {
                   case a: AggregateExpression => a
                 }.nonEmpty)
                 failAnalysis(
-                  s"grouping expressions sequence is empty, " +
+                  "grouping expressions sequence is empty, " +
                     s"and '${e.sql}' is not an aggregate function. " +
                     s"Wrap '${aggExprs.map(_.sql).mkString("(", ", ", ")")}' in windowing " +
                     s"function(s) or wrap '${e.sql}' in first() (or first_value) " +
-                    s"if you don't care which value you get."
+                    "if you don't care which value you get."
                 )
               case e: Attribute if !groupingExprs.exists(_.semanticEquals(e)) =>
                 failAnalysis(
                   s"expression '${e.sql}' is neither present in the group by, " +
-                    s"nor is it an aggregate function. " +
+                    "nor is it an aggregate function. " +
                     "Add to group by or wrap in first() (or first_value) if you don't care " +
                     "which value you get.")
               case e if groupingExprs.exists(_.semanticEquals(e)) => // OK
@@ -241,7 +241,7 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
                     s"because its data type ${expr.dataType.catalogString} is not an orderable " +
-                    s"data type.")
+                    "data type.")
               }
 
               if (!expr.deterministic) {
@@ -249,7 +249,7 @@ trait CheckAnalysis extends PredicateHelper {
                 // already pull out those nondeterministic expressions and evaluate them in
                 // a Project node.
                 failAnalysis(s"nondeterministic expression ${expr.sql} should not " +
-                  s"appear in grouping expression.")
+                  "appear in grouping expression.")
               }
             }
 
@@ -380,7 +380,7 @@ trait CheckAnalysis extends PredicateHelper {
                   case _: StructType =>
                     throw new AnalysisException(
                       s"Cannot update ${table.name} field $fieldName type: " +
-                          s"update a struct by adding, deleting, or updating its fields")
+                          "update a struct by adding, deleting, or updating its fields")
                   case _: MapType =>
                     throw new AnalysisException(
                       s"Cannot update ${table.name} field $fieldName type: " +
@@ -596,7 +596,7 @@ trait CheckAnalysis extends PredicateHelper {
         plan match {
           case _: Filter | _: DeleteFromTable => // Ok
           case _ =>
-            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
+            failAnalysis("IN/EXISTS predicate sub-queries can only be used in" +
                 s" Filter/DeleteFromTable: $plan")
         }
     }

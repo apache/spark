@@ -380,28 +380,28 @@ class DDLParserSuite extends AnalysisTest {
   test("drop table") {
     parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
       DropTableStatement(Seq("testcat", "ns1", "ns2", "tbl"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE db.tab",
+    parseCompare("DROP TABLE db.tab",
       DropTableStatement(Seq("db", "tab"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS db.tab",
+    parseCompare("DROP TABLE IF EXISTS db.tab",
       DropTableStatement(Seq("db", "tab"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab",
+    parseCompare("DROP TABLE tab",
       DropTableStatement(Seq("tab"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS tab",
+    parseCompare("DROP TABLE IF EXISTS tab",
       DropTableStatement(Seq("tab"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab PURGE",
+    parseCompare("DROP TABLE tab PURGE",
       DropTableStatement(Seq("tab"), ifExists = false, purge = true))
-    parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
+    parseCompare("DROP TABLE IF EXISTS tab PURGE",
       DropTableStatement(Seq("tab"), ifExists = true, purge = true))
   }
 
   test("drop view") {
-    parseCompare(s"DROP VIEW testcat.db.view",
+    parseCompare("DROP VIEW testcat.db.view",
       DropViewStatement(Seq("testcat", "db", "view"), ifExists = false))
-    parseCompare(s"DROP VIEW db.view", DropViewStatement(Seq("db", "view"), ifExists = false))
-    parseCompare(s"DROP VIEW IF EXISTS db.view",
+    parseCompare("DROP VIEW db.view", DropViewStatement(Seq("db", "view"), ifExists = false))
+    parseCompare("DROP VIEW IF EXISTS db.view",
       DropViewStatement(Seq("db", "view"), ifExists = true))
-    parseCompare(s"DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
-    parseCompare(s"DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
+    parseCompare("DROP VIEW view", DropViewStatement(Seq("view"), ifExists = false))
+    parseCompare("DROP VIEW IF EXISTS view", DropViewStatement(Seq("view"), ifExists = true))
   }
 
   private def testCreateOrReplaceDdl(
@@ -838,7 +838,7 @@ class DDLParserSuite extends AnalysisTest {
             rtas.location,
             rtas.comment)
         case other =>
-          fail(s"Expected to parse Create, CTAS, Replace, or RTAS plan" +
+          fail("Expected to parse Create, CTAS, Replace, or RTAS plan" +
             s" from query, got ${other.getClass.getName}.")
       }
     }

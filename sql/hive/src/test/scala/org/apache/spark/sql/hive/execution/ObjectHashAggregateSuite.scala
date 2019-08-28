@@ -49,7 +49,7 @@ class ObjectHashAggregateSuite
 
   protected override def afterAll(): Unit = {
     try {
-      sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS hive_max")
     } finally {
       super.afterAll()
     }
@@ -197,7 +197,7 @@ class ObjectHashAggregateSuite
         case row: Row => Row.fromSeq(i +: row.toSeq)
         case null => Row.fromSeq(i +: Seq.fill(schemaForGenerator.length)(null))
         case other => fail(
-          s"Row or null is expected to be generated, " +
+          "Row or null is expected to be generated, " +
             s"but a ${other.getClass.getCanonicalName} is generated."
         )
       }
@@ -326,7 +326,7 @@ class ObjectHashAggregateSuite
             // Currently Spark SQL doesn't support evaluating distinct aggregate function together
             // with aggregate functions without partial aggregation support.
             test(
-              s"randomized aggregation test - " +
+              "randomized aggregation test - " +
                 s"${names.mkString("[", ", ", "]")} - " +
                 s"${if (withGroupingKeys) "with" else "without"} grouping keys - " +
                 s"with ${if (emptyInput) "empty" else "non-empty"} input"

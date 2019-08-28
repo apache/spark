@@ -144,7 +144,7 @@ case class CaseWhen(
       } else {
         val index = branches.indexWhere(_._1.dataType != BooleanType)
         TypeCheckResult.TypeCheckFailure(
-          s"WHEN expressions in CaseWhen should all be boolean type, " +
+          "WHEN expressions in CaseWhen should all be boolean type, " +
             s"but the ${index + 1}th when expression's type is ${branches(index)._1}")
       }
     } else {

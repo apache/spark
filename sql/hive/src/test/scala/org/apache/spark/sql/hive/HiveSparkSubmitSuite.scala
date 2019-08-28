@@ -357,7 +357,7 @@ object SetMetastoreURLTest extends Logging {
 
     if (expectedMetastoreURL == null) {
       throw new Exception(
-        s"spark.sql.test.expectedMetastoreURL should be set.")
+        "spark.sql.test.expectedMetastoreURL should be set.")
     }
 
     // HiveExternalCatalog is used when Hive support is enabled.

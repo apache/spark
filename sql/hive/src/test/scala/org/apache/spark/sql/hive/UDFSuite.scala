@@ -158,7 +158,7 @@ class UDFSuite
           expectedDF
         )
 
-        sql(s"USE default")
+        sql("USE default")
 
         checkAnswer(
           sql(s"SELECT $dbName.$functionName(value) from $testTableName"),
@@ -168,7 +168,7 @@ class UDFSuite
         sql(s"USE $dbName")
       }
 
-      sql(s"USE default")
+      sql("USE default")
 
       // For this block, drop function command uses default.functionName as the function name.
       withUserDefinedFunction(s"$dbName.$functionNameUpper" -> false) {
@@ -189,7 +189,7 @@ class UDFSuite
           expectedDF
          )
 
-        sql(s"USE default")
+        sql("USE default")
       }
     }
   }

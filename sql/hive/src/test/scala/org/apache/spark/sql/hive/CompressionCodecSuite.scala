@@ -135,7 +135,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
       partitionValue: Option[String],
       format: String,
       compressionCodec: Option[String]): Unit = {
-    val partitionCreate = partitionValue.map(p => s"PARTITIONED BY (p)").mkString
+    val partitionCreate = partitionValue.map(p => "PARTITIONED BY (p)").mkString
     val compressionOption = compressionCodec.map { codec =>
       s",'${getHiveCompressPropName(format)}'='$codec'"
     }.mkString

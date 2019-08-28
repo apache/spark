@@ -264,7 +264,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       val nonExcludable = nonExcludableRules.contains(ruleName)
       if (nonExcludable) {
         logWarning(s"Optimization rule '${ruleName}' was not excluded from the optimizer " +
-          s"because this rule is a non-excludable rule.")
+          "because this rule is a non-excludable rule.")
       }
       !nonExcludable
     }
@@ -285,7 +285,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
           Some(Batch(batch.name, batch.strategy, filteredRules: _*))
         } else {
           logInfo(s"Optimization batch '${batch.name}' is excluded from the optimizer " +
-            s"as all enclosed rules have been excluded.")
+            "as all enclosed rules have been excluded.")
           None
         }
       }

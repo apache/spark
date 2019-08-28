@@ -207,8 +207,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val existingDb = getDatabase(dbDefinition.name)
     if (existingDb.properties == dbDefinition.properties) {
       logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
-        s"the provided database properties are the same as the old ones. Hive does not " +
-        s"currently support altering other database fields.")
+        "the provided database properties are the same as the old ones. Hive does not " +
+        "currently support altering other database fields.")
     }
     client.alterDatabase(dbDefinition)
   }
@@ -373,14 +373,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case Some(serde) =>
         val message =
           s"Persisting file based data source table $qualifiedTableName into " +
-            s"Hive metastore in Hive compatible format."
+            "Hive metastore in Hive compatible format."
         (Some(newHiveCompatibleMetastoreTable(serde)), message)
 
       case _ =>
         val message =
           s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
             s"Persisting data source table $qualifiedTableName into Hive metastore in " +
-            s"Spark SQL specific format, which is NOT compatible with Hive."
+            "Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
     }
 

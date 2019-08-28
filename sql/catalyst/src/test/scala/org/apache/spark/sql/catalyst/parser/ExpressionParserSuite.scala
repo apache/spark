@@ -490,8 +490,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Double Literal
     assertEqual("10.0D", Literal(10.0D))
-    intercept("-1.8E308D", s"does not fit in range")
-    intercept("1.8E308D", s"does not fit in range")
+    intercept("-1.8E308D", "does not fit in range")
+    intercept("1.8E308D", "does not fit in range")
 
     // BigDecimal Literal
     assertEqual("90912830918230182310293801923652346786BD",

@@ -239,7 +239,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
       ignoreNullability = true))
     if (mismatchOpt.isDefined) {
-      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+      TypeCheckResult.TypeCheckFailure("Arguments must be same type but were: " +
         s"${value.dataType.catalogString} != ${mismatchOpt.get.dataType.catalogString}")
     } else {
       TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")

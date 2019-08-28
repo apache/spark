@@ -62,7 +62,7 @@ object ObjectHashAggregateExecBenchmark extends BenchmarkBase with SQLHelper {
     )
 
     sql(
-      s"CREATE TEMPORARY FUNCTION hive_percentile_approx AS '" +
+      "CREATE TEMPORARY FUNCTION hive_percentile_approx AS '" +
         s"${classOf[GenericUDAFPercentileApprox].getName}'"
     )
 

@@ -26,4 +26,4 @@ class CannotReplaceMissingTableException(
     cause: Option[Throwable] = None)
   extends AnalysisException(
     s"Table $tableIdentifier cannot be replaced as it did not exist." +
-    s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)
+    " Use CREATE OR REPLACE TABLE to create the table.", cause = cause)

@@ -76,7 +76,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
   test("SPARK-20986 Reset table's statistics after PruneFileSourcePartitions rule") {
     withTable("tbl") {
       spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
-      sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
+      sql("ANALYZE TABLE tbl COMPUTE STATISTICS")
       val tableStats = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl")).stats
       assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
 

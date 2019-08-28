@@ -73,7 +73,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     assert(errorMsg3.contains(
       s"""root class: "${clsName[ComplexNonEncodable3]}""""))
     assert(errorMsg3.contains(
-      s"""field (class: "scala.Option", name: "name3")"""))
+      """field (class: "scala.Option", name: "name3")"""))
     assert(errorMsg3.contains(
       s"""option value class: "${clsName[NonEncodable]}""""))
 
@@ -82,7 +82,7 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     assert(errorMsg4.contains(
       s"""root class: "${clsName[ComplexNonEncodable4]}""""))
     assert(errorMsg4.contains(
-      s"""field (class: "scala.Array", name: "name4")"""))
+      """field (class: "scala.Array", name: "name4")"""))
     assert(errorMsg4.contains(
       s"""array element class: "${clsName[NonEncodable]}""""))
 
@@ -91,9 +91,9 @@ class EncoderErrorMessageSuite extends SparkFunSuite {
     assert(errorMsg5.contains(
       s"""root class: "${clsName[ComplexNonEncodable5]}""""))
     assert(errorMsg5.contains(
-      s"""field (class: "scala.Option", name: "name5")"""))
+      """field (class: "scala.Option", name: "name5")"""))
     assert(errorMsg5.contains(
-      s"""option value class: "scala.Array""""))
+      """option value class: "scala.Array""""))
     assert(errorMsg5.contains(
       s"""array element class: "${clsName[NonEncodable]}""""))
   }

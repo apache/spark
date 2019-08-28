@@ -205,7 +205,7 @@ trait SimpleHigherOrderFunction extends HigherOrderFunction  {
    * in order to save null-check code.
    */
   protected def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any =
-    sys.error(s"UnaryHigherOrderFunction must override either eval or nullSafeEval")
+    sys.error("UnaryHigherOrderFunction must override either eval or nullSafeEval")
 
   override def eval(inputRow: InternalRow): Any = {
     val value = argument.eval(inputRow)
@@ -808,7 +808,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
   private def assertSizeOfArrayBuffer(size: Int): Unit = {
     if (size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
       throw new RuntimeException(s"Unsuccessful try to zip maps with $size " +
-        s"unique keys due to exceeding the array size limit " +
+        "unique keys due to exceeding the array size limit " +
         s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
     }
   }

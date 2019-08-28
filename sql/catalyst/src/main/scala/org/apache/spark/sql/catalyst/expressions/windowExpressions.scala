@@ -66,7 +66,7 @@ case class WindowSpecDefinition(
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           orderSpec.size > 1 =>
         TypeCheckFailure(
-          s"A range window frame with value boundaries cannot be used in a window specification " +
+          "A range window frame with value boundaries cannot be used in a window specification " +
             s"with multiple order by expressions: ${orderSpec.mkString(",")}")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>

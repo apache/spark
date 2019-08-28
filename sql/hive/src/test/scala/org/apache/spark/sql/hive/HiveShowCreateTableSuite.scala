@@ -25,7 +25,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("simple hive table") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        """CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -64,7 +64,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("partitioned hive table") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        """CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -83,7 +83,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive table with explicit storage info") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        """CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -101,7 +101,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive table with STORED AS clause") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        """CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -116,7 +116,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive table with serde info") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (
+        """CREATE TABLE t1 (
            |  c1 INT COMMENT 'bla',
            |  c2 STRING
            |)
@@ -138,7 +138,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
   test("hive bucketing is supported") {
     withTable("t1") {
       sql(
-        s"""CREATE TABLE t1 (a INT, b STRING)
+        """CREATE TABLE t1 (a INT, b STRING)
            |CLUSTERED BY (a)
            |SORTED BY (b)
            |INTO 2 BUCKETS
@@ -152,7 +152,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     withTable("t1") {
       withView("v1") {
         sql(
-          s"""
+          """
              |CREATE TABLE t1 (c1 INT, c2 STRING)
              |PARTITIONED BY (
              |  p1 BIGINT COMMENT 'bla',
@@ -160,7 +160,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
            """.stripMargin)
 
         createRawHiveTable(
-          s"""
+          """
              |CREATE VIEW v1
              |PARTITIONED ON (p1, p2)
              |AS SELECT * from t1
@@ -180,7 +180,7 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
     withTable("t1") {
       val createTable = "CREATE TABLE `t1`(`a` STRUCT<`b`: STRING>)"
       sql(createTable)
-      val shownDDL = sql(s"SHOW CREATE TABLE t1")
+      val shownDDL = sql("SHOW CREATE TABLE t1")
         .head()
         .getString(0)
         .split("\n")

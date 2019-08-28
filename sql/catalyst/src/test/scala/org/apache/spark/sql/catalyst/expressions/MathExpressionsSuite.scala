@@ -130,7 +130,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     if (!actual.asInstanceOf[Double].isNaN) {
       fail(s"Incorrect evaluation (codegen off): $expression, " +
         s"actual: $actual, " +
-        s"expected: NaN")
+        "expected: NaN")
     }
   }
 

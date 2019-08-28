@@ -42,7 +42,7 @@ private[spark] class HiveDelegationTokenProvider
 
   override def serviceName: String = "hive"
 
-  private val classNotFoundErrorStr = s"You are attempting to use the " +
+  private val classNotFoundErrorStr = "You are attempting to use the " +
     s"${getClass.getCanonicalName}, but your Spark distribution is not built with Hive libraries."
 
   private def hiveConf(hadoopConf: Configuration): Configuration = {

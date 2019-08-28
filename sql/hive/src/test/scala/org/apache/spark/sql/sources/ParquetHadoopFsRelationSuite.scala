@@ -180,7 +180,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     }
   }
 
-  test(s"SPARK-13537: Fix readBytes in VectorizedPlainValuesReader") {
+  test("SPARK-13537: Fix readBytes in VectorizedPlainValuesReader") {
     withTempPath { file =>
       val path = file.getCanonicalPath
 

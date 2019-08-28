@@ -41,7 +41,7 @@ case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[Log
           case other => other.failAnalysis(
             "A lambda function should only be used in a higher order function. However, " +
               s"its class is ${other.getClass.getCanonicalName}, which is not a " +
-              s"higher order function.")
+              "higher order function.")
         }
       }
   }

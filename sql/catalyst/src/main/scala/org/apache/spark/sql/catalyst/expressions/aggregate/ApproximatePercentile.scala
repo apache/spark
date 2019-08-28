@@ -105,13 +105,13 @@ case class ApproximatePercentile(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!percentageExpression.foldable || !accuracyExpression.foldable) {
-      TypeCheckFailure(s"The accuracy or percentage provided must be a constant literal")
+      TypeCheckFailure("The accuracy or percentage provided must be a constant literal")
     } else if (accuracy <= 0) {
       TypeCheckFailure(
         s"The accuracy provided must be a positive integer literal (current value = $accuracy)")
     } else if (percentages.exists(percentage => percentage < 0.0D || percentage > 1.0D)) {
       TypeCheckFailure(
-        s"All percentage values must be between 0.0 and 1.0 " +
+        "All percentage values must be between 0.0 and 1.0 " +
           s"(current = ${percentages.mkString(", ")})")
     } else {
       TypeCheckSuccess
