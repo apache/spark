@@ -22,16 +22,14 @@
 import datetime
 import re
 import unittest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, patch, PropertyMock
 from typing import Dict
 
 import time
-
 from copy import deepcopy
 
-from mock import PropertyMock
-
 from airflow import DAG, AirflowException
+from airflow.contrib.hooks.gcp_dataproc_hook import _DataProcJobBuilder
 from airflow.contrib.operators.dataproc_operator import \
     DataprocClusterCreateOperator, \
     DataprocClusterDeleteOperator, \
@@ -44,16 +42,20 @@ from airflow.contrib.operators.dataproc_operator import \
     DataprocWorkflowTemplateInstantiateOperator, \
     DataprocClusterScaleOperator, DataProcJobBaseOperator
 from airflow.exceptions import AirflowTaskTimeout
+from airflow.models.taskinstance import TaskInstance
 from airflow.utils.timezone import make_aware
 from airflow.version import version
 from tests.compat import mock
 
-
+DAG_ID = 'test_dag'
 TASK_ID = 'test-dataproc-operator'
-CLUSTER_NAME = 'test-cluster-name'
+CLUSTER_NAME = 'airflow_{}_cluster'.format(DAG_ID)
+CLUSTER_NAME_TEMPLATED = 'airflow_{{ dag.dag_id }}_cluster'
 GCP_PROJECT_ID = 'test-project-id'
+GCP_PROJECT_TEMPLATED = "{{  ['test', 'project', 'id'] | join('-') }}"
 NUM_WORKERS = 123
 GCE_ZONE = 'us-central1-a'
+GCE_ZONE_TEMPLATED = "{{ 'US-CENTRAL1-A' | lower }}"
 SCALING_POLICY = 'test-scaling-policy'
 NETWORK_URI = '/projects/project_id/regions/global/net'
 SUBNETWORK_URI = '/projects/project_id/regions/global/subnet'
@@ -81,7 +83,8 @@ IDLE_DELETE_TTL = 321
 AUTO_DELETE_TIME = datetime.datetime(2017, 6, 7)
 AUTO_DELETE_TTL = 654
 DEFAULT_DATE = datetime.datetime(2017, 6, 6)
-GCP_REGION = 'test-region'
+GCP_REGION = 'us-central1'
+GCP_REGION_TEMPLATED = "{{ 'US-CENTRAL1' | lower }}"
 MAIN_URI = 'test-uri'
 TEMPLATE_ID = 'template-id'
 
@@ -153,7 +156,7 @@ class TestDataprocClusterCreateOperator(unittest.TestCase):
                 )
             )
         self.dag = DAG(
-            'test_dag',
+            DAG_ID,
             default_args={
                 'owner': 'airflow',
                 'start_date': DEFAULT_DATE,
@@ -419,7 +422,7 @@ class TestDataprocClusterCreateOperator(unittest.TestCase):
                 requestId=mock.ANY,
                 body={
                     'projectId': 'test-project-id',
-                    'clusterName': 'test-cluster-name',
+                    'clusterName': CLUSTER_NAME,
                     'config': {
                         'gceClusterConfig':
                             {'zoneUri': zone_uri},
@@ -486,7 +489,7 @@ class TestDataprocClusterCreateOperator(unittest.TestCase):
                 requestId=mock.ANY,
                 body={
                     'projectId': 'test-project-id',
-                    'clusterName': 'test-cluster-name',
+                    'clusterName': CLUSTER_NAME,
                     'config': {
                         'gceClusterConfig':
                             {'zoneUri': zone_uri},
@@ -530,6 +533,28 @@ class TestDataprocClusterCreateOperator(unittest.TestCase):
         self.assertEqual(str(cm.exception),
                          "Set internal_ip_only to true only when you pass a subnetwork_uri.")
 
+    def test_render_template(self):
+        task = DataprocClusterCreateOperator(
+            task_id=TASK_ID,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            project_id=GCP_PROJECT_TEMPLATED,
+            num_workers=NUM_WORKERS,
+            zone=GCE_ZONE_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dag=self.dag,
+        )
+
+        self.assertEqual(task.template_fields,
+                         ['cluster_name', 'project_id', 'zone', 'region'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.project_id, GCP_PROJECT_ID)
+        self.assertEqual(task.zone, GCE_ZONE)
+        self.assertEqual(task.region, GCP_REGION)
+
 
 class TestDataprocClusterScaleOperator(unittest.TestCase):
     # Unit test for the DataprocClusterScaleOperator
@@ -549,7 +574,7 @@ class TestDataprocClusterScaleOperator(unittest.TestCase):
         self.mock_conn.projects.return_value = self.mock_projects
 
         self.dag = DAG(
-            'test_dag',
+            DAG_ID,
             default_args={
                 'owner': 'airflow',
                 'start_date': DEFAULT_DATE,
@@ -593,6 +618,27 @@ class TestDataprocClusterScaleOperator(unittest.TestCase):
                 })
             hook.wait.assert_called_once_with(self.operation)
 
+    def test_render_template(self):
+        task = DataprocClusterScaleOperator(
+            task_id=TASK_ID,
+            region=GCP_REGION_TEMPLATED,
+            project_id=GCP_PROJECT_TEMPLATED,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            num_workers=NUM_WORKERS,
+            num_preemptible_workers=NUM_PREEMPTIBLE_WORKERS,
+            dag=self.dag
+        )
+
+        self.assertEqual(task.template_fields,
+                         ['cluster_name', 'project_id', 'region'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.project_id, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+
 
 class TestDataprocClusterDeleteOperator(unittest.TestCase):
     # Unit test for the DataprocClusterDeleteOperator
@@ -612,7 +658,7 @@ class TestDataprocClusterDeleteOperator(unittest.TestCase):
         self.mock_conn.projects.return_value = self.mock_projects
 
         self.dag = DAG(
-            'test_dag',
+            DAG_ID,
             default_args={
                 'owner': 'airflow',
                 'start_date': DEFAULT_DATE,
@@ -642,12 +688,31 @@ class TestDataprocClusterDeleteOperator(unittest.TestCase):
                 requestId=mock.ANY)
             hook.wait.assert_called_once_with(self.operation)
 
+    def test_render_template(self):
+        task = DataprocClusterDeleteOperator(
+            task_id=TASK_ID,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            project_id=GCP_PROJECT_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dag=self.dag,
+        )
+
+        self.assertEqual(task.template_fields,
+                         ['cluster_name', 'project_id', 'region'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.project_id, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+
 
 class TestDataProcJobBaseOperator(unittest.TestCase):
 
     def setUp(self):
         self.dag = DAG(
-            'test_dag',
+            DAG_ID,
             default_args={
                 'owner': 'airflow',
                 'start_date': DEFAULT_DATE,
@@ -681,9 +746,38 @@ class TestDataProcJobBaseOperator(unittest.TestCase):
                 task.run(start_date=make_aware(DEFAULT_DATE), end_date=make_aware(DEFAULT_DATE))
             mock_hook.cancel.assert_called_once_with(mock.ANY, job_id, GCP_REGION)
 
+    def test_dataproc_job_base(self):
+        with patch(
+            'airflow.contrib.operators.dataproc_operator.DataProcHook.project_id',
+                new_callable=PropertyMock) as mock_project_id:
+            mock_project_id.return_value = GCP_PROJECT_ID
+            task = DataProcJobBaseOperator(
+                task_id=TASK_ID,
+                cluster_name="cluster-1",
+                region=GCP_REGION,
+                dag=self.dag,
+            )
+
+            task.create_job_template()
+
+            self.assertIsInstance(task.job_template, _DataProcJobBuilder)
+            job_dict = task.job_template.build()
+            self.assertDictEqual({'clusterName': task.cluster_name}, job_dict['job']['placement'])
+            self.assertEqual(GCP_PROJECT_ID, job_dict['job']['reference']['projectId'])
+
 
 class TestDataProcHadoopOperator(unittest.TestCase):
     # Unit test for the DataProcHadoopOperator
+
+    def setUp(self):
+        self.dag = DAG(
+            DAG_ID,
+            default_args={
+                'owner': 'airflow',
+                'start_date': DEFAULT_DATE,
+            },
+            schedule_interval='@daily')
+
     @mock.patch(
         'airflow.contrib.hooks.gcp_dataproc_hook.DataProcHook.project_id',
         new_callable=PropertyMock,
@@ -730,9 +824,45 @@ class TestDataProcHadoopOperator(unittest.TestCase):
 
             _assert_dataproc_job_id(mock_hook, dataproc_task)
 
+    def test_render_template(self):
+        task = DataProcHadoopOperator(
+            task_id=TASK_ID,
+            main_jar='file:///usr/lib/hadoop-mapreduce/hadoop-mapreduce-examples.jar',
+            arguments=['{{ ds }}', 'gs://pub/shakespeare/rose.txt'],
+            job_name=GCP_PROJECT_TEMPLATED,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dataproc_jars=['gs://test-bucket/{{ dag.dag_id }}/test.jar'],
+            dataproc_properties={},
+            dag=self.dag,
+        )
+
+        self.assertEqual(task.template_fields,
+                         ['arguments', 'job_name', 'cluster_name',
+                          'region', 'dataproc_jars', 'dataproc_properties'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.arguments, [DEFAULT_DATE.date().isoformat(), 'gs://pub/shakespeare/rose.txt'])
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.job_name, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+        self.assertEqual(task.dataproc_jars, ['gs://test-bucket/{}/test.jar'.format(DAG_ID)])
+        self.assertEqual(task.dataproc_properties, {})
+
 
 class TestDataProcHiveOperator(unittest.TestCase):
     # Unit test for the DataProcHiveOperator
+    def setUp(self):
+        self.dag = DAG(
+            DAG_ID,
+            default_args={
+                'owner': 'airflow',
+                'start_date': DEFAULT_DATE,
+            },
+            schedule_interval='@daily')
+
     @mock.patch(
         'airflow.contrib.hooks.gcp_dataproc_hook.DataProcHook.project_id',
         new_callable=PropertyMock,
@@ -779,8 +909,45 @@ class TestDataProcHiveOperator(unittest.TestCase):
 
             _assert_dataproc_job_id(mock_hook, dataproc_task)
 
+    def test_render_template(self):
+        task = DataProcHiveOperator(
+            task_id=TASK_ID,
+            query="select * from {{ dag.dag_id }}",
+            variables={},
+            dataproc_properties={},
+            dataproc_jars=['gs://test-bucket/{{ dag.dag_id }}/test.jar'],
+            job_name=GCP_PROJECT_TEMPLATED,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dag=self.dag,
+        )
+
+        self.assertEqual(
+            task.template_fields, ['query', 'variables', 'job_name', 'cluster_name', 'region',
+                                   'dataproc_jars', 'dataproc_properties'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.query, "select * from {}".format(DAG_ID))
+        self.assertEqual(task.variables, {})
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.job_name, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+        self.assertEqual(task.dataproc_jars, ['gs://test-bucket/{}/test.jar'.format(DAG_ID)])
+        self.assertEqual(task.dataproc_properties, {})
+
 
 class TestDataProcPigOperator(unittest.TestCase):
+    def setUp(self):
+        self.dag = DAG(
+            DAG_ID,
+            default_args={
+                'owner': 'airflow',
+                'start_date': DEFAULT_DATE,
+            },
+            schedule_interval='@daily')
+
     @mock.patch(
         'airflow.contrib.hooks.gcp_dataproc_hook.DataProcHook.project_id',
         new_callable=PropertyMock,
@@ -820,6 +987,34 @@ class TestDataProcPigOperator(unittest.TestCase):
         mock_hook.return_value.submit.assert_called_once_with(mock.ANY, mock.ANY,
                                                               GCP_REGION, mock.ANY)
 
+    def test_render_template(self):
+        task = DataProcPigOperator(
+            task_id=TASK_ID,
+            query="select * from {{ dag.dag_id }}",
+            variables={},
+            dataproc_properties={},
+            dataproc_jars=['gs://test-bucket/{{ dag.dag_id }}/test.jar'],
+            job_name=GCP_PROJECT_TEMPLATED,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dag=self.dag,
+        )
+
+        self.assertEqual(
+            task.template_fields, ['query', 'variables', 'job_name', 'cluster_name', 'region',
+                                   'dataproc_jars', 'dataproc_properties'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.query, "select * from {}".format(DAG_ID))
+        self.assertEqual(task.variables, {})
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.job_name, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+        self.assertEqual(task.dataproc_jars, ['gs://test-bucket/{}/test.jar'.format(DAG_ID)])
+        self.assertEqual(task.dataproc_properties, {})
+
     @staticmethod
     def test_dataproc_job_id_is_set():
         with patch(HOOK) as mock_hook:
@@ -834,6 +1029,15 @@ class TestDataProcPigOperator(unittest.TestCase):
 
 class TestDataProcPySparkOperator(unittest.TestCase):
     # Unit test for the DataProcPySparkOperator
+    def setUp(self):
+        self.dag = DAG(
+            DAG_ID,
+            default_args={
+                'owner': 'airflow',
+                'start_date': DEFAULT_DATE,
+            },
+            schedule_interval='@daily')
+
     @mock.patch(
         'airflow.contrib.hooks.gcp_dataproc_hook.DataProcHook.project_id',
         new_callable=PropertyMock,
@@ -883,9 +1087,45 @@ class TestDataProcPySparkOperator(unittest.TestCase):
 
             _assert_dataproc_job_id(mock_hook, dataproc_task)
 
+    def test_render_template(self):
+        task = DataProcPySparkOperator(
+            task_id=TASK_ID,
+            main='file:///usr/lib/hadoop-mapreduce/hadoop-mapreduce-examples.jar',
+            arguments=['{{ ds }}', 'gs://pub/shakespeare/rose.txt'],
+            job_name=GCP_PROJECT_TEMPLATED,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dataproc_jars=['gs://test-bucket/{{ dag.dag_id }}/test.jar'],
+            dataproc_properties={},
+            dag=self.dag,
+        )
+
+        self.assertEqual(
+            task.template_fields, ['arguments', 'job_name', 'cluster_name',
+                                   'region', 'dataproc_jars', 'dataproc_properties'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.arguments, [DEFAULT_DATE.date().isoformat(), 'gs://pub/shakespeare/rose.txt'])
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.job_name, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+        self.assertEqual(task.dataproc_jars, ['gs://test-bucket/{}/test.jar'.format(DAG_ID)])
+        self.assertEqual(task.dataproc_properties, {})
+
 
 class TestDataProcSparkOperator(unittest.TestCase):
     # Unit test for the DataProcSparkOperator
+    def setUp(self):
+        self.dag = DAG(
+            DAG_ID,
+            default_args={
+                'owner': 'airflow',
+                'start_date': DEFAULT_DATE,
+            },
+            schedule_interval='@daily')
+
     @mock.patch(
         'airflow.contrib.hooks.gcp_dataproc_hook.DataProcHook.project_id',
         new_callable=PropertyMock,
@@ -933,6 +1173,33 @@ class TestDataProcSparkOperator(unittest.TestCase):
 
             _assert_dataproc_job_id(mock_hook, dataproc_task)
 
+    def test_render_template(self):
+        task = DataProcSparkOperator(
+            task_id=TASK_ID,
+            main_jar='file:///usr/lib/hadoop-mapreduce/hadoop-mapreduce-examples.jar',
+            arguments=['{{ ds }}', 'gs://pub/shakespeare/rose.txt'],
+            job_name=GCP_PROJECT_TEMPLATED,
+            cluster_name=CLUSTER_NAME_TEMPLATED,
+            region=GCP_REGION_TEMPLATED,
+            dataproc_jars=['gs://test-bucket/{{ dag.dag_id }}/test.jar'],
+            dataproc_properties={},
+            dag=self.dag,
+        )
+
+        self.assertEqual(
+            task.template_fields, ['arguments', 'job_name', 'cluster_name', 'region',
+                                   'dataproc_jars', 'dataproc_properties'])
+
+        ti = TaskInstance(task, DEFAULT_DATE)
+        ti.render_templates()
+
+        self.assertEqual(task.arguments, [DEFAULT_DATE.date().isoformat(), 'gs://pub/shakespeare/rose.txt'])
+        self.assertEqual(task.cluster_name, CLUSTER_NAME)
+        self.assertEqual(task.job_name, GCP_PROJECT_ID)
+        self.assertEqual(task.region, GCP_REGION)
+        self.assertEqual(task.dataproc_jars, ['gs://test-bucket/{}/test.jar'.format(DAG_ID)])
+        self.assertEqual(task.dataproc_properties, {})
+
 
 class TestDataprocWorkflowTemplateInstantiateOperator(unittest.TestCase):
     def setUp(self):
@@ -949,7 +1216,7 @@ class TestDataprocWorkflowTemplateInstantiateOperator(unittest.TestCase):
         self.mock_conn = Mock()
         self.mock_conn.projects.return_value = self.mock_projects
         self.dag = DAG(
-            'test_dag',
+            DAG_ID,
             default_args={
                 'owner': 'airflow',
                 'start_date': DEFAULT_DATE,
@@ -973,8 +1240,8 @@ class TestDataprocWorkflowTemplateInstantiateOperator(unittest.TestCase):
 
             dataproc_task.execute(None)
             template_name = (
-                'projects/test-project-id/regions/test-region/'
-                'workflowTemplates/template-id')
+                'projects/test-project-id/regions/{}/'
+                'workflowTemplates/template-id'.format(GCP_REGION))
             self.mock_workflows.instantiate.assert_called_once_with(
                 name=template_name,
                 body=mock.ANY)
@@ -997,7 +1264,7 @@ class TestDataprocWorkflowTemplateInstantiateInlineOperator(unittest.TestCase):
         self.mock_conn = Mock()
         self.mock_conn.projects.return_value = self.mock_projects
         self.dag = DAG(
-            'test_dag',
+            DAG_ID,
             default_args={
                 'owner': 'airflow',
                 'start_date': DEFAULT_DATE,
@@ -1041,7 +1308,7 @@ class TestDataprocWorkflowTemplateInstantiateInlineOperator(unittest.TestCase):
 
             dataproc_task.execute(None)
             self.mock_workflows.instantiateInline.assert_called_once_with(
-                parent='projects/test-project-id/regions/test-region',
+                parent='projects/test-project-id/regions/{}'.format(GCP_REGION),
                 requestId=mock.ANY,
                 body=template)
             hook.wait.assert_called_once_with(self.operation)
