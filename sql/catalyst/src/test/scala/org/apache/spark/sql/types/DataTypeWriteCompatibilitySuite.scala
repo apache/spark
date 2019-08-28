@@ -133,6 +133,18 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
       assert(err.contains("Cannot safely cast"))
     }
   }
+
+  test("Conversions between timestamp and long are not allowed") {
+    assertSingleError(LongType, TimestampType, "longToTimestamp",
+      "Should not allow long to timestamp") { err =>
+      assert(err.contains("Cannot safely cast 'longToTimestamp': LongType to TimestampType"))
+    }
+
+    assertSingleError(TimestampType, LongType, "timestampToLong",
+      "Should not allow timestamp to long") { err =>
+      assert(err.contains("Cannot safely cast 'timestampToLong': TimestampType to LongType"))
+    }
+  }
 }
 
 abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
