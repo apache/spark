@@ -47,30 +47,6 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     pool.invokePrivate(_cache())
   }
 
-  test("acquire fresh one") {
-    val dataPool = new FetchedDataPool(new SparkConf())
-
-    val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
-
-    assert(getCache(dataPool).get(cacheKey).isEmpty)
-
-    val data = dataPool.acquire(cacheKey, 0)
-
-    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 1, expectedNumTotal = 1)
-    assert(getCache(dataPool)(cacheKey).size === 1)
-    assert(getCache(dataPool)(cacheKey).head.inUse)
-
-    data.withNewPoll(testRecords(0, 5).listIterator, 5)
-
-    dataPool.release(cacheKey, data)
-
-    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 1, expectedNumTotal = 1)
-    assert(getCache(dataPool)(cacheKey).size === 1)
-    assert(!getCache(dataPool)(cacheKey).head.inUse)
-
-    dataPool.shutdown()
-  }
-
   test("acquire fetched data from multiple keys") {
     val dataPool = new FetchedDataPool(new SparkConf())
 
@@ -113,14 +89,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
 
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
-    assert(getCache(dataPool).get(cacheKey).isEmpty)
-
     val data = dataPool.acquire(cacheKey, 0)
-
-    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 1, expectedNumTotal = 1)
-    assert(getCache(dataPool)(cacheKey).size === 1)
-    assert(getCache(dataPool)(cacheKey).head.inUse)
-
     data.withNewPoll(testRecords(0, 5).listIterator, 5)
 
     (0 to 3).foreach { _ => data.next() }
@@ -150,14 +119,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
 
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
-    assert(getCache(dataPool).get(cacheKey).isEmpty)
-
     val dataFromTask1 = dataPool.acquire(cacheKey, 0)
-
-    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 1, expectedNumTotal = 1)
-    assert(getCache(dataPool)(cacheKey).size === 1)
-    assert(getCache(dataPool)(cacheKey).head.inUse)
-
     val dataFromTask2 = dataPool.acquire(cacheKey, 0)
 
     // it shouldn't give same object as dataFromTask1 though it asks same offset

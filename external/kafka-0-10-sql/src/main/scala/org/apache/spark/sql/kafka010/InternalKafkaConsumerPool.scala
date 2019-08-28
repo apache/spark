@@ -47,7 +47,7 @@ import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
  */
 private[kafka010] class InternalKafkaConsumerPool(
     objectFactory: ObjectFactory,
-    poolConfig: PoolConfig) {
+    poolConfig: PoolConfig) extends Logging {
 
   def this(conf: SparkConf) = {
     this(new ObjectFactory, new PoolConfig(conf))
@@ -76,7 +76,8 @@ private[kafka010] class InternalKafkaConsumerPool(
   def borrowObject(key: CacheKey, kafkaParams: ju.Map[String, Object]): InternalKafkaConsumer = {
     updateKafkaParamForKey(key, kafkaParams)
 
-    if (size == poolConfig.softMaxSize()) {
+    if (size >= poolConfig.softMaxSize) {
+      logWarning("Pool exceeds its soft max size, cleaning up idle objects...")
       pool.clearOldest()
     }
 
@@ -151,7 +152,7 @@ private[kafka010] object InternalKafkaConsumerPool {
   class PoolConfig(conf: SparkConf) extends GenericKeyedObjectPoolConfig[InternalKafkaConsumer] {
     private var _softMaxSize = Int.MaxValue
 
-    def softMaxSize(): Int = _softMaxSize
+    def softMaxSize: Int = _softMaxSize
 
     init()
 
@@ -192,9 +193,7 @@ private[kafka010] object InternalKafkaConsumerPool {
     }
   }
 
-  class ObjectFactory extends BaseKeyedPooledObjectFactory[CacheKey, InternalKafkaConsumer]
-    with Logging {
-
+  class ObjectFactory extends BaseKeyedPooledObjectFactory[CacheKey, InternalKafkaConsumer] {
     val keyToKafkaParams = new ConcurrentHashMap[CacheKey, ju.Map[String, Object]]()
 
     override def create(key: CacheKey): InternalKafkaConsumer = {
