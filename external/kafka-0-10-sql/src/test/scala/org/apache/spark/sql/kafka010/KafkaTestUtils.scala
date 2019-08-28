@@ -463,9 +463,7 @@ class KafkaTestUtils(
   private def adminClientConfiguration: Properties = {
     val props = new Properties()
     props.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, s"$brokerHost:$brokerPort")
-    if (secure) {
-      setDynamicJaasConfiguration(props)
-    }
+    setAuthenticationConfigIfNeeded(props)
     props
   }
 
@@ -476,9 +474,7 @@ class KafkaTestUtils(
     props.put("key.serializer", classOf[StringSerializer].getName)
     // wait for all in-sync replicas to ack sends
     props.put("acks", "all")
-    if (secure) {
-      setDynamicJaasConfiguration(props)
-    }
+    setAuthenticationConfigIfNeeded(props)
     props
   }
 
@@ -502,17 +498,17 @@ class KafkaTestUtils(
     props.put("value.deserializer", classOf[StringDeserializer].getName)
     props.put("key.deserializer", classOf[StringDeserializer].getName)
     props.put("enable.auto.commit", "false")
-    if (secure) {
-      setDynamicJaasConfiguration(props)
-    }
+    setAuthenticationConfigIfNeeded(props)
     props
   }
 
-  private def setDynamicJaasConfiguration(props: Properties): Unit = {
-    val jaasParams = KafkaTokenUtil.getKeytabJaasParams(
-      clientKeytabFile.getAbsolutePath, clientPrincipal, brokerServiceName)
-    props.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
-    props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SASL_PLAINTEXT.name)
+  private def setAuthenticationConfigIfNeeded(props: Properties): Unit = {
+    if (secure) {
+      val jaasParams = KafkaTokenUtil.getKeytabJaasParams(
+        clientKeytabFile.getAbsolutePath, clientPrincipal, brokerServiceName)
+      props.put(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
+      props.put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, SASL_PLAINTEXT.name)
+    }
   }
 
   /** Verify topic is deleted in all places, e.g, brokers, zookeeper. */
