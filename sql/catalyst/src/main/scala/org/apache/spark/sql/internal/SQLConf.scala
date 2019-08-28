@@ -1216,12 +1216,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
-    .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
-      " This is useful in determining if a table is small enough to use auto broadcast joins.")
-    .booleanConf
-    .createWithDefault(false)
-
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -1230,6 +1224,16 @@ object SQLConf {
       "knows for sure its size is small enough.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(Long.MaxValue)
+
+  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
+    .doc("When true, it will fall back to HDFS if the table statistics are not available from " +
+      "table metadata. This is useful in determining if a table is small enough to use " +
+      "broadcast joins. This flag is effective only for non-partitioned Hive tables. " +
+      "For non-partitioned data source tables, it will be automatically recalculated if table " +
+      "statistics are not available. For partitioned data source and partitioned Hive tables, " +
+      s"It is '${DEFAULT_SIZE_IN_BYTES.key}' if table statistics are not available.")
+    .booleanConf
+    .createWithDefault(false)
 
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
