@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorExited
@@ -58,16 +59,16 @@ private[spark] class ExecutorPodsLifecycleManager(
     snapshots.foreach { snapshot =>
       snapshot.executorPods.foreach { case (execId, state) =>
         state match {
-          case deleted@PodDeleted(_) =>
+          case deleted@ExecutorPodDeleted(_) =>
             logDebug(s"Snapshot reported deleted executor with id $execId," +
               s" pod name ${state.pod.getMetadata.getName}")
             removeExecutorFromSpark(schedulerBackend, deleted, execId)
             execIdsRemovedInThisRound += execId
-          case failed@PodFailed(_) =>
+          case failed@ExecutorFailed(_) =>
             logDebug(s"Snapshot reported failed executor with id $execId," +
               s" pod name ${state.pod.getMetadata.getName}")
             onFinalNonDeletedState(failed, execId, schedulerBackend, execIdsRemovedInThisRound)
-          case succeeded@PodSucceeded(_) =>
+          case succeeded@ExecutorSucceeded(_) =>
             if (schedulerBackend.isExecutorActive(execId.toString)) {
               logInfo(s"Snapshot reported succeeded executor with id $execId, " +
                 "even though the application has not requested for it to be removed.")
@@ -113,13 +114,13 @@ private[spark] class ExecutorPodsLifecycleManager(
   }
 
   private def onFinalNonDeletedState(
-      podState: FinalPodState,
+      executorState: FinalExecutorState,
       execId: Long,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
-    removeExecutorFromSpark(schedulerBackend, podState, execId)
+    removeExecutorFromSpark(schedulerBackend, executorState, execId)
     if (shouldDeleteExecutors) {
-      removeExecutorFromK8s(podState.pod)
+      removeExecutorFromK8s(executorState.pod)
     }
     execIdsRemovedInRound += execId
   }
@@ -139,29 +140,29 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private def removeExecutorFromSpark(
       schedulerBackend: KubernetesClusterSchedulerBackend,
-      podState: FinalPodState,
+      executorState: FinalExecutorState,
       execId: Long): Unit = {
     if (removedExecutorsCache.getIfPresent(execId) == null) {
       removedExecutorsCache.put(execId, execId)
-      val exitReason = findExitReason(podState, execId)
+      val exitReason = findExitReason(executorState, execId)
       schedulerBackend.doRemoveExecutor(execId.toString, exitReason)
     }
   }
 
-  private def findExitReason(podState: FinalPodState, execId: Long): ExecutorExited = {
-    val exitCode = findExitCode(podState)
-    val (exitCausedByApp, exitMessage) = podState match {
-      case PodDeleted(_) =>
+  private def findExitReason(executorState: FinalExecutorState, execId: Long): ExecutorExited = {
+    val exitCode = findExitCode(executorState)
+    val (exitCausedByApp, exitMessage) = executorState match {
+      case ExecutorPodDeleted(_) =>
         (false, s"The executor with id $execId was deleted by a user or the framework.")
       case _ =>
-        val msg = exitReasonMessage(podState, execId, exitCode)
+        val msg = exitReasonMessage(executorState, execId, exitCode)
         (true, msg)
     }
     ExecutorExited(exitCode, exitCausedByApp, exitMessage)
   }
 
-  private def exitReasonMessage(podState: FinalPodState, execId: Long, exitCode: Int) = {
-    val pod = podState.pod
+  private def exitReasonMessage(executorState: FinalExecutorState, execId: Long, exitCode: Int) = {
+    val pod = executorState.pod
     val reason = Option(pod.getStatus.getReason)
     val message = Option(pod.getStatus.getMessage)
     s"""
@@ -174,8 +175,9 @@ private[spark] class ExecutorPodsLifecycleManager(
       """.stripMargin
   }
 
-  private def findExitCode(podState: FinalPodState): Int = {
-    podState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
+  private def findExitCode(executorState: FinalExecutorState): Int = {
+    executorState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
+      containerStatus.getName == DEFAULT_EXECUTOR_CONTAINER_NAME &
       containerStatus.getState.getTerminated != null
     }.map { terminatedContainer =>
       terminatedContainer.getState.getTerminated.getExitCode.toInt
@@ -186,4 +188,3 @@ private[spark] class ExecutorPodsLifecycleManager(
 private object ExecutorPodsLifecycleManager {
   val UNKNOWN_EXIT_CODE = -1
 }
-

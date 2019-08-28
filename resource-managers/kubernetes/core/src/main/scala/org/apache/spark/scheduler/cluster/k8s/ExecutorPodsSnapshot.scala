@@ -22,11 +22,12 @@ import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import collection.JavaConversions._
 
 /**
  * An immutable view of the current executor pods that are running in the cluster.
  */
-private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorPodState]) {
+private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorState]) {
 
   import ExecutorPodsSnapshot._
 
@@ -42,32 +43,47 @@ object ExecutorPodsSnapshot extends Logging {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
   }
 
-  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState])
+  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorState])
 
-  private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
+  private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorState] = {
     executorPods.map { pod =>
       (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong, toState(pod))
     }.toMap
   }
 
-  private def toState(pod: Pod): ExecutorPodState = {
+  private def toState(pod: Pod): ExecutorState = {
     if (isDeleted(pod)) {
-      PodDeleted(pod)
+      ExecutorPodDeleted(pod)
     } else {
       val phase = pod.getStatus.getPhase.toLowerCase(Locale.ROOT)
       phase match {
         case "pending" =>
-          PodPending(pod)
+          ExecutorPending(pod)
         case "running" =>
-          PodRunning(pod)
+          // Checking executor container status is not terminated
+          // Pod status can still be running if sidecar container status is running
+          val executorContainerStatusCode = pod.getStatus.getContainerStatuses.
+            filter(_.getName == DEFAULT_EXECUTOR_CONTAINER_NAME).
+            flatMap(c => Option(c.getState.getTerminated)).
+            map(_.getExitCode).
+            headOption
+          executorContainerStatusCode match {
+            case Some(statusCode) if statusCode != null && statusCode != 0 =>
+              logWarning(s"Received Pod phase $phase with " + DEFAULT_EXECUTOR_CONTAINER_NAME +
+                s" container phase terminated(ExitCode: ${statusCode})" +
+                s" in namespace ${pod.getMetadata.getNamespace}, Report Pod failed.")
+              ExecutorFailed(pod)
+            case _ =>
+              ExecutorRunning(pod)
+          }
         case "failed" =>
-          PodFailed(pod)
+          ExecutorFailed(pod)
         case "succeeded" =>
-          PodSucceeded(pod)
+          ExecutorSucceeded(pod)
         case _ =>
           logWarning(s"Received unknown phase $phase for executor pod with name" +
             s" ${pod.getMetadata.getName} in namespace ${pod.getMetadata.getNamespace}")
-          PodUnknown(pod)
+          ExecutorPodUnknown(pod)
       }
     }
   }
