@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,7 +39,7 @@ class TableCatalogSuite extends SparkFunSuite {
       .add("data", StringType)
 
   private def newCatalog(): TableCatalog with SupportsNamespaces = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }

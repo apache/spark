@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.connector.InMemoryTable
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 
 class DataSourceV2SQLSessionCatalogSuite
