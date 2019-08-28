@@ -164,9 +164,11 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf, client: 
     lazy val (fs, uploadPath) = KubernetesUtils.getUploadPath(conf.sparkConf, client)
     Seq(JARS, FILES).foreach { key =>
       val value = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
-      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, uploadPath, fs)
-      if (resolved.nonEmpty) {
-        additionalProps.put(key.key, resolved.mkString(","))
+      if (value.nonEmpty) {
+        val resolved = KubernetesUtils.uploadAndTransformFileUris(value, uploadPath, fs)
+        if (resolved.nonEmpty) {
+          additionalProps.put(key.key, resolved.mkString(","))
+        }
       }
     }
     additionalProps.toMap
