@@ -754,8 +754,6 @@ private[spark] class ExternalSorter[K, V, C](
           if (partitionPairsWriter != null) {
             partitionPairsWriter.close()
           }
-          if (partitionWriter != null) {
-          }
         }
         nextPartitionId = partitionId + 1
       }
