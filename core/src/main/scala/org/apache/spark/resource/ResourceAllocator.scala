@@ -35,7 +35,7 @@ trait ResourceAllocator {
    * while value `false` means the address is assigned.
    * TODO Use [[OpenHashMap]] instead to gain better performance.
    */
-  lazy val addressAvailabilityMap = mutable.HashMap(resourceAddresses.map(_ -> true): _*)
+  private lazy val addressAvailabilityMap = mutable.HashMap(resourceAddresses.map(_ -> true): _*)
 
   /**
    * Sequence of currently available resource addresses.
