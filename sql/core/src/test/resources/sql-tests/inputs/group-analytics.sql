@@ -1,6 +1,3 @@
---SET spark.sql.codegen.aggregate.splitAggregateFunc.enabled=true
---SET spark.sql.codegen.aggregate.splitAggregateFunc.enabled=false
-
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
 (1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)
 AS testData(a, b);

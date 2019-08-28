@@ -1,6 +1,3 @@
---SET spark.sql.codegen.aggregate.splitAggregateFunc.enabled=true
---SET spark.sql.codegen.aggregate.splitAggregateFunc.enabled=false
-
 CREATE TEMPORARY VIEW grouping AS SELECT * FROM VALUES
   ("1", "2", "3", 1),
   ("4", "5", "6", 1),

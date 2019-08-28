@@ -1,6 +1,3 @@
---SET spark.sql.codegen.aggregate.splitAggregateFunc.enabled=true
---SET spark.sql.codegen.aggregate.splitAggregateFunc.enabled=false
-
 -- group by ordinal positions
 
 create temporary view data as select * from values
