@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.{AvailableOffsetRange, UNKNOWN_OFFSET}
@@ -293,6 +293,12 @@ private[kafka010] class KafkaDataConsumer(
         }
       } catch {
         case e: OffsetOutOfRangeException =>
+          // When there is some error thrown, it's better to use a new consumer to drop all cached
+          // states in the old consumer. We don't need to worry about the performance because this
+          // is not a common path.
+          releaseConsumer()
+          fetchedData.reset()
+
           reportDataLoss(topicPartition, groupId, failOnDataLoss,
             s"Cannot fetch offset $toFetchOffset", e)
           toFetchOffset = getEarliestAvailableOffsetBetween(consumer, toFetchOffset, untilOffset)
@@ -321,11 +327,18 @@ private[kafka010] class KafkaDataConsumer(
    * must call method after using the instance to make sure resources are not leaked.
    */
   def release(): Unit = {
+    releaseConsumer()
+    releaseFetchedData()
+  }
+
+  private def releaseConsumer(): Unit = {
     if (_consumer.isDefined) {
       consumerPool.returnObject(_consumer.get)
       _consumer = None
     }
+  }
 
+  private def releaseFetchedData(): Unit = {
     if (_fetchedData.isDefined) {
       fetchedDataPool.release(cacheKey, _fetchedData.get)
       _fetchedData = None
@@ -566,8 +579,9 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       this(kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String], topicPartition)
   }
 
-  private val consumerPool = InternalKafkaConsumerPool.build
-  private val fetchedDataPool = FetchedDataPool.build
+  private val sparkConf = SparkEnv.get.conf
+  private val consumerPool = new InternalKafkaConsumerPool(sparkConf)
+  private val fetchedDataPool = new FetchedDataPool(sparkConf)
 
   ShutdownHookManager.addShutdownHook { () =>
     try {

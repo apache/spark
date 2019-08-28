@@ -28,7 +28,7 @@ import org.apache.kafka.common.TopicPartition
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.ManualClock
@@ -48,7 +48,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("acquire fresh one") {
-    val dataPool = FetchedDataPool.build
+    val dataPool = new FetchedDataPool(new SparkConf())
 
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
@@ -72,7 +72,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("acquire fetched data from multiple keys") {
-    val dataPool = FetchedDataPool.build
+    val dataPool = new FetchedDataPool(new SparkConf())
 
     val cacheKeys = (0 until 10).map { partId =>
       CacheKey("testgroup", new TopicPartition("topic", partId))
@@ -109,7 +109,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("continuous use of fetched data from single key") {
-    val dataPool = FetchedDataPool.build
+    val dataPool = new FetchedDataPool(new SparkConf())
 
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
@@ -146,7 +146,7 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("multiple tasks referring same key continuously using fetched data") {
-    val dataPool = FetchedDataPool.build
+    val dataPool = new FetchedDataPool(new SparkConf())
 
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
@@ -206,90 +206,87 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
   }
 
   test("evict idle fetched data") {
-    val minEvictableIdleTimeMillis = 2000
-    val evictorThreadRunIntervalMillis = 500
+    val minEvictableIdleTimeMillis = 2000L
+    val evictorThreadRunIntervalMillis = 500L
 
-    val newConf = Seq(
-      CONSUMER_CACHE_MIN_EVICTABLE_IDLE_TIME_MILLIS.key -> minEvictableIdleTimeMillis.toString,
-      CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL_MILLIS.key ->
-        evictorThreadRunIntervalMillis.toString)
+    val conf = new SparkConf()
+    conf.set(CONSUMER_CACHE_TIMEOUT, minEvictableIdleTimeMillis)
+    conf.set(CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, evictorThreadRunIntervalMillis)
 
-    withSparkConf(newConf: _*) {
-      val scheduler = new DeterministicScheduler()
-      val clock = new ManualClock()
-      val dataPool = FetchedDataPool.build(scheduler, clock)
+    val scheduler = new DeterministicScheduler()
+    val clock = new ManualClock()
+    val dataPool = new FetchedDataPool(scheduler, clock, conf)
 
-      val cacheKeys = (0 until 10).map { partId =>
-        CacheKey("testgroup", new TopicPartition("topic", partId))
-      }
+    val cacheKeys = (0 until 10).map { partId =>
+      CacheKey("testgroup", new TopicPartition("topic", partId))
+    }
 
-      val dataList = cacheKeys.map(key => (key, dataPool.acquire(key, 0)))
+    val dataList = cacheKeys.map(key => (key, dataPool.acquire(key, 0)))
 
-      assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 10)
+    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 10)
 
-      dataList.map { case (_, data) =>
-        data.withNewPoll(testRecords(0, 5).listIterator, 5)
-      }
+    dataList.map { case (_, data) =>
+      data.withNewPoll(testRecords(0, 5).listIterator, 5)
+    }
 
-      val dataToEvict = dataList.take(3)
-      // release key with around 500 ms delay, so that we can check eviction per key
-      dataToEvict.foreach { case (key, data) =>
-        dataPool.release(key, data)
-        clock.advance(500)
-      }
-
-      // time elapsed after releasing
-      // first key: 1500ms, second key: 1000 ms, third key: 500 ms
-
-      // advancing - first key: 2100ms, second key: 1600 ms, third key: 1100 ms
-      clock.advance(600)
-
-      scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
-      assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
-      assert(getCache(dataPool)(dataToEvict(1)._1).nonEmpty)
-      assert(getCache(dataPool)(dataToEvict(2)._1).nonEmpty)
-
-      // advancing - second key: 2100 ms, third key: 1600 ms
+    val dataToEvict = dataList.take(3)
+    // release key with around 500 ms delay, so that we can check eviction per key
+    dataToEvict.foreach { case (key, data) =>
+      dataPool.release(key, data)
       clock.advance(500)
+    }
 
-      scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
-      assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
-      assert(getCache(dataPool)(dataToEvict(1)._1).isEmpty)
-      assert(getCache(dataPool)(dataToEvict(2)._1).nonEmpty)
+    // time elapsed after releasing
+    // first key: 1500ms, second key: 1000 ms, third key: 500 ms
 
-      // advancing - third key: 2300 ms
-      clock.advance(500)
+    // advancing - first key: 2100ms, second key: 1600 ms, third key: 1100 ms
+    clock.advance(600)
 
-      scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
-      assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
-      assert(getCache(dataPool)(dataToEvict(1)._1).isEmpty)
-      assert(getCache(dataPool)(dataToEvict(2)._1).isEmpty)
+    scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
+    assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
+    assert(getCache(dataPool)(dataToEvict(1)._1).nonEmpty)
+    assert(getCache(dataPool)(dataToEvict(2)._1).nonEmpty)
 
-      assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 7)
-      assert(getCache(dataPool).values.map(_.size).sum === dataList.size - dataToEvict.size)
+    // advancing - second key: 2100 ms, third key: 1600 ms
+    clock.advance(500)
 
-      dataList.takeRight(3).foreach { case (key, data) =>
-        dataPool.release(key, data)
-      }
+    scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
+    assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
+    assert(getCache(dataPool)(dataToEvict(1)._1).isEmpty)
+    assert(getCache(dataPool)(dataToEvict(2)._1).nonEmpty)
 
-      // add objects to be candidates for eviction
-      clock.advance(minEvictableIdleTimeMillis + 100)
+    // advancing - third key: 2300 ms
+    clock.advance(500)
 
-      // ensure releasing more objects don't trigger eviction unless evictor runs
-      assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 7)
-      assert(getCache(dataPool).values.map(_.size).sum === dataList.size - dataToEvict.size)
+    scheduler.tick(minEvictableIdleTimeMillis + 100, TimeUnit.MILLISECONDS)
+    assert(getCache(dataPool)(dataToEvict(0)._1).isEmpty)
+    assert(getCache(dataPool)(dataToEvict(1)._1).isEmpty)
+    assert(getCache(dataPool)(dataToEvict(2)._1).isEmpty)
 
-      try {
-        dataPool.shutdown()
-      } catch {
-        // ignore as it's known issue, DeterministicScheduler doesn't support shutdown
-        case _: UnsupportedOperationException =>
-      }
+    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 7)
+    assert(getCache(dataPool).values.map(_.size).sum === dataList.size - dataToEvict.size)
+
+    dataList.takeRight(3).foreach { case (key, data) =>
+      dataPool.release(key, data)
+    }
+
+    // add objects to be candidates for eviction
+    clock.advance(minEvictableIdleTimeMillis + 100)
+
+    // ensure releasing more objects don't trigger eviction unless evictor runs
+    assertFetchedDataPoolStatistic(dataPool, expectedNumCreated = 10, expectedNumTotal = 7)
+    assert(getCache(dataPool).values.map(_.size).sum === dataList.size - dataToEvict.size)
+
+    try {
+      dataPool.shutdown()
+    } catch {
+      // ignore as it's known issue, DeterministicScheduler doesn't support shutdown
+      case _: UnsupportedOperationException =>
     }
   }
 
   test("invalidate key") {
-    val dataPool = FetchedDataPool.build
+    val dataPool = new FetchedDataPool(new SparkConf())
 
     val cacheKey = CacheKey("testgroup", new TopicPartition("topic", 0))
 
@@ -333,28 +330,6 @@ class FetchedDataPoolSuite extends SharedSparkSession with PrivateMethodTester {
     (0 until count).map { offset =>
       new Record("topic", 0, startOffset + offset, dummyBytes, dummyBytes)
     }.toList.asJava
-  }
-
-  private def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val conf = SparkEnv.get.conf
-
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.get(key))
-      } else {
-        None
-      }
-    }
-
-    (keys, values).zipped.foreach { conf.set }
-
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.set(key, value)
-        case (key, None) => conf.remove(key)
-      }
-    }
   }
 
   private def assertFetchedDataPoolStatistic(

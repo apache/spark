@@ -25,14 +25,14 @@ import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
 class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
 
   test("basic multiple borrows and returns for single key") {
-    val pool = InternalKafkaConsumerPool.build
+    val pool = new InternalKafkaConsumerPool(new SparkConf())
 
     val topic = "topic"
     val partitionId = 0
@@ -72,7 +72,7 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
   }
 
   test("basic borrow and return for multiple keys") {
-    val pool = InternalKafkaConsumerPool.build
+    val pool = new InternalKafkaConsumerPool(new SparkConf())
 
     val kafkaParams = getTestKafkaParams
     val topicPartitions = createTopicPartitions(Seq("topic", "topic2"), 6)
@@ -139,67 +139,58 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
         ju.Map[String, Object],
         Seq[(CacheKey, InternalKafkaConsumer)]) => Unit): Unit = {
     val capacity = 16
-    val newConf = newConfForKafkaPool(Some(capacity), Some(-1), Some(-1))
 
-    withSparkConf(newConf: _*) {
-      val pool = InternalKafkaConsumerPool.build
+    val conf = new SparkConf()
+    conf.set(CONSUMER_CACHE_CAPACITY, capacity)
+    conf.set(CONSUMER_CACHE_TIMEOUT, -1L)
+    conf.set(CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, -1L)
 
-      try {
-        val kafkaParams = getTestKafkaParams
-        val topicPartitions = createTopicPartitions(Seq("topic"), capacity)
-        val keys = createCacheKeys(topicPartitions, kafkaParams)
+    val pool = new InternalKafkaConsumerPool(conf)
 
-        // borrow objects which makes pool reaching soft capacity
-        val keyToPooledObjectPairs = borrowObjectsPerKey(pool, kafkaParams, keys)
+    try {
+      val kafkaParams = getTestKafkaParams
+      val topicPartitions = createTopicPartitions(Seq("topic"), capacity)
+      val keys = createCacheKeys(topicPartitions, kafkaParams)
 
-        testFn(pool, kafkaParams, keyToPooledObjectPairs)
-      } finally {
-        pool.close()
-      }
+      // borrow objects which makes pool reaching soft capacity
+      val keyToPooledObjectPairs = borrowObjectsPerKey(pool, kafkaParams, keys)
+
+      testFn(pool, kafkaParams, keyToPooledObjectPairs)
+    } finally {
+      pool.close()
     }
   }
 
   test("evicting idle objects on background") {
     import org.scalatest.time.SpanSugar._
 
-    val minEvictableIdleTimeMillis = 3 * 1000 // 3 seconds
-    val evictorThreadRunIntervalMillis = 500 // triggering multiple evictions by intention
+    val minEvictableIdleTimeMillis = 3 * 1000L // 3 seconds
+    val evictorThreadRunIntervalMillis = 500L // triggering multiple evictions by intention
 
-    val newConf = newConfForKafkaPool(None, Some(minEvictableIdleTimeMillis),
-      Some(evictorThreadRunIntervalMillis))
-    withSparkConf(newConf: _*) {
-      val pool = InternalKafkaConsumerPool.build
+    val conf = new SparkConf()
+    conf.set(CONSUMER_CACHE_TIMEOUT, minEvictableIdleTimeMillis)
+    conf.set(CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL, evictorThreadRunIntervalMillis)
 
-      val kafkaParams = getTestKafkaParams
-      val topicPartitions = createTopicPartitions(Seq("topic"), 10)
-      val keys = createCacheKeys(topicPartitions, kafkaParams)
+    val pool = new InternalKafkaConsumerPool(conf)
 
-      // borrow and return some consumers to ensure some partitions are being idle
-      // this test covers the use cases: rebalance / topic removal happens while running query
-      val keyToPooledObjectPairs = borrowObjectsPerKey(pool, kafkaParams, keys)
-      val objectsToReturn = keyToPooledObjectPairs.filter(_._1.topicPartition.partition() % 2 == 0)
-      returnObjects(pool, objectsToReturn)
+    val kafkaParams = getTestKafkaParams
+    val topicPartitions = createTopicPartitions(Seq("topic"), 10)
+    val keys = createCacheKeys(topicPartitions, kafkaParams)
 
-      // wait up to twice than minEvictableIdleTimeMillis to ensure evictor thread to clear up
-      // idle objects
-      eventually(timeout((minEvictableIdleTimeMillis.toLong * 2).seconds),
-        interval(evictorThreadRunIntervalMillis.milliseconds)) {
-        assertPoolState(pool, numIdle = 0, numActive = 5, numTotal = 5)
-      }
+    // borrow and return some consumers to ensure some partitions are being idle
+    // this test covers the use cases: rebalance / topic removal happens while running query
+    val keyToPooledObjectPairs = borrowObjectsPerKey(pool, kafkaParams, keys)
+    val objectsToReturn = keyToPooledObjectPairs.filter(_._1.topicPartition.partition() % 2 == 0)
+    returnObjects(pool, objectsToReturn)
 
-      pool.close()
+    // wait up to twice than minEvictableIdleTimeMillis to ensure evictor thread to clear up
+    // idle objects
+    eventually(timeout((minEvictableIdleTimeMillis.toLong * 2).seconds),
+      interval(evictorThreadRunIntervalMillis.milliseconds)) {
+      assertPoolState(pool, numIdle = 0, numActive = 5, numTotal = 5)
     }
-  }
 
-  private def newConfForKafkaPool(
-      capacity: Option[Int],
-      minEvictableIdleTimeMillis: Option[Long],
-      evictorThreadRunIntervalMillis: Option[Long]): Seq[(String, String)] = {
-    Seq(
-      CONSUMER_CACHE_CAPACITY.key -> capacity,
-      CONSUMER_CACHE_MIN_EVICTABLE_IDLE_TIME_MILLIS.key -> minEvictableIdleTimeMillis,
-      CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL_MILLIS.key -> evictorThreadRunIntervalMillis
-    ).filter(_._2.isDefined).map(e => (e._1 -> e._2.get.toString))
+    pool.close()
   }
 
   private def createTopicPartitions(
@@ -289,28 +280,6 @@ class InternalKafkaConsumerPoolSuite extends SharedSparkSession {
       assertPoolStateForKey(pool, key, numIdle = 1, numActive = 0, numTotal = 1)
       assertPoolState(pool, numIdle = numIdleBeforeReturning + 1,
         numActive = numActiveBeforeReturning - 1, numTotal = numTotalBeforeReturning)
-    }
-  }
-
-  private def withSparkConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val conf = SparkEnv.get.conf
-
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (conf.contains(key)) {
-        Some(conf.get(key))
-      } else {
-        None
-      }
-    }
-
-    (keys, values).zipped.foreach { conf.set }
-
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => conf.set(key, value)
-        case (key, None) => conf.remove(key)
-      }
     }
   }
 }

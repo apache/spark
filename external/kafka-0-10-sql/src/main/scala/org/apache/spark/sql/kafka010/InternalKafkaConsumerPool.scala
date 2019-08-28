@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.commons.pool2.{BaseKeyedPooledObjectFactory, PooledObject, SwallowedExceptionListener}
 import org.apache.commons.pool2.impl.{DefaultEvictionPolicy, DefaultPooledObject, GenericKeyedObjectPool, GenericKeyedObjectPoolConfig}
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.InternalKafkaConsumerPool._
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
@@ -36,7 +36,7 @@ import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
  * returnObject() if the object is healthy to return to pool, or invalidateObject() if the object
  * should be destroyed.
  *
- * The soft capacity of pool is determined by "spark.sql.kafkaConsumerCache.capacity" config value,
+ * The soft capacity of pool is determined by "spark.kafka.consumer.cache.capacity" config value,
  * and the pool will have reasonable default value if the value is not provided.
  * (The instance will do its best effort to respect soft capacity but it can exceed when there's
  * a borrowing request and there's neither free space nor idle object to clear.)
@@ -48,6 +48,10 @@ import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 private[kafka010] class InternalKafkaConsumerPool(
     objectFactory: ObjectFactory,
     poolConfig: PoolConfig) {
+
+  def this(conf: SparkConf) = {
+    this(new ObjectFactory, new PoolConfig(conf))
+  }
 
   // the class is intended to have only soft capacity
   assert(poolConfig.getMaxTotal < 0)
@@ -138,23 +142,13 @@ private[kafka010] class InternalKafkaConsumerPool(
 }
 
 private[kafka010] object InternalKafkaConsumerPool {
-
-  /**
-   * Builds the pool for [[InternalKafkaConsumer]]. The pool instance is created per each call.
-   */
-  def build: InternalKafkaConsumerPool = {
-    val objFactory = new ObjectFactory
-    val poolConfig = new PoolConfig
-    new InternalKafkaConsumerPool(objFactory, poolConfig)
-  }
-
   object CustomSwallowedExceptionListener extends SwallowedExceptionListener with Logging {
     override def onSwallowException(e: Exception): Unit = {
       logError(s"Error closing Kafka consumer", e)
     }
   }
 
-  class PoolConfig extends GenericKeyedObjectPoolConfig[InternalKafkaConsumer] {
+  class PoolConfig(conf: SparkConf) extends GenericKeyedObjectPoolConfig[InternalKafkaConsumer] {
     private var _softMaxSize = Int.MaxValue
 
     def softMaxSize(): Int = _softMaxSize
@@ -162,14 +156,12 @@ private[kafka010] object InternalKafkaConsumerPool {
     init()
 
     def init(): Unit = {
-      val conf = SparkEnv.get.conf
-
       _softMaxSize = conf.get(CONSUMER_CACHE_CAPACITY)
 
       val jmxEnabled = conf.get(CONSUMER_CACHE_JMX_ENABLED)
-      val minEvictableIdleTimeMillis = conf.get(CONSUMER_CACHE_MIN_EVICTABLE_IDLE_TIME_MILLIS)
+      val minEvictableIdleTimeMillis = conf.get(CONSUMER_CACHE_TIMEOUT)
       val evictorThreadRunIntervalMillis = conf.get(
-        CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL_MILLIS)
+        CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL)
 
       // NOTE: Below lines define the behavior, so do not modify unless you know what you are
       // doing, and update the class doc accordingly if necessary when you modify.
