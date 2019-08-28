@@ -22,6 +22,7 @@ import time
 import unittest
 import warnings
 
+from pyspark import SparkContext, SparkConf
 from pyspark.sql import Row, SparkSession
 from pyspark.sql.functions import udf
 from pyspark.sql.types import *
@@ -430,11 +431,8 @@ class MaxResultArrowTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.spark = SparkSession.builder \
-            .master("local[4]") \
-            .appName(cls.__name__) \
-            .config("spark.driver.maxResultSize", "10k") \
-            .getOrCreate()
+        cls.spark = SparkSession(SparkContext(
+            'local[4]', cls.__name__, conf=SparkConf().set("spark.driver.maxResultSize", "10k")))
 
         # Explicitly enable Arrow and disable fallback.
         cls.spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
