@@ -114,7 +114,6 @@ private[spark] object Minikube extends Logging {
     // Mounting blocks and needs to keep running to keep the mount.
     val process = executeMinikubeBackground(
       "mount",
-      "--mode=777", // World read/write
       "--uid=185", // UID of Spark
       s"${hostPath}:${vmPath}")
     process
