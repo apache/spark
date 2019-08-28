@@ -87,6 +87,7 @@ GCP_REGION = 'us-central1'
 GCP_REGION_TEMPLATED = "{{ 'US-CENTRAL1' | lower }}"
 MAIN_URI = 'test-uri'
 TEMPLATE_ID = 'template-id'
+WORKFLOW_PARAMETERS = '{"parameter": "value"}'
 
 LABELS = {
     'label_a': 'value_a',
@@ -1235,6 +1236,7 @@ class TestDataprocWorkflowTemplateInstantiateOperator(unittest.TestCase):
                 project_id=GCP_PROJECT_ID,
                 region=GCP_REGION,
                 template_id=TEMPLATE_ID,
+                parameters=WORKFLOW_PARAMETERS,
                 dag=self.dag
             )
 
