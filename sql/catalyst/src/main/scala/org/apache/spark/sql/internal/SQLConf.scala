@@ -1643,12 +1643,16 @@ object SQLConf {
   val STORE_ASSIGNMENT_POLICY =
     buildConf("spark.sql.storeAssignmentPolicy")
       .doc("When inserting a value into a column with different data type, Spark will perform " +
-        "type coercion. Currently we support 3 policies for the type coercion rules: ansi, " +
-        "legacy and strict. With ansi policy, Spark performs the type coercion as per ANSI SQL. " +
-        "With legacy policy, Spark allows casting any value to any data type. " +
-        "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
+        "type coercion. Currently, we support 3 policies for the type coercion rules: ANSI, " +
+        "legacy and strict. With ANSI policy, Spark performs the type coercion as per ANSI SQL. " +
+        "In practice, it follows PostgreSQL. It disallows certain type unreasonable conversions " +
+        "such as converting `string` to `int` or `double` to `boolean`. " +
+        "With legacy policy, Spark allows the type coercion as long as it is a valid `Cast`, " +
+        "which is very loose. e.g. converting `string` to `int` or `double` to `boolean` is " +
+        "allowed. It is also the only behavior in Spark 2.x and it is compatible with Hive. " +
         "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
-        "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."
+        "in type coercion, e.g. converting `double` to `int` or `decimal` to `double` is " +
+        "not allowed."
       )
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
