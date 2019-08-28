@@ -145,6 +145,25 @@ private[thriftserver] class SparkSQLOperationManager()
     operation
   }
 
+  override def cancelOperation(opHandle: OperationHandle): Unit = {
+    val operation = getOperation(opHandle)
+    val opState = operation.getStatus.getState
+    if ((opState eq OperationState.CANCELED) ||
+      (opState eq OperationState.CLOSED) ||
+      (opState eq OperationState.FINISHED) ||
+      (opState eq OperationState.ERROR) ||
+      (opState eq OperationState.UNKNOWN)) { // Cancel should be a no-op in either cases
+      logDebug(opHandle + ": Operation is already aborted in state - " + opState)
+    } else {
+      logDebug(opHandle + ": Attempting to cancel from state - " + opState)
+      if (operation.isInstanceOf[SparkExecuteStatementOperation]) {
+        operation.asInstanceOf[SparkExecuteStatementOperation].cancelStatement()
+      } else {
+        operation.cancel()
+      }
+    }
+  }
+
   def setConfMap(conf: SQLConf, confMap: java.util.Map[String, String]): Unit = {
     val iterator = confMap.entrySet().iterator()
     while (iterator.hasNext) {
