@@ -38,7 +38,7 @@ private[spark] class KubernetesDriverBuilder {
       .getOrElse(SparkPod.initialPod())
 
     val features = Seq(
-      new BasicDriverFeatureStep(conf),
+      new BasicDriverFeatureStep(conf, client),
       new DriverKubernetesCredentialsFeatureStep(conf),
       new DriverServiceFeatureStep(conf),
       new MountSecretsFeatureStep(conf),
