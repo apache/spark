@@ -28,9 +28,9 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class KafkaDelegationTokenSuite extends StreamTest with SharedSQLContext with KafkaTest {
+class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with KafkaTest {
 
   import testImplicits._
 
