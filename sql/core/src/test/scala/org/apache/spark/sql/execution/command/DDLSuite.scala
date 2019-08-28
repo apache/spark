@@ -68,6 +68,9 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
         StructField("s2", StringType),
         StructField("i1", IntegerType)
       )))
+      .add("arr1", ArrayType(StructType(Seq(
+        StructField("a1", StringType)
+      ))))
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
@@ -1720,19 +1723,36 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     // Ensure that change column changing type within nested-column fails
     intercept[AnalysisException] {
-      val alterSql = "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
-          "nested1 struct<s1:string,s2:string,i1:string>"
-      sql(alterSql)
+      sql(
+        "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
+        "nested1 struct<s1:string,s2:string,i1:string>"
+      )
     }
 
     // Ensure that change column on nested field will allow addition of new fields in struct
-    val alterSql = "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
-        "nested1 struct<s1:string,s2:string,i1:int,s3:string>"
-    sql(alterSql)
+    sql(
+      "ALTER TABLE dbx.tab1 CHANGE COLUMN nested1 " +
+      "nested1 struct<s1:string,s2:string,i1:int,s3:string>"
+    )
     val alteredNestedColumn = getColumnFromCatalog("nested1").get
     val alteredNestedSchema = alteredNestedColumn.dataType.asInstanceOf[StructType]
     assert(alteredNestedSchema.length == 4)
     assert(alteredNestedSchema("s3").name == "s3")
+
+    // Ensure that change column changing array element type in an incompatible way fails
+    intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 CHANGE COLUMN arr1 arr1 array<int>")
+    }
+
+    // Ensure that change struct type column in array
+    // element will allow addition of new fields in struct
+    sql("ALTER TABLE dbx.tab1 CHANGE COLUMN arr1 arr1 array<struct<a1:string,a2:int>>")
+    val alteredArrayColumn = getColumnFromCatalog("arr1").get
+    val alteredArraySchema = alteredArrayColumn
+      .dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType]
+    assert(alteredArraySchema.length == 2)
+    assert(alteredArraySchema("a2").name == "a2")
   }
 
   test("drop build-in function") {

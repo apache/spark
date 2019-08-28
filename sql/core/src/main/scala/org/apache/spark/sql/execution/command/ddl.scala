@@ -385,29 +385,42 @@ case class AlterTableChangeColumnCommand(
     if (!resolver(ours.name, theirs.name)) {
       return false
     }
+    // These columns are compatible if their dataTypes are compatible.
+    typesCompatible(ours.dataType, theirs.dataType, resolver)
+  }
 
-    (ours.dataType, theirs.dataType) match {
+  @scala.annotation.tailrec
+  private def typesCompatible(
+   ourType: DataType,
+   theirType: DataType,
+   resolver: Resolver
+  ): Boolean = {
+    (ourType, theirType) match {
       // If dataTypes are the same, then these columns are compatible
       case (a, b) if a == b => true
+
+      // If both are ArrayTypes, then ensure their elementTypes are compatible.
+      case (ourSchema: ArrayType, theirSchema: ArrayType) =>
+        // if both are ArrayTypes, then match their element type
+        typesCompatible(ourSchema.elementType, theirSchema.elementType, resolver)
+
       // If both are StructTypes, recurse and ensure that each of
       // the common fields recursively have identical types.
       case (ourSchema: StructType, theirSchema: StructType) =>
         // Get all fields in theirSchema that are also in ourSchema
         // and make sure that all of these fields are also compatible.
         theirSchema
-        .filter(field => findColumnByName(ourSchema, field.name, resolver).isDefined)
-        .forall { theirField =>
-          columnsCompatible(
-            findColumnByName(ourSchema, theirField.name, resolver).get,
-            theirField,
-            resolver
-          )
-        }
+          .filter(field => findColumnByName(ourSchema, field.name, resolver).isDefined)
+          .forall { theirField =>
+            columnsCompatible(
+              findColumnByName(ourSchema, theirField.name, resolver).get,
+              theirField,
+              resolver
+            )
+          }
       case _ => false
     }
   }
-
-
 
 }
 
