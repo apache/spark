@@ -81,19 +81,36 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def checkSecrets(pod: Pod): Unit = {
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      implicit val podName: String = pod.getMetadata.getName
-      implicit val components: KubernetesTestComponents = kubernetesTestComponents
-      val env = Utils.executeCommand("env")
-      assert(env.toString.contains(ENV_SECRET_VALUE_1))
-      assert(env.toString.contains(ENV_SECRET_VALUE_2))
-      val fileUsernameContents = Utils
-        .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
-      val filePasswordContents = Utils
-        .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
-      assert(fileUsernameContents.toString.trim.equals(ENV_SECRET_VALUE_1))
-      assert(filePasswordContents.toString.trim.equals(ENV_SECRET_VALUE_2))
+    println("Checking secrets for " + pod)
+    // We do the env lookup in eventually, but since it shouldn't
+    // change after the pod is launched the assertion on value lives outside
+    implicit val podName: String = pod.getMetadata.getName
+    implicit val components: KubernetesTestComponents = kubernetesTestComponents
+    val env = Eventually.eventually(TIMEOUT, INTERVAL) {
+      try {
+        println("Looping...")
+        println(s"Checking env of ${pod.getMetadata().getName()} ....")
+        Utils.executeCommand("env")
+      } catch {
+        case e: Exception =>
+          println("The snoop boop failed!")
+          println(e)
+          e.printStackTrace()
+          throw e
+      }
     }
+    println("Env contains " + env.toString)
+    assert(env.toString.contains(ENV_SECRET_VALUE_1))
+    assert(env.toString.contains(ENV_SECRET_VALUE_2))
+    val fileUsernameContents = Utils
+      .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
+    val filePasswordContents = Utils
+      .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
+    println("Secrets are " + fileUsernameContents.toString + "," + filePasswordContents.toString)
+    assert(fileUsernameContents.toString.trim.equals(ENV_SECRET_VALUE_1))
+    assert(filePasswordContents.toString.trim.equals(ENV_SECRET_VALUE_2))
+
+    println("Success!")
   }
 }
 
