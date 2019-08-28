@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
   extends ResourceAllocator {
 
-  val resourceName: String = name
-  val resourceAddresses: Seq[String] = this.addresses
+  override protected def resourceName = this.name
+  override protected def resourceAddresses = this.addresses
 
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)

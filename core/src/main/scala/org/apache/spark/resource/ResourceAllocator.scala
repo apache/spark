@@ -27,8 +27,9 @@ import org.apache.spark.util.collection.OpenHashMap
  * Please note that this is intended to be used in a single thread.
  */
 trait ResourceAllocator {
-  val resourceName: String
-  val resourceAddresses: Seq[String]
+
+  protected def resourceName: String
+  protected def resourceAddresses: Seq[String]
 
   /**
    * Map from an address to its availability, the value `true` means the address is available,

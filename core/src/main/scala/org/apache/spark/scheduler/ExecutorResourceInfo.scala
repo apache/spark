@@ -29,6 +29,6 @@ import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
 private[spark] class ExecutorResourceInfo(name: String, addresses: Seq[String])
   extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
 
-  override val resourceName: String = name
-  override val resourceAddresses: Seq[String] = addresses
+  override protected def resourceName = this.name
+  override protected def resourceAddresses = this.addresses
 }
