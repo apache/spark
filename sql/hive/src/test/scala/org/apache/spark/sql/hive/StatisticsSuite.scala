@@ -1485,43 +1485,33 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
-  test("SPARK-25474: test sizeInBytes for CatalogFileIndex dataSourceTable") {
-    withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
-      withTable("t1", "t2") {
-        sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
-        sql("INSERT INTO t1 VALUES (1, 'a')")
-        checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
-        sql("CREATE TABLE t2 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
-        sql("INSERT INTO t2 VALUES (1, 'a')")
-        checkKeywordsExist(sql("EXPLAIN SELECT * FROM t1, t2 WHERE t1.id=t2.id"),
-          "BroadcastHashJoin")
-      }
-    }
-  }
-
-  test("SPARK-25474: should not fall back to hdfs when table statistics exists" +
-    " for CatalogFileIndex dataSourceTable") {
-
-    var sizeInBytesDisabledFallBack, sizeInBytesEnabledFallBack = 0L
+  test("fallBackToHdfs should not support Hive partitioned table") {
     Seq(true, false).foreach { fallBackToHdfs =>
-      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> fallBackToHdfs.toString) {
-        withTable("t1") {
-          sql("CREATE TABLE t1 (id INT, name STRING) USING PARQUET PARTITIONED BY (name)")
-          sql("INSERT INTO t1 VALUES (1, 'a')")
-          // Analyze command updates the statistics of table `t1`
-          sql("ANALYZE TABLE t1 COMPUTE STATISTICS")
-          val catalogTable = getCatalogTable("t1")
-          assert(catalogTable.stats.isDefined)
+      withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> s"$fallBackToHdfs",
+        HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        withTempDir { dir =>
+          val tableDir = new File(dir, "table")
+          val partitionDir = new File(dir, "partition")
+          withTable("spark_28876") {
+            sql(
+              s"""
+                 |CREATE TABLE spark_28876(id bigint)
+                 |PARTITIONED BY (ds STRING)
+                 |STORED AS PARQUET
+                 |LOCATION '${tableDir.toURI}'
+             """.stripMargin)
 
-          if (!fallBackToHdfs) {
-            sizeInBytesDisabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
-          } else {
-            sizeInBytesEnabledFallBack = catalogTable.stats.get.sizeInBytes.toLong
+            spark.range(5).write.mode(SaveMode.Overwrite).parquet(partitionDir.getCanonicalPath)
+            sql(s"ALTER TABLE spark_28876 ADD PARTITION (ds='p1') LOCATION '$partitionDir'")
+
+            assert(getCatalogTable("spark_28876").stats.isEmpty)
+            val sizeInBytes = spark.table("spark_28876").queryExecution.analyzed.children.head
+              .asInstanceOf[HiveTableRelation].stats.sizeInBytes
+            assert(sizeInBytes === conf.defaultSizeInBytes)
+            assert(spark.table("spark_28876").count() === 5)
           }
-          checkKeywordsNotExist(sql("EXPLAIN COST SELECT * FROM t1"), "sizeInBytes=8.0 EiB")
         }
       }
     }
-    assert(sizeInBytesEnabledFallBack === sizeInBytesDisabledFallBack)
   }
 }

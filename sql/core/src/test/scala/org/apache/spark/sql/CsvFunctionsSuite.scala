@@ -25,10 +25,10 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
+class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("from_csv with empty options") {

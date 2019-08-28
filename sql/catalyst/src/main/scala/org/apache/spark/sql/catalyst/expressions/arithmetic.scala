@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
   """)
 case class UnaryMinus(child: Expression) extends UnaryExpression
     with ExpectsInputTypes with NullIntolerant {
-  private val checkOverflow = SQLConf.get.arithmeticOperationsFailOnOverflow
+  private val checkOverflow = SQLConf.get.failOnIntegralTypeOverflow
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
@@ -136,7 +136,7 @@ case class Abs(child: Expression)
 
 abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
-  protected val checkOverflow = SQLConf.get.arithmeticOperationsFailOnOverflow
+  protected val checkOverflow = SQLConf.get.failOnIntegralTypeOverflow
 
   override def dataType: DataType = left.dataType
 
@@ -292,6 +292,8 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 // Common base trait for Divide and Remainder, since these two classes are almost identical
 trait DivModLike extends BinaryArithmetic {
 
+  protected def decimalToDataTypeCodeGen(decimalResult: String): String = decimalResult
+
   override def nullable: Boolean = true
 
   final override def eval(input: InternalRow): Any = {
@@ -316,14 +318,15 @@ trait DivModLike extends BinaryArithmetic {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
-    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+    val operandsDataType = left.dataType
+    val isZero = if (operandsDataType.isInstanceOf[DecimalType]) {
       s"${eval2.value}.isZero()"
     } else {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val operation = if (dataType.isInstanceOf[DecimalType]) {
-      s"${eval1.value}.$decimalMethod(${eval2.value})"
+    val operation = if (operandsDataType.isInstanceOf[DecimalType]) {
+      decimalToDataTypeCodeGen(s"${eval1.value}.$decimalMethod(${eval2.value})")
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
@@ -384,7 +387,7 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2` rounded to the long integer. It returns NULL if an operand is NULL or `expr2` is 0.",
+  usage = "expr1 _FUNC_ expr2 - Divide `expr1` by `expr2`. It returns NULL if an operand is NULL or `expr2` is 0. The result is casted to long if spark.sql.legacy.integralDivide.returnBigint is true, otherwise the data type of the operands is returned.",
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
@@ -394,7 +397,8 @@ case class Divide(left: Expression, right: Expression) extends DivModLike {
 // scalastyle:on line.size.limit
 case class IntegralDivide(left: Expression, right: Expression) extends DivModLike {
 
-  override def inputType: AbstractDataType = IntegralType
+  override def inputType: AbstractDataType = TypeCollection(IntegralType, DecimalType)
+
   override def dataType: DataType = if (SQLConf.get.integralDivideReturnLong) {
     LongType
   } else {
@@ -402,17 +406,38 @@ case class IntegralDivide(left: Expression, right: Expression) extends DivModLik
   }
 
   override def symbol: String = "/"
+  override def decimalMethod: String = "quot"
+  override def decimalToDataTypeCodeGen(decimalResult: String): String = {
+    if (SQLConf.get.integralDivideReturnLong) {
+      s"$decimalResult.toLong()"
+    } else {
+      decimalResult
+    }
+  }
+
   override def sqlOperator: String = "div"
 
-  private lazy val div: (Any, Any) => Any = left.dataType match {
-    case i: IntegralType =>
-      val divide = i.integral.asInstanceOf[Integral[Any]].quot _
-      if (SQLConf.get.integralDivideReturnLong) {
-        val toLong = i.integral.asInstanceOf[Integral[Any]].toLong _
-        (x, y) => toLong(divide(x, y))
-      } else {
-        divide
+  private lazy val div: (Any, Any) => Any = {
+    val integral = left.dataType match {
+      case i: IntegralType =>
+        i.integral.asInstanceOf[Integral[Any]]
+      case d: DecimalType =>
+        d.asIntegral.asInstanceOf[Integral[Any]]
+    }
+    val divide = integral.quot _
+    if (SQLConf.get.integralDivideReturnLong) {
+      val toLong = integral.asInstanceOf[Integral[Any]].toLong _
+      (x, y) => {
+        val res = divide(x, y)
+        if (res == null) {
+          null
+        } else {
+          toLong(res)
+        }
       }
+    } else {
+      divide
+    }
   }
 
   override def evalOperation(left: Any, right: Any): Any = div(left, right)

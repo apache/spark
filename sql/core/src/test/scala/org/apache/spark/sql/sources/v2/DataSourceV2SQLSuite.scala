@@ -19,34 +19,49 @@ package org.apache.spark.sql.sources.v2
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
 import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{ArrayType, DoubleType, IntegerType, LongType, MapType, Metadata, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
+class DataSourceV2SQLSuite
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true) {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-  private val orc2 = classOf[OrcDataSourceV2].getName
   private val v2Source = classOf[FakeV2Provider].getName
+  override protected val v2Format = v2Source
+  override protected val catalogAndNamespace = "testcat.ns1.ns2."
+
+  private def catalog(name: String): CatalogPlugin = {
+    spark.sessionState.catalogManager.catalog(name)
+  }
+
+  protected def doInsert(tableName: String, insert: DataFrame, mode: SaveMode): Unit = {
+    val tmpView = "tmp_view"
+    withTempView(tmpView) {
+      insert.createOrReplaceTempView(tmpView)
+      val overwrite = if (mode == SaveMode.Overwrite) "OVERWRITE" else "INTO"
+      sql(s"INSERT $overwrite TABLE $tableName SELECT * FROM $tmpView")
+    }
+  }
+
+  override def verifyTable(tableName: String, expected: DataFrame): Unit = {
+    checkAnswer(spark.table(tableName), expected)
+  }
 
   before {
     spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
     spark.conf.set(
         "spark.sql.catalog.testcat_atomic", classOf[TestStagingInMemoryCatalog].getName)
     spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
-    spark.conf.set(V2_SESSION_CATALOG.key, classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set(V2_SESSION_CATALOG.key, classOf[InMemoryTableSessionCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -55,15 +70,15 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   after {
-    spark.catalog("testcat").asInstanceOf[TestInMemoryTableCatalog].clearTables()
-    spark.catalog("testcat_atomic").asInstanceOf[TestInMemoryTableCatalog].clearTables()
-    spark.catalog("session").asInstanceOf[TestInMemoryTableCatalog].clearTables()
+    spark.sessionState.catalog.reset()
+    spark.sessionState.catalogManager.reset()
+    spark.sessionState.conf.clear()
   }
 
   test("CreateTable: use v2 plan because catalog is set") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
@@ -126,14 +141,14 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTable: use v2 plan and session catalog when provider is v2") {
-    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $orc2")
+    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING $v2Source")
 
-    val testCatalog = spark.catalog("session").asTableCatalog
+    val testCatalog = catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(table.name == "session.table_name")
+    assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> orc2).asJava)
+    assert(table.properties == Map("provider" -> v2Source).asJava)
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -143,7 +158,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   test("CreateTable: fail if table exists") {
     spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
 
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
@@ -174,7 +189,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     spark.sql(
       "CREATE TABLE IF NOT EXISTS testcat.table_name (id bigint, data string) USING foo")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
@@ -197,12 +212,10 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTable: use default catalog for v2 sources when default catalog is set") {
-    val sparkSession = spark.newSession()
-    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
-    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
-    sparkSession.sql(s"CREATE TABLE table_name (id bigint, data string) USING foo")
+    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.sql(s"CREATE TABLE table_name (id bigint, data string) USING foo")
 
-    val testCatalog = sparkSession.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
@@ -211,13 +224,13 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     assert(table.schema == new StructType().add("id", LongType).add("data", StringType))
 
     // check that the table is empty
-    val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+    val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
     checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Seq.empty)
   }
 
   test("CreateTableAsSelect: use v2 plan because catalog is set") {
-    val basicCatalog = spark.catalog("testcat").asTableCatalog
-    val atomicCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
 
@@ -231,7 +244,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
         assert(table.partitioning.isEmpty)
         assert(table.properties == Map("provider" -> "foo").asJava)
         assert(table.schema == new StructType()
-          .add("id", LongType, nullable = false)
+          .add("id", LongType)
           .add("data", StringType))
 
         val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -240,8 +253,8 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("ReplaceTableAsSelect: basic v2 implementation.") {
-    val basicCatalog = spark.catalog("testcat").asTableCatalog
-    val atomicCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
     val basicIdentifier = "testcat.table_name"
     val atomicIdentifier = "testcat_atomic.table_name"
 
@@ -257,8 +270,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
         assert(replacedTable.name == identifier)
         assert(replacedTable.partitioning.isEmpty)
         assert(replacedTable.properties == Map("provider" -> "foo").asJava)
-        assert(replacedTable.schema == new StructType()
-          .add("id", LongType, nullable = false))
+        assert(replacedTable.schema == new StructType().add("id", LongType))
 
         val rdd = spark.sparkContext.parallelize(replacedTable.asInstanceOf[InMemoryTable].rows)
         checkAnswer(
@@ -269,7 +281,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   test("ReplaceTableAsSelect: Non-atomic catalog drops the table if the write fails.") {
     spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
@@ -286,7 +298,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   test("ReplaceTableAsSelect: Non-atomic catalog drops the table permanently if the" +
     " subsequent table creation fails.") {
     spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
@@ -303,7 +315,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   test("ReplaceTableAsSelect: Atomic catalog does not drop the table when replace fails.") {
     spark.sql("CREATE TABLE testcat_atomic.table_name USING foo AS SELECT id, data FROM source")
-    val testCatalog = spark.catalog("testcat_atomic").asTableCatalog
+    val testCatalog = catalog("testcat_atomic").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     intercept[Exception] {
@@ -327,9 +339,9 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("ReplaceTable: Erases the table contents and changes the metadata.") {
-    spark.sql(s"CREATE TABLE testcat.table_name USING $orc2 AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE testcat.table_name USING $v2Source AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.asInstanceOf[InMemoryTable].rows.nonEmpty)
 
@@ -345,12 +357,19 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("ReplaceTableAsSelect: CREATE OR REPLACE new table has same behavior as CTAS.") {
-    Seq("testcat", "testcat_atomic").foreach { catalog =>
-      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+    Seq("testcat", "testcat_atomic").foreach { catalogName =>
       spark.sql(
-        s"CREATE OR REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+        s"""
+           |CREATE TABLE $catalogName.created USING $v2Source
+           |AS SELECT id, data FROM source
+         """.stripMargin)
+      spark.sql(
+        s"""
+           |CREATE OR REPLACE TABLE $catalogName.replaced USING $v2Source
+           |AS SELECT id, data FROM source
+         """.stripMargin)
 
-      val testCatalog = spark.catalog(catalog).asTableCatalog
+      val testCatalog = catalog(catalogName).asTableCatalog
       val createdTable = testCatalog.loadTable(Identifier.of(Array(), "created"))
       val replacedTable = testCatalog.loadTable(Identifier.of(Array(), "replaced"))
 
@@ -362,35 +381,35 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table does not exist.") {
     Seq("testcat", "testcat_atomic").foreach { catalog =>
-      spark.sql(s"CREATE TABLE $catalog.created USING $orc2 AS SELECT id, data FROM source")
+      spark.sql(s"CREATE TABLE $catalog.created USING $v2Source AS SELECT id, data FROM source")
       intercept[CannotReplaceMissingTableException] {
-        spark.sql(s"REPLACE TABLE $catalog.replaced USING $orc2 AS SELECT id, data FROM source")
+        spark.sql(s"REPLACE TABLE $catalog.replaced USING $v2Source AS SELECT id, data FROM source")
       }
     }
   }
 
   test("ReplaceTableAsSelect: REPLACE TABLE throws exception if table is dropped before commit.") {
     import TestInMemoryTableCatalog._
-    spark.sql(s"CREATE TABLE testcat_atomic.created USING $orc2 AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE testcat_atomic.created USING $v2Source AS SELECT id, data FROM source")
     intercept[CannotReplaceMissingTableException] {
       spark.sql(s"REPLACE TABLE testcat_atomic.replaced" +
-        s" USING $orc2" +
+        s" USING $v2Source" +
         s" TBLPROPERTIES (`$SIMULATE_DROP_BEFORE_REPLACE_PROPERTY`=true)" +
         s" AS SELECT id, data FROM source")
     }
   }
 
   test("CreateTableAsSelect: use v2 plan and session catalog when provider is v2") {
-    spark.sql(s"CREATE TABLE table_name USING $orc2 AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE table_name USING $v2Source AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("session").asTableCatalog
+    val testCatalog = catalog("session").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
-    assert(table.name == "session.table_name")
+    assert(table.name == "default.table_name")
     assert(table.partitioning.isEmpty)
-    assert(table.properties == Map("provider" -> orc2).asJava)
+    assert(table.properties == Map("provider" -> v2Source).asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -400,14 +419,14 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   test("CreateTableAsSelect: fail if table exists") {
     spark.sql("CREATE TABLE testcat.table_name USING foo AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
 
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -427,7 +446,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     assert(table2.partitioning.isEmpty)
     assert(table2.properties == Map("provider" -> "foo").asJava)
     assert(table2.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -438,14 +457,14 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     spark.sql(
       "CREATE TABLE IF NOT EXISTS testcat.table_name USING foo AS SELECT id, data FROM source")
 
-    val testCatalog = spark.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
     val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
@@ -460,55 +479,78 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
   }
 
   test("CreateTableAsSelect: use default catalog for v2 sources when default catalog is set") {
-    val sparkSession = spark.newSession()
-    sparkSession.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
-    sparkSession.conf.set("spark.sql.default.catalog", "testcat")
+    spark.conf.set("spark.sql.default.catalog", "testcat")
 
-    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
 
     // setting the default catalog breaks the reference to source because the default catalog is
     // used and AsTableIdentifier no longer matches
-    sparkSession.sql(s"CREATE TABLE table_name USING foo AS SELECT id, data FROM source")
+    spark.sql(s"CREATE TABLE table_name USING foo AS SELECT id, data FROM source")
 
-    val testCatalog = sparkSession.catalog("testcat").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
     val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name == "testcat.table_name")
     assert(table.partitioning.isEmpty)
     assert(table.properties == Map("provider" -> "foo").asJava)
     assert(table.schema == new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType))
 
-    val rdd = sparkSession.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
-    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), sparkSession.table("source"))
+    val rdd = sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+    checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), spark.table("source"))
   }
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
-    val sparkSession = spark.newSession()
-    sparkSession.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
+    spark.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
 
-    val df = sparkSession.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+    val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
 
-    sparkSession.sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
+    sql(s"CREATE TABLE table_name USING parquet AS SELECT id, data FROM source")
 
-    checkAnswer(sparkSession.sql(s"TABLE default.table_name"), sparkSession.table("source"))
+    checkAnswer(sql(s"TABLE default.table_name"), spark.table("source"))
     // The fact that the following line doesn't throw an exception means, the session catalog
     // can load the table.
-    val t = sparkSession.catalog("session").asTableCatalog
+    val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
     assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
+  }
+
+  test("CreateTableAsSelect: nullable schema") {
+    val basicCatalog = catalog("testcat").asTableCatalog
+    val atomicCatalog = catalog("testcat_atomic").asTableCatalog
+    val basicIdentifier = "testcat.table_name"
+    val atomicIdentifier = "testcat_atomic.table_name"
+
+    Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
+      case (catalog, identifier) =>
+        spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT 1 i")
+
+        val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
+
+        assert(table.name == identifier)
+        assert(table.partitioning.isEmpty)
+        assert(table.properties == Map("provider" -> "foo").asJava)
+        assert(table.schema == new StructType().add("i", "int"))
+
+        val rdd = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd, table.schema), Row(1))
+
+        sql(s"INSERT INTO $identifier SELECT CAST(null AS INT)")
+        val rdd2 = spark.sparkContext.parallelize(table.asInstanceOf[InMemoryTable].rows)
+        checkAnswer(spark.internalCreateDataFrame(rdd2, table.schema), Seq(Row(1), Row(null)))
+    }
   }
 
   test("DropTable: basic") {
     val tableName = "testcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
     sql(s"CREATE TABLE $tableName USING foo AS SELECT id, data FROM source")
-    assert(spark.catalog("testcat").asTableCatalog.tableExists(ident) === true)
+    assert(catalog("testcat").asTableCatalog.tableExists(ident) === true)
     sql(s"DROP TABLE $tableName")
-    assert(spark.catalog("testcat").asTableCatalog.tableExists(ident) === false)
+    assert(catalog("testcat").asTableCatalog.tableExists(ident) === false)
   }
 
   test("DropTable: if exists") {
@@ -599,7 +641,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       assert(exc.getMessage.contains("Unsupported table change"))
       assert(exc.getMessage.contains("Cannot drop all fields")) // from the implementation
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -613,7 +655,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN data string")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -627,7 +669,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN data string COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -643,7 +685,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMNS data string COMMENT 'doc', ts timestamp")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -660,7 +702,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN point.z double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -679,7 +721,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<struct<x: double, y: double>, bigint>) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN points.key.z double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -698,7 +740,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN points.value.z double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -717,7 +759,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN points.element.z double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -736,7 +778,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN points array<struct<x: double, y: double>>")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -754,7 +796,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ADD COLUMN points.element.z double COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -787,7 +829,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -801,7 +843,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point struct<x: float, y: double>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -825,7 +867,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       assert(exc.getMessage.contains("point"))
       assert(exc.getMessage.contains("update a struct by adding, deleting, or updating its fields"))
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -848,7 +890,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
       assert(exc.getMessage.contains("update the element by updating points.element"))
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -864,7 +906,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<int>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.element TYPE long")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -885,7 +927,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
 
       assert(exc.getMessage.contains("update a map by updating m.key or m.value"))
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -901,7 +943,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, m map<string, int>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN m.value TYPE long")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -917,7 +959,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<struct<x: float, y: double>, bigint>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.key.x TYPE double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -935,7 +977,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: float, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.value.x TYPE double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -953,7 +995,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<struct<x: float, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.element.x TYPE double")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1013,7 +1055,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN id COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1027,7 +1069,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN id TYPE bigint COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1041,7 +1083,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN point.y COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1059,7 +1101,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<struct<x: double, y: double>, bigint>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.key.y COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1077,7 +1119,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.value.y COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1095,7 +1137,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t ALTER COLUMN points.element.y COMMENT 'doc'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1141,7 +1183,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t RENAME COLUMN id TO user_id")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1155,7 +1197,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING foo")
       sql(s"ALTER TABLE $t RENAME COLUMN point.y TO t")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1173,7 +1215,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) USING foo")
       sql(s"ALTER TABLE $t RENAME COLUMN point.key.y TO t")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1191,7 +1233,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t RENAME COLUMN points.value.y TO t")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1209,7 +1251,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t RENAME COLUMN points.element.y TO t")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1255,7 +1297,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, data string) USING foo")
       sql(s"ALTER TABLE $t DROP COLUMN data")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1269,7 +1311,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double, t: double>) USING foo")
       sql(s"ALTER TABLE $t DROP COLUMN point.t")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1287,7 +1329,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, point map<struct<x: double, y: double>, bigint>) USING foo")
       sql(s"ALTER TABLE $t DROP COLUMN point.key.y")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1304,7 +1346,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points map<string, struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t DROP COLUMN points.value.y")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1321,7 +1363,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int, points array<struct<x: double, y: double>>) USING foo")
       sql(s"ALTER TABLE $t DROP COLUMN points.element.y")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1366,7 +1408,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t SET LOCATION 's3://bucket/path'")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1380,7 +1422,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
       sql(s"CREATE TABLE $t (id int) USING foo")
       sql(s"ALTER TABLE $t SET TBLPROPERTIES ('test'='34')")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1393,7 +1435,7 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING foo TBLPROPERTIES('test' = '34')")
 
-      val testCatalog = spark.catalog("testcat").asTableCatalog
+      val testCatalog = catalog("testcat").asTableCatalog
       val table = testCatalog.loadTable(Identifier.of(Array("ns1"), "table_name"))
 
       assert(table.name == "testcat.ns1.table_name")
@@ -1408,15 +1450,6 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     }
   }
 
-  test("InsertInto: append") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
-      sql(s"INSERT INTO $t1 SELECT id, data FROM source")
-      checkAnswer(spark.table(t1), spark.table("source"))
-    }
-  }
-
   test("InsertInto: append - across catalog") {
     val t1 = "testcat.ns1.ns2.tbl"
     val t2 = "testcat2.db.tbl"
@@ -1428,286 +1461,116 @@ class DataSourceV2SQLSuite extends QueryTest with SharedSQLContext with BeforeAn
     }
   }
 
-  test("InsertInto: append to partitioned table - without PARTITION clause") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-      sql(s"INSERT INTO TABLE $t1 SELECT * FROM source")
-      checkAnswer(spark.table(t1), spark.table("source"))
-    }
+  test("ShowTables: using v2 catalog") {
+    spark.sql("CREATE TABLE testcat.db.table_name (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.n1.n2.db.table_name (id bigint, data string) USING foo")
+
+    runShowTablesSql("SHOW TABLES FROM testcat.db", Seq(Row("db", "table_name")))
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.n1.n2.db",
+      Seq(Row("n1.n2.db", "table_name")))
   }
 
-  test("InsertInto: append to partitioned table - with PARTITION clause") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-      sql(s"INSERT INTO TABLE $t1 PARTITION (id) SELECT * FROM source")
-      checkAnswer(spark.table(t1), spark.table("source"))
-    }
+  test("ShowTables: using v2 catalog with a pattern") {
+    spark.sql("CREATE TABLE testcat.db.table (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db.table_name_1 (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db.table_name_2 (id bigint, data string) USING foo")
+    spark.sql("CREATE TABLE testcat.db2.table_name_2 (id bigint, data string) USING foo")
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.db",
+      Seq(
+        Row("db", "table"),
+        Row("db", "table_name_1"),
+        Row("db", "table_name_2")))
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.db LIKE '*name*'",
+      Seq(Row("db", "table_name_1"), Row("db", "table_name_2")))
+
+    runShowTablesSql(
+      "SHOW TABLES FROM testcat.db LIKE '*2'",
+      Seq(Row("db", "table_name_2")))
   }
 
-  test("InsertInto: dynamic PARTITION clause fails with non-partition column") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $t1 PARTITION (data) SELECT * FROM source")
-      }
-
-      assert(spark.table(t1).count === 0)
-      assert(exc.getMessage.contains("PARTITION clause cannot contain a non-partition column name"))
-      assert(exc.getMessage.contains("data"))
-    }
+  test("ShowTables: using v2 catalog, namespace doesn't exist") {
+    runShowTablesSql("SHOW TABLES FROM testcat.unknown", Seq())
   }
 
-  test("InsertInto: static PARTITION clause fails with non-partition column") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (data)")
-
-      val exc = intercept[AnalysisException] {
-        sql(s"INSERT INTO TABLE $t1 PARTITION (id=1) SELECT data FROM source")
-      }
-
-      assert(spark.table(t1).count === 0)
-      assert(exc.getMessage.contains("PARTITION clause cannot contain a non-partition column name"))
-      assert(exc.getMessage.contains("id"))
-    }
+  test("ShowTables: using v1 catalog") {
+    runShowTablesSql(
+      "SHOW TABLES FROM default",
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
   }
 
-  test("InsertInto: fails when missing a column") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string, missing string) USING foo")
-      val exc = intercept[AnalysisException] {
-        sql(s"INSERT INTO $t1 SELECT id, data FROM source")
-      }
-
-      assert(spark.table(t1).count === 0)
-      assert(exc.getMessage.contains(s"Cannot write to '$t1', not enough data columns"))
+  test("ShowTables: using v1 catalog, db doesn't exist ") {
+    // 'db' below resolves to a database name for v1 catalog because there is no catalog named
+    // 'db' and there is no default catalog set.
+    val exception = intercept[NoSuchDatabaseException] {
+      runShowTablesSql("SHOW TABLES FROM db", Seq(), expectV2Catalog = false)
     }
+
+    assert(exception.getMessage.contains("Database 'db' not found"))
   }
 
-  test("InsertInto: fails when an extra column is present") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
-      val exc = intercept[AnalysisException] {
-        sql(s"INSERT INTO $t1 SELECT id, data, 'fruit' FROM source")
-      }
-
-      assert(spark.table(t1).count === 0)
-      assert(exc.getMessage.contains(s"Cannot write to '$t1', too many data columns"))
+  test("ShowTables: using v1 catalog, db name with multipartIdentifier ('a.b') is not allowed.") {
+    val exception = intercept[AnalysisException] {
+      runShowTablesSql("SHOW TABLES FROM a.b", Seq(), expectV2Catalog = false)
     }
+
+    assert(exception.getMessage.contains("The database name is not valid: a.b"))
   }
 
-  test("InsertInto: append to partitioned table - static clause") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-      sql(s"INSERT INTO $t1 PARTITION (id = 23) SELECT data FROM source")
-      checkAnswer(spark.table(t1), sql("SELECT 23, data FROM source"))
-    }
+  test("ShowTables: using v2 catalog with empty namespace") {
+    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
+    runShowTablesSql("SHOW TABLES FROM testcat", Seq(Row("", "table")))
   }
 
-  test("InsertInto: overwrite non-partitioned table") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 USING foo AS SELECT * FROM source")
-      sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source2")
-      checkAnswer(spark.table(t1), spark.table("source2"))
-    }
+  test("ShowTables: namespace is not specified and default v2 catalog is set") {
+    spark.conf.set("spark.sql.default.catalog", "testcat")
+    spark.sql("CREATE TABLE testcat.table (id bigint, data string) USING foo")
+
+    // v2 catalog is used where default namespace is empty for TestInMemoryTableCatalog.
+    runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
   }
 
-  test("InsertInto: overwrite - dynamic clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c")))
-      }
-    }
+  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
+    runShowTablesSql(
+      "SHOW TABLES",
+      Seq(Row("", "source", true), Row("", "source2", true)),
+      expectV2Catalog = false)
+
+    runShowTablesSql(
+      "SHOW TABLES LIKE '*2'",
+      Seq(Row("", "source2", true)),
+      expectV2Catalog = false)
   }
 
-  test("InsertInto: overwrite - dynamic clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c"),
-          Row(4, "keep")))
-      }
+  private def runShowTablesSql(
+      sqlText: String,
+      expected: Seq[Row],
+      expectV2Catalog: Boolean = true): Unit = {
+    val schema = if (expectV2Catalog) {
+      new StructType()
+        .add("namespace", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+    } else {
+      new StructType()
+        .add("database", StringType, nullable = false)
+        .add("tableName", StringType, nullable = false)
+        .add("isTemporary", BooleanType, nullable = false)
     }
-  }
 
-  test("InsertInto: overwrite - missing clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'also-deleted')")
-        sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c")))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - missing clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo PARTITIONED BY (id)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy'), (4L, 'keep')")
-        sql(s"INSERT OVERWRITE TABLE $t1 SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a"),
-          Row(2, "b"),
-          Row(3, "c"),
-          Row(4, "keep")))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - static clause") {
-    val t1 = "testcat.ns1.ns2.tbl"
-    withTable(t1) {
-      sql(s"CREATE TABLE $t1 (id bigint, data string, p1 int) USING foo PARTITIONED BY (p1)")
-      sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 23), (4L, 'keep', 2)")
-      sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p1 = 23) SELECT * FROM source")
-      checkAnswer(spark.table(t1), Seq(
-        Row(1, "a", 23),
-        Row(2, "b", 23),
-        Row(3, "c", 23),
-        Row(4, "keep", 2)))
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause reordered - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - implicit dynamic partition - static mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.STATIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'also-deleted', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2, id) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - mixed clause reordered - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id, p = 2) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - implicit dynamic partition - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (p = 2) SELECT * FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(1, "a", 2),
-          Row(2, "b", 2),
-          Row(3, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
-  }
-
-  test("InsertInto: overwrite - multiple static partitions - dynamic mode") {
-    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-      val t1 = "testcat.ns1.ns2.tbl"
-      withTable(t1) {
-        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
-        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM source")
-        checkAnswer(spark.table(t1), Seq(
-          Row(2, "a", 2),
-          Row(2, "b", 2),
-          Row(2, "c", 2),
-          Row(4, "keep", 2)))
-      }
-    }
+    val df = spark.sql(sqlText)
+    assert(df.schema === schema)
+    assert(expected === df.collect())
   }
 
   test("tableCreation: partition column case insensitive resolution") {
-    val testCatalog = spark.catalog("testcat").asTableCatalog
-    val sessionCatalog = spark.catalog("session").asTableCatalog
+    val testCatalog = catalog("testcat").asTableCatalog
+    val sessionCatalog = catalog("session").asTableCatalog
 
     def checkPartitioning(cat: TableCatalog, partition: String): Unit = {
       val table = cat.loadTable(Identifier.of(Array.empty, "tbl"))

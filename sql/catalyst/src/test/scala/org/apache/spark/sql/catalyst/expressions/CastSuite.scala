@@ -1075,4 +1075,115 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast("badvalue", dataType), null)
     }
   }
+
+  private def testIntMaxAndMin(dt: DataType): Unit = {
+    assert(Seq(IntegerType, ShortType, ByteType).contains(dt))
+    Seq(Int.MaxValue + 1L, Int.MinValue - 1L).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](cast(value, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](cast(Decimal(value.toString), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * MICROS_PER_SECOND, TimestampType), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * 1.5f, FloatType), dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast(Literal(value * 1.0, DoubleType), dt), "overflow")
+    }
+  }
+
+  private def testLongMaxAndMin(dt: DataType): Unit = {
+    assert(Seq(LongType, IntegerType).contains(dt))
+    Seq(Decimal(Long.MaxValue) + Decimal(1), Decimal(Long.MinValue) - Decimal(1)).foreach { value =>
+      checkExceptionInExpression[ArithmeticException](
+        cast(value, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast((value * Decimal(1.1)).toFloat, dt), "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        cast((value * Decimal(1.1)).toDouble, dt), "overflow")
+    }
+  }
+
+  test("Cast to byte with option FAIL_ON_INTEGER_OVERFLOW enabled") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+      testIntMaxAndMin(ByteType)
+      Seq(Byte.MaxValue + 1, Byte.MinValue - 1).foreach { value =>
+        checkExceptionInExpression[ArithmeticException](cast(value, ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toFloat, FloatType), ByteType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toDouble, DoubleType), ByteType), "overflow")
+      }
+
+      Seq(Byte.MaxValue, 0.toByte, Byte.MinValue).foreach { value =>
+        checkEvaluation(cast(value, ByteType), value)
+        checkEvaluation(cast(value.toString, ByteType), value)
+        checkEvaluation(cast(Decimal(value.toString), ByteType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ByteType), value)
+        checkEvaluation(cast(Literal(value.toInt, DateType), ByteType), null)
+        checkEvaluation(cast(Literal(value.toFloat, FloatType), ByteType), value)
+        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ByteType), value)
+      }
+    }
+  }
+
+  test("Cast to short with option FAIL_ON_INTEGER_OVERFLOW enabled") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+      testIntMaxAndMin(ShortType)
+      Seq(Short.MaxValue + 1, Short.MinValue - 1).foreach { value =>
+        checkExceptionInExpression[ArithmeticException](cast(value, ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toFloat, FloatType), ShortType), "overflow")
+        checkExceptionInExpression[ArithmeticException](
+          cast(Literal(value.toDouble, DoubleType), ShortType), "overflow")
+      }
+
+      Seq(Short.MaxValue, 0.toShort, Short.MinValue).foreach { value =>
+        checkEvaluation(cast(value, ShortType), value)
+        checkEvaluation(cast(value.toString, ShortType), value)
+        checkEvaluation(cast(Decimal(value.toString), ShortType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), ShortType), value)
+        checkEvaluation(cast(Literal(value.toInt, DateType), ShortType), null)
+        checkEvaluation(cast(Literal(value.toFloat, FloatType), ShortType), value)
+        checkEvaluation(cast(Literal(value.toDouble, DoubleType), ShortType), value)
+      }
+    }
+  }
+
+  test("Cast to int with option FAIL_ON_INTEGER_OVERFLOW enabled") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+      testIntMaxAndMin(IntegerType)
+      testLongMaxAndMin(IntegerType)
+
+      Seq(Int.MaxValue, 0, Int.MinValue).foreach { value =>
+        checkEvaluation(cast(value, IntegerType), value)
+        checkEvaluation(cast(value.toString, IntegerType), value)
+        checkEvaluation(cast(Decimal(value.toString), IntegerType), value)
+        checkEvaluation(cast(Literal(value * MICROS_PER_SECOND, TimestampType), IntegerType), value)
+        checkEvaluation(cast(Literal(value * 1.0, DoubleType), IntegerType), value)
+      }
+      checkEvaluation(cast(Int.MaxValue + 0.9D, IntegerType), Int.MaxValue)
+      checkEvaluation(cast(Int.MinValue - 0.9D, IntegerType), Int.MinValue)
+    }
+  }
+
+  test("Cast to long with option FAIL_ON_INTEGER_OVERFLOW enabled") {
+    withSQLConf(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key -> "true") {
+      testLongMaxAndMin(LongType)
+
+      Seq(Long.MaxValue, 0, Long.MinValue).foreach { value =>
+        checkEvaluation(cast(value, LongType), value)
+        checkEvaluation(cast(value.toString, LongType), value)
+        checkEvaluation(cast(Decimal(value.toString), LongType), value)
+        checkEvaluation(cast(Literal(value, TimestampType), LongType),
+          Math.floorDiv(value, MICROS_PER_SECOND))
+      }
+      checkEvaluation(cast(Long.MaxValue + 0.9F, LongType), Long.MaxValue)
+      checkEvaluation(cast(Long.MinValue - 0.9F, LongType), Long.MinValue)
+      checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
+      checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
+    }
+  }
 }

@@ -78,7 +78,7 @@ private[kafka010] sealed trait KafkaDataConsumer {
   def release(): Unit
 
   /** Reference to the internal implementation that this wrapper delegates to */
-  protected def internalConsumer: InternalKafkaConsumer
+  def internalConsumer: InternalKafkaConsumer
 }
 
 
@@ -512,7 +512,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     override def release(): Unit = { internalConsumer.close() }
   }
 
-  private case class CacheKey(groupId: String, topicPartition: TopicPartition) {
+  private[kafka010] case class CacheKey(groupId: String, topicPartition: TopicPartition) {
     def this(topicPartition: TopicPartition, kafkaParams: ju.Map[String, Object]) =
       this(kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String], topicPartition)
   }
@@ -521,7 +521,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   // - We make a best-effort attempt to maintain the max size of the cache as configured capacity.
   //   The capacity is not guaranteed to be maintained, especially when there are more active
   //   tasks simultaneously using consumers than the capacity.
-  private lazy val cache = {
+  private[kafka010] lazy val cache = {
     val conf = SparkEnv.get.conf
     val capacity = conf.get(CONSUMER_CACHE_CAPACITY)
     new ju.LinkedHashMap[CacheKey, InternalKafkaConsumer](capacity, 0.75f, true) {
