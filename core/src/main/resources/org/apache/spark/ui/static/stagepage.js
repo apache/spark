@@ -100,10 +100,10 @@ function getColumnNameForTaskMetricSummary(columnKey) {
             return "Scheduler Delay";
 
         case "diskBytesSpilled":
-            return "Shuffle spill (disk)";
+            return "Spill (disk)";
 
         case "memoryBytesSpilled":
-            return "Shuffle spill (memory)";
+            return "Spill (memory)";
 
         case "shuffleReadMetrics":
             return "Shuffle Read Size / Records";
@@ -263,7 +263,6 @@ function reselectCheckboxesBasedOnTaskTableState() {
 
 function getStageAttemptId() {
   var words = document.baseURI.split('?');
-  var attemptIdStr = words[1].split('&')[1];
   var digitsRegex = /[0-9]+/;
   // We are using regex here to extract the stage attempt id as there might be certain url's with format
   // like /proxy/application_1539986433979_27115/stages/stage/?id=0&attempt=0#tasksTitle
@@ -324,7 +323,7 @@ $(document).ready(function () {
                 "in this task. For SQL jobs, this only tracks all unsafe operators, broadcast joins, and " +
                 "external sort.");
     $('[data-toggle="tooltip"]').tooltip();
-    tasksSummary = $("#parent-container");
+    var tasksSummary = $("#parent-container");
     getStandAloneAppId(function (appId) {
 
         var endPoint = stageEndPoint(appId);
@@ -347,7 +346,7 @@ $(document).ready(function () {
             }
 
             // prepare data for executor summary table
-            stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
+            var stageExecutorSummaryInfoKeys = Object.keys(responseBody.executorSummary);
             $.getJSON(createRESTEndPointForExecutorsPage(appId),
               function(executorSummaryResponse, status, jqXHR) {
                 var executorDetailsMap = {};
@@ -433,7 +432,7 @@ $(document).ready(function () {
                     "oLanguage": {
                         "sEmptyTable": "No data to show yet"
                     }
-                }
+                };
                 var executorSummaryTableSelector =
                     $("#summary-executor-table").DataTable(executorSummaryConf);
                 $('#parent-container [data-toggle="tooltip"]').tooltip();
@@ -612,7 +611,7 @@ $(document).ready(function () {
                     "searching": false,
                     "order": [[0, "asc"]],
                     "bAutoWidth": false
-                }
+                };
                 $("#accumulator-table").DataTable(accumulatorConf);
 
                 // building tasks table that uses server side functionality
@@ -842,7 +841,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Memory)"
+                            name: "Spill (Memory)"
                         },
                         {
                             data : function (row, type) {
@@ -852,7 +851,7 @@ $(document).ready(function () {
                                     return "";
                                 }
                             },
-                            name: "Shuffle Spill (Disk)"
+                            name: "Spill (Disk)"
                         },
                         {
                             data : function (row, type) {
@@ -878,7 +877,7 @@ $(document).ready(function () {
                         { "visible": false, "targets": 16 },
                         { "visible": false, "targets": 17 },
                         { "visible": false, "targets": 18 }
-                    ],
+                    ]
                 };
                 taskTableSelector = $(taskTable).DataTable(taskConf);
                 $('#active-tasks-table_filter input').unbind();
@@ -898,14 +897,14 @@ $(document).ready(function () {
                     // Get the column
                     var para = $(this).attr('data-column');
                     if (para == "0") {
-                        var column = taskTableSelector.column(optionalColumns);
+                        var allColumns = taskTableSelector.columns(optionalColumns);
                         if ($(this).is(":checked")) {
                             $(".toggle-vis").prop('checked', true);
-                            column.visible(true);
+                            allColumns.visible(true);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableArray);
                         } else {
                             $(".toggle-vis").prop('checked', false);
-                            column.visible(false);
+                            allColumns.visible(false);
                             var taskSummaryMetricsTableFilteredArray =
                                 taskSummaryMetricsTableArray.filter(row => row.checkboxId < 11);
                             createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTableFilteredArray);

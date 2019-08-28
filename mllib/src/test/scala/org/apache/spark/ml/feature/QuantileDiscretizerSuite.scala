@@ -29,25 +29,30 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 100000
+    val datasetSize = 30000
     val numBuckets = 5
-    val df = sc.parallelize(1 to datasetSize).map(_.toDouble).map(Tuple1.apply).toDF("input")
+    val df = sc.parallelize(1 to datasetSize).map(_.toDouble).toDF("input")
     val discretizer = new QuantileDiscretizer()
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
     val model = discretizer.fit(df)
 
-    testTransformerByGlobalCheckFunc[(Double)](df, model, "result") { rows =>
-      val result = rows.map { r => Tuple1(r.getDouble(0)) }.toDF("result")
-      val observedNumBuckets = result.select("result").distinct.count
-      assert(observedNumBuckets === numBuckets,
-        "Observed number of buckets does not equal expected number of buckets.")
-      val relativeError = discretizer.getRelativeError
-      val numGoodBuckets = result.groupBy("result").count
-        .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}").count
-      assert(numGoodBuckets === numBuckets,
-        "Bucket sizes are not within expected relative error tolerance.")
+    testTransformerByGlobalCheckFunc[Double](df, model, "result") { rows =>
+      val result = rows.map(_.getDouble(0)).toDF("result").cache()
+      try {
+        val observedNumBuckets = result.select("result").distinct().count()
+        assert(observedNumBuckets === numBuckets,
+          "Observed number of buckets does not equal expected number of buckets.")
+        val relativeError = discretizer.getRelativeError
+        val numGoodBuckets = result.groupBy("result").count()
+          .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
+          .count()
+        assert(numGoodBuckets === numBuckets,
+          "Bucket sizes are not within expected relative error tolerance.")
+      } finally {
+        result.unpersist()
+      }
     }
   }
 
@@ -162,10 +167,10 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val spark = this.spark
     import spark.implicits._
 
-    val datasetSize = 100000
+    val datasetSize = 30000
     val numBuckets = 5
-    val data1 = Array.range(1, 100001, 1).map(_.toDouble)
-    val data2 = Array.range(1, 200000, 2).map(_.toDouble)
+    val data1 = Array.range(1, datasetSize + 1, 1).map(_.toDouble)
+    val data2 = Array.range(1, 2 * datasetSize, 2).map(_.toDouble)
     val df = data1.zip(data2).toSeq.toDF("input1", "input2")
 
     val discretizer = new QuantileDiscretizer()
@@ -175,20 +180,24 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val model = discretizer.fit(df)
     testTransformerByGlobalCheckFunc[(Double, Double)](df, model, "result1", "result2") { rows =>
       val result =
-        rows.map { r => Tuple2(r.getDouble(0), r.getDouble(1)) }.toDF("result1", "result2")
-      val relativeError = discretizer.getRelativeError
-      for (i <- 1 to 2) {
-        val observedNumBuckets = result.select("result" + i).distinct.count
-        assert(observedNumBuckets === numBuckets,
-          "Observed number of buckets does not equal expected number of buckets.")
+        rows.map(r => (r.getDouble(0), r.getDouble(1))).toDF("result1", "result2").cache()
+      try {
+        val relativeError = discretizer.getRelativeError
+        for (i <- 1 to 2) {
+          val observedNumBuckets = result.select("result" + i).distinct().count()
+          assert(observedNumBuckets === numBuckets,
+            "Observed number of buckets does not equal expected number of buckets.")
 
-        val numGoodBuckets = result
-          .groupBy("result" + i)
-          .count
-          .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
-          .count
-        assert(numGoodBuckets === numBuckets,
-          "Bucket sizes are not within expected relative error tolerance.")
+          val numGoodBuckets = result
+            .groupBy("result" + i)
+            .count()
+            .filter(s"abs(count - ${datasetSize / numBuckets}) <= ${relativeError * datasetSize}")
+            .count()
+          assert(numGoodBuckets === numBuckets,
+            "Bucket sizes are not within expected relative error tolerance.")
+        }
+      } finally {
+        result.unpersist()
       }
     }
   }

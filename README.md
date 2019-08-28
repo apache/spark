@@ -1,35 +1,39 @@
 # Apache Spark
 
-Spark is a fast and general cluster computing system for Big Data. It provides
+Spark is a unified analytics engine for large-scale data processing. It provides
 high-level APIs in Scala, Java, Python, and R, and an optimized engine that
 supports general computation graphs for data analysis. It also supports a
 rich set of higher-level tools including Spark SQL for SQL and DataFrames,
 MLlib for machine learning, GraphX for graph processing,
-and Spark Streaming for stream processing.
+and Structured Streaming for stream processing.
 
-<http://spark.apache.org/>
+<https://spark.apache.org/>
+
+[![Jenkins Build](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-2.7/badge/icon)](https://amplab.cs.berkeley.edu/jenkins/job/spark-master-test-sbt-hadoop-2.7)
+[![AppVeyor Build](https://img.shields.io/appveyor/ci/ApacheSoftwareFoundation/spark/master.svg?style=plastic&logo=appveyor)](https://ci.appveyor.com/project/ApacheSoftwareFoundation/spark)
+[![PySpark Coverage](https://img.shields.io/badge/dynamic/xml.svg?label=pyspark%20coverage&url=https%3A%2F%2Fspark-test.github.io%2Fpyspark-coverage-site&query=%2Fhtml%2Fbody%2Fdiv%5B1%5D%2Fdiv%2Fh1%2Fspan&colorB=brightgreen&style=plastic)](https://spark-test.github.io/pyspark-coverage-site)
 
 
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the [project web page](http://spark.apache.org/documentation.html).
+guide, on the [project web page](https://spark.apache.org/documentation.html).
 This README file only contains basic setup instructions.
 
 ## Building Spark
 
-Spark is built using [Apache Maven](http://maven.apache.org/).
+Spark is built using [Apache Maven](https://maven.apache.org/).
 To build Spark and its example programs, run:
 
-    build/mvn -DskipTests clean package
+    ./build/mvn -DskipTests clean package
 
 (You do not need to do this if you downloaded a pre-built package.)
 
 You can build Spark using more than one thread by using the -T option with Maven, see ["Parallel builds in Maven 3"](https://cwiki.apache.org/confluence/display/MAVEN/Parallel+builds+in+Maven+3).
 More detailed documentation is available from the project site, at
-["Building Spark"](http://spark.apache.org/docs/latest/building-spark.html).
+["Building Spark"](https://spark.apache.org/docs/latest/building-spark.html).
 
-For general development tips, including info on developing Spark using an IDE, see ["Useful Developer Tools"](http://spark.apache.org/developer-tools.html).
+For general development tips, including info on developing Spark using an IDE, see ["Useful Developer Tools"](https://spark.apache.org/developer-tools.html).
 
 ## Interactive Scala Shell
 
@@ -37,9 +41,9 @@ The easiest way to start using Spark is through the Scala shell:
 
     ./bin/spark-shell
 
-Try the following command, which should return 1000:
+Try the following command, which should return 1,000,000,000:
 
-    scala> sc.parallelize(1 to 1000).count()
+    scala> spark.range(1000 * 1000 * 1000).count()
 
 ## Interactive Python Shell
 
@@ -47,9 +51,9 @@ Alternatively, if you prefer Python, you can use the Python shell:
 
     ./bin/pyspark
 
-And run the following command, which should also return 1000:
+And run the following command, which should also return 1,000,000,000:
 
-    >>> sc.parallelize(range(1000)).count()
+    >>> spark.range(1000 * 1000 * 1000).count()
 
 ## Example Programs
 
@@ -79,7 +83,7 @@ can be run using:
     ./dev/run-tests
 
 Please see the guidance on how to
-[run tests for a module, or individual tests](http://spark.apache.org/developer-tools.html#individual-tests).
+[run tests for a module, or individual tests](https://spark.apache.org/developer-tools.html#individual-tests).
 
 There is also a Kubernetes integration test, see resource-managers/kubernetes/integration-tests/README.md
 
@@ -90,16 +94,16 @@ storage systems. Because the protocols have changed in different versions of
 Hadoop, you must build Spark against the same version that your cluster runs.
 
 Please refer to the build documentation at
-["Specifying the Hadoop Version and Enabling YARN"](http://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version-and-enabling-yarn)
+["Specifying the Hadoop Version and Enabling YARN"](https://spark.apache.org/docs/latest/building-spark.html#specifying-the-hadoop-version-and-enabling-yarn)
 for detailed guidance on building for a particular distribution of Hadoop, including
 building for particular Hive and Hive Thriftserver distributions.
 
 ## Configuration
 
-Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
+Please refer to the [Configuration Guide](https://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
 
 ## Contributing
 
-Please review the [Contribution to Spark guide](http://spark.apache.org/contributing.html)
+Please review the [Contribution to Spark guide](https://spark.apache.org/contributing.html)
 for information on how to get started contributing to the project.

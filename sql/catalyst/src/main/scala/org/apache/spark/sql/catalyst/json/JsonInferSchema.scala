@@ -39,7 +39,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
   private val timestampFormatter = TimestampFormatter(
     options.timestampFormat,
-    options.timeZone,
+    options.zoneId,
     options.locale)
 
   /**
@@ -122,13 +122,14 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
       case VALUE_STRING =>
         val field = parser.getText
-        val decimalTry = allCatch opt {
+        lazy val decimalTry = allCatch opt {
           val bigDecimal = decimalParser(field)
             DecimalType(bigDecimal.precision, bigDecimal.scale)
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if ((allCatch opt timestampFormatter.parse(field)).isDefined) {
+        } else if (options.inferTimestamp &&
+            (allCatch opt timestampFormatter.parse(field)).isDefined) {
           TimestampType
         } else {
           StringType

@@ -27,6 +27,7 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SQLAppStatusStore}
+import org.apache.spark.sql.internal.SQLConf.WHOLESTAGE_CODEGEN_ENABLED
 import org.apache.spark.sql.test.SQLTestUtils
 
 
@@ -84,8 +85,10 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
       assert(metricValue == expected)
     }
 
-    val totalNumBytesMetric = executedNode.metrics.find(_.name == "bytes of written output").get
-    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "").toInt
+    val totalNumBytesMetric = executedNode.metrics.find(
+      _.name == "written output total (min, med, max)").get
+    val totalNumBytes = metrics(totalNumBytesMetric.accumulatorId).replaceAll(",", "")
+      .split(" ").head.trim.toDouble
     assert(totalNumBytes > 0)
   }
 
@@ -152,7 +155,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
        expectedNodeIds: Set[Long],
        enableWholeStage: Boolean = false): Option[Map[Long, (String, Map[String, Any])]] = {
     val previousExecutionIds = currentExecutionIds()
-    withSQLConf("spark.sql.codegen.wholeStage" -> enableWholeStage.toString) {
+    withSQLConf(WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)

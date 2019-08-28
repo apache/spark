@@ -91,7 +91,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   private lazy val delegationTokens: Array[Byte] = {
     if (keytab.isEmpty && existingSecretName.isEmpty) {
       val tokenManager = new HadoopDelegationTokenManager(kubernetesConf.sparkConf,
-        SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf))
+        SparkHadoopUtil.get.newConfiguration(kubernetesConf.sparkConf), null)
       val creds = UserGroupInformation.getCurrentUser().getCredentials()
       tokenManager.obtainDelegationTokens(creds)
       // If no tokens and no secrets are stored in the credentials, make sure nothing is returned,

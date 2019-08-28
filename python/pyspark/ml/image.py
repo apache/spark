@@ -28,6 +28,7 @@ import sys
 import warnings
 
 import numpy as np
+from distutils.version import LooseVersion
 
 from pyspark import SparkContext
 from pyspark.sql.types import Row, _create_row, _parse_datatype_json_string
@@ -190,51 +191,17 @@ class _ImageSchema(object):
         # Running `bytearray(numpy.array([1]))` fails in specific Python versions
         # with a specific Numpy version, for example in Python 3.6.0 and NumPy 1.13.3.
         # Here, it avoids it by converting it to bytes.
-        data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        if LooseVersion(np.__version__) >= LooseVersion('1.9'):
+            data = bytearray(array.astype(dtype=np.uint8).ravel().tobytes())
+        else:
+            # Numpy prior to 1.9 don't have `tobytes` method.
+            data = bytearray(array.astype(dtype=np.uint8).ravel())
 
         # Creating new Row with _create_row(), because Row(name = value, ... )
         # orders fields by name, which conflicts with expected schema order
         # when the new DataFrame is created by UDF
         return _create_row(self.imageFields,
                            [origin, height, width, nChannels, mode, data])
-
-    def readImages(self, path, recursive=False, numPartitions=-1,
-                   dropImageFailures=False, sampleRatio=1.0, seed=0):
-        """
-        Reads the directory of images from the local or remote source.
-
-        .. note:: If multiple jobs are run in parallel with different sampleRatio or recursive flag,
-            there may be a race condition where one job overwrites the hadoop configs of another.
-
-        .. note:: If sample ratio is less than 1, sampling uses a PathFilter that is efficient but
-            potentially non-deterministic.
-
-        .. note:: Deprecated in 2.4.0. Use `spark.read.format("image").load(path)` instead and
-            this `readImages` will be removed in 3.0.0.
-
-        :param str path: Path to the image directory.
-        :param bool recursive: Recursive search flag.
-        :param int numPartitions: Number of DataFrame partitions.
-        :param bool dropImageFailures: Drop the files that are not valid images.
-        :param float sampleRatio: Fraction of the images loaded.
-        :param int seed: Random number seed.
-        :return: a :class:`DataFrame` with a single column of "images",
-               see ImageSchema for details.
-
-        >>> df = ImageSchema.readImages('data/mllib/images/origin/kittens', recursive=True)
-        >>> df.count()
-        5
-
-        .. versionadded:: 2.3.0
-        """
-        warnings.warn("`ImageSchema.readImage` is deprecated. " +
-                      "Use `spark.read.format(\"image\").load(path)` instead.", DeprecationWarning)
-        spark = SparkSession.builder.getOrCreate()
-        image_schema = spark._jvm.org.apache.spark.ml.image.ImageSchema
-        jsession = spark._jsparkSession
-        jresult = image_schema.readImages(path, jsession, recursive, numPartitions,
-                                          dropImageFailures, float(sampleRatio), seed)
-        return DataFrame(jresult, spark._wrapped)
 
 
 ImageSchema = _ImageSchema()

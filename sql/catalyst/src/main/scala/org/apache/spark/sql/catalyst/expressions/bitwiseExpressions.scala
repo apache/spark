@@ -95,7 +95,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
   examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
-       2
+       6
   """)
 case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithmetic {
 

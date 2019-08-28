@@ -22,13 +22,16 @@ if sys.version >= '3':
     basestring = unicode = str
     long = int
     from functools import reduce
+    from html import escape as html_escape
 else:
     from itertools import imap as map
+    from cgi import escape as html_escape
 
 import warnings
 
 from pyspark import copy_func, since, _NoValue
-from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
+from pyspark.rdd import RDD, _load_from_socket, _local_iterator_from_socket, \
+    ignore_unicode_prefix, PythonEvalType
 from pyspark.serializers import ArrowCollectSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
@@ -374,7 +377,6 @@ class DataFrame(object):
         by 'spark.sql.repl.eagerEval.enabled', this only called by REPL you are
         using support eager evaluation with HTML.
         """
-        import cgi
         if not self._support_repr_html:
             self._support_repr_html = True
         if self.sql_ctx._conf.isReplEagerEvalEnabled():
@@ -389,11 +391,11 @@ class DataFrame(object):
 
             html = "<table border='1'>\n"
             # generate table head
-            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: cgi.escape(x), head))
+            html += "<tr><th>%s</th></tr>\n" % "</th><th>".join(map(lambda x: html_escape(x), head))
             # generate table rows
             for row in row_data:
                 html += "<tr><td>%s</td></tr>\n" % "</td><td>".join(
-                    map(lambda x: cgi.escape(x), row))
+                    map(lambda x: html_escape(x), row))
             html += "</table>\n"
             if has_more_data:
                 html += "only showing top %d %s\n" % (
@@ -407,7 +409,7 @@ class DataFrame(object):
         """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
         logical plan of this DataFrame, which is especially useful in iterative algorithms where the
         plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with L{SparkContext.setCheckpointDir()}.
+        directory set with :meth:`SparkContext.setCheckpointDir`.
 
         :param eager: Whether to checkpoint this DataFrame immediately
 
@@ -528,7 +530,7 @@ class DataFrame(object):
         """
         with SCCallSiteSync(self._sc) as css:
             sock_info = self._jdf.toPythonIterator()
-        return _load_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
+        return _local_iterator_from_socket(sock_info, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -580,9 +582,9 @@ class DataFrame(object):
 
     @since(1.3)
     def cache(self):
-        """Persists the :class:`DataFrame` with the default storage level (C{MEMORY_AND_DISK}).
+        """Persists the :class:`DataFrame` with the default storage level (`MEMORY_AND_DISK`).
 
-        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
         self._jdf.cache()
@@ -593,9 +595,9 @@ class DataFrame(object):
         """Sets the storage level to persist the contents of the :class:`DataFrame` across
         operations after the first time it is computed. This can only be used to assign
         a new storage level if the :class:`DataFrame` does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_AND_DISK}).
+        If no storage level is specified defaults to (`MEMORY_AND_DISK`).
 
-        .. note:: The default storage level has changed to C{MEMORY_AND_DISK} to match Scala in 2.0.
+        .. note:: The default storage level has changed to `MEMORY_AND_DISK` to match Scala in 2.0.
         """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
@@ -795,9 +797,9 @@ class DataFrame(object):
 
         >>> df = spark.range(10)
         >>> df.sample(0.5, 3).count()
-        4
+        7
         >>> df.sample(fraction=0.5, seed=3).count()
-        4
+        7
         >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
         1
         >>> df.sample(1.0).count()
@@ -865,8 +867,8 @@ class DataFrame(object):
         +---+-----+
         |key|count|
         +---+-----+
-        |  0|    5|
-        |  1|    9|
+        |  0|    3|
+        |  1|    6|
         +---+-----+
         >>> dataset.sampleBy(col("key"), fractions={2: 1.0}, seed=0).count()
         33
@@ -898,10 +900,10 @@ class DataFrame(object):
 
         >>> splits = df4.randomSplit([1.0, 2.0], 24)
         >>> splits[0].count()
-        1
+        2
 
         >>> splits[1].count()
-        3
+        2
         """
         for w in weights:
             if w < 0.0:
@@ -1000,8 +1002,9 @@ class DataFrame(object):
             If `on` is a string or a list of strings indicating the name of the join column(s),
             the column(s) must exist on both sides, and this performs an equi-join.
         :param how: str, default ``inner``. Must be one of: ``inner``, ``cross``, ``outer``,
-            ``full``, ``full_outer``, ``left``, ``left_outer``, ``right``, ``right_outer``,
-            ``left_semi``, and ``left_anti``.
+            ``full``, ``fullouter``, ``full_outer``, ``left``, ``leftouter``, ``left_outer``,
+            ``right``, ``rightouter``, ``right_outer``, ``semi``, ``leftsemi``, ``left_semi``,
+            ``anti``, ``leftanti`` and ``left_anti``.
 
         The following performs a full outer join between ``df1`` and ``df2``.
 
@@ -1973,6 +1976,11 @@ class DataFrame(object):
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
+        .. note:: This method introduces a projection internally. Therefore, calling it multiple
+            times, for instance, via loops in order to add multiple columns can generate big
+            plans which can cause performance issues and even `StackOverflowException`.
+            To avoid this, use :func:`select` with the multiple columns at once.
+
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
 
@@ -2046,6 +2054,31 @@ class DataFrame(object):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(3.0)
+    def transform(self, func):
+        """Returns a new class:`DataFrame`. Concise syntax for chaining custom transformations.
+
+        :param func: a function that takes and returns a class:`DataFrame`.
+
+        >>> from pyspark.sql.functions import col
+        >>> df = spark.createDataFrame([(1, 1.0), (2, 2.0)], ["int", "float"])
+        >>> def cast_all_to_int(input_df):
+        ...     return input_df.select([col(col_name).cast("int") for col_name in input_df.columns])
+        >>> def sort_columns_asc(input_df):
+        ...     return input_df.select(*sorted(input_df.columns))
+        >>> df.transform(cast_all_to_int).transform(sort_columns_asc).show()
+        +-----+---+
+        |float|int|
+        +-----+---+
+        |    1|  1|
+        |    2|  2|
+        +-----+---+
+        """
+        result = func(self)
+        assert isinstance(result, DataFrame), "Func returned an instance of type [%s], " \
+                                              "should have been DataFrame." % type(result)
+        return result
+
     @since(1.3)
     def toPandas(self):
         """
@@ -2056,7 +2089,7 @@ class DataFrame(object):
         .. note:: This method should only be used if the resulting Pandas's DataFrame is expected
             to be small, as all the data is loaded into the driver's memory.
 
-        .. note:: Usage with spark.sql.execution.arrow.enabled=True is experimental.
+        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
 
         >>> df.toPandas()  # doctest: +SKIP
            age   name
@@ -2073,7 +2106,7 @@ class DataFrame(object):
         else:
             timezone = None
 
-        if self.sql_ctx._conf.arrowEnabled():
+        if self.sql_ctx._conf.arrowPySparkEnabled():
             use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
@@ -2083,38 +2116,39 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx._conf.arrowFallbackEnabled():
+                if self.sql_ctx._conf.arrowPySparkFallbackEnabled():
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true; however, "
                         "failed by the reason below:\n  %s\n"
                         "Attempting non-optimization as "
-                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' is set to "
                         "true." % _exception_message(e))
                     warnings.warn(msg)
                     use_arrow = False
                 else:
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                        "the error below and will not continue because automatic fallback "
-                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                        "reached the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.pyspark.fallback.enabled' has been set to "
                         "false.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
-            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.types import _check_dataframe_convert_date, \
-                        _check_dataframe_localize_timestamps
+                    from pyspark.sql.types import _check_dataframe_localize_timestamps
                     import pyarrow
                     batches = self._collectAsArrow()
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
-                        pdf = table.to_pandas()
-                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
+                        # values, but we should use datetime.date to match the behavior with when
+                        # Arrow optimization is disabled.
+                        pdf = table.to_pandas(date_as_object=True)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
@@ -2123,10 +2157,11 @@ class DataFrame(object):
                     # be executed. So, simply fail in this case for now.
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
-                        "the error below and can not continue. Note that "
-                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
-                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                        "'spark.sql.execution.arrow.pyspark.enabled' is set to true, but has "
+                        "reached the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.pyspark.fallback.enabled' does not have an "
+                        "effect on failures in the middle of "
+                        "computation.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 
@@ -2159,6 +2194,48 @@ class DataFrame(object):
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
             return pdf
 
+    def mapInPandas(self, udf):
+        """
+        Maps an iterator of batches in the current :class:`DataFrame` using a Pandas user-defined
+        function and returns the result as a :class:`DataFrame`.
+
+        The user-defined function should take an iterator of `pandas.DataFrame`\\s and return
+        another iterator of `pandas.DataFrame`\\s. All columns are passed
+        together as an iterator of `pandas.DataFrame`\\s to the user-defined function and the
+        returned iterator of `pandas.DataFrame`\\s are combined as a :class:`DataFrame`.
+        Each `pandas.DataFrame` size can be controlled by
+        `spark.sql.execution.arrow.maxRecordsPerBatch`.
+        Its schema must match the returnType of the Pandas user-defined function.
+
+        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> df = spark.createDataFrame([(1, 21), (2, 30)],
+        ...                            ("id", "age"))  # doctest: +SKIP
+        >>> @pandas_udf(df.schema, PandasUDFType.MAP_ITER)  # doctest: +SKIP
+        ... def filter_func(batch_iter):
+        ...     for pdf in batch_iter:
+        ...         yield pdf[pdf.id == 1]
+        >>> df.mapInPandas(filter_func).show()  # doctest: +SKIP
+        +---+---+
+        | id|age|
+        +---+---+
+        |  1| 21|
+        +---+---+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+
+        """
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') \
+                or udf.evalType != PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
+            raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
+                             "MAP_ITER.")
+
+        udf_column = udf(*[self[col] for col in self.columns])
+        jdf = self._jdf.mapInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
+
     def _collectAsArrow(self):
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
@@ -2167,10 +2244,16 @@ class DataFrame(object):
         .. note:: Experimental.
         """
         with SCCallSiteSync(self._sc) as css:
-            sock_info = self._jdf.collectAsArrowToPython()
+            port, auth_secret, jsocket_auth_server = self._jdf.collectAsArrowToPython()
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
-        results = list(_load_from_socket(sock_info, ArrowCollectSerializer()))
+        try:
+            results = list(_load_from_socket((port, auth_secret), ArrowCollectSerializer()))
+        finally:
+            # Join serving thread and raise any exceptions from collectAsArrowToPython
+            jsocket_auth_server.getResult()
+
+        # Separate RecordBatches from batch order indices in results
         batches = results[:-1]
         batch_order = results[-1]
 

@@ -46,8 +46,8 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
   private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.get("spark.driver.host"),
-    kubernetesConf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
+    kubernetesConf.get(DRIVER_HOST_ADDRESS),
+    kubernetesConf.sparkConf.getInt(DRIVER_PORT.key, DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val executorMemoryMiB = kubernetesConf.get(EXECUTOR_MEMORY)
   private val executorMemoryString = kubernetesConf.get(
@@ -67,7 +67,7 @@ private[spark] class BasicExecutorFeatureStep(
       executorMemoryWithOverhead
     }
 
-  private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
+  private val executorCores = kubernetesConf.sparkConf.get(EXECUTOR_CORES)
   private val executorCoresRequest =
     if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
       kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
@@ -83,12 +83,21 @@ private[spark] class BasicExecutorFeatureStep(
     // name as the hostname.  This preserves uniqueness since the end of name contains
     // executorId
     val hostname = name.substring(Math.max(0, name.length - 63))
+      // Remove non-word characters from the start of the hostname
+      .replaceAll("^[^\\w]+", "")
+      // Replace dangerous characters in the remaining string with a safe alternative.
+      .replaceAll("[^\\w-]+", "_")
+
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryTotal}Mi")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
       .withAmount(executorCoresRequest)
       .build()
+
+    val executorResourceQuantities =
+      KubernetesUtils.buildResourcesQuantities(SPARK_EXECUTOR_PREFIX,
+        kubernetesConf.sparkConf)
 
     val executorEnv: Seq[EnvVar] = {
         (Seq(
@@ -163,11 +172,12 @@ private[spark] class BasicExecutorFeatureStep(
         .addToRequests("memory", executorMemoryQuantity)
         .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
+        .addToLimits(executorResourceQuantities.asJava)
         .endResources()
-        .addNewEnv()
-          .withName(ENV_SPARK_USER)
-          .withValue(Utils.getCurrentUserName())
-          .endEnv()
+      .addNewEnv()
+        .withName(ENV_SPARK_USER)
+        .withValue(Utils.getCurrentUserName())
+        .endEnv()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")

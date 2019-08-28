@@ -31,9 +31,9 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
-import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
 
 /**
@@ -79,7 +79,18 @@ class HistoryServer(
       }
 
       val appId = parts(1)
-      val attemptId = if (parts.length >= 3) Some(parts(2)) else None
+      var shouldAppendAttemptId = false
+      val attemptId = if (parts.length >= 3) {
+        Some(parts(2))
+      } else {
+        val lastAttemptId = provider.getApplicationInfo(appId).flatMap(_.attempts.head.attemptId)
+        if (lastAttemptId.isDefined) {
+          shouldAppendAttemptId = true
+          lastAttemptId
+        } else {
+          None
+        }
+      }
 
       // Since we may have applications with multiple attempts mixed with applications with a
       // single attempt, we need to try both. Try the single-attempt route first, and if an
@@ -97,8 +108,13 @@ class HistoryServer(
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
       // Also, make sure that the redirect url contains the query string present in the request.
-      val requestURI = req.getRequestURI + Option(req.getQueryString).map("?" + _).getOrElse("")
-      res.sendRedirect(res.encodeRedirectURL(requestURI))
+      val redirect = if (shouldAppendAttemptId) {
+        req.getRequestURI.stripSuffix("/") + "/" + attemptId.get
+      } else {
+        req.getRequestURI
+      }
+      val query = Option(req.getQueryString).map("?" + _).getOrElse("")
+      res.sendRedirect(res.encodeRedirectURL(redirect + query))
     }
 
     // SPARK-5983 ensure TRACE is not supported
@@ -150,17 +166,15 @@ class HistoryServer(
       ui: SparkUI,
       completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
-    handlers.synchronized {
-      ui.getHandlers.foreach(attachHandler)
+    ui.getHandlers.foreach { handler =>
+      serverInfo.get.addHandler(handler, ui.securityManager)
     }
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
   override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
-    handlers.synchronized {
-      ui.getHandlers.foreach(detachHandler)
-    }
+    ui.getHandlers.foreach(detachHandler)
     provider.onUIDetached(appId, attemptId, ui)
   }
 
@@ -275,10 +289,9 @@ object HistoryServer extends Logging {
 
     val providerName = conf.get(History.PROVIDER)
       .getOrElse(classOf[FsHistoryProvider].getName())
-    val provider = Utils.classForName(providerName)
+    val provider = Utils.classForName[ApplicationHistoryProvider](providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)
-      .asInstanceOf[ApplicationHistoryProvider]
 
     val port = conf.get(History.HISTORY_SERVER_UI_PORT)
 
@@ -304,11 +317,10 @@ object HistoryServer extends Logging {
       config.set(SecurityManager.SPARK_AUTH_CONF, "false")
     }
 
-    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
-      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
-        "only using spark.history.ui.acl.enable")
-      config.set("spark.acls.enable", "false")
-      config.set("spark.ui.acls.enable", "false")
+    if (config.get(ACLS_ENABLE)) {
+      logInfo(s"${ACLS_ENABLE.key} is configured, " +
+        s"clearing it and only using ${History.HISTORY_SERVER_UI_ACLS_ENABLE.key}")
+      config.set(ACLS_ENABLE, false)
     }
 
     new SecurityManager(config)

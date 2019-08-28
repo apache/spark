@@ -21,15 +21,14 @@ import java.util.regex.{Matcher, Pattern}
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
@@ -183,42 +182,6 @@ object YarnSparkHadoopUtil {
   def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
     ConverterUtils.toContainerId(containerIdString)
-  }
-
-  /** The filesystems for which YARN should fetch delegation tokens. */
-  def hadoopFSsToAccess(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Set[FileSystem] = {
-    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
-    val requestAllDelegationTokens = filesystemsToAccess.isEmpty
-
-    val stagingFS = sparkConf.get(STAGING_DIR)
-      .map(new Path(_).getFileSystem(hadoopConf))
-      .getOrElse(FileSystem.get(hadoopConf))
-
-    // Add the list of available namenodes for all namespaces in HDFS federation.
-    // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
-    // namespaces.
-    val hadoopFilesystems = if (!requestAllDelegationTokens || stagingFS.getScheme == "viewfs") {
-      filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
-    } else {
-      val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
-      // Retrieving the filesystem for the nameservices where HA is not enabled
-      val filesystemsWithoutHA = nameservices.flatMap { ns =>
-        Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")).map { nameNode =>
-          new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf)
-        }
-      }
-      // Retrieving the filesystem for the nameservices where HA is enabled
-      val filesystemsWithHA = nameservices.flatMap { ns =>
-        Option(hadoopConf.get(s"dfs.ha.namenodes.$ns")).map { _ =>
-          new Path(s"hdfs://$ns").getFileSystem(hadoopConf)
-        }
-      }
-      (filesystemsWithoutHA ++ filesystemsWithHA).toSet
-    }
-
-    hadoopFilesystems + stagingFS
   }
 
 }

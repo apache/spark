@@ -37,7 +37,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -275,7 +275,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
       state.x.toArray.clone()
     }
 
-    bcFeaturesStd.destroy(blocking = false)
+    bcFeaturesStd.destroy()
     if (handlePersistence) instances.unpersist()
 
     val rawCoefficients = parameters.slice(2, parameters.length)
@@ -342,7 +342,7 @@ class AFTSurvivalRegressionModel private[ml] (
     // shape parameter for the Weibull distribution of lifetime
     val k = 1 / scale
     val quantiles = $(quantileProbabilities).map {
-      q => lambda * math.exp(math.log(-math.log(1 - q)) / k)
+      q => lambda * math.exp(math.log(-math.log1p(-q)) / k)
     }
     Vectors.dense(quantiles)
   }
@@ -355,13 +355,28 @@ class AFTSurvivalRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predictUDF = udf { features: Vector => predict(features) }
-    val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
+
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
+    if ($(predictionCol).nonEmpty) {
+      val predictUDF = udf { features: Vector => predict(features) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)))
+    }
+
     if (hasQuantilesCol) {
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
-        .withColumn($(quantilesCol), predictQuantilesUDF(col($(featuresCol))))
+      val predictQuantilesUDF = udf { features: Vector => predictQuantiles(features)}
+      predictionColNames :+= $(quantilesCol)
+      predictionColumns :+= predictQuantilesUDF(col($(featuresCol)))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
     } else {
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+      this.logWarning(s"$uid: AFTSurvivalRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
     }
   }
 
@@ -633,7 +648,7 @@ private class AFTCostFun(
         case (aggregator1, aggregator2) => aggregator1.merge(aggregator2)
       }, depth = aggregationDepth)
 
-    bcParameters.destroy(blocking = false)
+    bcParameters.destroy()
     (aftAggregator.loss, aftAggregator.gradient)
   }
 }

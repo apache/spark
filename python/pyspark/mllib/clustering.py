@@ -33,7 +33,6 @@ from pyspark import SparkContext, since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, callJavaFunc, _py2java, _java2py
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.distribution import MultivariateGaussian
 from pyspark.mllib.util import Saveable, Loader, inherit_doc, JavaLoader, JavaSaveable
 from pyspark.streaming import DStream
@@ -131,9 +130,9 @@ class BisectingKMeans(object):
     clusters, larger clusters get higher priority.
 
     Based on
-    U{http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf}
-    Steinbach, Karypis, and Kumar, A comparison of document clustering
-    techniques, KDD Workshop on Text Mining, 2000.
+    `Steinbach, Karypis, and Kumar, A comparison of document clustering
+    techniques, KDD Workshop on Text Mining, 2000
+    <http://glaros.dtc.umn.edu/gkhome/fetch/papers/docclusterKDDTMW00.pdf>`_.
 
     .. versionadded:: 2.0.0
     """
@@ -384,11 +383,11 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model.predict([-0.1,-0.05])
     0
     >>> softPredicted = model.predictSoft([-0.1,-0.05])
-    >>> abs(softPredicted[0] - 1.0) < 0.001
+    >>> abs(softPredicted[0] - 1.0) < 0.03
     True
-    >>> abs(softPredicted[1] - 0.0) < 0.001
+    >>> abs(softPredicted[1] - 0.0) < 0.03
     True
-    >>> abs(softPredicted[2] - 0.0) < 0.001
+    >>> abs(softPredicted[2] - 0.0) < 0.03
     True
 
     >>> path = tempfile.mkdtemp()

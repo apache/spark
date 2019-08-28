@@ -23,34 +23,37 @@ import scala.concurrent.Future
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset}
+import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
 import org.apache.spark.util.Utils
 
-class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
+class StreamingQueryManagerSuite extends StreamTest {
 
   import AwaitTerminationTester._
   import testImplicits._
 
   override val streamingTimeout = 20.seconds
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     assert(spark.streams.active.isEmpty)
     spark.streams.resetTerminated()
   }
 
-  after {
-    assert(spark.streams.active.isEmpty)
-    spark.streams.resetTerminated()
+  override def afterEach(): Unit = {
+    try {
+      assert(spark.streams.active.isEmpty)
+      spark.streams.resetTerminated()
+    } finally {
+      super.afterEach()
+    }
   }
 
   testQuietly("listing") {
@@ -84,7 +87,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  testQuietly("awaitAnyTermination without timeout and resetTerminated") {
+  testRetry("awaitAnyTermination without timeout and resetTerminated") {
     val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
@@ -94,7 +97,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       testAwaitAnyTermination(ExpectBlocked)
 
       // Stop a query asynchronously and see if it is reported through awaitAnyTermination
-      val q1 = stopRandomQueryAsync(stopAfter = 100 milliseconds, withError = false)
+      val q1 = stopRandomQueryAsync(stopAfter = 100.milliseconds, withError = false)
       testAwaitAnyTermination(ExpectNotBlocked)
       require(!q1.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
@@ -107,7 +110,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
       // Terminate a query asynchronously with exception and see awaitAnyTermination throws
       // the exception
-      val q2 = stopRandomQueryAsync(100 milliseconds, withError = true)
+      val q2 = stopRandomQueryAsync(100.milliseconds, withError = true)
       testAwaitAnyTermination(ExpectException[SparkException])
       require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
@@ -120,10 +123,10 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
       // Terminate multiple queries, one with failure and see whether awaitAnyTermination throws
       // the exception
-      val q3 = stopRandomQueryAsync(10 milliseconds, withError = false)
+      val q3 = stopRandomQueryAsync(10.milliseconds, withError = false)
       testAwaitAnyTermination(ExpectNotBlocked)
       require(!q3.isActive)
-      val q4 = stopRandomQueryAsync(10 milliseconds, withError = true)
+      val q4 = stopRandomQueryAsync(10.milliseconds, withError = true)
       eventually(Timeout(streamingTimeout)) { require(!q4.isActive) }
       // After q4 terminates with exception, awaitAnyTerm should start throwing exception
       testAwaitAnyTermination(ExpectException[SparkException])
@@ -139,81 +142,81 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       // awaitAnyTermination should be blocking or non-blocking depending on timeout values
       testAwaitAnyTermination(
         ExpectBlocked,
-        awaitTimeout = 4 seconds,
+        awaitTimeout = 4.seconds,
         expectedReturnedValue = false,
-        testBehaviorFor = 2 seconds)
+        testBehaviorFor = 2.seconds)
 
       testAwaitAnyTermination(
         ExpectNotBlocked,
-        awaitTimeout = 50 milliseconds,
+        awaitTimeout = 50.milliseconds,
         expectedReturnedValue = false,
-        testBehaviorFor = 1 second)
+        testBehaviorFor = 1.second)
 
       // Stop a query asynchronously within timeout and awaitAnyTerm should be unblocked
-      val q1 = stopRandomQueryAsync(stopAfter = 100 milliseconds, withError = false)
+      val q1 = stopRandomQueryAsync(stopAfter = 100.milliseconds, withError = false)
       testAwaitAnyTermination(
         ExpectNotBlocked,
-        awaitTimeout = 2 seconds,
+        awaitTimeout = 2.seconds,
         expectedReturnedValue = true,
-        testBehaviorFor = 4 seconds)
+        testBehaviorFor = 4.seconds)
       require(!q1.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should be non-blocking even if timeout is high
       testAwaitAnyTermination(
-        ExpectNotBlocked, awaitTimeout = 4 seconds, expectedReturnedValue = true)
+        ExpectNotBlocked, awaitTimeout = 4.seconds, expectedReturnedValue = true)
 
       // Resetting termination should make awaitAnyTermination() blocking again
       spark.streams.resetTerminated()
       testAwaitAnyTermination(
         ExpectBlocked,
-        awaitTimeout = 4 seconds,
+        awaitTimeout = 4.seconds,
         expectedReturnedValue = false,
-        testBehaviorFor = 1 second)
+        testBehaviorFor = 1.second)
 
       // Terminate a query asynchronously with exception within timeout, awaitAnyTermination should
       // throws the exception
-      val q2 = stopRandomQueryAsync(100 milliseconds, withError = true)
+      val q2 = stopRandomQueryAsync(100.milliseconds, withError = true)
       testAwaitAnyTermination(
         ExpectException[SparkException],
-        awaitTimeout = 4 seconds,
-        testBehaviorFor = 6 seconds)
+        awaitTimeout = 4.seconds,
+        testBehaviorFor = 6.seconds)
       require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should throw the exception
       testAwaitAnyTermination(
         ExpectException[SparkException],
-        awaitTimeout = 2 seconds,
-        testBehaviorFor = 4 seconds)
+        awaitTimeout = 2.seconds,
+        testBehaviorFor = 4.seconds)
 
       // Terminate a query asynchronously outside the timeout, awaitAnyTerm should be blocked
       spark.streams.resetTerminated()
-      val q3 = stopRandomQueryAsync(2 seconds, withError = true)
+      val q3 = stopRandomQueryAsync(2.seconds, withError = true)
       testAwaitAnyTermination(
         ExpectNotBlocked,
-        awaitTimeout = 100 milliseconds,
+        awaitTimeout = 100.milliseconds,
         expectedReturnedValue = false,
-        testBehaviorFor = 4 seconds)
+        testBehaviorFor = 4.seconds)
 
       // After that query is stopped, awaitAnyTerm should throw exception
       eventually(Timeout(streamingTimeout)) { require(!q3.isActive) } // wait for query to stop
       testAwaitAnyTermination(
         ExpectException[SparkException],
-        awaitTimeout = 100 milliseconds,
-        testBehaviorFor = 4 seconds)
+        awaitTimeout = 100.milliseconds,
+        testBehaviorFor = 4.seconds)
 
 
       // Terminate multiple queries, one with failure and see whether awaitAnyTermination throws
       // the exception
       spark.streams.resetTerminated()
 
-      val q4 = stopRandomQueryAsync(10 milliseconds, withError = false)
+      val q4 = stopRandomQueryAsync(10.milliseconds, withError = false)
       testAwaitAnyTermination(
-        ExpectNotBlocked, awaitTimeout = 2 seconds, expectedReturnedValue = true)
+        ExpectNotBlocked, awaitTimeout = 2.seconds, expectedReturnedValue = true)
       require(!q4.isActive)
-      val q5 = stopRandomQueryAsync(10 milliseconds, withError = true)
+      val q5 = stopRandomQueryAsync(10.milliseconds, withError = true)
       eventually(Timeout(streamingTimeout)) { require(!q5.isActive) }
       // After q5 terminates with exception, awaitAnyTerm should start throwing exception
-      testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 2 seconds)
+      testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 2.seconds)
     }
   }
 
@@ -277,7 +280,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       expectedBehavior: ExpectedBehavior,
       expectedReturnedValue: Boolean = false,
       awaitTimeout: Span = null,
-      testBehaviorFor: Span = 4 seconds
+      testBehaviorFor: Span = 4.seconds
     ): Unit = {
 
     def awaitTermFunc(): Unit = {
@@ -304,8 +307,8 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       if (withError) {
         logDebug(s"Terminating query ${queryToStop.name} with error")
         queryToStop.asInstanceOf[StreamingQueryWrapper].streamingQuery.logicalPlan.collect {
-          case StreamingExecutionRelation(source, _) =>
-            source.asInstanceOf[MemoryStream[Int]].addData(0)
+          case r: StreamingDataSourceV2Relation =>
+            r.stream.asInstanceOf[MemoryStream[Int]].addData(0)
         }
       } else {
         logDebug(s"Stopping query ${queryToStop.name}")

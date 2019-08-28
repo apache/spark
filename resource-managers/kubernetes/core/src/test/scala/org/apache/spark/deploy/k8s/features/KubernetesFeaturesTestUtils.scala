@@ -20,12 +20,12 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import io.fabric8.kubernetes.api.model.{Container, HasMetadata, PodBuilder, SecretBuilder}
-import org.mockito.Matchers
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 
 import org.apache.spark.deploy.k8s.SparkPod
+import org.apache.spark.resource.ResourceID
 
 object KubernetesFeaturesTestUtils {
 
@@ -37,17 +37,15 @@ object KubernetesFeaturesTestUtils {
 
     when(mockStep.getAdditionalPodSystemProperties())
       .thenReturn(Map(stepType -> stepType))
-    when(mockStep.configurePod(Matchers.any(classOf[SparkPod])))
-      .thenAnswer(new Answer[SparkPod]() {
-        override def answer(invocation: InvocationOnMock): SparkPod = {
-          val originalPod = invocation.getArgumentAt(0, classOf[SparkPod])
-          val configuredPod = new PodBuilder(originalPod.pod)
-            .editOrNewMetadata()
-            .addToLabels(stepType, stepType)
-            .endMetadata()
-            .build()
-          SparkPod(configuredPod, originalPod.container)
-        }
+    when(mockStep.configurePod(any(classOf[SparkPod])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val originalPod: SparkPod = invocation.getArgument(0)
+        val configuredPod = new PodBuilder(originalPod.pod)
+          .editOrNewMetadata()
+          .addToLabels(stepType, stepType)
+          .endMetadata()
+          .build()
+        SparkPod(configuredPod, originalPod.container)
       })
     mockStep
   }
@@ -67,6 +65,8 @@ object KubernetesFeaturesTestUtils {
 
   def filter[T: ClassTag](list: Seq[HasMetadata]): Seq[T] = {
     val desired = implicitly[ClassTag[T]].runtimeClass
-    list.filter(_.getClass() == desired).map(_.asInstanceOf[T]).toSeq
+    list.filter(_.getClass() == desired).map(_.asInstanceOf[T])
   }
+
+  case class TestResourceInformation(rId: ResourceID, count: String, vendor: String)
 }

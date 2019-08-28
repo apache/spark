@@ -78,13 +78,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  override def unpersist(blocking: Boolean = true): Graph[VD, ED] = {
+  override def unpersist(blocking: Boolean = false): Graph[VD, ED] = {
     unpersistVertices(blocking)
     replicatedVertexView.edges.unpersist(blocking)
     this
   }
 
-  override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
+  override def unpersistVertices(blocking: Boolean = false): Graph[VD, ED] = {
     vertices.unpersist(blocking)
     // TODO: unpersist the replicated vertices in `replicatedVertexView` but leave the edges alone
     this

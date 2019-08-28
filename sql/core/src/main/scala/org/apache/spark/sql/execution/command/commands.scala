@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -70,7 +70,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
@@ -110,6 +110,9 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   override def nodeName: String = "Execute " + cmd.nodeName
 
+  // override the default one, otherwise the `cmd.nodeName` will appear twice from simpleString
+  override def argString(maxFields: Int): String = cmd.argString(maxFields)
+
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
@@ -140,7 +143,8 @@ case class ExplainCommand(
     logicalPlan: LogicalPlan,
     extended: Boolean = false,
     codegen: Boolean = false,
-    cost: Boolean = false)
+    cost: Boolean = false,
+    formatted: Boolean = false)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -148,16 +152,8 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val queryExecution =
-      if (logicalPlan.isStreaming) {
-        // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
-        // output mode does not matter since there is no `Sink`.
-        new IncrementalExecution(
-          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
-          UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
-      } else {
-        sparkSession.sessionState.executePlan(logicalPlan)
-      }
+    val queryExecution = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan,
+      sparkSession.sessionState.executePlan(logicalPlan))
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)
@@ -165,12 +161,32 @@ case class ExplainCommand(
         queryExecution.toString
       } else if (cost) {
         queryExecution.stringWithStats
+      } else if (formatted) {
+        queryExecution.simpleString(formatted = true)
       } else {
         queryExecution.simpleString
       }
     Seq(Row(outputString))
   } catch { case cause: TreeNodeException[_] =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
+  }
+}
+
+object ExplainCommandUtil {
+  // Returns `QueryExecution` which is used to explain a logical plan.
+  def explainedQueryExecution(
+      sparkSession: SparkSession,
+      logicalPlan: LogicalPlan,
+      queryExecution: => QueryExecution): QueryExecution = {
+    if (logicalPlan.isStreaming) {
+      // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
+      // output mode does not matter since there is no `Sink`.
+      new IncrementalExecution(
+        sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
+        UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+    } else {
+      queryExecution
+    }
   }
 }
 

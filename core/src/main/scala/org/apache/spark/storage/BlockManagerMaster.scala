@@ -56,13 +56,14 @@ class BlockManagerMaster(
    * updated BlockManagerId fleshed out with this information.
    */
   def registerBlockManager(
-      blockManagerId: BlockManagerId,
+      id: BlockManagerId,
+      localDirs: Array[String],
       maxOnHeapMemSize: Long,
       maxOffHeapMemSize: Long,
       slaveEndpoint: RpcEndpointRef): BlockManagerId = {
-    logInfo(s"Registering BlockManager $blockManagerId")
+    logInfo(s"Registering BlockManager $id")
     val updatedId = driverEndpoint.askSync[BlockManagerId](
-      RegisterBlockManager(blockManagerId, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
+      RegisterBlockManager(id, localDirs, maxOnHeapMemSize, maxOffHeapMemSize, slaveEndpoint))
     logInfo(s"Registered BlockManager $updatedId")
     updatedId
   }
@@ -85,9 +86,11 @@ class BlockManagerMaster(
   }
 
   /** Get locations as well as status of the blockId from the driver */
-  def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+  def getLocationsAndStatus(
+      blockId: BlockId,
+      requesterHost: String): Option[BlockLocationsAndStatus] = {
     driverEndpoint.askSync[Option[BlockLocationsAndStatus]](
-      GetLocationsAndStatus(blockId))
+      GetLocationsAndStatus(blockId, requesterHost))
   }
 
   /** Get locations of multiple blockIds from the driver */
@@ -220,14 +223,6 @@ class BlockManagerMaster(
     val msg = GetMatchingBlockIds(filter, askSlaves)
     val future = driverEndpoint.askSync[Future[Seq[BlockId]]](msg)
     timeout.awaitResult(future)
-  }
-
-  /**
-   * Find out if the executor has cached blocks. This method does not consider broadcast blocks,
-   * since they are not reported the master.
-   */
-  def hasCachedBlocks(executorId: String): Boolean = {
-    driverEndpoint.askSync[Boolean](HasCachedBlocks(executorId))
   }
 
   /** Stop the driver endpoint, called only on the Spark driver node */

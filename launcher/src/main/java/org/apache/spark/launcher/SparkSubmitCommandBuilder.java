@@ -267,13 +267,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // We don't want the client to specify Xmx. These have to be set by their corresponding
     // memory flag --driver-memory or configuration entry spark.driver.memory
+    String driverDefaultJavaOptions = config.get(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS);
+    checkJavaOptions(driverDefaultJavaOptions);
     String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
-    if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
-      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
-                   "java options (was %s). Use the corresponding --driver-memory or " +
-                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
-      throw new IllegalArgumentException(msg);
-    }
+    checkJavaOptions(driverExtraJavaOptions);
 
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
@@ -289,6 +286,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xmx" + memory);
+      addOptionString(cmd, driverDefaultJavaOptions);
       addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
@@ -297,6 +295,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
     return cmd;
+  }
+
+  private void checkJavaOptions(String javaOptions) {
+    if (!isEmpty(javaOptions) && javaOptions.contains("Xmx")) {
+      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
+        "java options (was %s). Use the corresponding --driver-memory or " +
+        "spark.driver.memory configuration instead.", javaOptions);
+      throw new IllegalArgumentException(msg);
+    }
   }
 
   private List<String> buildPySparkShellCommand(Map<String, String> env) throws IOException {
@@ -455,6 +462,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
           break;
         case CONF:
+          checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
           checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);

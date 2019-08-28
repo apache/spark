@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -32,10 +33,13 @@ import org.apache.spark.sql.internal.SQLConf
  *
  *     -> OrcReadSchemaSuite
  *     -> VectorizedOrcReadSchemaSuite
+ *     -> MergedOrcReadSchemaSuite
  *
  *     -> ParquetReadSchemaSuite
  *     -> VectorizedParquetReadSchemaSuite
  *     -> MergedParquetReadSchemaSuite
+ *
+ *     -> AvroReadSchemaSuite
  */
 
 /**
@@ -72,7 +76,10 @@ class HeaderCSVReadSchemaSuite
 
 class JsonReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest
   with IntegralTypeTest
   with ToDoubleTypeTest
@@ -84,7 +91,10 @@ class JsonReadSchemaSuite
 
 class OrcReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest {
 
   override val format: String = "orc"
@@ -103,7 +113,10 @@ class OrcReadSchemaSuite
 
 class VectorizedOrcReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest
   with BooleanTypeTest
   with IntegralTypeTest
@@ -123,9 +136,31 @@ class VectorizedOrcReadSchemaSuite
   }
 }
 
+class MergedOrcReadSchemaSuite
+  extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
+  with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
+  with ChangePositionTest
+  with BooleanTypeTest
+  with IntegralTypeTest
+  with ToDoubleTypeTest {
+
+  override val format: String = "orc"
+
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.ORC_SCHEMA_MERGING_ENABLED.key, "true")
+}
+
 class ParquetReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest {
 
   override val format: String = "parquet"
@@ -144,7 +179,10 @@ class ParquetReadSchemaSuite
 
 class VectorizedParquetReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest {
 
   override val format: String = "parquet"
@@ -163,7 +201,10 @@ class VectorizedParquetReadSchemaSuite
 
 class MergedParquetReadSchemaSuite
   extends ReadSchemaSuite
+  with AddColumnIntoTheMiddleTest
   with HideColumnInTheMiddleTest
+  with AddNestedColumnTest
+  with HideNestedColumnTest
   with ChangePositionTest {
 
   override val format: String = "parquet"

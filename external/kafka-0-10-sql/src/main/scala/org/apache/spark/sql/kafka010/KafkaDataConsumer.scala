@@ -27,6 +27,7 @@ import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.AvailableOffsetRange
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.util.UninterruptibleThread
@@ -77,7 +78,7 @@ private[kafka010] sealed trait KafkaDataConsumer {
   def release(): Unit
 
   /** Reference to the internal implementation that this wrapper delegates to */
-  protected def internalConsumer: InternalKafkaConsumer
+  def internalConsumer: InternalKafkaConsumer
 }
 
 
@@ -197,7 +198,10 @@ private[kafka010] case class InternalKafkaConsumer(
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[Array[Byte], Array[Byte]] = {
-    val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParams)
+    val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
+    val c = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
@@ -343,7 +347,7 @@ private[kafka010] case class InternalKafkaConsumer(
    * consumer's `isolation.level` is `read_committed`), it will return a `FetchedRecord` with the
    * next offset to fetch.
    *
-   * This method also will try the best to detect data loss. If `failOnDataLoss` is true`, it will
+   * This method also will try the best to detect data loss. If `failOnDataLoss` is `true`, it will
    * throw an exception when we detect an unavailable offset. If `failOnDataLoss` is `false`, this
    * method will return `null` if the next available record is within [offset, untilOffset).
    *
@@ -508,7 +512,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     override def release(): Unit = { internalConsumer.close() }
   }
 
-  private case class CacheKey(groupId: String, topicPartition: TopicPartition) {
+  private[kafka010] case class CacheKey(groupId: String, topicPartition: TopicPartition) {
     def this(topicPartition: TopicPartition, kafkaParams: ju.Map[String, Object]) =
       this(kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String], topicPartition)
   }
@@ -517,9 +521,9 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   // - We make a best-effort attempt to maintain the max size of the cache as configured capacity.
   //   The capacity is not guaranteed to be maintained, especially when there are more active
   //   tasks simultaneously using consumers than the capacity.
-  private lazy val cache = {
+  private[kafka010] lazy val cache = {
     val conf = SparkEnv.get.conf
-    val capacity = conf.getInt("spark.sql.kafkaConsumerCache.capacity", 64)
+    val capacity = conf.get(CONSUMER_CACHE_CAPACITY)
     new ju.LinkedHashMap[CacheKey, InternalKafkaConsumer](capacity, 0.75f, true) {
       override def removeEldestEntry(
         entry: ju.Map.Entry[CacheKey, InternalKafkaConsumer]): Boolean = {

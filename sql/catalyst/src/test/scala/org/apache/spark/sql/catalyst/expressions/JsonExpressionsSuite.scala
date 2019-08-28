@@ -548,7 +548,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
       JsonToStructs(schema, Map.empty, Literal.create(" ", StringType), gmtId),
-      InternalRow(null)
+      null
     )
   }
 
@@ -696,7 +696,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     val struct2 = Literal.create(null, schema2)
     StructsToJson(Map.empty, struct2, gmtId).checkInputDataTypes() match {
       case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("Unable to convert column a of type calendarinterval to JSON"))
+        assert(msg.contains("Unable to convert column a of type interval to JSON"))
       case _ => fail("from_json should not work on interval map value type.")
     }
   }

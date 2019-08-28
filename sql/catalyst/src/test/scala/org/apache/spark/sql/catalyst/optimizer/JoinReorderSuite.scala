@@ -31,15 +31,23 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
+      Batch("Resolve Hints", Once,
+        EliminateResolvedHint) ::
       Batch("Operator Optimizations", FixedPoint(100),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         ReorderJoin,
         PushPredicateThroughJoin,
         ColumnPruning,
         CollapseProject) ::
-      Batch("Join Reorder", Once,
+      Batch("Join Reorder", FixedPoint(1),
         CostBasedJoinReorder) :: Nil
+  }
+
+  object ResolveHints extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Resolve Hints", Once,
+        EliminateResolvedHint) :: Nil
   }
 
   var originalConfCBOEnabled = false
@@ -284,12 +292,89 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(originalPlan, bestPlan)
   }
 
+  test("don't reorder if hints present") {
+    val originalPlan =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .hint("broadcast")
+        .join(
+          t4.join(t3, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+            .hint("broadcast"),
+          Inner,
+          Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+
+    assertEqualPlans(originalPlan, originalPlan)
+
+    val originalPlan2 =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .hint("broadcast")
+        .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+        .hint("broadcast")
+        .join(t3, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t4.k-1-2")))
+
+    assertEqualPlans(originalPlan2, originalPlan2)
+
+    val originalPlan3 =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .join(t4).hint("broadcast")
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
+
+    assertEqualPlans(originalPlan3, originalPlan3)
+  }
+
+  test("reorder below and above the hint node") {
+    val originalPlan =
+      t1.join(t2).join(t3)
+        .where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+          (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .hint("broadcast").join(t4)
+
+    val bestPlan =
+    t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+      .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+      .select(outputsOf(t1, t2, t3): _*)
+      .hint("broadcast").join(t4)
+
+    assertEqualPlans(originalPlan, bestPlan)
+
+    val originalPlan2 =
+      t1.join(t2).join(t3)
+        .where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+          (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t4.hint("broadcast"))
+
+    val bestPlan2 =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(outputsOf(t1, t2, t3): _*)
+        .join(t4.hint("broadcast"))
+
+    assertEqualPlans(originalPlan2, bestPlan2)
+
+    val originalPlan3 =
+      t1.join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .hint("broadcast")
+        .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
+
+    val bestPlan3 =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(outputsOf(t1, t2, t3): _*)
+        .hint("broadcast")
+        .join(t4, Inner, Some(nameToAttr("t4.v-1-10") === nameToAttr("t3.v-1-100")))
+        .join(t5, Inner, Some(nameToAttr("t5.v-1-5") === nameToAttr("t3.v-1-100")))
+
+    assertEqualPlans(originalPlan3, bestPlan3)
+  }
+
   private def assertEqualPlans(
       originalPlan: LogicalPlan,
       groundTruthBestPlan: LogicalPlan): Unit = {
     val analyzed = originalPlan.analyze
     val optimized = Optimize.execute(analyzed)
-    val expected = groundTruthBestPlan.analyze
+    val expected = ResolveHints.execute(groundTruthBestPlan.analyze)
 
     assert(analyzed.sameOutput(expected)) // if this fails, the expected plan itself is incorrect
     assert(analyzed.sameOutput(optimized))

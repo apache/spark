@@ -326,8 +326,8 @@ private[hive] object HiveMetastoreCatalog {
     // Merge missing nullable fields to inferred schema and build a case-insensitive field map.
     val inferredFields = StructType(inferredSchema ++ missingNullables)
       .map(f => f.name.toLowerCase -> f).toMap
+    StructType(metastoreSchema.map(f => f.copy(name = inferredFields(f.name.toLowerCase).name)))
     // scalastyle:on caselocale
-    StructType(metastoreSchema.map(f => f.copy(name = inferredFields(f.name).name)))
   } catch {
     case NonFatal(_) =>
       val msg = s"""Detected conflicting schemas when merging the schema obtained from the Hive

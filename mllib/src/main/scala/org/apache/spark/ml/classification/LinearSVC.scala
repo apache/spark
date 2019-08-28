@@ -248,7 +248,7 @@ class LinearSVC @Since("2.2.0") (
         scaledObjectiveHistory += state.adjustedValue
       }
 
-      bcFeaturesStd.destroy(blocking = false)
+      bcFeaturesStd.destroy()
       if (state == null) {
         val msg = s"${optimizer.getClass.getName} failed."
         instr.logError(msg)
@@ -311,9 +311,6 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
   setDefault(threshold, 0.0)
-
-  @Since("2.2.0")
-  def setWeightCol(value: Double): this.type = set(threshold, value)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept
