@@ -66,7 +66,7 @@ Assuming the `students` table has already been created and populated.
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
      + -------------- + ------------------------------ + -------------- +
@@ -92,7 +92,7 @@ Assuming the `students` table has already been created and populated.
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Ashua Hill     | 456 Erica Ct, Cupertino        | 111111         |
      + -------------- + ------------------------------ + -------------- +
@@ -107,20 +107,20 @@ Assuming the `persons` table has already been created and populated.
  SELECT * FROM persons;
 
       + -------------- + ------------------------------ + -------------- +
-      | Name           | Address                        | SSN            |
+      | name           | address                        | ssn            |
       + -------------- + ------------------------------ + -------------- +
       | Dora Williams  | 134 Forest Ave, Melo Park      | 123456789      |
       + -------------- + ------------------------------ + -------------- +
       | Eddie Davis    | 245 Market St, Milpitas        | 345678901      |
       + -------------- + ------------------------------ + ---------------+
 
- INSERT OVERWRITE students PARTITION (StudentID = 222222)
-     SELECT Name, Address FROM persons WHERE name = "Dora Williams";
+ INSERT OVERWRITE students PARTITION (student_id = 222222)
+     SELECT name, address FROM persons WHERE name = "Dora Williams";
 
  SELECT * FROM students;
 
       + -------------- + ------------------------------ + -------------- +
-      | Name           | Address                        | StudentID      |
+      | name           | address                        | student_id     |
       + -------------- + ------------------------------ + -------------- +
       | Ashua Hill     | 456 Erica Ct, Cupertino        | 111111         |
       + -------------- + ------------------------------ + -------------- +
@@ -129,25 +129,25 @@ Assuming the `persons` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a TABLE Statement
-Assuming the `visitingStudents` table has already been created and populated.
+Assuming the `visiting_students` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM visitingStudents;
+ SELECT * FROM visiting_students;
 
       + -------------- + ------------------------------ + -------------- +
-      | Name           | Address                        | StudentID      |
+      | name           | address                        | student_id     |
       + -------------- + ------------------------------ + -------------- +
       | Fleur Laurent  | 345 Copper St, London          | 777777         |
       + -------------- + ------------------------------ + -------------- +
       | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
       + -------------- + ------------------------------ + -------------- +
 
- INSERT OVERWRITE students TABLE visitingStudents;
+ INSERT OVERWRITE students TABLE visiting_students;
 
  SELECT * FROM students;
 
       + -------------- + ------------------------------ + -------------- +
-      | Name           | Address                        | StudentID      |
+      | name           | address                        | student_id     |
       + -------------- + ------------------------------ + -------------- +
       | Fleur Laurent  | 345 Copper St, London          | 777777         |
       + -------------- + ------------------------------ + -------------- +
@@ -162,7 +162,7 @@ Assuming the `applicants` table has already been created and populated.
  SELECT * FROM applicants;
 
      + -------------- + ------------------------------ + -------------- + -------------- +
-     | Name           | Address                        | StudentID      | Qualified      |
+     | name           | address                        | student_id     | qualified      |
      + -------------- + ------------------------------ + -------------- + -------------- +
      | Helen Davis    | 469 Mission St, San Diego      | 999999         | true           |
      + -------------- + ------------------------------ + -------------- + -------------- +
@@ -172,12 +172,12 @@ Assuming the `applicants` table has already been created and populated.
      + -------------- + ------------------------------ + -------------- + -------------- +
 
  INSERT OVERWRITE students;
-      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE;
+      FROM applicants SELECT name, address, id applicants WHERE qualified = true;
 
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Helen Davis    | 469 Mission St, San Diego      | 999999         |
      + -------------- + ------------------------------ + -------------- +

@@ -60,8 +60,8 @@ INSERT INTO [ TABLE ] table_name
 ### Examples
 #### Single Row Insert Using a VALUES Clause
 {% highlight sql %}
- CREATE TABLE students (Name VARCHAR(64), Address VARCHAR(64), StudentID INT)
-     USING PARQUET PARTITIONED BY (StudentID);
+ CREATE TABLE students (name VARCHAR(64), address VARCHAR(64), student_id INT)
+     USING PARQUET PARTITIONED BY (student_id);
 
  INSERT INTO students
      VALUES ('Amy Smith', '123 Park Ave, San Jose', 111111);
@@ -69,7 +69,7 @@ INSERT INTO [ TABLE ] table_name
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
      + -------------- + ------------------------------ + -------------- +
@@ -84,7 +84,7 @@ INSERT INTO [ TABLE ] table_name
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
      + -------------- + ------------------------------ + -------------- +
@@ -101,20 +101,20 @@ Assuming the `persons` table has already been created and populated.
  SELECT * FROM persons;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | SSN            |
+     | name           | address                        | ssn            |
      + -------------- + ------------------------------ + -------------- +
      | Dora Williams  | 134 Forest Ave, Melo Park      | 123456789      |
      + -------------- + ------------------------------ + -------------- +
      | Eddie Davis    | 245 Market St, Milpitas        | 345678901      |
      + -------------- + ------------------------------ + ---------------+
 
- INSERT INTO students PARTITION (StudentID = 444444)
-     SELECT Name, Address FROM persons WHERE name = "Dora Williams";
+ INSERT INTO students PARTITION (student_id = 444444)
+     SELECT name, address FROM persons WHERE name = "Dora Williams";
 
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
      + -------------- + ------------------------------ + -------------- +
@@ -127,25 +127,25 @@ Assuming the `persons` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a TABLE Statement
-Assuming the `visitingStudents` table has already been created and populated.
+Assuming the `visiting_students` table has already been created and populated.
 
 {% highlight sql %}
- SELECT * FROM visitingStudents;
+ SELECT * FROM visiting_students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Fleur Laurent  | 345 Copper St, London          | 777777         |
      + -------------- + ------------------------------ + -------------- +
      | Gordon Martin  | 779 Lake Ave, Oxford           | 888888         |
      + -------------- + ------------------------------ + -------------- +
 
- INSERT INTO students TABLE visitingStudents;
+ INSERT INTO students TABLE visiting_students;
 
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
      + -------------- + ------------------------------ + -------------- +
@@ -168,7 +168,7 @@ Assuming the `applicants` table has already been created and populated.
  SELECT * FROM applicants;
 
      + -------------- + ------------------------------ + -------------- + -------------- +
-     | Name           | Address                        | StudentID      | Qualified      |
+     | name           | address                        | student_id     | qualified      |
      + -------------- + ------------------------------ + -------------- + -------------- +
      | Helen Davis    | 469 Mission St, San Diego      | 999999         | true           |
      + -------------- + ------------------------------ + -------------- + -------------- +
@@ -178,12 +178,12 @@ Assuming the `applicants` table has already been created and populated.
      + -------------- + ------------------------------ + -------------- + -------------- +
 
  INSERT INTO students
-      FROM applicants SELECT Name, Address, ID applicants WHERE Qualified = TRUE;
+      FROM applicants SELECT name, address, id applicants WHERE qualified = true;
 
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
-     | Name           | Address                        | StudentID      |
+     | name           | address                        | student_id     |
      + -------------- + ------------------------------ + -------------- +
      | Amy Smith      | 123 Park Ave, San Jose         | 111111         |
      + -------------- + ------------------------------ + -------------- +
