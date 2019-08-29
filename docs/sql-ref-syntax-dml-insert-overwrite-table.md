@@ -185,7 +185,7 @@ Assuming the `applicants` table has already been created and populated.
      + -------------- + ------------------------------ + -------------- +
 {% endhighlight %}
 
-Related Statements:
+### Related Statements
   * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
   * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
   * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
