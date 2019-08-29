@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectComm
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
 import org.apache.spark.sql.functions.{lit, udf}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.QueryExecutionListener
@@ -36,7 +36,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
 
 private case class FunctionResult(f1: String, f2: String)
 
-class UDFSuite extends QueryTest with SharedSQLContext {
+class UDFSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("built-in fixed arity expressions") {

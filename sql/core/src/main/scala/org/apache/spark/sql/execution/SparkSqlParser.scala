@@ -149,21 +149,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{
-   *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
-   * }}}
-   */
-  override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
-    ShowTablesCommand(
-      Option(ctx.db).map(_.getText),
-      Option(ctx.pattern).map(string),
-      isExtended = false,
-      partitionSpec = None)
-  }
-
-  /**
-   * Create a [[ShowTablesCommand]] logical plan.
-   * Example SQL :
-   * {{{
    *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
    *   [PARTITION(partition_spec)];
    * }}}
@@ -304,13 +289,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create an [[ExplainCommand]] logical plan.
    * The syntax of using this command in SQL is:
    * {{{
-   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
    * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.FORMATTED != null) {
-      operationNotAllowed("EXPLAIN FORMATTED", ctx)
-    }
     if (ctx.LOGICAL != null) {
       operationNotAllowed("EXPLAIN LOGICAL", ctx)
     }
@@ -323,7 +305,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         logicalPlan = statement,
         extended = ctx.EXTENDED != null,
         codegen = ctx.CODEGEN != null,
-        cost = ctx.COST != null)
+        cost = ctx.COST != null,
+        formatted = ctx.FORMATTED != null)
     }
   }
 
@@ -985,7 +968,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         } else {
           CreateTable(tableDescWithPartitionColNames, mode, Some(q))
         }
-      case None => CreateTable(tableDesc, mode, None)
+      case None =>
+        // When creating partitioned table, we must specify data type for the partition columns.
+        if (Option(ctx.partitionColumnNames).isDefined) {
+          val errorMessage = "Must specify a data type for each partition column while creating " +
+            "Hive partitioned table."
+          operationNotAllowed(errorMessage, ctx)
+        }
+
+        CreateTable(tableDesc, mode, None)
     }
   }
 

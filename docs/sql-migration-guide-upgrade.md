@@ -23,6 +23,8 @@ license: |
 {:toc}
 
 ## Upgrading From Spark SQL 2.4 to 3.0
+  - Since Spark 3.0, configuration `spark.sql.crossJoin.enabled` become internal configuration, and is true by default, so by default spark won't raise exception on sql with implicit cross join.
+
   - Since Spark 3.0, we reversed argument order of the trim function from `TRIM(trimStr, str)` to `TRIM(str, trimStr)` to be compatible with other databases.
 
   - Since Spark 3.0, PySpark requires a Pandas version of 0.23.2 or higher to use Pandas related functionality, such as `toPandas`, `createDataFrame` from Pandas DataFrame, etc.
@@ -160,6 +162,95 @@ license: |
   - The result of `java.lang.Math`'s `log`, `log1p`, `exp`, `expm1`, and `pow` may vary across platforms. In Spark 3.0, the result of the equivalent SQL functions (including related SQL functions like `LOG10`) return values consistent with `java.lang.StrictMath`. In virtually all cases this makes no difference in the return value, and the difference is very small, but may not exactly match `java.lang.Math` on x86 platforms in cases like, for example, `log(3.0)`, whose value varies between `Math.log()` and `StrictMath.log()`.
 
   - Since Spark 3.0, Dataset query fails if it contains ambiguous column reference that is caused by self join. A typical example: `val df1 = ...; val df2 = df1.filter(...);`, then `df1.join(df2, df1("a") > df2("a"))` returns an empty result which is quite confusing. This is because Spark cannot resolve Dataset column references that point to tables being self joined, and `df1("a")` is exactly the same as `df2("a")` in Spark. To restore the behavior before Spark 3.0, you can set `spark.sql.analyzer.failAmbiguousSelfJoin` to `false`.
+
+  - Since Spark 3.0, `Cast` function processes string literals such as 'Infinity', '+Infinity', '-Infinity', 'NaN', 'Inf', '+Inf', '-Inf' in case insensitive manner when casting the literals to `Double` or `Float` type to ensure greater compatibility with other database systems. This behaviour change is illustrated in the table below:
+    <table class="table">
+        <tr>
+          <th>
+            <b>Operation</b>
+          </th>
+          <th>
+            <b>Result prior to Spark 3.0</b>
+          </th>
+          <th>
+            <b>Result starting Spark 3.0</b>
+          </th>
+        </tr>
+        <tr>
+          <td>
+            CAST('infinity' AS DOUBLE)<br>
+            CAST('+infinity' AS DOUBLE)<br>
+            CAST('inf' AS DOUBLE)<br>
+            CAST('+inf' AS DOUBLE)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Double.PositiveInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('-infinity' AS DOUBLE)<br>
+            CAST('-inf' AS DOUBLE)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Double.NegativeInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('infinity' AS FLOAT)<br>
+            CAST('+infinity' AS FLOAT)<br>
+            CAST('inf' AS FLOAT)<br>
+            CAST('+inf' AS FLOAT)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Float.PositiveInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('-infinity' AS FLOAT)<br>
+            CAST('-inf' AS FLOAT)<br>
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Float.NegativeInfinity
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('nan' AS DOUBLE)
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Double.NaN
+          </td>
+        </tr>
+        <tr>
+          <td>
+            CAST('nan' AS FLOAT)
+          </td>
+          <td>
+            NULL
+          </td>
+          <td>
+            Float.NaN
+          </td>
+        </tr>
+    </table>
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 

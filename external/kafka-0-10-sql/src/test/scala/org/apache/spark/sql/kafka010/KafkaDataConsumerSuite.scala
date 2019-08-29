@@ -20,22 +20,23 @@ package org.apache.spark.sql.kafka010
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.Duration
 import scala.util.Random
 
-import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{TaskContext, TaskContextImpl}
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
+import org.apache.spark.sql.test.SharedSparkSession
 
-class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
+class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester {
 
   protected var testUtils: KafkaTestUtils = _
+  private val topic = "topic" + Random.nextInt()
+  private val topicPartition = new TopicPartition(topic, 0)
+  private val groupId = "groupId"
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -51,6 +52,15 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
     super.afterAll()
   }
 
+  private def getKafkaParams() = Map[String, Object](
+    GROUP_ID_CONFIG -> "groupId",
+    BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress,
+    KEY_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
+    VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
+    AUTO_OFFSET_RESET_CONFIG -> "earliest",
+    ENABLE_AUTO_COMMIT_CONFIG -> "false"
+  ).asJava
+
   test("SPARK-19886: Report error cause correctly in reportDataLoss") {
     val cause = new Exception("D'oh!")
     val reportDataLoss = PrivateMethod[Unit]('reportDataLoss0)
@@ -60,23 +70,40 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
     assert(e.getCause === cause)
   }
 
+  test("new KafkaDataConsumer instance in case of Task retry") {
+    try {
+      KafkaDataConsumer.cache.clear()
+
+      val kafkaParams = getKafkaParams()
+      val key = new CacheKey(groupId, topicPartition)
+
+      val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
+      TaskContext.setTaskContext(context1)
+      val consumer1 = KafkaDataConsumer.acquire(topicPartition, kafkaParams, true)
+      consumer1.release()
+
+      assert(KafkaDataConsumer.cache.size() == 1)
+      assert(KafkaDataConsumer.cache.get(key).eq(consumer1.internalConsumer))
+
+      val context2 = new TaskContextImpl(0, 0, 0, 0, 1, null, null, null)
+      TaskContext.setTaskContext(context2)
+      val consumer2 = KafkaDataConsumer.acquire(topicPartition, kafkaParams, true)
+      consumer2.release()
+
+      // The first consumer should be removed from cache and new non-cached should be returned
+      assert(KafkaDataConsumer.cache.size() == 0)
+      assert(consumer1.internalConsumer.ne(consumer2.internalConsumer))
+    } finally {
+      TaskContext.unset()
+    }
+  }
+
   test("SPARK-23623: concurrent use of KafkaDataConsumer") {
-    val topic = "topic" + Random.nextInt()
     val data = (1 to 1000).map(_.toString)
     testUtils.createTopic(topic, 1)
     testUtils.sendMessages(topic, data.toArray)
-    val topicPartition = new TopicPartition(topic, 0)
 
-    import ConsumerConfig._
-    val kafkaParams = Map[String, Object](
-      GROUP_ID_CONFIG -> "groupId",
-      BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress,
-      KEY_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
-      VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
-      AUTO_OFFSET_RESET_CONFIG -> "earliest",
-      ENABLE_AUTO_COMMIT_CONFIG -> "false"
-    )
-
+    val kafkaParams = getKafkaParams()
     val numThreads = 100
     val numConsumerUsages = 500
 
@@ -90,8 +117,7 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
         null
       }
       TaskContext.setTaskContext(taskContext)
-      val consumer = KafkaDataConsumer.acquire(
-        topicPartition, kafkaParams.asJava, useCache)
+      val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache)
       try {
         val range = consumer.getAvailableOffsetRange()
         val rcvd = range.earliest until range.latest map { offset =>

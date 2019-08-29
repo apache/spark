@@ -63,8 +63,8 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.5</code> and " +
-        "<code>3.0.0</code> through <code>3.1.1</code>.")
+        "<code>0.12.0</code> through <code>2.3.6</code> and " +
+        "<code>3.0.0</code> through <code>3.1.2</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -338,18 +338,20 @@ private[spark] object HiveUtils extends Logging {
       }
 
       val classLoader = Utils.getContextOrSparkClassLoader
-      val jars = allJars(classLoader)
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+      val jars: Array[URL] = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
         // Do nothing. The system classloader is no longer a URLClassLoader in Java 9,
-        // so it won't match the case in allJars above. It no longer exposes URLs of
+        // so it won't match the case in allJars. It no longer exposes URLs of
         // the system classpath
+        Array.empty[URL]
       } else {
+        val loadedJars = allJars(classLoader)
         // Verify at least one jar was found
-        if (jars.length == 0) {
+        if (loadedJars.length == 0) {
           throw new IllegalArgumentException(
             "Unable to locate hive jars to connect to metastore. " +
               s"Please set ${HIVE_METASTORE_JARS.key}.")
         }
+        loadedJars
       }
 
       logInfo(

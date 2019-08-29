@@ -34,8 +34,8 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -136,8 +136,8 @@ class DecisionTreeClassifier @Since("1.4.0") (
     val strategy = getOldStrategy(categoricalFeatures, numClasses)
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
-      probabilityCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain, maxMemoryInMB,
-      cacheNodeIds, checkpointInterval, impurity, seed)
+      probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -208,6 +208,18 @@ class DecisionTreeClassificationModel private[ml] (
 
   override def predict(features: Vector): Double = {
     rootNode.predictImpl(features).prediction
+  }
+
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
+
+    val outputData = super.transform(dataset)
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))))
+    } else {
+      outputData
+    }
   }
 
   override protected def predictRaw(features: Vector): Vector = {
