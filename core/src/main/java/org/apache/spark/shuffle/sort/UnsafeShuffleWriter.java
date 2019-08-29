@@ -460,7 +460,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             mergedFileOutputChannel,
             spillInputChannelPositions[i],
             partitionLengthInSpill,
-            sparkConf.getInt("spark.file.transferToNumCalls", Integer.MAX_VALUE));
+            sparkConf.getInt("spark.file.transferToZeroReturns", Integer.MAX_VALUE));
           spillInputChannelPositions[i] += partitionLengthInSpill;
           writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           bytesWrittenToMergedFile += partitionLengthInSpill;

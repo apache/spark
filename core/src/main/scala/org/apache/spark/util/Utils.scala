@@ -336,7 +336,7 @@ private[spark] object Utils extends Logging {
       out: OutputStream,
       closeStreams: Boolean = false,
       transferToEnabled: Boolean = false,
-      numTransferToCalls: Int = Int.MaxValue): Long = {
+      transferToZeroReturns: Int = Int.MaxValue): Long = {
     tryWithSafeFinally {
       if (in.isInstanceOf[FileInputStream] && out.isInstanceOf[FileOutputStream]
         && transferToEnabled) {
@@ -344,7 +344,7 @@ private[spark] object Utils extends Logging {
         val inChannel = in.asInstanceOf[FileInputStream].getChannel()
         val outChannel = out.asInstanceOf[FileOutputStream].getChannel()
         val size = inChannel.size()
-        copyFileStreamNIO(inChannel, outChannel, 0, size, numTransferToCalls)
+        copyFileStreamNIO(inChannel, outChannel, 0, size, transferToZeroReturns)
         size
       } else {
         var count = 0L
@@ -419,7 +419,7 @@ private[spark] object Utils extends Logging {
       output: WritableByteChannel,
       startPosition: Long,
       bytesToCopy: Long,
-      numTransferToCalls: Int): Unit = {
+      transferToZeroReturns: Int): Unit = {
     val outputInitialState = output match {
       case outputFileChannel: FileChannel =>
         Some((outputFileChannel.position(), outputFileChannel))
@@ -428,10 +428,20 @@ private[spark] object Utils extends Logging {
     var count = 0L
     var num = 0
     // In case transferTo method transferred less data than we have required.
-    while (count < bytesToCopy && num < numTransferToCalls) {
-      count += input.transferTo(count + startPosition, bytesToCopy - count, output)
-      num += 1
+    while (count < bytesToCopy && num < transferToZeroReturns) {
+      val ret = input.transferTo(count + startPosition, bytesToCopy - count, output)
+      count += ret
+      if (ret <= 0L) {
+        num += 1
+      }
     }
+
+    if (count < bytesToCopy && num >= transferToZeroReturns) {
+      throw new IllegalStateException(s"Number of zero return 'transferTo' $num reaches " +
+        s"threshold $transferToZeroReturns, but the copied size $count is still less then the " +
+        s"expected byte $bytesToCopy, this potentially indicates the environment problem.")
+    }
+
     assert(count == bytesToCopy,
       s"request to copy $bytesToCopy bytes, but actually copied $count bytes.")
 

@@ -1408,10 +1408,12 @@ package object config {
     .createOptional
 
   private[spark] val TRANSFERTO_NUM_CALLS =
-    ConfigBuilder("spark.file.transferToNumCalls")
-      .doc("Number to control the calls Java NIO's transferTo. In some occasional case, Spark's " +
-        "copyFileStreamNIO will run into infinite loop, we should control the calls and jump out " +
-        "of loop int time. This is an internal configuration, user shouldn't configure it normally")
+    ConfigBuilder("spark.file.transferToZeroReturns")
+      .doc("To track the numbers of 0 return value of Java NIO's transferTo. " +
+        "In some occasional case, Spark's copyFileStreamNIO will always return zero and " +
+        "run into infinite loop, this configuration is used to track the number of return 0 and " +
+        "jump out of loop in time. This is an internal configuration, " +
+        "user shouldn't configure it normally")
       .intConf
       .createWithDefault(Int.MaxValue)
 }
