@@ -15,35 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
 import java.util.UUID
-import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetSchemasOperation
-import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
+import org.apache.hive.service.cli.operation.GetTableTypesOperation
 import org.apache.hive.service.cli.session.HiveSession
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
- * Spark's own GetSchemasOperation
+ * Spark's own GetTableTypesOperation
  *
  * @param sqlContext SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. null if not applicable.
- * @param schemaName database name, null or a concrete database name
  */
-private[hive] class SparkGetSchemasOperation(
+private[hive] class SparkGetTableTypesOperation(
     sqlContext: SQLContext,
-    parentSession: HiveSession,
-    catalogName: String,
-    schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
+    parentSession: HiveSession)
+  extends GetTableTypesOperation(parentSession) with SparkMetadataOperationUtils with Logging {
 
   private var statementId: String = _
 
@@ -54,9 +49,7 @@ private[hive] class SparkGetSchemasOperation(
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
-    // Do not change cmdStr. It's used for Hive auditing and authorization.
-    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val logMsg = s"Listing databases '$cmdStr'"
+    val logMsg = "Listing table types"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -64,7 +57,7 @@ private[hive] class SparkGetSchemasOperation(
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     if (isAuthV2Enabled) {
-      authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_TABLETYPES, null)
     }
 
     HiveThriftServer2.listener.onStatementStart(
@@ -75,15 +68,9 @@ private[hive] class SparkGetSchemasOperation(
       parentSession.getUsername)
 
     try {
-      val schemaPattern = convertSchemaPattern(schemaName)
-      sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
-        rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
-      }
-
-      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
-      val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-      if (databasePattern.matcher(globalTempViewDb).matches()) {
-        rowSet.addRow(Array[AnyRef](globalTempViewDb, DEFAULT_HIVE_CATALOG))
+      val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet
+      tableTypes.foreach { tableType =>
+        rowSet.addRow(Array[AnyRef](tableType))
       }
       setState(OperationState.FINISHED)
     } catch {

@@ -15,26 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
 import java.util.UUID
 import java.util.regex.Pattern
 
-import scala.collection.JavaConverters.seqAsJavaListConverter
-
-import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
+import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetColumnsOperation
 import org.apache.hive.service.cli.session.HiveSession
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils => SparkUtils}
+
+import scala.collection.JavaConverters.seqAsJavaListConverter
 
 /**
  * Spark's own SparkGetColumnsOperation

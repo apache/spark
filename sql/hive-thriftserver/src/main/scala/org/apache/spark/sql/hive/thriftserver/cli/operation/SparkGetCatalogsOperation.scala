@@ -15,30 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
 import java.util.UUID
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetTableTypesOperation
+import org.apache.hive.service.cli.operation.GetCatalogsOperation
 import org.apache.hive.service.cli.session.HiveSession
-
+import org.apache.hive.service.cli.{HiveSQLException, OperationState}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
- * Spark's own GetTableTypesOperation
+ * Spark's own GetCatalogsOperation
  *
  * @param sqlContext SQLContext to use
  * @param parentSession a HiveSession from SessionManager
  */
-private[hive] class SparkGetTableTypesOperation(
+private[hive] class SparkGetCatalogsOperation(
     sqlContext: SQLContext,
     parentSession: HiveSession)
-  extends GetTableTypesOperation(parentSession) with SparkMetadataOperationUtils with Logging {
+  extends GetCatalogsOperation(parentSession) with Logging {
 
   private var statementId: String = _
 
@@ -49,16 +48,12 @@ private[hive] class SparkGetTableTypesOperation(
 
   override def runInternal(): Unit = {
     statementId = UUID.randomUUID().toString
-    val logMsg = "Listing table types"
+    val logMsg = "Listing catalogs"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    if (isAuthV2Enabled) {
-      authorizeMetaGets(HiveOperationType.GET_TABLETYPES, null)
-    }
 
     HiveThriftServer2.listener.onStatementStart(
       statementId,
@@ -68,9 +63,8 @@ private[hive] class SparkGetTableTypesOperation(
       parentSession.getUsername)
 
     try {
-      val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet
-      tableTypes.foreach { tableType =>
-        rowSet.addRow(Array[AnyRef](tableType))
+      if (isAuthV2Enabled) {
+        authorizeMetaGets(HiveOperationType.GET_CATALOGS, null)
       }
       setState(OperationState.FINISHED)
     } catch {

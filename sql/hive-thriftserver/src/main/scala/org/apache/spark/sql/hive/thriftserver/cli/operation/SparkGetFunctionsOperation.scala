@@ -15,45 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
-import java.util.{List => JList, UUID}
-import java.util.regex.Pattern
+import java.sql.DatabaseMetaData
+import java.util.UUID
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObjectUtils
+import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetTablesOperation
+import org.apache.hive.service.cli.operation.GetFunctionsOperation
+import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.util.{Utils => SparkUtils}
 
+import scala.collection.JavaConverters.seqAsJavaListConverter
+
 /**
- * Spark's own GetTablesOperation
+ * Spark's own GetFunctionsOperation
  *
  * @param sqlContext SQLContext to use
  * @param parentSession a HiveSession from SessionManager
  * @param catalogName catalog name. null if not applicable
  * @param schemaName database name, null or a concrete database name
- * @param tableName table name pattern
- * @param tableTypes list of allowed table types, e.g. "TABLE", "VIEW"
+ * @param functionName function name pattern
  */
-private[hive] class SparkGetTablesOperation(
+private[hive] class SparkGetFunctionsOperation(
     sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
     schemaName: String,
-    tableName: String,
-    tableTypes: JList[String])
-  extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-    with SparkMetadataOperationUtils with Logging {
+    functionName: String)
+  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName) with Logging {
 
   private var statementId: String = _
 
@@ -66,8 +60,7 @@ private[hive] class SparkGetTablesOperation(
     statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
-    val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
+    val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -75,14 +68,16 @@ private[hive] class SparkGetTablesOperation(
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     val catalog = sqlContext.sessionState.catalog
+    // get databases for schema pattern
     val schemaPattern = convertSchemaPattern(schemaName)
-    val tablePattern = convertIdentifierPattern(tableName, true)
     val matchingDbs = catalog.listDatabases(schemaPattern)
+    val functionPattern = CLIServiceUtils.patternToRegex(functionName)
 
     if (isAuthV2Enabled) {
+      // authorize this call on the schema objects
       val privObjs =
         HivePrivilegeObjectUtils.getHivePrivDbObjects(seqAsJavaListConverter(matchingDbs).asJava)
-      authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
     }
 
     HiveThriftServer2.listener.onStatementStart(
@@ -93,28 +88,18 @@ private[hive] class SparkGetTablesOperation(
       parentSession.getUsername)
 
     try {
-      // Tables and views
-      matchingDbs.foreach { dbName =>
-        val tables = catalog.listTables(dbName, tablePattern, includeLocalTempViews = false)
-        catalog.getTablesByName(tables).foreach { table =>
-          val tableType = tableTypeString(table.tableType)
-          if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(tableType)) {
-            addToRowSet(table.database, table.identifier.table, tableType, table.comment)
-          }
-        }
-      }
-
-      // Temporary views and global temporary views
-      if (tableTypes == null || tableTypes.isEmpty || tableTypes.contains(VIEW.name)) {
-        val globalTempViewDb = catalog.globalTempViewManager.database
-        val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-        val tempViews = if (databasePattern.matcher(globalTempViewDb).matches()) {
-          catalog.listTables(globalTempViewDb, tablePattern, includeLocalTempViews = true)
-        } else {
-          catalog.listLocalTempViews(tablePattern)
-        }
-        tempViews.foreach { view =>
-          addToRowSet(view.database.orNull, view.table, VIEW.name, None)
+      matchingDbs.foreach { db =>
+        catalog.listFunctions(db, functionPattern).foreach {
+          case (funcIdentifier, _) =>
+            val info = catalog.lookupFunctionInfo(funcIdentifier)
+            val rowData = Array[AnyRef](
+              DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
+              db, // FUNCTION_SCHEM
+              funcIdentifier.funcName, // FUNCTION_NAME
+              info.getUsage, // REMARKS
+              DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
+              info.getClassName) // SPECIFIC_NAME
+            rowSet.addRow(rowData);
         }
       }
       setState(OperationState.FINISHED)
@@ -126,24 +111,5 @@ private[hive] class SparkGetTablesOperation(
         throw e
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
-  }
-
-  private def addToRowSet(
-      dbName: String,
-      tableName: String,
-      tableType: String,
-      comment: Option[String]): Unit = {
-    val rowData = Array[AnyRef](
-      "",
-      dbName,
-      tableName,
-      tableType,
-      comment.getOrElse(""))
-    // Since HIVE-7575(Hive 2.0.0), adds 5 additional columns to the ResultSet of GetTables.
-    if (HiveUtils.isHive23) {
-      rowSet.addRow(rowData ++ Array(null, null, null, null, null))
-    } else {
-      rowSet.addRow(rowData)
-    }
   }
 }

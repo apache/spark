@@ -15,39 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
-import java.sql.DatabaseMetaData
 import java.util.UUID
+import java.util.regex.Pattern
 
-import scala.collection.JavaConverters.seqAsJavaListConverter
-
-import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetFunctionsOperation
+import org.apache.hive.service.cli.operation.GetSchemasOperation
 import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
 import org.apache.hive.service.cli.session.HiveSession
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
- * Spark's own GetFunctionsOperation
+ * Spark's own GetSchemasOperation
  *
  * @param sqlContext SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. null if not applicable
+ * @param catalogName catalog name. null if not applicable.
  * @param schemaName database name, null or a concrete database name
- * @param functionName function name pattern
  */
-private[hive] class SparkGetFunctionsOperation(
+private[hive] class SparkGetSchemasOperation(
     sqlContext: SQLContext,
     parentSession: HiveSession,
     catalogName: String,
-    schemaName: String,
-    functionName: String)
-  extends GetFunctionsOperation(parentSession, catalogName, schemaName, functionName) with Logging {
+    schemaName: String)
+  extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
 
   private var statementId: String = _
 
@@ -60,24 +56,15 @@ private[hive] class SparkGetFunctionsOperation(
     statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
-    val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
+    val logMsg = s"Listing databases '$cmdStr'"
     logInfo(s"$logMsg with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    val catalog = sqlContext.sessionState.catalog
-    // get databases for schema pattern
-    val schemaPattern = convertSchemaPattern(schemaName)
-    val matchingDbs = catalog.listDatabases(schemaPattern)
-    val functionPattern = CLIServiceUtils.patternToRegex(functionName)
-
     if (isAuthV2Enabled) {
-      // authorize this call on the schema objects
-      val privObjs =
-        HivePrivilegeObjectUtils.getHivePrivDbObjects(seqAsJavaListConverter(matchingDbs).asJava)
-      authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
+      authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
     }
 
     HiveThriftServer2.listener.onStatementStart(
@@ -88,19 +75,15 @@ private[hive] class SparkGetFunctionsOperation(
       parentSession.getUsername)
 
     try {
-      matchingDbs.foreach { db =>
-        catalog.listFunctions(db, functionPattern).foreach {
-          case (funcIdentifier, _) =>
-            val info = catalog.lookupFunctionInfo(funcIdentifier)
-            val rowData = Array[AnyRef](
-              DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
-              db, // FUNCTION_SCHEM
-              funcIdentifier.funcName, // FUNCTION_NAME
-              info.getUsage, // REMARKS
-              DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
-              info.getClassName) // SPECIFIC_NAME
-            rowSet.addRow(rowData);
-        }
+      val schemaPattern = convertSchemaPattern(schemaName)
+      sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
+        rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
+      }
+
+      val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
+      val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
+      if (databasePattern.matcher(globalTempViewDb).matches()) {
+        rowSet.addRow(Array[AnyRef](globalTempViewDb, DEFAULT_HIVE_CATALOG))
       }
       setState(OperationState.FINISHED)
     } catch {

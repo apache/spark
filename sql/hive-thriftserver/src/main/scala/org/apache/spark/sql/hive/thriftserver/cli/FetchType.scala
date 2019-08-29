@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,20 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
+trait FetchType {
+  def toTFetchType: Short
+}
 
-/**
- * Utils for metadata operations.
- */
-private[hive] trait SparkMetadataOperationUtils {
+object FetchType {
 
-  def tableTypeString(tableType: CatalogTableType): String = tableType match {
-    case EXTERNAL | MANAGED => "TABLE"
-    case VIEW => "VIEW"
-    case t =>
-      throw new IllegalArgumentException(s"Unknown table type is found: $t")
+  case object QUERY_OUTPUT extends FetchType {
+    override val toTFetchType: Short = 0
+  }
+
+  case object LOG extends FetchType {
+    override val toTFetchType: Short = 1
+  }
+
+  def getFetchType(tFetchType: Short): FetchType = tFetchType match {
+    case LOG.toTFetchType => LOG
+    case _ => QUERY_OUTPUT
   }
 }

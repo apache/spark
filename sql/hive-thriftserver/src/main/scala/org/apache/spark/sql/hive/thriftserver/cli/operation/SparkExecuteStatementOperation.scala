@@ -15,31 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver
+package org.apache.spark.sql.hive.thriftserver.cli.operation
 
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
-import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
+import java.util.{Arrays, UUID, Map => JMap}
+
+import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.shims.Utils
+import org.apache.hive.service.cli.operation.ExecuteStatementOperation
+import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hive.service.cli.{OperationState, _}
+import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.execution.command.SetCommand
+import org.apache.spark.sql.hive.thriftserver.{HiveThriftServer2, ThriftserverShimUtils, cli}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.{DataFrame, SQLContext, Row => SparkRow}
+import org.apache.spark.util.{Utils => SparkUtils}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
-
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.shims.Utils
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.ExecuteStatementOperation
-import org.apache.hive.service.cli.session.HiveSession
-
-import org.apache.spark.SparkContext
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
-import org.apache.spark.sql.execution.HiveResult
-import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types._
-import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
@@ -277,7 +277,7 @@ private[hive] class SparkExecuteStatementOperation(
     cleanup(OperationState.CANCELED)
   }
 
-  private def cleanup(state: OperationState) {
+  private def cleanup(state: cli.OperationState) {
     setState(state)
     if (runInBackground) {
       val backgroundHandle = getBackgroundHandle()
