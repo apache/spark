@@ -25,12 +25,13 @@ import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, Identifier, TableCatalog, TestTableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DropTable, LogicalPlan}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSourceResolution}
 import org.apache.spark.sql.internal.SQLConf.DEFAULT_V2_CATALOG
 import org.apache.spark.sql.sources.v2.InMemoryTableProvider
@@ -43,13 +44,13 @@ class PlanResolutionSuite extends AnalysisTest {
   private val v2Format = classOf[InMemoryTableProvider].getName
 
   private val testCat: TableCatalog = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("testcat", CaseInsensitiveStringMap.empty())
     newCatalog
   }
 
   private val v2SessionCatalog = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("session", CaseInsensitiveStringMap.empty())
     newCatalog
   }
