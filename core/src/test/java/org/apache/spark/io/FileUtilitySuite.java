@@ -68,6 +68,7 @@ public class FileUtilitySuite {
     Assert.assertEquals(destFolder.listFiles().length , 0);
     FileUtility.extractTarFile(destTarLoc.getAbsolutePath(), destFolder.getAbsolutePath());
 
+    // Verify that the extraction was successful
     Assert.assertTrue(destFolder.exists());
     Assert.assertEquals(destFolder.listFiles().length , 1);
     Assert.assertArrayEquals(randomBytes, FileUtils.readFileToByteArray(destFolder.listFiles()[0]));
