@@ -70,14 +70,6 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def cancelStatement(): Unit = {
-    // RDDs will be cleaned automatically upon garbage collection.
-    logDebug(s"CANCELING $statementId")
-    cleanup(OperationState.CANCELED)
-    sqlContext.sparkContext.clearJobGroup()
-    HiveThriftServer2.listener.onStatementCanceled(statementId)
-  }
-
   override def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
     logDebug(s"CLOSING $statementId")
@@ -287,6 +279,7 @@ private[hive] class SparkExecuteStatementOperation(
   override def cancel(): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
     cleanup(OperationState.CANCELED)
+    HiveThriftServer2.listener.onStatementCanceled(statementId)
   }
 
   private def cleanup(state: OperationState) {
