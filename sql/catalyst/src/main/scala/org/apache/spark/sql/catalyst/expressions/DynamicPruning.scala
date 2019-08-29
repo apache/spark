@@ -28,9 +28,10 @@ trait DynamicPruning extends Predicate
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
  *
+ * @param child the underlying plan to be filtered on.
  * @param buildQuery the build side of the join.
  * @param buildKeys the join keys corresponding to the build side of the join
- * @param onlyInBroadcast when set to true it indicates that the pruning filter is likely to be
+ * @param onlyInBroadcast when set to false it indicates that the pruning filter is likely to be
  *  beneficial and so it should be executed even if it cannot reuse the results of the
  *  broadcast through ReuseExchange; otherwise, it will use the filter only if it
  *  can reuse the results of the broadcast through ReuseExchange

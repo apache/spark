@@ -71,12 +71,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Insert a dynamic partition pruning predicate on the left side of the join using the filter
-   * on the right side of the join.
+   * Insert a dynamic partition pruning predicate on one side of the join using the filter on the
+   * other side of the join.
    *  - to be able to identify this filter during query planning, we use a custom
    *    DynamicPruning expression that wraps a regular In expression
    *  - we also insert a flag that indicates if the subquery duplication is worthwhile and it
-   *  should run irrespective the type of join, or is too expensive and it should be run only if
+   *  should run regardless of the join strategy, or is too expensive and it should be run only if
    *  we can reuse the results of a broadcast
    */
   private def insertPredicate(
@@ -110,7 +110,8 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * Given an estimated filtering ratio we assume the partition pruning has benefit if
    * the size in bytes of the partitioned plan after filtering is greater than the size
    * in bytes of the plan on the other side of the join. We estimate the filtering ratio
-   * using column statistics if they are available, otherwise we use a default value of 0.5.
+   * using column statistics if they are available, otherwise we use the config value of
+   * `spark.sql.optimizer.joinFilterRatio`.
    */
   private def pruningHasBenefit(
       partExpr: Expression,
