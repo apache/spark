@@ -95,7 +95,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
-    assert(parsed == Seq("`", ".", "test_table"))
+    assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.schema == schema)
     assert(table.properties.asScala == Map())
 
@@ -113,7 +113,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
-    assert(parsed == Seq("`", ".", "test_table"))
+    assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.schema == schema)
     assert(table.properties == properties)
 
@@ -131,7 +131,7 @@ class TableCatalogSuite extends SparkFunSuite {
       catalog.createTable(testIdent, schema, Array.empty, emptyProps)
     }
 
-    assert(exc.message.contains(table.name()))
+    assert(exc.message.contains(testIdent.quoted))
     assert(exc.message.contains("already exists"))
 
     assert(catalog.tableExists(testIdent))
