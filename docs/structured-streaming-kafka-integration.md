@@ -361,21 +361,21 @@ The following configurations are optional:
   as you expected.</td>
 </tr>
 <tr>
-  <td>kafkaConsumer.pollTimeoutMs</td>
+  <td>kafkaConsumerPollTimeoutMs</td>
   <td>long</td>
   <td>512</td>
   <td>streaming and batch</td>
   <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
 </tr>
 <tr>
-  <td>fetchOffset.numRetries</td>
+  <td>fetchOffsetNumRetries</td>
   <td>int</td>
   <td>3</td>
   <td>streaming and batch</td>
   <td>Number of times to retry before giving up fetching Kafka offsets.</td>
 </tr>
 <tr>
-  <td>fetchOffset.retryIntervalMs</td>
+  <td>fetchOffsetRetryIntervalMs</td>
   <td>long</td>
   <td>10</td>
   <td>streaming and batch</td>

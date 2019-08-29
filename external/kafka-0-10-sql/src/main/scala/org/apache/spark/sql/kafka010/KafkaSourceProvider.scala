@@ -494,9 +494,9 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
   private[kafka010] val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
   private[kafka010] val MAX_OFFSET_PER_TRIGGER = "maxoffsetspertrigger"
-  private[kafka010] val FETCH_OFFSET_NUM_RETRY = "fetchoffset.numretries"
-  private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffset.retryintervalms"
-  private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumer.polltimeoutms"
+  private[kafka010] val FETCH_OFFSET_NUM_RETRY = "fetchoffsetnumretries"
+  private[kafka010] val FETCH_OFFSET_RETRY_INTERVAL_MS = "fetchoffsetretryintervalms"
+  private[kafka010] val CONSUMER_POLL_TIMEOUT = "kafkaconsumerpolltimeoutms"
   private val GROUP_ID_PREFIX = "groupidprefix"
 
   val TOPIC_OPTION_KEY = "topic"

@@ -114,7 +114,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
         "subscribe" -> topic,
         "startingOffsets" -> s"""{"$topic":{"0":0}}""",
         "failOnDataLoss" -> "false",
-        "kafkaConsumer.pollTimeoutMs" -> "1000")
+        "kafkaConsumerPollTimeoutMs" -> "1000")
       val df =
         if (testStreamingQuery) {
           val reader = spark.readStream.format("kafka")
@@ -227,7 +227,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
       .option("subscribePattern", "failOnDataLoss.*")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")
-      .option("fetchOffset.retryIntervalMs", "3000")
+      .option("fetchOffsetRetryIntervalMs", "3000")
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]

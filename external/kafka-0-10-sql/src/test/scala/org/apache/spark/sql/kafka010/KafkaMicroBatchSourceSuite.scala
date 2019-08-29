@@ -569,7 +569,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       // If a topic is deleted and we try to poll data starting from offset 0,
       // the Kafka consumer will just block until timeout and return an empty result.
       // So set the timeout to 1 second to make this test fast.
-      .option("kafkaConsumer.pollTimeoutMs", "1000")
+      .option("kafkaConsumerPollTimeoutMs", "1000")
       .option("startingOffsets", "earliest")
       .option("failOnDataLoss", "false")
     val kafka = reader.load()
@@ -784,7 +784,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("startingOffsets", "earliest")
       // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
       // messages, "poll" will wait until timeout.
-      .option("kafkaConsumer.pollTimeoutMs", 5000)
+      .option("kafkaConsumerPollTimeoutMs", 5000)
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
@@ -907,7 +907,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .option("startingOffsets", "earliest")
       // Set a short timeout to make the test fast. When a batch doesn't contain any visible data
       // messages, "poll" will wait until timeout.
-      .option("kafkaConsumer.pollTimeoutMs", 5000)
+      .option("kafkaConsumerPollTimeoutMs", 5000)
     val kafka = reader.load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
       .as[(String, String)]
