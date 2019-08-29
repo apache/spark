@@ -142,8 +142,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("Scheduler does not always schedule tasks on the same workers") {
     val taskScheduler = setupScheduler()
     val numFreeCores = 1
-    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val workerOffers = IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores),
+      WorkerOffer("executor1", "host1", numFreeCores))
     // Repeatedly try to schedule a 1-task job, and make sure that it doesn't always
     // get scheduled on the same executor. While there is a chance this test will fail
     // because the task randomly gets placed on the first executor all 1000 times, the
@@ -169,8 +169,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       s"local[$taskCpus]",
       config.CPUS_PER_TASK.key -> taskCpus.toString)
     // Give zero core offers. Should not generate any tasks
-    val zeroCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 0),
-      new WorkerOffer("executor1", "host1", 0))
+    val zeroCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 0),
+      WorkerOffer("executor1", "host1", 0))
     val taskSet = FakeTask.createTaskSet(1)
     taskScheduler.submitTasks(taskSet)
     var taskDescriptions = taskScheduler.resourceOffers(zeroCoreWorkerOffers).flatten
@@ -178,16 +178,16 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // No tasks should run as we only have 1 core free.
     val numFreeCores = 1
-    val singleCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val singleCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores),
+      WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
     taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
 
     // Now change the offers to have 2 cores in one executor and verify if it
     // is chosen.
-    val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val multiCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", taskCpus),
+      WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(1 === taskDescriptions.length)
@@ -203,8 +203,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val numFreeCores = 1
     val taskSet = new TaskSet(
       Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
-    val multiCoreWorkerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", taskCpus),
-      new WorkerOffer("executor1", "host1", numFreeCores))
+    val multiCoreWorkerOffers = IndexedSeq(WorkerOffer("executor0", "host0", taskCpus),
+      WorkerOffer("executor1", "host1", numFreeCores))
     taskScheduler.submitTasks(taskSet)
     var taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
     assert(0 === taskDescriptions.length)
@@ -254,7 +254,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskScheduler = setupScheduler()
 
     val numFreeCores = 1
-    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores))
+    val workerOffers = IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores))
     val attempt1 = FakeTask.createTaskSet(10)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
@@ -286,7 +286,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val taskScheduler = setupScheduler()
 
     val numFreeCores = 10
-    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores))
+    val workerOffers = IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores))
     val attempt1 = FakeTask.createTaskSet(10)
 
     // submit attempt 1, offer some resources, some tasks get scheduled
@@ -324,8 +324,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
   test("tasks are not re-scheduled while executor loss reason is pending") {
     val taskScheduler = setupScheduler()
 
-    val e0Offers = IndexedSeq(new WorkerOffer("executor0", "host0", 1))
-    val e1Offers = IndexedSeq(new WorkerOffer("executor1", "host0", 1))
+    val e0Offers = IndexedSeq(WorkerOffer("executor0", "host0", 1))
+    val e1Offers = IndexedSeq(WorkerOffer("executor1", "host0", 1))
     val attempt1 = FakeTask.createTaskSet(1)
 
     // submit attempt 1, offer resources, task gets scheduled
@@ -370,10 +370,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       .thenReturn(true)
 
     val offers = IndexedSeq(
-      new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1),
-      new WorkerOffer("executor2", "host1", 1),
-      new WorkerOffer("executor3", "host2", 10)
+      WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1),
+      WorkerOffer("executor2", "host1", 1),
+      WorkerOffer("executor3", "host2", 10)
     )
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     // We should schedule all tasks.
@@ -466,11 +466,11 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     }
 
     val offers = IndexedSeq(
-      new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1),
-      new WorkerOffer("executor2", "host1", 1),
-      new WorkerOffer("executor3", "host2", 10),
-      new WorkerOffer("executor4", "host3", 1)
+      WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1),
+      WorkerOffer("executor2", "host1", 1),
+      WorkerOffer("executor3", "host2", 10),
+      WorkerOffer("executor4", "host3", 1)
     )
 
     // setup our mock blacklist:
@@ -731,9 +731,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
         taskScheduler.submitTasks(taskSet)
 
         val offers = IndexedSeq(
-          new WorkerOffer("executor1", "host1", 1),
-          new WorkerOffer("executor2", "host1", 1),
-          new WorkerOffer("executor3", "host2", 1)
+          WorkerOffer("executor1", "host1", 1),
+          WorkerOffer("executor2", "host1", 1),
+          WorkerOffer("executor3", "host2", 1)
         )
         // We should check the node & exec blacklists, but only O(numOffers), not O(numPendingTasks)
         // times.  In the worst case, after shuffling, we offer our blacklisted resource first, and
@@ -827,8 +827,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm = taskScheduler.taskSetManagerForAttempt(taskSet.stageId, taskSet.stageAttemptId).get
 
     val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
-      new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1)
+      WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1)
     )).flatten
     assert(Set("executor0", "executor1") === firstTaskAttempts.map(_.executorId).toSet)
 
@@ -843,7 +843,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // on that executor, and make sure that the other task (not the failed one) is assigned there.
     taskScheduler.executorLost("executor1", SlaveLost("oops"))
     val nextTaskAttempts =
-      taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1))).flatten
+      taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("executor0", "host0", 1))).flatten
     // Note: Its OK if some future change makes this already realize the taskset has become
     // unschedulable at this point (though in the current implementation, we're sure it will not).
     assert(nextTaskAttempts.size === 1)
@@ -853,7 +853,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     // Now we should definitely realize that our task set is unschedulable, because the only
     // task left can't be scheduled on any executors due to the blacklist.
-    taskScheduler.resourceOffers(IndexedSeq(new WorkerOffer("executor0", "host0", 1)))
+    taskScheduler.resourceOffers(IndexedSeq(WorkerOffer("executor0", "host0", 1)))
     sc.listenerBus.waitUntilEmpty(100000)
     assert(tsm.isZombie)
     assert(failedTaskSet)
@@ -885,8 +885,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val offers = IndexedSeq(
       // each offer has more than enough free cores for the entire task set, so when combined
       // with the locality preferences, we schedule all tasks on one executor
-      new WorkerOffer("executor0", "host0", 4),
-      new WorkerOffer("executor1", "host1", 4)
+      WorkerOffer("executor0", "host0", 4),
+      WorkerOffer("executor1", "host1", 4)
     )
     val firstTaskAttempts = taskScheduler.resourceOffers(offers).flatten
     assert(firstTaskAttempts.size == 2)
@@ -915,8 +915,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     ))
 
     val taskDescs = taskScheduler.resourceOffers(IndexedSeq(
-      new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1)
+      WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1)
     )).flatten
     // only schedule one task because of locality
     assert(taskDescs.size === 1)
@@ -930,7 +930,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // when executor2 is added, we should realize that we can run process-local tasks.
     // And we should know its alive on the host.
     val secondTaskDescs = taskScheduler.resourceOffers(
-      IndexedSeq(new WorkerOffer("executor2", "host0", 1))).flatten
+      IndexedSeq(WorkerOffer("executor2", "host0", 1))).flatten
     assert(secondTaskDescs.size === 1)
     assert(mgr.myLocalityLevels.toSet ===
       Set(TaskLocality.PROCESS_LOCAL, TaskLocality.NODE_LOCAL, TaskLocality.ANY))
@@ -940,7 +940,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // And even if we don't have anything left to schedule, another resource offer on yet another
     // executor should also update the set of live executors
     val thirdTaskDescs = taskScheduler.resourceOffers(
-      IndexedSeq(new WorkerOffer("executor3", "host1", 1))).flatten
+      IndexedSeq(WorkerOffer("executor3", "host1", 1))).flatten
     assert(thirdTaskDescs.size === 0)
     assert(taskScheduler.getExecutorsAliveOnHost("host1") === Some(Set("executor1", "executor3")))
   }
@@ -950,7 +950,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     taskScheduler.submitTasks(FakeTask.createTaskSet(1, 0))
     taskScheduler.resourceOffers(IndexedSeq(
-      new WorkerOffer("executor0", "host0", 1)
+      WorkerOffer("executor0", "host0", 1)
     )).flatten
 
     verify(blacklist).applyBlacklistTimeout()
@@ -1124,8 +1124,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val numFreeCores = 3
     val workerOffers = IndexedSeq(
-      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
-      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")))
+      WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")))
     val attempt1 = FakeTask.createBarrierTaskSet(3)
 
     // submit attempt 1, offer some resources, since the available slots are less than pending
@@ -1143,9 +1143,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     val numFreeCores = 3
     val workerOffers = IndexedSeq(
-      new WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
-      new WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
-      new WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
+      WorkerOffer("executor0", "host0", numFreeCores, Some("192.168.0.101:49625")),
+      WorkerOffer("executor1", "host1", numFreeCores, Some("192.168.0.101:49627")),
+      WorkerOffer("executor2", "host2", numFreeCores, Some("192.168.0.101:49629")))
     val attempt1 = FakeTask.createBarrierTaskSet(3)
 
     // submit attempt 1, offer some resources, all tasks get launched together
@@ -1172,8 +1172,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val attempt1 = FakeTask.createTaskSet(10, 0)
     taskScheduler.submitTasks(attempt1)
 
-    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1))
+    val workerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1))
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
     assert(2 === taskDescriptions.length)
     val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
@@ -1203,8 +1203,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val attempt1 = FakeTask.createTaskSet(10, 0)
     taskScheduler.submitTasks(attempt1)
 
-    val workerOffers = IndexedSeq(new WorkerOffer("executor0", "host0", 1),
-      new WorkerOffer("executor1", "host1", 1))
+    val workerOffers = IndexedSeq(WorkerOffer("executor0", "host0", 1),
+      WorkerOffer("executor1", "host1", 1))
     val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
     assert(2 === taskDescriptions.length)
     val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
@@ -1250,9 +1250,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val numFreeCores = 2
     val resources = Map(GPU -> ArrayBuffer("0", "1", "2", "3"))
     val singleCoreWorkerOffers =
-      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, resources))
+      IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores, None, resources))
     val zeroGpuWorkerOffers =
-      IndexedSeq(new WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
+      IndexedSeq(WorkerOffer("executor0", "host0", numFreeCores, None, Map.empty))
     taskScheduler.submitTasks(taskSet)
     // WorkerOffer doesn't contain GPU resource, don't launch any task.
     var taskDescriptions = taskScheduler.resourceOffers(zeroGpuWorkerOffers).flatten
