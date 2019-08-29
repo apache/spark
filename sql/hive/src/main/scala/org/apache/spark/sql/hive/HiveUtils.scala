@@ -442,6 +442,13 @@ private[spark] object HiveUtils extends Logging {
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
 
+    // Disable schema verification and allow schema auto-creation in the
+    // Derby database, in case the config for the metastore is set otherwise.
+    // Without these settings, starting the client fails with
+    // MetaException(message:Version information not found in metastore.)
+    propMap.put("hive.metastore.schema.verification", "false")
+    propMap.put("datanucleus.schema.autoCreateAll", "true")
+
     // SPARK-11783: When "hive.metastore.uris" is set, the metastore connection mode will be
     // remote (https://cwiki.apache.org/confluence/display/Hive/AdminManual+MetastoreAdmin
     // mentions that "If hive.metastore.uris is empty local mode is assumed, remote otherwise").
