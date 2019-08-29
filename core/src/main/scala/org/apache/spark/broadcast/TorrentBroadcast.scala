@@ -20,7 +20,6 @@ package org.apache.spark.broadcast
 import java.io._
 import java.lang.ref.SoftReference
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.Adler32
 
 import scala.collection.JavaConverters._
@@ -32,7 +31,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{KeyLock, Utils}
 import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStream}
 
 /**
@@ -216,7 +215,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
-    TorrentBroadcast.withTorrentBroadcastLock(broadcastId) {
+    TorrentBroadcast.torrentBroadcastLock.withLock(broadcastId) {
       // As we just lock based on `broadcastId`, whenever using `broadcastCache`, we should just
       // touch `broadcastId`.
       val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
@@ -294,40 +293,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 private object TorrentBroadcast extends Logging {
 
   /** Locks to ensure there is only one thread fetching the same [[TorrentBroadcast]] block. */
-  private val torrentBroadcastLock = new ConcurrentHashMap[BroadcastBlockId, AnyRef]()
-
-  /** Acquire a lock for fetching a [[TorrentBroadcast]] block. */
-  private def acquireTorrentBroadcastLock(broadcastId: BroadcastBlockId): Unit = {
-    while (true) {
-      val lock = torrentBroadcastLock.putIfAbsent(broadcastId, new Object)
-      if (lock == null) return
-      lock.synchronized {
-        while (torrentBroadcastLock.get(broadcastId) eq lock) {
-          lock.wait()
-        }
-      }
-    }
-  }
-
-  /** Release the lock for a [[TorrentBroadcast]]  block. */
-  private def releaseTorrentBroadcastLock(broadcastId: BroadcastBlockId): Unit = {
-    val lock = torrentBroadcastLock.remove(broadcastId)
-    if (lock != null) {
-      lock.synchronized {
-        lock.notifyAll()
-      }
-    }
-  }
-
-  /** Acquire and hold the lock to access `broadcastId` when calling `func`.  */
-  private def withTorrentBroadcastLock[T](broadcastId: BroadcastBlockId)(func: => T): T = {
-    acquireTorrentBroadcastLock(broadcastId)
-    try {
-      func
-    } finally {
-      releaseTorrentBroadcastLock(broadcastId)
-    }
-  }
+  private val torrentBroadcastLock = new KeyLock[BroadcastBlockId]
 
   def blockifyObject[T: ClassTag](
       obj: T,
