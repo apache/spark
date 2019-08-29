@@ -844,7 +844,7 @@ private[spark] object MapOutputTracker extends Logging {
       statuses: Array[MapStatus]): Iterator[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ListBuffer[(BlockId, Long)]]
-    for ((status, mapId) <- statuses.iterator.zipWithIndex) {
+    statuses.foreach { status =>
       if (status == null) {
         val errorMessage = s"Missing an output location for shuffle $shuffleId"
         logError(errorMessage)
@@ -854,7 +854,7 @@ private[spark] object MapOutputTracker extends Logging {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
             splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, mapId, part), size))
+                ((ShuffleBlockId(shuffleId, status.mapTaskAttemptId, part), size))
           }
         }
       }

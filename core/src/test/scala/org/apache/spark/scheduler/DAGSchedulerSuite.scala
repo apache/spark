@@ -487,18 +487,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     // map stage1 completes successfully, with one task on each executor
     complete(taskSets(0), Seq(
       (Success,
-        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2))),
+        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 5)),
       (Success,
-        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2))),
-      (Success, makeMapStatus("hostB", 1))
+        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 6)),
+      (Success, makeMapStatus("hostB", 1, taskAttemptId = 7))
     ))
     // map stage2 completes successfully, with one task on each executor
     complete(taskSets(1), Seq(
       (Success,
-        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2))),
+        MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 8)),
       (Success,
-        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2))),
-      (Success, makeMapStatus("hostB", 1))
+        MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 9)),
+      (Success, makeMapStatus("hostB", 1, taskAttemptId = 10))
     ))
     // make sure our test setup is correct
     val initialMapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
@@ -506,12 +506,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(initialMapStatus1.count(_ != null) === 3)
     assert(initialMapStatus1.map{_.location.executorId}.toSet ===
       Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+    assert(initialMapStatus1.map{_.mapTaskAttemptId}.toSet === Set(5, 6, 7))
 
     val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
     //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(initialMapStatus2.count(_ != null) === 3)
     assert(initialMapStatus2.map{_.location.executorId}.toSet ===
       Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
+    assert(initialMapStatus2.map{_.mapTaskAttemptId}.toSet === Set(8, 9, 10))
 
     // reduce stage fails with a fetch failure from one host
     complete(taskSets(2), Seq(
@@ -2745,7 +2747,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(countSubmittedMapStageAttempts() === 2)
   }
 
-  test("SPARK-23207: retry all the succeeding stages when the map stage is indeterminate") {
+  private def constructIndeterminateStageFetchFailed(): (Int, Int) = {
     val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
 
     val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
@@ -2775,12 +2777,138 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskSets(2).tasks(0),
       FetchFailed(makeBlockManagerId("hostC"), shuffleId2, 0, 0, "ignored"),
       null))
+    (shuffleId1, shuffleId2)
+  }
 
-    // The second shuffle map stage need to rerun, the job will abort for the indeterminate
-    // stage rerun.
-    // TODO: After we support re-generate shuffle file(SPARK-25341), this test will be extended.
-    assert(failure != null && failure.getMessage
-      .contains("Spark cannot rollback the ShuffleMapStage 1"))
+  test("SPARK-25341: abort stage while using old fetch protocol") {
+    // reset the test context with using old fetch protocol
+    afterEach()
+    val conf = new SparkConf()
+    conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
+    init(conf)
+    // Construct the scenario of indeterminate stage fetch failed.
+    constructIndeterminateStageFetchFailed()
+    // The job should fail because Spark can't rollback the shuffle map stage while
+    // using old protocol.
+    assert(failure != null && failure.getMessage.contains(
+      "Spark can only do this while using the new shuffle block fetching protocol"))
+  }
+
+  test("SPARK-25341: retry all the succeeding stages when the map stage is indeterminate") {
+    val (shuffleId1, shuffleId2) = constructIndeterminateStageFetchFailed()
+
+    // Check status for all failedStages
+    val failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.map(_.id) == Seq(1, 2))
+    // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
+    }.head.findMissingPartitions() == Seq(0))
+    // The result stage is still waiting for its 2 tasks to complete
+    assert(failedStages.collect {
+      case stage: ResultStage => stage
+    }.head.findMissingPartitions() == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // The first task of the `shuffleMapRdd2` failed with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0, 0, "ignored"),
+      null))
+
+    val newFailedStages = scheduler.failedStages.toSeq
+    assert(newFailedStages.map(_.id) == Seq(0, 1))
+
+    scheduler.resubmitFailedStages()
+
+    // First shuffle map stage resubmitted and reran all tasks.
+    assert(taskSets(4).stageId == 0)
+    assert(taskSets(4).stageAttemptId == 1)
+    assert(taskSets(4).tasks.length == 2)
+
+    // Finish all stage.
+    complete(taskSets(4), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    complete(taskSets(5), Seq(
+      (Success, makeMapStatus("hostC", 2)),
+      (Success, makeMapStatus("hostD", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    complete(taskSets(6), Seq((Success, 11), (Success, 12)))
+
+    // Job successful ended.
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-25341: continuous indeterminate stage roll back") {
+    // shuffleMapRdd1/2/3 are all indeterminate.
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, indeterminate = true)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(2))
+    val shuffleId1 = shuffleDep1.shuffleId
+
+    val shuffleMapRdd2 = new MyRDD(
+      sc, 2, List(shuffleDep1), tracker = mapOutputTracker, indeterminate = true)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(2))
+    val shuffleId2 = shuffleDep2.shuffleId
+
+    val shuffleMapRdd3 = new MyRDD(
+      sc, 2, List(shuffleDep2), tracker = mapOutputTracker, indeterminate = true)
+    val shuffleDep3 = new ShuffleDependency(shuffleMapRdd3, new HashPartitioner(2))
+    val shuffleId3 = shuffleDep3.shuffleId
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep3), tracker = mapOutputTracker)
+
+    submit(finalRdd, Array(0, 1), properties = new Properties())
+
+    // Finish the first 2 shuffle map stages.
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostD", 2))))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+
+    // Executor lost on hostB, both of stage 0 and 1 should be reran.
+    runEvent(makeCompletionEvent(
+      taskSets(2).tasks(0),
+      FetchFailed(makeBlockManagerId("hostB"), shuffleId2, 0, 0, "ignored"),
+      null))
+    mapOutputTracker.removeOutputsOnHost("hostB")
+
+    assert(scheduler.failedStages.toSeq.map(_.id) == Seq(1, 2))
+    scheduler.resubmitFailedStages()
+
+    def checkAndCompleteRetryStage(
+      taskSetIndex: Int,
+      stageId: Int,
+      shuffleId: Int): Unit = {
+      assert(taskSets(taskSetIndex).stageId == stageId)
+      assert(taskSets(taskSetIndex).stageAttemptId == 1)
+      assert(taskSets(taskSetIndex).tasks.length == 2)
+      complete(taskSets(taskSetIndex), Seq(
+        (Success, makeMapStatus("hostA", 2)),
+        (Success, makeMapStatus("hostB", 2))))
+      assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
+    }
+
+    // Check all indeterminate stage roll back.
+    checkAndCompleteRetryStage(3, 0, shuffleId1)
+    checkAndCompleteRetryStage(4, 1, shuffleId2)
+    checkAndCompleteRetryStage(5, 2, shuffleId3)
+
+    // Result stage success, all job ended.
+    complete(taskSets(6), Seq((Success, 11), (Success, 12)))
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
   }
 
   test("SPARK-29042: Sampled RDD with unordered input should be indeterminate") {
@@ -2903,33 +3031,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(latch.await(10, TimeUnit.SECONDS))
   }
 
-  test("SPARK-28699: abort stage if parent stage is indeterminate stage") {
-    val shuffleMapRdd = new MyRDD(sc, 2, Nil, indeterminate = true)
-
-    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
-    val shuffleId = shuffleDep.shuffleId
-    val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
-
-    submit(finalRdd, Array(0, 1))
-
-    // Finish the first shuffle map stage.
-    complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 2)),
-      (Success, makeMapStatus("hostB", 2))))
-    assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq.empty))
-
-    runEvent(makeCompletionEvent(
-      taskSets(1).tasks(0),
-      FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"),
-      null))
-
-    // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd` needs to retry.
-    // The result stage is still waiting for its 2 tasks to complete.
-    // Because of shuffleMapRdd is indeterminate, this job will be abort.
-    assert(failure != null && failure.getMessage
-      .contains("Spark cannot rollback the ShuffleMapStage 0"))
-  }
-
   test("Completions in zombie tasksets update status of non-zombie taskset") {
     val parts = 4
     val shuffleMapRdd = new MyRDD(sc, parts, Nil)
@@ -3036,8 +3137,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 }
 
 object DAGSchedulerSuite {
-  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes))
+  def makeMapStatus(host: String, reduces: Int,
+      sizes: Byte = 2, taskAttemptId: Long = -1): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), taskAttemptId)
 
   def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

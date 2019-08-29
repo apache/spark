@@ -360,14 +360,14 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+    val shuffleHandle = manager.registerShuffle(0, shuffleDep)
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
     val context1 =
       new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem)
     val writer1 = manager.getWriter[Int, Int](
-      shuffleHandle, 0, context1, context1.taskMetrics.shuffleWriteMetrics)
+      shuffleHandle, context1, context1.taskMetrics.shuffleWriteMetrics)
     val data1 = (1 to 10).map { x => x -> x}
 
     // second attempt -- also successful.  We'll write out different data,
@@ -376,7 +376,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val context2 =
       new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem)
     val writer2 = manager.getWriter[Int, Int](
-      shuffleHandle, 0, context2, context2.taskMetrics.shuffleWriteMetrics)
+      shuffleHandle, context2, context2.taskMetrics.shuffleWriteMetrics)
     val data2 = (11 to 20).map { x => x -> x}
 
     // interleave writes of both attempts -- we want to test that both attempts can occur

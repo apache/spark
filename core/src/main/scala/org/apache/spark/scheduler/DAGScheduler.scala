@@ -1103,7 +1103,16 @@ private[spark] class DAGScheduler(
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
 
-    // First figure out the indexes of partition ids to compute.
+    // Before find missing partition, do the intermediate state clean work first.
+    // The operation here can make sure for the intermediate stage, `findMissingPartitions()`
+    // returns all partitions every time.
+    stage match {
+      case sms: ShuffleMapStage if stage.isIndeterminate() =>
+        mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
+      case _ =>
+    }
+
+    // Figure out the indexes of partition ids to compute.
     val partitionsToCompute: Seq[Int] = stage.findMissingPartitions()
 
     // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
@@ -1573,7 +1582,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
+              if (mapStage.isIndeterminate()) {
                 // It's a little tricky to find all the succeeding stages of `mapStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages
@@ -1605,11 +1614,18 @@ private[spark] class DAGScheduler(
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
                     if (numMissingPartitions < mapStage.numTasks) {
-                      // TODO: support to rollback shuffle files.
-                      // Currently the shuffle writing is "first write wins", so we can't re-run a
-                      // shuffle map stage and overwrite existing shuffle files. We have to finish
-                      // SPARK-8029 first.
-                      abortStage(mapStage, generateErrorMessage(mapStage), None)
+                      if (sc.getConf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+                        val reason = "A shuffle map stage with indeterminate output was failed " +
+                          "and retried. However, Spark can only do this while using the new " +
+                          "shuffle block fetching protocol. Please check the config " +
+                          "'spark.shuffle.useOldFetchProtocol', see more detail in " +
+                          "SPARK-27665 and SPARK-25341."
+                        abortStage(mapStage, reason, None)
+                      } else {
+                        logInfo(s"The indeterminate stage $mapStage will be resubmitted," +
+                          " the stage self and all indeterminate parent stage will be" +
+                          " rollback and whole stage rerun.")
+                      }
                     }
 
                   case resultStage: ResultStage if resultStage.activeJob.isDefined =>

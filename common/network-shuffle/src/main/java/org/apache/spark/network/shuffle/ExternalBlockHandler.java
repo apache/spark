@@ -300,7 +300,7 @@ public class ExternalBlockHandler extends RpcHandler {
     }
 
     ManagedBufferIterator(FetchShuffleBlocks msg, int numBlockIds) {
-      final int[] mapIdAndReduceIds = new int[2 * numBlockIds];
+      final long[] mapIdAndReduceIds = new long[2 * numBlockIds];
       int idx = 0;
       for (int i = 0; i < msg.mapIds.length; i++) {
         for (int reduceId : msg.reduceIds[i]) {
@@ -311,7 +311,7 @@ public class ExternalBlockHandler extends RpcHandler {
       assert(idx == 2 * numBlockIds);
       size = mapIdAndReduceIds.length;
       blockDataForIndexFn = index -> blockManager.getBlockData(msg.appId, msg.execId,
-        msg.shuffleId, mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
+        msg.shuffleId, mapIdAndReduceIds[index], (int) mapIdAndReduceIds[index + 1]);
     }
 
     @Override

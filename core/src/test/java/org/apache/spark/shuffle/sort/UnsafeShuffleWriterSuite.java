@@ -135,7 +135,7 @@ public class UnsafeShuffleWriterSuite {
         );
       });
 
-    when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
+    when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
 
     Answer<?> renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
@@ -157,7 +157,7 @@ public class UnsafeShuffleWriterSuite {
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyInt(), any(long[].class), eq(null));
+        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
@@ -176,9 +176,8 @@ public class UnsafeShuffleWriterSuite {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter(
       blockManager,
-        taskMemoryManager,
-      new SerializedShuffleHandle<>(0, 1, shuffleDep),
-      0, // map id
+      taskMemoryManager,
+      new SerializedShuffleHandle<>(0, shuffleDep),
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics(),
@@ -536,8 +535,7 @@ public class UnsafeShuffleWriterSuite {
     final UnsafeShuffleWriter writer = new UnsafeShuffleWriter(
         blockManager,
         taskMemoryManager,
-        new SerializedShuffleHandle<>(0, 1, shuffleDep),
-        0, // map id
+        new SerializedShuffleHandle<>(0, shuffleDep),
         taskContext,
         conf,
         taskContext.taskMetrics().shuffleWriteMetrics(),

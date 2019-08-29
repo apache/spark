@@ -78,7 +78,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final ShuffleWriteMetricsReporter writeMetrics;
   private final ShuffleExecutorComponents shuffleExecutorComponents;
   private final int shuffleId;
-  private final int mapId;
+  private final long mapTaskAttemptId;
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
@@ -109,7 +109,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       BlockManager blockManager,
       TaskMemoryManager memoryManager,
       SerializedShuffleHandle<K, V> handle,
-      int mapId,
       TaskContext taskContext,
       SparkConf sparkConf,
       ShuffleWriteMetricsReporter writeMetrics,
@@ -123,7 +122,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     this.blockManager = blockManager;
     this.memoryManager = memoryManager;
-    this.mapId = mapId;
+    this.mapTaskAttemptId = taskContext.taskAttemptId();
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();
@@ -228,7 +227,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+      blockManager.shuffleServerId(), partitionLengths, mapTaskAttemptId);
   }
 
   @VisibleForTesting
@@ -266,14 +266,13 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(
               shuffleId,
-              mapId,
               taskContext.taskAttemptId(),
               partitioner.numPartitions());
       return mapWriter.commitAllPartitions();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(
-              shuffleId, mapId, taskContext.taskAttemptId());
+              shuffleId, taskContext.taskAttemptId());
       if (maybeSingleFileWriter.isPresent()) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
@@ -300,7 +299,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
         .createMapOutputWriter(
             shuffleId,
-            mapId,
             taskContext.taskAttemptId(),
             partitioner.numPartitions());
     try {
