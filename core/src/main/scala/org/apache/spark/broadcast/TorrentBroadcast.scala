@@ -292,7 +292,10 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
 private object TorrentBroadcast extends Logging {
 
-  /** Locks to ensure there is only one thread fetching the same [[TorrentBroadcast]] block. */
+  /**
+   * A [[KeyLock]] whose key is [[BroadcastBlockId]] to ensure there is only one thread fetching
+   * the same [[TorrentBroadcast]] block.
+   */
   private val torrentBroadcastLock = new KeyLock[BroadcastBlockId]
 
   def blockifyObject[T: ClassTag](
