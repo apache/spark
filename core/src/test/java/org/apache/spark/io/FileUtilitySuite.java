@@ -33,21 +33,20 @@ import java.io.IOException;
 public class FileUtilitySuite {
 
   protected File sourceFolder;
-  protected File destFile;
   protected File destTarLoc;
+  protected File destFolder;
 
   @Before
   public void setUp() throws IOException {
-    sourceFolder = Utils.createTempDir(System.getProperty("java.io.tmpdir"),
-      "FileUtilTest" + RandomUtils.nextLong());
-    destTarLoc = File.createTempFile("dest-tar", ".tar");
-    destFile = File.createTempFile("dest-file", ".tmp");
+    String tmpDir = System.getProperty("java.io.tmpdir");
+    sourceFolder = Utils.createTempDir(tmpDir, "FileUtilTest-src-" + RandomUtils.nextLong());
+    destFolder = Utils.createTempDir(tmpDir, "FileUtilTest-dest-" + RandomUtils.nextLong());
+    destTarLoc= File.createTempFile("dest-tar", ".tar");
   }
 
   @After
   public void tearDown() {
     destTarLoc.delete();
-    destFile.delete();
   }
 
   @Test
@@ -66,14 +65,12 @@ public class FileUtilitySuite {
     Assert.assertTrue(destTarLoc.exists());
 
     // Extract the tarball
-    String destFilePath = destFile.getAbsolutePath();
-    destFile.delete();
-    Assert.assertFalse(destFile.exists());
-    FileUtility.extractTarFile(destTarLoc.getAbsolutePath(), destFilePath);
+    Assert.assertEquals(destFolder.listFiles().length , 0);
+    FileUtility.extractTarFile(destTarLoc.getAbsolutePath(), destFolder.getAbsolutePath());
 
-    Assert.assertTrue(destFile.exists());
-    Assert.assertEquals(destFile.listFiles().length , 1);
-    Assert.assertArrayEquals(randomBytes, FileUtils.readFileToByteArray(destFile.listFiles()[0]));
+    Assert.assertTrue(destFolder.exists());
+    Assert.assertEquals(destFolder.listFiles().length , 1);
+    Assert.assertArrayEquals(randomBytes, FileUtils.readFileToByteArray(destFolder.listFiles()[0]));
   }
 
 }
