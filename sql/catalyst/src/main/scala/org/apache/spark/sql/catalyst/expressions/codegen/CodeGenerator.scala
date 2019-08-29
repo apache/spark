@@ -1639,8 +1639,6 @@ object CodeGenerator extends Logging {
           val SubExprEliminationState(isNull, value) = subExprs(e)
           collectLocalVariable(value)
           collectLocalVariable(isNull)
-          // Since the children possibly have common subexprs, we push them here
-          stack.pushAll(e.children)
 
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>
