@@ -270,11 +270,15 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         val currentState = getStatus().getState()
-        logError(s"Error executing query, currentState $currentState, ", e)
-        setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw new HiveSQLException(e.toString)
+        if (currentState == OperationState.CANCELED) {
+          return
+        } else {
+          logError(s"Error executing query, currentState $currentState, ", e)
+          setState(OperationState.ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
+          throw new HiveSQLException(e.toString)
+        }
     }
     setState(OperationState.FINISHED)
     HiveThriftServer2.listener.onStatementFinish(statementId)
