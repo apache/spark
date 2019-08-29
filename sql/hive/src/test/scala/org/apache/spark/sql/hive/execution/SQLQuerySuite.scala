@@ -2365,7 +2365,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       // This test case is only for file source V1. As the rule OptimizeMetadataOnlyQuery is
       // disabled by default, we can skip testing file source v2 in current stage.
       withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key -> enableOptimizeMetadataOnlyQuery.toString,
-        SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+        SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
         withTable("t") {
           sql("CREATE TABLE t (col1 INT, p1 INT) USING PARQUET PARTITIONED BY (p1)")
           sql("INSERT INTO TABLE t PARTITION (p1 = 5) SELECT ID FROM range(1, 1)")

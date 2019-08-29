@@ -108,10 +108,11 @@ object TableOutputResolver {
       case StoreAssignmentPolicy.LEGACY =>
         outputField
 
-      case StoreAssignmentPolicy.STRICT =>
+      case StoreAssignmentPolicy.STRICT | StoreAssignmentPolicy.ANSI =>
         // run the type check first to ensure type errors are present
         val canWrite = DataType.canWrite(
-          queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name, addError)
+          queryExpr.dataType, tableAttr.dataType, byName, conf.resolver, tableAttr.name,
+          storeAssignmentPolicy, addError)
         if (queryExpr.nullable && !tableAttr.nullable) {
           addError(s"Cannot write nullable values to non-null column '${tableAttr.name}'")
           None

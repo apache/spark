@@ -65,7 +65,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   test("SPARK-16337 temporary view refresh") {
     withTempView("view_refresh") { withTempPath { (location: File) =>
@@ -123,5 +123,5 @@ class MetadataCacheV2Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

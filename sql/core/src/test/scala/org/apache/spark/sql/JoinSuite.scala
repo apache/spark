@@ -611,14 +611,16 @@ class JoinSuite extends QueryTest with SharedSparkSession {
       /** Cartesian product involving C, which is not involved in a CROSS join */
       "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
 
-     def checkCartesianDetection(query: String): Unit = {
+    def checkCartesianDetection(query: String): Unit = {
       val e = intercept[Exception] {
         checkAnswer(sql(query), Nil);
       }
       assert(e.getMessage.contains("Detected implicit cartesian product"))
     }
 
-    cartesianQueries.foreach(checkCartesianDetection)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      cartesianQueries.foreach(checkCartesianDetection)
+    }
 
     // Check that left_semi, left_anti, existence joins without conditions do not throw
     // an exception if cross joins are disabled

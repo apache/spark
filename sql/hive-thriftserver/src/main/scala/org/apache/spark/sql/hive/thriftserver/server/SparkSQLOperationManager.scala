@@ -63,6 +63,17 @@ private[thriftserver] class SparkSQLOperationManager()
     operation
   }
 
+  override def newGetCatalogsOperation(
+      parentSession: HiveSession): GetCatalogsOperation = synchronized {
+    val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
+    require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
+      " initialized or had already closed.")
+    val operation = new SparkGetCatalogsOperation(sqlContext, parentSession)
+    handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created GetCatalogsOperation with session=$parentSession.")
+    operation
+  }
+
   override def newGetSchemasOperation(
       parentSession: HiveSession,
       catalogName: String,
