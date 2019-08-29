@@ -399,32 +399,23 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
       "LocalTableScanExec should be within a WholeStageCodegen domain.")
   }
 
-  test("Give up splitting aggregate code if a parameter length goes over the JVM limit") {
-    withSQLConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true") {
+  test("Give up splitting aggregate code if a parameter length goes over the limit") {
+    withSQLConf(
+        SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC.key -> "true",
+        SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1",
+        "spark.sql.HashAggregateExec.isValidParamLength" -> "0") {
       withTable("t") {
-        val numCols = 45
-        val colExprs = "id AS key" +: (0 until numCols).map { i => s"id AS _c$i" }
-        spark.range(3).selectExpr(colExprs: _*).write.saveAsTable("t")
-
-        // Defines many common subexpressions for a parameter length
-        // to go over the JVM limit.
-        val aggExprs = (2 until numCols).map { i =>
-          (0 until i).map(d => s"_c$d").mkString("SUM(", " + ", ")")
+        val expectedErrMsg = "Failed to split aggregate code into small functions"
+        Seq(
+          // Test case without keys
+          "SELECT AVG(v) FROM VALUES(1) t(v)",
+          // Tet case with keys
+          "SELECT k, AVG(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k").foreach { query =>
+          val errMsg = intercept[IllegalStateException] {
+            sql(query).collect
+          }.getMessage
+          assert(errMsg.contains(expectedErrMsg))
         }
-
-        // Test case without keys
-        var cause = intercept[Exception] {
-          sql(s"SELECT ${aggExprs.mkString(", ")} FROM t").collect
-        }.getCause
-        assert(cause.isInstanceOf[IllegalStateException])
-        assert(cause.getMessage.contains("Failed to split aggregate code into small functions"))
-
-        // Tet case with keys
-        cause = intercept[Exception] {
-          sql(s"SELECT key, ${aggExprs.mkString(", ")} FROM t GROUP BY key").collect
-        }.getCause
-        assert(cause.isInstanceOf[IllegalStateException])
-        assert(cause.getMessage.contains("Failed to split aggregate code into small functions"))
       }
     }
   }
