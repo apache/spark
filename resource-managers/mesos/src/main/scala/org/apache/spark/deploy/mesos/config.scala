@@ -172,7 +172,7 @@ package object config {
   private[spark] val COARSE_SHUTDOWN_TIMEOUT =
     ConfigBuilder("spark.mesos.coarse.shutdownTimeout")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(_ >= 0, s"spark.mesos.coarse.shutdownTimeout must be >= 0")
+      .checkValue(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
       .createWithDefaultString("10s")
 
   private[spark] val MAX_DRIVERS =

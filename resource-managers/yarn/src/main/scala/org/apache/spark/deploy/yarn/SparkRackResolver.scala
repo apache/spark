@@ -75,7 +75,7 @@ private[spark] class SparkRackResolver(conf: Configuration) extends Logging {
     val rNameList = dnsToSwitchMapping.resolve(hostNames.toList.asJava).asScala
     if (rNameList == null || rNameList.isEmpty) {
       hostNames.foreach(nodes += new NodeBase(_, NetworkTopology.DEFAULT_RACK))
-      logInfo(s"Got an error when resolving hostNames. " +
+      logInfo("Got an error when resolving hostNames. " +
         s"Falling back to ${NetworkTopology.DEFAULT_RACK} for all")
     } else {
       for ((hostName, rName) <- hostNames.zip(rNameList)) {

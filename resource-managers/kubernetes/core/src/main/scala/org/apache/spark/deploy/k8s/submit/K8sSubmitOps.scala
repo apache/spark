@@ -164,14 +164,14 @@ private[spark] class K8SSparkSubmitOperation extends SparkSubmitOperation
   }
 
   override def kill(submissionId: String, conf: SparkConf): Unit = {
-    printMessage(s"Submitting a request to kill submission " +
+    printMessage("Submitting a request to kill submission " +
       s"${submissionId} in ${conf.get("spark.master")}. " +
       s"Grace period in secs: ${getGracePeriod(conf).getOrElse("not set.")}")
     execute(submissionId, conf, new KillApplication)
   }
 
   override def printSubmissionStatus(submissionId: String, conf: SparkConf): Unit = {
-    printMessage(s"Submitting a request for the status of submission" +
+    printMessage("Submitting a request for the status of submission" +
       s" ${submissionId} in ${conf.get("spark.master")}.")
     execute(submissionId, conf, new ListStatus)
   }

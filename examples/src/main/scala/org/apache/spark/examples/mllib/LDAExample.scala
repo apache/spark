@@ -65,32 +65,32 @@ object LDAExample {
         .text(s"number of iterations of learning. default: ${defaultParams.maxIterations}")
         .action((x, c) => c.copy(maxIterations = x))
       opt[Double]("docConcentration")
-        .text(s"amount of topic smoothing to use (> 1.0) (-1=auto)." +
+        .text("amount of topic smoothing to use (> 1.0) (-1=auto)." +
         s"  default: ${defaultParams.docConcentration}")
         .action((x, c) => c.copy(docConcentration = x))
       opt[Double]("topicConcentration")
-        .text(s"amount of term (word) smoothing to use (> 1.0) (-1=auto)." +
+        .text("amount of term (word) smoothing to use (> 1.0) (-1=auto)." +
         s"  default: ${defaultParams.topicConcentration}")
         .action((x, c) => c.copy(topicConcentration = x))
       opt[Int]("vocabSize")
-        .text(s"number of distinct word types to use, chosen by frequency. (-1=all)" +
+        .text("number of distinct word types to use, chosen by frequency. (-1=all)" +
           s"  default: ${defaultParams.vocabSize}")
         .action((x, c) => c.copy(vocabSize = x))
       opt[String]("stopwordFile")
-        .text(s"filepath for a list of stopwords. Note: This must fit on a single machine." +
+        .text("filepath for a list of stopwords. Note: This must fit on a single machine." +
         s"  default: ${defaultParams.stopwordFile}")
         .action((x, c) => c.copy(stopwordFile = x))
       opt[String]("algorithm")
-        .text(s"inference algorithm to use. em and online are supported." +
+        .text("inference algorithm to use. em and online are supported." +
         s" default: ${defaultParams.algorithm}")
         .action((x, c) => c.copy(algorithm = x))
       opt[String]("checkpointDir")
-        .text(s"Directory for checkpointing intermediate results." +
-        s"  Checkpointing helps with recovery and eliminates temporary shuffle files on disk." +
+        .text("Directory for checkpointing intermediate results." +
+        "  Checkpointing helps with recovery and eliminates temporary shuffle files on disk." +
         s"  default: ${defaultParams.checkpointDir}")
         .action((x, c) => c.copy(checkpointDir = Some(x)))
       opt[Int]("checkpointInterval")
-        .text(s"Iterations between each checkpoint.  Only used if checkpointDir is set." +
+        .text("Iterations between each checkpoint.  Only used if checkpointDir is set." +
         s" default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       arg[String]("<input>...")
@@ -123,7 +123,7 @@ object LDAExample {
     val preprocessElapsed = (System.nanoTime() - preprocessStart) / 1e9
 
     println()
-    println(s"Corpus summary:")
+    println("Corpus summary:")
     println(s"\t Training set size: $actualCorpusSize documents")
     println(s"\t Vocabulary size: $actualVocabSize terms")
     println(s"\t Training set size: $actualNumTokens tokens")
@@ -154,7 +154,7 @@ object LDAExample {
     val ldaModel = lda.run(corpus)
     val elapsed = (System.nanoTime() - startTime) / 1e9
 
-    println(s"Finished training LDA model.  Summary:")
+    println("Finished training LDA model.  Summary:")
     println(s"\t Training time: $elapsed sec")
 
     if (ldaModel.isInstanceOf[DistributedLDAModel]) {

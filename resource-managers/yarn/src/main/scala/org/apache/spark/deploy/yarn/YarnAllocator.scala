@@ -311,7 +311,7 @@ private[yarn] class YarnAllocator(
             s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)"
         if (ResourceRequestHelper.isYarnResourceTypesAvailable() &&
             executorResourceRequests.nonEmpty) {
-          requestContainerMessage ++= s" with custom resources: " + resource.toString
+          requestContainerMessage ++= " with custom resources: " + resource.toString
         }
         logInfo(requestContainerMessage)
       }
@@ -469,7 +469,7 @@ private[yarn] class YarnAllocator(
 
     if (remainingAfterOffRackMatches.nonEmpty) {
       logDebug(s"Releasing ${remainingAfterOffRackMatches.size} unneeded containers that were " +
-        s"allocated to us")
+        "allocated to us")
       for (container <- remainingAfterOffRackMatches) {
         internalReleaseContainer(container)
       }
@@ -505,7 +505,7 @@ private[yarn] class YarnAllocator(
 
     ResourceRequestHelper.setResourceRequests(executorResourceRequests, matchingResource)
 
-    logDebug(s"Calling amClient.getMatchingRequests with parameters: " +
+    logDebug("Calling amClient.getMatchingRequests with parameters: " +
         s"priority: ${allocatedContainer.getPriority}, " +
         s"location: $location, resource: $matchingResource")
     val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,

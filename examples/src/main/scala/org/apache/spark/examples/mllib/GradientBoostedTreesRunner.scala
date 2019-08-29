@@ -62,14 +62,14 @@ object GradientBoostedTreesRunner {
         .text(s"max depth of the tree, default: ${defaultParams.maxDepth}")
         .action((x, c) => c.copy(maxDepth = x))
       opt[Int]("numIterations")
-        .text(s"number of iterations of boosting," + s" default: ${defaultParams.numIterations}")
+        .text("number of iterations of boosting," + s" default: ${defaultParams.numIterations}")
         .action((x, c) => c.copy(numIterations = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text("fraction of data to hold out for testing.  If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text("input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")

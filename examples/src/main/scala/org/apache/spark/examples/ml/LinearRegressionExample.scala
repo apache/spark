@@ -59,23 +59,23 @@ object LinearRegressionExample {
         .text(s"regularization parameter, default: ${defaultParams.regParam}")
         .action((x, c) => c.copy(regParam = x))
       opt[Double]("elasticNetParam")
-        .text(s"ElasticNet mixing parameter. For alpha = 0, the penalty is an L2 penalty. " +
-        s"For alpha = 1, it is an L1 penalty. For 0 < alpha < 1, the penalty is a combination of " +
+        .text("ElasticNet mixing parameter. For alpha = 0, the penalty is an L2 penalty. " +
+        "For alpha = 1, it is an L1 penalty. For 0 < alpha < 1, the penalty is a combination of " +
         s"L1 and L2, default: ${defaultParams.elasticNetParam}")
         .action((x, c) => c.copy(elasticNetParam = x))
       opt[Int]("maxIter")
         .text(s"maximum number of iterations, default: ${defaultParams.maxIter}")
         .action((x, c) => c.copy(maxIter = x))
       opt[Double]("tol")
-        .text(s"the convergence tolerance of iterations, Smaller value will lead " +
+        .text("the convergence tolerance of iterations, Smaller value will lead " +
         s"to higher accuracy with the cost of more iterations, default: ${defaultParams.tol}")
         .action((x, c) => c.copy(tol = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing. If given option testInput, " +
+        .text("fraction of data to hold out for testing. If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset. If given, option fracTest is ignored." +
+        .text("input path to test dataset. If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")

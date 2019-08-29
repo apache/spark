@@ -52,7 +52,7 @@ object IndexToStringExample {
     indexed.show()
 
     val inputColSchema = indexed.schema(indexer.getOutputCol)
-    println(s"StringIndexer will store labels in output column metadata: " +
+    println("StringIndexer will store labels in output column metadata: " +
         s"${Attribute.fromStructField(inputColSchema).toString}\n")
 
     val converter = new IndexToString()

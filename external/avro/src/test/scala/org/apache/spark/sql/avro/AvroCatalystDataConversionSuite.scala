@@ -130,7 +130,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
   test("read int as string") {
     val data = Literal(1)
     val avroTypeJson =
-      s"""
+      """
          |{
          |  "type": "string",
          |  "name": "my_string"
@@ -144,7 +144,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
   test("read string as int") {
     val data = Literal("abc")
     val avroTypeJson =
-      s"""
+      """
          |{
          |  "type": "int",
          |  "name": "my_int"
@@ -159,7 +159,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
   test("read float as double") {
     val data = Literal(1.23f)
     val avroTypeJson =
-      s"""
+      """
          |{
          |  "type": "double",
          |  "name": "my_double"
@@ -174,7 +174,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
   test("read double as float") {
     val data = Literal(1.23)
     val avroTypeJson =
-      s"""
+      """
          |{
          |  "type": "float",
          |  "name": "my_float"

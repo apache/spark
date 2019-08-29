@@ -38,7 +38,7 @@ private[spark] case class KafkaTokenClusterConf(
     keyPassword: Option[String],
     tokenMechanism: String,
     specifiedKafkaParams: Map[String, String]) {
-  override def toString: String = s"KafkaTokenClusterConf{" +
+  override def toString: String = "KafkaTokenClusterConf{" +
     s"identifier=$identifier, " +
     s"authBootstrapServers=$authBootstrapServers, " +
     s"targetServersRegex=$targetServersRegex, " +

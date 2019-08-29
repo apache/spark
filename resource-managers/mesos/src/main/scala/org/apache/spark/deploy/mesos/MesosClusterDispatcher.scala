@@ -58,7 +58,7 @@ private[mesos] class MesosClusterDispatcher(
     val authKey = SecurityManager.SPARK_AUTH_SECRET_CONF
     require(conf.getOption(authKey).isEmpty,
       s"The MesosClusterDispatcher does not support authentication via ${authKey}.  It is not " +
-        s"currently possible to run jobs in cluster mode with authentication on.")
+        "currently possible to run jobs in cluster mode with authentication on.")
   }
 
   private val publicAddress = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(args.host)

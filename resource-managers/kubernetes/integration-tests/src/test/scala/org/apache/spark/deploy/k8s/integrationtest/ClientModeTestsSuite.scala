@@ -68,7 +68,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
             .addToArgs("/opt/spark/bin/run-example")
-            .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
+            .addToArgs("--master", "k8s://https://kubernetes.default.svc")
             .addToArgs("--deploy-mode", "client")
             .addToArgs("--conf", s"spark.kubernetes.container.image=$image")
             .addToArgs(
@@ -83,7 +83,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
             .addToArgs("--conf", "spark.executor.cores=1")
             .addToArgs("--conf", "spark.executor.instances=1")
             .addToArgs("--conf",
-              s"spark.driver.host=" +
+              "spark.driver.host=" +
                 s"${driverService.getMetadata.getName}.${kubernetesTestComponents.namespace}.svc")
             .addToArgs("--conf", s"spark.driver.port=$driverPort")
             .addToArgs("--conf", s"spark.driver.blockManager.port=$blockManagerPort")

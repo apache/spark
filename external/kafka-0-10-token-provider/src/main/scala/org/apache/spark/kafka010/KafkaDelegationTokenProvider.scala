@@ -60,7 +60,7 @@ private[spark] class KafkaDelegationTokenProvider
       }
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get token cluster configuration", e)
+        logWarning("Failed to get token cluster configuration", e)
     }
     lowestNextRenewalDate
   }
@@ -72,7 +72,7 @@ private[spark] class KafkaDelegationTokenProvider
       KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).exists(delegationTokensRequired(_))
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Failed to get token cluster configuration", e)
+        logWarning("Failed to get token cluster configuration", e)
         false
     }
   }

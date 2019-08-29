@@ -111,7 +111,7 @@ class KafkaTokenSparkConfSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("getAllClusterConfigs should return empty list with malformed configuration") {
-    sparkConf.set(s"spark.kafka.clusters.", authBootStrapServers)
+    sparkConf.set("spark.kafka.clusters.", authBootStrapServers)
     assert(KafkaTokenSparkConf.getAllClusterConfigs(sparkConf).isEmpty)
   }
 

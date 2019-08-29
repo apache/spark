@@ -37,7 +37,7 @@ object OneVsRestExample {
   def main(args: Array[String]) {
     val spark = SparkSession
       .builder
-      .appName(s"OneVsRestExample")
+      .appName("OneVsRestExample")
       .getOrCreate()
 
     // $example on$

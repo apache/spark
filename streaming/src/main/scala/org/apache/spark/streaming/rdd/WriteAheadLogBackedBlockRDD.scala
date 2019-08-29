@@ -153,7 +153,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       if (dataRead == null) {
         throw new SparkException(
           s"Could not read data from write ahead log record ${partition.walRecordHandle}, " +
-            s"read returned null")
+            "read returned null")
       }
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)

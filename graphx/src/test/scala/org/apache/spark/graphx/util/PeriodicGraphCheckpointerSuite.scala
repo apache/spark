@@ -126,7 +126,7 @@ private object PeriodicGraphCheckpointerSuite {
       }
     } catch {
       case _: AssertionError =>
-        throw new Exception(s"PeriodicGraphCheckpointerSuite.checkPersistence failed with:\n" +
+        throw new Exception("PeriodicGraphCheckpointerSuite.checkPersistence failed with:\n" +
           s"\t gIndex = $gIndex\n" +
           s"\t iteration = $iteration\n" +
           s"\t graph.vertices.getStorageLevel = ${graph.vertices.getStorageLevel}\n" +
@@ -181,7 +181,7 @@ private object PeriodicGraphCheckpointerSuite {
       }
     } catch {
       case e: AssertionError =>
-        throw new Exception(s"PeriodicGraphCheckpointerSuite.checkCheckpoint failed with:\n" +
+        throw new Exception("PeriodicGraphCheckpointerSuite.checkCheckpoint failed with:\n" +
           s"\t gIndex = $gIndex\n" +
           s"\t iteration = $iteration\n" +
           s"\t checkpointInterval = $checkpointInterval\n" +

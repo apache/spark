@@ -48,7 +48,7 @@ private[kafka010] object KafkaWriter extends Logging {
       topic: Option[String] = None): Unit = {
     schema.find(_.name == TOPIC_ATTRIBUTE_NAME).getOrElse(
       if (topic.isEmpty) {
-        throw new AnalysisException(s"topic option required when no " +
+        throw new AnalysisException("topic option required when no " +
           s"'$TOPIC_ATTRIBUTE_NAME' attribute is present. Use the " +
           s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a topic.")
       } else {

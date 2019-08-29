@@ -264,7 +264,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     val ex = intercept[AnalysisException] {
       /* topic field wrong type */
       createKafkaWriter(input.toDF())(
-        withSelectExpr = s"CAST('1' as INT) as topic", "value"
+        withSelectExpr = "CAST('1' as INT) as topic", "value"
       )
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("topic type must be a string"))

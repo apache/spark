@@ -467,14 +467,14 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       if (useSet) {
         assert(
           output(i).toSet === expectedOutput(i).toSet,
-          s"Set comparison failed\n" +
+          "Set comparison failed\n" +
             s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
             s"Generated output (${output.size} items): ${output.mkString("\n")}"
         )
       } else {
         assert(
           output(i).toList === expectedOutput(i).toList,
-          s"Ordered list comparison failed\n" +
+          "Ordered list comparison failed\n" +
             s"Expected output (${expectedOutput.size} items):\n${expectedOutput.mkString("\n")}\n" +
             s"Generated output (${output.size} items): ${output.mkString("\n")}"
         )

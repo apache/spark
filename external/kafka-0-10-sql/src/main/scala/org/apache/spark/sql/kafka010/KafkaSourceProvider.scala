@@ -309,7 +309,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (!params.contains(s"kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Option 'kafka.${ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG}' must be specified for " +
-          s"configuring Kafka consumer")
+          "configuring Kafka consumer")
     }
   }
 

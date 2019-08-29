@@ -252,7 +252,7 @@ class KafkaSinkStreamingSuite extends KafkaSinkSuiteBase with StreamTest {
       /* topic field wrong type */
       ex = intercept[StreamingQueryException] {
         writer = createKafkaWriter(input.toDF())(
-          withSelectExpr = s"CAST('1' as INT) as topic", "value"
+          withSelectExpr = "CAST('1' as INT) as topic", "value"
         )
         input.addData("1", "2", "3", "4", "5")
         writer.processAllAvailable()

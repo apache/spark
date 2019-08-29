@@ -89,7 +89,7 @@ private[spark] object KubernetesUtils extends Logging {
     } catch {
       case e: Exception =>
         logError(
-          s"Encountered exception while attempting to load initial pod spec from file", e)
+          "Encountered exception while attempting to load initial pod spec from file", e)
         throw new SparkException("Could not load pod from template file.", e)
     }
   }
@@ -102,7 +102,7 @@ private[spark] object KubernetesUtils extends Logging {
         case _ =>
           logWarning(
             s"specified container ${name} not found on pod template, " +
-              s"falling back to taking the first container")
+              "falling back to taking the first container")
           Option.empty
       }
     val containers = pod.getSpec.getContainers.asScala.toList

@@ -202,7 +202,7 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.report.interval")
       .doc("Interval between reports of the current app status in cluster mode.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
+      .checkValue(interval => interval > 0, "Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
   val KUBERNETES_EXECUTOR_API_POLLING_INTERVAL =
@@ -210,7 +210,7 @@ private[spark] object Config extends Logging {
       .doc("Interval between polls against the Kubernetes API server to inspect the " +
         "state of executors.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(interval => interval > 0, s"API server polling interval must be a" +
+      .checkValue(interval => interval > 0, "API server polling interval must be a" +
         " positive time value.")
       .createWithDefaultString("30s")
 
@@ -219,7 +219,7 @@ private[spark] object Config extends Logging {
       .doc("Interval between successive inspection of executor events sent from the" +
         " Kubernetes API.")
       .timeConf(TimeUnit.MILLISECONDS)
-      .checkValue(interval => interval > 0, s"Event processing interval must be a positive" +
+      .checkValue(interval => interval > 0, "Event processing interval must be a positive" +
         " time value.")
       .createWithDefaultString("1s")
 

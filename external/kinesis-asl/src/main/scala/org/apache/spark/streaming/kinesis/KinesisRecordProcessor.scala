@@ -169,16 +169,16 @@ private[kinesis] object KinesisRecordProcessor extends Logging {
           retryRandom(expression, numRetriesLeft - 1, maxBackOffMillis)
         /* Throw:  Shutdown has been requested by the Kinesis Client Library. */
         case _: ShutdownException =>
-          logError(s"ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
+          logError("ShutdownException:  Caught shutdown exception, skipping checkpoint.", e)
           throw e
         /* Throw:  Non-retryable exception has occurred with the Kinesis Client Library */
         case _: InvalidStateException =>
-          logError(s"InvalidStateException:  Cannot save checkpoint to the DynamoDB table used" +
-              s" by the Amazon Kinesis Client Library.  Table likely doesn't exist.", e)
+          logError("InvalidStateException:  Cannot save checkpoint to the DynamoDB table used" +
+              " by the Amazon Kinesis Client Library.  Table likely doesn't exist.", e)
           throw e
         /* Throw:  Unexpected exception has occurred */
         case _ =>
-          logError(s"Unexpected, non-retryable exception.", e)
+          logError("Unexpected, non-retryable exception.", e)
           throw e
       }
     }

@@ -72,7 +72,7 @@ private[streaming] class PIDRateEstimator(
     s"Derivative term $derivative in PIDRateEstimator should be >= 0.")
   require(
     minRate > 0,
-    s"Minimum rate in PIDRateEstimator should be > 0")
+    "Minimum rate in PIDRateEstimator should be > 0")
 
   logInfo(s"Created PIDRateEstimator with proportional = $proportional, integral = $integral, " +
     s"derivative = $derivative, min rate = $minRate")

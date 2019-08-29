@@ -84,7 +84,7 @@ class ExecutorClassLoaderSuite
   test("child over system classloader") {
     // JavaFileObject for scala.Option class
     val scalaOptionFile = new SimpleJavaFileObject(
-      URI.create(s"string:///scala/Option.java"),
+      URI.create("string:///scala/Option.java"),
       JavaFileObject.Kind.SOURCE) {
 
       override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = {

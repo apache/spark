@@ -53,7 +53,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       MesosClusterDispatcher.printStream.println(s"Using properties file: $file")
     }
 
-    MesosClusterDispatcher.printStream.println(s"Spark Config properties set:")
+    MesosClusterDispatcher.printStream.println("Spark Config properties set:")
     conf.getAll.foreach(println)
   }
 

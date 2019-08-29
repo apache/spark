@@ -721,8 +721,8 @@ class DirectKafkaStreamSuite
       new TopicPartition(topic, 2) -> 20L,
       new TopicPartition(topic, 3) -> 30L
     )
-    assert(result.contains(expected), s"Number of messages per partition must be at least equal" +
-      s" to the specified minimum")
+    assert(result.contains(expected), "Number of messages per partition must be at least equal" +
+      " to the specified minimum")
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */

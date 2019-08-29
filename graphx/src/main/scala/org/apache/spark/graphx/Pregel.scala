@@ -122,7 +122,7 @@ object Pregel extends Logging {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
-    require(maxIterations > 0, s"Maximum number of iterations must be greater than 0," +
+    require(maxIterations > 0, "Maximum number of iterations must be greater than 0," +
       s" but got ${maxIterations}")
 
     val checkpointInterval = graph.vertices.sparkContext.getConf

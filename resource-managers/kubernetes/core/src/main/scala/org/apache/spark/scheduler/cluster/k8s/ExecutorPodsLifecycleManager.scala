@@ -93,8 +93,8 @@ private[spark] class ExecutorPodsLifecycleManager(
         -- execIdsRemovedInThisRound).foreach { missingExecutorId =>
         if (removedExecutorsCache.getIfPresent(missingExecutorId) == null) {
           val exitReasonMessage = s"The executor with ID $missingExecutorId was not found in the" +
-            s" cluster but we didn't get a reason why. Marking the executor as failed. The" +
-            s" executor may have been deleted but the driver missed the deletion event."
+            " cluster but we didn't get a reason why. Marking the executor as failed. The" +
+            " executor may have been deleted but the driver missed the deletion event."
           logDebug(exitReasonMessage)
           val exitReason = ExecutorExited(
             UNKNOWN_EXIT_CODE,
@@ -108,7 +108,7 @@ private[spark] class ExecutorPodsLifecycleManager(
 
     if (execIdsRemovedInThisRound.nonEmpty) {
       logDebug(s"Removed executors with ids ${execIdsRemovedInThisRound.mkString(",")}" +
-        s" from Spark that were either found to be deleted or non-existent in the cluster.")
+        " from Spark that were either found to be deleted or non-existent in the cluster.")
     }
   }
 

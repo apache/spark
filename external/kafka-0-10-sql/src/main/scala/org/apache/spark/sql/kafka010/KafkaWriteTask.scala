@@ -85,7 +85,7 @@ private[kafka010] abstract class KafkaRowWriter(
     val key = projectedRow.getBinary(1)
     val value = projectedRow.getBinary(2)
     if (topic == null) {
-      throw new NullPointerException(s"null topic present in the data. Use the " +
+      throw new NullPointerException("null topic present in the data. Use the " +
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
     val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
@@ -102,7 +102,7 @@ private[kafka010] abstract class KafkaRowWriter(
     val topicExpression = topic.map(Literal(_)).orElse {
       inputSchema.find(_.name == KafkaWriter.TOPIC_ATTRIBUTE_NAME)
     }.getOrElse {
-      throw new IllegalStateException(s"topic option required when no " +
+      throw new IllegalStateException("topic option required when no " +
         s"'${KafkaWriter.TOPIC_ATTRIBUTE_NAME}' attribute is present")
     }
     topicExpression.dataType match {

@@ -60,7 +60,7 @@ private[mesos] class MesosExternalBlockHandler(
           s"heartbeat timeout $timeout ms).")
         if (connectedApps.containsKey(appId)) {
           logWarning(s"Received a registration request from app $appId, but it was already " +
-            s"registered")
+            "registered")
         }
         connectedApps.put(appId, appState)
         callback.onSuccess(ByteBuffer.allocate(0))
@@ -72,7 +72,7 @@ private[mesos] class MesosExternalBlockHandler(
               s"address $address).")
             existingAppState.lastHeartbeat = System.nanoTime()
           case None =>
-            logWarning(s"Received ShuffleServiceHeartbeat from an unknown app (remote " +
+            logWarning("Received ShuffleServiceHeartbeat from an unknown app (remote " +
               s"address $address, appId '$appId').")
         }
       case _ => super.handleMessage(message, client, callback)

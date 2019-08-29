@@ -421,7 +421,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("subscribe", topic)
-        .option("startingOffsets", s"earliest")
+        .option("startingOffsets", "earliest")
         .load()
 
       // Test the written initial offset file has 0 byte in the beginning, so that
@@ -460,7 +460,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         .format("kafka")
         .option("kafka.bootstrap.servers", testUtils.brokerAddress)
         .option("subscribe", topic)
-        .option("startingOffsets", s"earliest")
+        .option("startingOffsets", "earliest")
         .load()
         .selectExpr("CAST(value AS STRING)")
         .as[String]
@@ -502,7 +502,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         StartStream(checkpointLocation = metadataPath.getAbsolutePath),
         ExpectFailure[IllegalStateException](e => {
           Seq(
-            s"maximum supported log version is v1, but encountered v99999",
+            "maximum supported log version is v1, but encountered v99999",
             "produced by a newer version of Spark and cannot be read by this version"
           ).foreach { message =>
             assert(e.toString.contains(message))
@@ -522,7 +522,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
-      .option("startingOffsets", s"earliest")
+      .option("startingOffsets", "earliest")
       .option("subscribe", topic)
       .load()
 
@@ -1422,7 +1422,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
-      .option("startingOffsets", s"earliest")
+      .option("startingOffsets", "earliest")
       .option("subscribe", topic)
       .load()
 
@@ -1505,7 +1505,7 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val reader = spark.readStream
     reader
       .format(classOf[KafkaSourceProvider].getCanonicalName.stripSuffix("$"))
-      .option("startingOffsets", s"earliest")
+      .option("startingOffsets", "earliest")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("failOnDataLoss", failOnDataLoss.toString)

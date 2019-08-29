@@ -205,7 +205,7 @@ private[hive] class SparkExecuteStatementOperation(
           throw new HiveSQLException("The background threadpool cannot accept" +
             " new task for execution, please retry the operation", rejected)
         case NonFatal(e) =>
-          logError(s"Error executing query in background", e)
+          logError("Error executing query in background", e)
           setState(OperationState.ERROR)
           throw new HiveSQLException(e)
       }

@@ -124,13 +124,13 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
 
   test("PVs with local storage", k8sTestTag, MinikubeTag) {
     sparkAppConf
-      .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
+      .set("spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
-      .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.options.claimName",
+      .set("spark.kubernetes.driver.volumes.persistentVolumeClaim.data.options.claimName",
         PVC_NAME)
-      .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.path",
+      .set("spark.kubernetes.executor.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
+      .set("spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
         PVC_NAME)
     val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {

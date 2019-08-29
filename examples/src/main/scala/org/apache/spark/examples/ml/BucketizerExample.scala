@@ -76,7 +76,7 @@ object BucketizerExample {
     // Transform original data into its bucket index.
     val bucketedData2 = bucketizer2.transform(dataFrame2)
 
-    println(s"Bucketizer output with [" +
+    println("Bucketizer output with [" +
       s"${bucketizer2.getSplitsArray(0).length-1}, " +
       s"${bucketizer2.getSplitsArray(1).length-1}] buckets for each input column")
     bucketedData2.show()

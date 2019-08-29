@@ -351,7 +351,7 @@ private[spark] class Client(
       throw new IllegalArgumentException(s"Required executor memory ($executorMemory), overhead " +
         s"($executorMemoryOverhead MB), and PySpark memory ($pysparkWorkerMemory MB) is above " +
         s"the max threshold ($maxMem MB) of this cluster! Please check the values of " +
-        s"'yarn.scheduler.maximum-allocation-mb' and/or 'yarn.nodemanager.resource.memory-mb'.")
+        "'yarn.scheduler.maximum-allocation-mb' and/or 'yarn.nodemanager.resource.memory-mb'.")
     }
     val amMem = amMemory + amMemoryOverhead
     if (amMem > maxMem) {

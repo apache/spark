@@ -72,7 +72,7 @@ private[streaming] class ExecutorAllocationManager(
 
   def start(): Unit = {
     timer.start()
-    logInfo(s"ExecutorAllocationManager started with " +
+    logInfo("ExecutorAllocationManager started with " +
       s"ratios = [$scalingUpRatio, $scalingDownRatio] and interval = $scalingIntervalSecs sec")
   }
 
@@ -131,7 +131,7 @@ private[streaming] class ExecutorAllocationManager(
         client.killExecutor(execIdToRemove)
         logInfo(s"Requested to kill executor $execIdToRemove")
       } else {
-        logInfo(s"No non-receiver executors to kill")
+        logInfo("No non-receiver executors to kill")
       }
     } else {
       logInfo("No available executor to kill")

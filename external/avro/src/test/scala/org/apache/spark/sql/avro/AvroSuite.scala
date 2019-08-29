@@ -1008,7 +1008,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
         sql("select testType()").write.format("avro").mode("overwrite").save(tempDir)
       }.getMessage
       assert(msg.toLowerCase(Locale.ROOT)
-        .contains(s"avro data source does not support interval data type."))
+        .contains("avro data source does not support interval data type."))
     }
   }
 
@@ -1139,7 +1139,7 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       assert(spark.sql("SELECT * FROM episodesEmpty").collect().isEmpty)
 
       spark.sql(
-        s"""
+        """
            |INSERT OVERWRITE TABLE episodesEmpty
            |SELECT * FROM episodes
          """.stripMargin.replaceAll("\n", " "))

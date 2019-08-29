@@ -52,11 +52,11 @@ object CosineSimilarity {
       head("CosineSimilarity: an example app.")
       opt[Double]("threshold")
         .required()
-        .text(s"threshold similarity: to tradeoff computation vs quality estimate")
+        .text("threshold similarity: to tradeoff computation vs quality estimate")
         .action((x, c) => c.copy(threshold = x))
       arg[String]("<inputFile>")
         .required()
-        .text(s"input file, one row per line, space-separated")
+        .text("input file, one row per line, space-separated")
         .action((x, c) => c.copy(inputFile = x))
       note(
         """

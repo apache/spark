@@ -71,7 +71,7 @@ private[spark] class ClientArguments(args: Array[String]) {
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
     message +
-      s"""
+      """
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster

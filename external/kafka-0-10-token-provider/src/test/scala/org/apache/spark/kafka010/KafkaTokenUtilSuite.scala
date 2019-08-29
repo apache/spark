@@ -133,7 +133,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
     assert(saslJaasConfig.contains("Krb5LoginModule required"))
-    assert(saslJaasConfig.contains(s"debug="))
+    assert(saslJaasConfig.contains("debug="))
     assert(saslJaasConfig.contains("useKeyTab=true"))
     assert(saslJaasConfig.contains(s"""keyTab="$keytab""""))
     assert(saslJaasConfig.contains(s"""principal="$principal""""))
@@ -151,7 +151,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(adminClientProperties.containsKey(SaslConfigs.SASL_MECHANISM))
     val saslJaasConfig = adminClientProperties.getProperty(SaslConfigs.SASL_JAAS_CONFIG)
     assert(saslJaasConfig.contains("Krb5LoginModule required"))
-    assert(saslJaasConfig.contains(s"debug="))
+    assert(saslJaasConfig.contains("debug="))
     assert(saslJaasConfig.contains("useTicketCache=true"))
   }
 

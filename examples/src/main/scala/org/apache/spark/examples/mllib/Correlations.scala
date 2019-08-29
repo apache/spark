@@ -77,7 +77,7 @@ object Correlations {
     val corrType = "pearson"
     println()
     println(s"Correlation ($corrType) between label and each feature")
-    println(s"Feature\tCorrelation")
+    println("Feature\tCorrelation")
     var feature = 0
     while (feature < numFeatures) {
       val featureRDD = examples.map(_.features(feature))

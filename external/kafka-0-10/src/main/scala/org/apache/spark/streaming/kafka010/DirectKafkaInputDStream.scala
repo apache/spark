@@ -196,11 +196,11 @@ private[spark] class DirectKafkaInputDStream[K, V](
     // Check if there's any partition been revoked because of consumer rebalance.
     val revokedPartitions = currentOffsets.keySet.diff(parts)
     if (revokedPartitions.nonEmpty) {
-      throw new IllegalStateException(s"Previously tracked partitions " +
+      throw new IllegalStateException("Previously tracked partitions " +
         s"${revokedPartitions.mkString("[", ",", "]")} been revoked by Kafka because of consumer " +
-        s"rebalance. This is mostly due to another stream with same group id joined, " +
-        s"please check if there're different streaming application misconfigure to use same " +
-        s"group id. Fundamentally different stream should use different group id")
+        "rebalance. This is mostly due to another stream with same group id joined, " +
+        "please check if there're different streaming application misconfigure to use same " +
+        "group id. Fundamentally different stream should use different group id")
     }
 
     // position for new partitions determined by auto.offset.reset if no commit

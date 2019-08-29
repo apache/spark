@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
 abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
-  val dateSchema = s"""
+  val dateSchema = """
       {
         "namespace": "logical",
         "type": "record",
@@ -82,7 +82,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  val timestampSchema = s"""
+  val timestampSchema = """
       {
         "namespace": "logical",
         "type": "record",
@@ -156,7 +156,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
 
       val expected = timestampInputData.map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
 
-      val userSpecifiedTimestampSchema = s"""
+      val userSpecifiedTimestampSchema = """
       {
         "namespace": "logical",
         "type": "record",

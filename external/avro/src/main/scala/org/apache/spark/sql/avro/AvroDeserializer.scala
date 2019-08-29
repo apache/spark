@@ -261,7 +261,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
 
                   case _ =>
                     throw new IncompatibleSchemaException(
-                      s"Cannot convert Avro to catalyst because schema at path " +
+                      "Cannot convert Avro to catalyst because schema at path " +
                         s"${path.mkString(".")} is not compatible " +
                         s"(avroType = $avroType, sqlType = $catalystType).\n" +
                         s"Source Avro schema: $rootAvroType.\n" +

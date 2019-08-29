@@ -252,9 +252,9 @@ private[spark] abstract class YarnSchedulerBackend(
             .map { reason => RemoveExecutor(executorId, reason) }(ThreadUtils.sameThread)
             .recover {
               case NonFatal(e) =>
-                logWarning(s"Attempted to get executor loss reason" +
+                logWarning("Attempted to get executor loss reason" +
                   s" for executor id ${executorId} at RPC address ${executorRpcAddress}," +
-                  s" but got no response. Marking as slave lost.", e)
+                  " but got no response. Marking as slave lost.", e)
                 RemoveExecutor(executorId, SlaveLost())
             }(ThreadUtils.sameThread)
         case None =>

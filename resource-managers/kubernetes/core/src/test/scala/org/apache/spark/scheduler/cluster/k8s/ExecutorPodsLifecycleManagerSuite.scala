@@ -91,9 +91,9 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   test("When the scheduler backend lists executor ids that aren't present in the cluster," +
     " remove those executors from Spark.") {
     when(schedulerBackend.getExecutorIds()).thenReturn(Seq("1"))
-    val msg = s"The executor with ID 1 was not found in the cluster but we didn't" +
-      s" get a reason why. Marking the executor as failed. The executor may have been" +
-      s" deleted but the driver missed the deletion event."
+    val msg = "The executor with ID 1 was not found in the cluster but we didn't" +
+      " get a reason why. Marking the executor as failed. The executor may have been" +
+      " deleted but the driver missed the deletion event."
     val expectedLossReason = ExecutorExited(-1, exitCausedByApp = false, msg)
     snapshotsStore.replaceSnapshot(Seq.empty[Pod])
     snapshotsStore.notifySubscribers()

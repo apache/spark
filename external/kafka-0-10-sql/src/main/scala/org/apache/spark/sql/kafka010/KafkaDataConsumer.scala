@@ -627,7 +627,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
         // at all. This may happen if the cache was invalidate while this consumer was being used.
         // Just close this consumer.
         intConsumer.close()
-        logInfo(s"Released a supposedly cached consumer that was not found in the cache")
+        logInfo("Released a supposedly cached consumer that was not found in the cache")
       }
     }
   }

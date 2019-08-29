@@ -86,42 +86,42 @@ object DecisionTreeRunner {
         .text(s"max number of bins, default: ${defaultParams.maxBins}")
         .action((x, c) => c.copy(maxBins = x))
       opt[Int]("minInstancesPerNode")
-        .text(s"min number of instances required at child nodes to create the parent split," +
+        .text("min number of instances required at child nodes to create the parent split," +
           s" default: ${defaultParams.minInstancesPerNode}")
         .action((x, c) => c.copy(minInstancesPerNode = x))
       opt[Double]("minInfoGain")
         .text(s"min info gain required to create a split, default: ${defaultParams.minInfoGain}")
         .action((x, c) => c.copy(minInfoGain = x))
       opt[Int]("numTrees")
-        .text(s"number of trees (1 = decision tree, 2+ = random forest)," +
+        .text("number of trees (1 = decision tree, 2+ = random forest)," +
           s" default: ${defaultParams.numTrees}")
         .action((x, c) => c.copy(numTrees = x))
       opt[String]("featureSubsetStrategy")
-        .text(s"feature subset sampling strategy" +
+        .text("feature subset sampling strategy" +
           s" (${RandomForest.supportedFeatureSubsetStrategies.mkString(", ")}), " +
           s"default: ${defaultParams.featureSubsetStrategy}")
         .action((x, c) => c.copy(featureSubsetStrategy = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text("fraction of data to hold out for testing.  If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("useNodeIdCache")
-        .text(s"whether to use node Id cache during training, " +
+        .text("whether to use node Id cache during training, " +
           s"default: ${defaultParams.useNodeIdCache}")
         .action((x, c) => c.copy(useNodeIdCache = x))
       opt[String]("checkpointDir")
-        .text(s"checkpoint directory where intermediate node Id caches will be stored, " +
+        .text("checkpoint directory where intermediate node Id caches will be stored, " +
          s"default: ${defaultParams.checkpointDir match {
            case Some(strVal) => strVal
            case None => "None"
          }}")
         .action((x, c) => c.copy(checkpointDir = Some(x)))
       opt[Int]("checkpointInterval")
-        .text(s"how often to checkpoint the node Id cache, " +
+        .text("how often to checkpoint the node Id cache, " +
          s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text("input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -199,8 +199,8 @@ object DecisionTreeRunner {
         }
         val numExamples = examples.count()
         println(s"numClasses = $numClasses.")
-        println(s"Per-class example fractions, counts:")
-        println(s"Class\tFrac\tCount")
+        println("Per-class example fractions, counts:")
+        println("Class\tFrac\tCount")
         sortedClasses.foreach { c =>
           val frac = classCounts(c) / numExamples.toDouble
           println(s"$c\t$frac\t${classCounts(c)}")

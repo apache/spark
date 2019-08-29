@@ -194,7 +194,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     val setComparison = output.zip(expectedPartialOutput).forall {
       case (o, e) => o.toSet === e.toSet
     }
-    assert(setComparison, s"set comparison failed\n" +
+    assert(setComparison, "set comparison failed\n" +
       s"Expected output items:\n${expectedPartialOutput.mkString("\n")}\n" +
       s"Generated output items: ${output.mkString("\n")}"
     )

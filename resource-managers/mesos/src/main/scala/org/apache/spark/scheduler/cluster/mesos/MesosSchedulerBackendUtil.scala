@@ -224,7 +224,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
 
     if (illegalSecretInput(secretPaths, secrets)) {
       throw new SparkException(
-        s"Need to give equal numbers of secrets and file paths for file-based " +
+        "Need to give equal numbers of secrets and file paths for file-based " +
           s"reference secrets got secrets $secrets, and paths $secretPaths")
     }
 
@@ -246,7 +246,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEYS).getOrElse(Nil)
     if (illegalSecretInput(secretEnvKeys, secrets)) {
       throw new SparkException(
-        s"Need to give equal numbers of secrets and environment keys " +
+        "Need to give equal numbers of secrets and environment keys " +
           s"for environment-based reference secrets got secrets $secrets, " +
           s"and keys $secretEnvKeys")
     }

@@ -54,7 +54,7 @@ object DenseKMeans {
       head("DenseKMeans: an example k-means app for dense data.")
       opt[Int]('k', "k")
         .required()
-        .text(s"number of clusters, required")
+        .text("number of clusters, required")
         .action((x, c) => c.copy(k = x))
       opt[Int]("numIterations")
         .text(s"number of iterations, default: ${defaultParams.numIterations}")
