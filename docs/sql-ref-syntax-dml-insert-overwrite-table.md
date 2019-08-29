@@ -31,20 +31,31 @@ INSERT OVERWRITE [TABLE] table_name
 {% endhighlight %}
 
 ### Parameters
-#### ***table_name***:
-The name of an existing table.
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>The name of an existing table.</dd>
+</dl>
 
-#### ***PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )***:
-Specifies one or more partition column and value pairs. The partition value is optional.
+<dl>
+  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
+  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+</dl>
 
-#### ***VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]***:
-Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
+<dl>
+  <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
+  <dd>Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.</dd>
+</dl>
 
-#### ***query***:
-A query that produces the rows to be inserted. It can be in one of following formats:
-- a `SELECT` statement
-- a `TABLE` statement
-- a `FROM` statement
+<dl>
+  <dt><code><em>query</em></code></dt>
+  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
+    <ul>
+      <li>a <code>SELECT</code> statement</li>
+      <li>a <code>TABLE</code> statement</li>
+      <li>a <code>FROM</code> statement</li>
+    </ul>
+   </dd>
+</dl>
 
 ### Examples
 #### Insert Using a VALUES Clause

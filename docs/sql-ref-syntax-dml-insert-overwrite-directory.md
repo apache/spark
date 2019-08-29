@@ -29,23 +29,42 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY [ directory_path ]
 {% endhighlight %}
 
 ### Parameters
-#### ***directory_path***:
-Specifies the destination directory. It can also be specified in `OPTIONS` using `path`. The `LOCAL` keyword is used to specify that the directory is on the local file system.
+<dl>
+  <dt><code><em>directory_path</em></code></dt>
+  <dd>
+  Specifies the destination directory. It can also be specified in <code>OPTIONS</code> using <code>path</code>. The <code>LOCAL</code> keyword is used to specify that the directory is on the local file system.
+  </dd>
+</dl>
 
-#### ***file_format***:
-Specifies the file format to use for the insert. Valid options are `TEXT`, `CSV`, `JSON`, `JDBC`, `PARQUET`, `ORC`, `HIVE`, `DELTA`, `LIBSVM`, or a fully qualified class name of a custom implementation of `org.apache.spark.sql.sources.DataSourceRegister`.
+<dl>
+  <dt><code><em>file_format</em></code></dt>
+  <dd>
+  Specifies the file format to use for the insert. Valid options are <code>TEXT</code>, <code>CSV</code>, <code>JSON</code>, <code>JDBC</code>, <code>PARQUET</code>, <code>ORC</code>, <code>HIVE</code>, <code>DELTA</code>, <code>LIBSVM</code>, or a fully qualified class name of a custom implementation of <code>org.apache.spark.sql.sources.DataSourceRegister</code>.
+  </dd>
+</dl>
 
-#### ***OPTIONS ( key = val [ , ... ] )***:
-Specifies one or more table property key and value pairs.
+<dl>
+  <dt><code><em>OPTIONS ( key = val [ , ... ] )</em></code></dt>
+  <dd>Specifies one or more table property key and value pairs.</dd>
+</dl>
 
-#### ***VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]***:
-Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
+<dl>
+  <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
+  <dd>
+  Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
+  </dd>
+</dl>
 
-#### ***query***:
-A query that produces the rows to be inserted. It can be in one of following formats:
-- a `SELECT` statement
-- a `TABLE` statement
-- a `FROM` statement
+<dl>
+  <dt><code><em>query</em></code></dt>
+  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
+    <ul>
+      <li>a <code>SELECT</code> statement</li>
+      <li>a <code>TABLE</code> statement</li>
+      <li>a <code>FROM</code> statement</li>
+    </ul>
+   </dd>
+</dl>
 
 ### Examples
 {% highlight sql %}

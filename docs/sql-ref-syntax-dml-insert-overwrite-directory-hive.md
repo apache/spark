@@ -31,23 +31,44 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
 {% endhighlight %}
 
 ### Parameters
-#### ***directory_path***:
-Specifies the destination directory.
+<dl>
+  <dt><code><em>directory_path</em></code></dt>
+  <dd>
+  Specifies the destination directory. The <code>LOCAL</code> keyword is used to specify that the directory is on the local file system.
+  </dd>
+</dl>
 
-#### ***row_format***:
-Specifies the row format for this insert. Valid options are `SERDE` clause and `DELIMITED` clause. `SERDE` clause can be used to specify a custom `SerDe` for this insert. Alternatively, `DELIMITED` clause can be used to specify the native `SerDe` and state the delimiter, escape character, null character, and so on.
+<dl>
+  <dt><code><em>row_format</em></code></dt>
+  <dd>
+  Specifies the row format for this insert. Valid options are <code>SERDE</code> clause and <code>DELIMITED</code> clause. <code>SERDE</code> clause can be used to specify a custom <code>SerDe</code> for this insert. Alternatively, <code>DELIMITED</code> clause can be used to specify the native <code>SerDe</code> and state the delimiter, escape character, null character, and so on.
+  </dd>
+</dl>
 
-#### ***file_format***:
-Specifies the file format for this insert. Valid options are `TEXTFILE`, `SEQUENCEFILE`, `RCFILE`, `ORC`, `PARQUET`, and `AVRO`. You can also specify your own input and output format using `INPUTFORMAT` and `OUTPUTFORMAT`. `ROW FORMAT SERDE` can only be used with `TEXTFILE`, `SEQUENCEFILE`, or `RCFILE`, while `ROW FORMAT DELIMITED` can only be used with `TEXTFILE`.
+<dl>
+  <dt><code><em>file_format</em></code></dt>
+  <dd>
+  Specifies the file format for this insert. Valid options are <code>TEXTFILE</code>, <code>SEQUENCEFILE</code>, <code>RCFILE</code>, <code>ORC</code>, <code>PARQUET</code>, and <code>AVRO</code>. You can also specify your own input and output format using <code>INPUTFORMAT</code> and <code>OUTPUTFORMAT</code>. <code>ROW FORMAT SERDE</code> can only be used with <code>TEXTFILE</code>, <code>SEQUENCEFILE</code>, or <code>RCFILE</code>, while <code>ROW FORMAT DELIMITED</code> can only be used with <code>TEXTFILE</code>.
+  </dd>
+</dl>
 
-#### ***VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]***:
-Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
+<dl>
+  <dt><code><em>VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ]</em></code></dt>
+  <dd>
+  Specifies the values to be inserted. Either an explicitly specified value or a NULL can be inserted. A comma must be used to seperate each value in the clause. More than one set of values can be specified to insert multiple rows.
+  </dd>
+</dl>
 
-#### ***query***:
-A query that produces the rows to be inserted. It can be in one of following formats:
-- a `SELECT` statement
-- a `TABLE` statement
-- a `FROM` statement
+<dl>
+  <dt><code><em>query</em></code></dt>
+  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
+    <ul>
+      <li>a <code>SELECT</code> statement</li>
+      <li>a <code>TABLE</code> statement</li>
+      <li>a <code>FROM</code> statement</li>
+    </ul>
+   </dd>
+</dl>
 
 ### Examples
 {% highlight sql %}
