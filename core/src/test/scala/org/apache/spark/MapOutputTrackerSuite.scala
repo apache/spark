@@ -69,9 +69,10 @@ class MapOutputTrackerSuite extends SparkFunSuite {
         Array(10000L, 1000L), 6))
     val statuses = tracker.getMapSizesByExecutorId(10, 0)
     assert(statuses.toSet ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000))),
-          (BlockManagerId("b", "hostB", 1000), ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000))))
-        .toSet)
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0))),
+          (BlockManagerId("b", "hostB", 1000),
+            ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()
     rpcEnv.shutdown()
@@ -150,7 +151,8 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       BlockManagerId("a", "hostA", 1000), Array(1000L), 5))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
-      Seq((BlockManagerId("a", "hostA", 1000), ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000)))))
+      Seq((BlockManagerId("a", "hostA", 1000),
+        ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0)))))
     assert(0 == masterTracker.getNumCachedSerializedBroadcast)
 
     val masterTrackerEpochBeforeLossOfMapOutput = masterTracker.getEpoch
@@ -318,9 +320,11 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     assert(tracker.getMapSizesByExecutorId(10, 0, 4).toSeq ===
         Seq(
           (BlockManagerId("a", "hostA", 1000),
-              Seq((ShuffleBlockId(10, 5, 1), size1000), (ShuffleBlockId(10, 5, 3), size10000))),
+              Seq((ShuffleBlockId(10, 5, 1), size1000, 0),
+                (ShuffleBlockId(10, 5, 3), size10000, 0))),
           (BlockManagerId("b", "hostB", 1000),
-              Seq((ShuffleBlockId(10, 6, 0), size10000), (ShuffleBlockId(10, 6, 2), size1000)))
+              Seq((ShuffleBlockId(10, 6, 0), size10000, 1),
+                (ShuffleBlockId(10, 6, 2), size1000, 1)))
         )
     )
 
