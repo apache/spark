@@ -129,7 +129,7 @@ class ExecutorClassLoader(
   }
 
   // See org.apache.spark.network.server.TransportRequestHandler.processStreamRequest.
-  private val STREAM_NOT_FOUND_REGEX = s"Stream '.*' was not found.".r.pattern
+  private val STREAM_NOT_FOUND_REGEX = "Stream '.*' was not found.".r.pattern
 
   private def getClassFileInputStreamFromSparkRPC(path: String): InputStream = {
     val channel = env.rpcEnv.openChannel(s"$classUri/${urlEncode(path)}")

@@ -78,7 +78,7 @@ import org.apache.spark.streaming.kafka010._
 object DirectKerberizedKafkaWordCount {
   def main(args: Array[String]) {
     if (args.length < 3) {
-      System.err.println(s"""
+      System.err.println("""
         |Usage: DirectKerberizedKafkaWordCount <brokers> <groupId> <topics>
         |  <brokers> is a list of one or more Kafka brokers
         |  <groupId> is a consumer group name to consume from topics

@@ -309,6 +309,9 @@ This file is divided into 3 sections:
 
   <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
 
+  <!-- Empty interpolated strings are harder to read and not necessary. -->
+  <check level="error" class="org.scalastyle.scalariform.EmptyInterpolatedStringChecker" enabled="true"></check>
+
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
   <!-- ================================================================================ -->
