@@ -239,12 +239,13 @@ object HiveThriftServer2 extends Logging {
       executionList(id).state = ExecutionState.COMPILED
     }
 
-    def onStatementCanceled(id: String): Unit = synchronized {
-      executionList(id).finishTimestamp = System.currentTimeMillis
-      executionList(id).state = ExecutionState.CANCELED
-      totalRunning -= 1
-      // for progress bar
-      trimExecutionIfNecessary()
+    def onStatementCanceled(id: String): Unit = {
+      synchronized {
+        executionList(id).finishTimestamp = System.currentTimeMillis
+        executionList(id).state = ExecutionState.CANCELED
+        totalRunning -= 1
+        trimExecutionIfNecessary()
+      }
     }
 
     def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
