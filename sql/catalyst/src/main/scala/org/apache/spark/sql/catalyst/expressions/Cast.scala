@@ -158,6 +158,11 @@ object Cast {
     case _ => false
   }
 
+  /**
+   * Returns true iff we can cast the `from` type to `to` type as per the ANSI SQL.
+   * In practice, the behavior is mostly the same as PostgreSQL. It disallows certain unreasonable
+   * type conversions such as converting `string` to `int` or `double` to `boolean`.
+   */
   def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
     case _ if from == to => true
     case (_: NumericType, _: NumericType) => true
@@ -165,10 +170,6 @@ object Cast {
     case (_: CalendarIntervalType, StringType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, DateType) => true
-    // Spark supports casting between long and timestamp, please see `longToTimestamp` and
-    // `timestampToLong` for details.
-    case (TimestampType, LongType) => true
-    case (LongType, TimestampType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
       resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
