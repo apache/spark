@@ -435,11 +435,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Returns a [[Column]] expression that replaces null value in `col` with `replacement`.
    */
   private def fillCol[T](col: StructField, replacement: T): Column = {
-    val quotedColName = "`" + col.name + "`"
     val colValue = col.dataType match {
       case DoubleType | FloatType =>
-        nanvl(df.col(quotedColName), lit(null)) // nanvl only supports these types
-      case _ => df.col(quotedColName)
+        nanvl(df.col(col.name), lit(null)) // nanvl only supports these types
+      case _ => df.col(col.name)
     }
     coalesce(colValue, lit(replacement).cast(col.dataType)).as(col.name)
   }
