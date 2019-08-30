@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -200,12 +201,12 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Deregister all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
+   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
    *
    * @since 3.0.0
    */
-  def removeAllListeners(): Unit = {
-    listenerBus.removeAllListeners()
+  def listListeners(): Array[StreamingQueryListener] = {
+    listenerBus.listeners.asScala.toArray
   }
 
   /** Post a listener event */
