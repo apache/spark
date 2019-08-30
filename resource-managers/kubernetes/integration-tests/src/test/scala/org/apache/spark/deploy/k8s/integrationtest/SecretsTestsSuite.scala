@@ -81,7 +81,7 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   private def checkSecrets(pod: Pod): Unit = {
-    println("Checking secrets for " + pod)
+    logDebug(s"Checking secrets for ${pod}")
     // Wait for the pod to become ready & have secrets provisioned
     implicit val podName: String = pod.getMetadata.getName
     implicit val components: KubernetesTestComponents = kubernetesTestComponents
@@ -94,27 +94,18 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     env.toString should include (ENV_SECRET_VALUE_1)
     env.toString should include (ENV_SECRET_VALUE_2)
 
-    Eventually.eventually(TIMEOUT, INTERVAL) {
-      // Keep track of the last test failure, so we can report something more useful
-      // than the pod going away.
-      var lastReasonableException: Option[Exception] = None
-      try {
-        val fileUsernameContents = Utils
-          .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
-        val filePasswordContents = Utils
-          .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
-        fileUsernameContents.toString.trim should equal(ENV_SECRET_VALUE_1)
-        filePasswordContents.toString.trim should equal (ENV_SECRET_VALUE_2)
-      } catch {
-        case e: Exception =>
-          println("Got exception")
-          println(e.toString)
-          e.printStackTrace()
-          lastReasonableException = Some(e)
-          throw e
-      }
-    }
-    println("Secrets are OK!")
+    // Make sure our secret files are mounted correctly
+    val files = Utils.executeCommand("ls", s"$SECRET_MOUNT_PATH")
+    println(s"Found files ${files}")
+    files should include (ENV_SECRET_KEY_1)
+    files should include (ENV_SECRET_KEY_2)
+    // Validate the contents
+    val fileUsernameContents = Utils
+      .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_1")
+    fileUsernameContents.toString.trim should equal(ENV_SECRET_VALUE_1)
+    val filePasswordContents = Utils
+      .executeCommand("cat", s"$SECRET_MOUNT_PATH/$ENV_SECRET_KEY_2")
+    filePasswordContents.toString.trim should equal(ENV_SECRET_VALUE_2)
   }
 }
 
