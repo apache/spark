@@ -819,7 +819,6 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("cast string to boolean") {
-
     checkCast("true", true)
     checkCast("tru", true)
     checkCast("tr", true)
@@ -840,6 +839,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("f", false)
     checkCast("    fAlse    ", false)
     checkCast("    fAls    ", false)
+    checkCast("    FAlsE    ", false)
     checkCast("no", false)
     checkCast("n", false)
     checkCast("0", false)
