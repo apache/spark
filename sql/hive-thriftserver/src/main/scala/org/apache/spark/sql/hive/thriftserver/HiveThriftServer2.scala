@@ -220,11 +220,11 @@ object HiveThriftServer2 extends Logging {
     }
 
     def onStatementPrepared(
-                          id: String,
-                          sessionId: String,
-                          statement: String,
-                          groupId: String,
-                          userName: String = "UNKNOWN"): Unit = synchronized {
+        id: String,
+        sessionId: String,
+        statement: String,
+        groupId: String,
+        userName: String = "UNKNOWN"): Unit = synchronized {
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
       info.state = ExecutionState.PREPARED
       executionList.put(id, info)
