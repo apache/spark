@@ -122,7 +122,7 @@ statement
         (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
-        (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+        (identifier | FOR COLUMNS multipartIdentifier | FOR ALL COLUMNS)?   #analyze
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -198,7 +198,7 @@ statement
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        multipartIdentifier partitionSpec? describeColName?                #describeTable
+        multipartIdentifier partitionSpec? describeColName?            #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
@@ -465,7 +465,7 @@ transformClause
       inRowFormat=rowFormat?
       (RECORDWRITER recordWriter=STRING)?
       USING script=STRING
-      (AS (identifierSeq | colTypeList | ('(' (identifierSeq | colTypeList) ')')))?
+      (AS (multipartIdentifier | colTypeList | ('(' (multipartIdentifier | colTypeList) ')')))?
       outRowFormat=rowFormat?
       (RECORDREADER recordReader=STRING)?
     ;
@@ -567,11 +567,7 @@ sampleMethod
     ;
 
 identifierList
-    : '(' identifierSeq ')'
-    ;
-
-identifierSeq
-    : ident+=errorCapturingIdentifier (',' ident+=errorCapturingIdentifier)*
+    : '(' multipartIdentifier ')'
     ;
 
 orderedIdentifierList

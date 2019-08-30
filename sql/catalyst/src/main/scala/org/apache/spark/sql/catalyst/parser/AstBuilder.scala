@@ -524,9 +524,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     val (attributes, schemaLess) = if (transformClause.colTypeList != null) {
       // Typed return columns.
       (createSchema(transformClause.colTypeList).toAttributes, false)
-    } else if (transformClause.identifierSeq != null) {
+    } else if (transformClause.multipartIdentifier != null) {
       // Untyped return columns.
-      val attrs = visitIdentifierSeq(transformClause.identifierSeq).map { name =>
+      val attrs = visitMultipartIdentifier(transformClause.multipartIdentifier).map { name =>
         AttributeReference(name, StringType, nullable = true)()
       }
       (attrs, false)
@@ -1048,14 +1048,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Sequence of Strings for a parenthesis enclosed alias list.
    */
   override def visitIdentifierList(ctx: IdentifierListContext): Seq[String] = withOrigin(ctx) {
-    visitIdentifierSeq(ctx.identifierSeq)
-  }
-
-  /**
-   * Create a Sequence of Strings for an identifier list.
-   */
-  override def visitIdentifierSeq(ctx: IdentifierSeqContext): Seq[String] = withOrigin(ctx) {
-    ctx.ident.asScala.map(_.getText)
+    visitMultipartIdentifier(ctx.multipartIdentifier)
   }
 
   /* ********************************************************************************************

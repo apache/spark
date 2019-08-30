@@ -124,7 +124,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (ctx.ALL() != null) {
       checkPartitionSpec()
       AnalyzeColumnCommand(table, None, allColumns = true)
-    } else if (ctx.identifierSeq() == null) {
+    } else if (ctx.multipartIdentifier() == null) {
       if (ctx.partitionSpec != null) {
         AnalyzePartitionCommand(table, visitPartitionSpec(ctx.partitionSpec),
           noscan = ctx.identifier != null)
@@ -134,7 +134,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else {
       checkPartitionSpec()
       AnalyzeColumnCommand(table,
-        Option(visitIdentifierSeq(ctx.identifierSeq())), allColumns = false)
+        Option(visitMultipartIdentifier(ctx.multipartIdentifier())), allColumns = false)
     }
   }
 
