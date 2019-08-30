@@ -268,7 +268,11 @@ object HiveThriftServer2 extends Logging {
 
     def onOperationClosed(id: String): Unit = synchronized {
       executionList(id).closeTimestamp = System.currentTimeMillis
+      val lastState = executionList(id).state
       executionList(id).state = ExecutionState.CLOSED
+      if (lastState == ExecutionState.STARTED || lastState == ExecutionState.COMPILED) {
+        totalRunning -= 1
+      }
     }
 
     private def trimExecutionIfNecessary() = {
