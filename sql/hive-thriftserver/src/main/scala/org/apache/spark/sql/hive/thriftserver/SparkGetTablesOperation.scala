@@ -69,12 +69,6 @@ private[hive] class SparkGetTablesOperation(
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
     logInfo(s"$logMsg with $statementId")
-    HiveThriftServer2.listener.onStatementPrepared(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
-      statementId,
-      parentSession.getUsername)
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -92,7 +86,12 @@ private[hive] class SparkGetTablesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(statementId)
+    HiveThriftServer2.listener.onStatementStart(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      logMsg,
+      statementId,
+      parentSession.getUsername)
 
     try {
       // Tables and views

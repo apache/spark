@@ -161,7 +161,7 @@ private[hive] class SparkExecuteStatementOperation(
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
     statementId = UUID.randomUUID().toString
-    HiveThriftServer2.listener.onStatementPrepared(
+    HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
       statement,
@@ -233,7 +233,6 @@ private[hive] class SparkExecuteStatementOperation(
       val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-      HiveThriftServer2.listener.onStatementStart(statementId)
       sqlContext.sparkContext.setJobGroup(statementId, statement)
 
       result = sqlContext.sql(statement)

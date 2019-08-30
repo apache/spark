@@ -51,12 +51,6 @@ private[hive] class SparkGetTableTypesOperation(
     statementId = UUID.randomUUID().toString
     val logMsg = "Listing table types"
     logInfo(s"$logMsg with $statementId")
-    HiveThriftServer2.listener.onStatementPrepared(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
-      statementId,
-      parentSession.getUsername)
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
@@ -67,7 +61,12 @@ private[hive] class SparkGetTableTypesOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLETYPES, null)
     }
 
-    HiveThriftServer2.listener.onStatementStart(statementId)
+    HiveThriftServer2.listener.onStatementStart(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      logMsg,
+      statementId,
+      parentSession.getUsername)
 
     try {
       val tableTypes = CatalogTableType.tableTypes.map(tableTypeString).toSet

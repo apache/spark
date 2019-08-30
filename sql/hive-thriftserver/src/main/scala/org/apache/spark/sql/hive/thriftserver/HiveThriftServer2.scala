@@ -138,7 +138,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val PREPARED, STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
+    val STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
     type ExecutionState = Value
   }
 
@@ -219,22 +219,18 @@ object HiveThriftServer2 extends Logging {
       trimSessionIfNecessary()
     }
 
-    def onStatementPrepared(
+    def onStatementStart(
         id: String,
         sessionId: String,
         statement: String,
         groupId: String,
         userName: String = "UNKNOWN"): Unit = synchronized {
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
-      info.state = ExecutionState.PREPARED
+      info.state = ExecutionState.STARTED
       executionList.put(id, info)
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
       executionList(id).groupId = groupId
-    }
-
-    def onStatementStart(id: String): Unit = synchronized {
-      executionList(id).state = ExecutionState.STARTED
       totalRunning += 1
     }
 
