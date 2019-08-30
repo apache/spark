@@ -32,7 +32,13 @@ class CatalogManager(conf: SQLConf, sessionCatalog: TableCatalog) extends Loggin
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
   def catalog(name: String): CatalogPlugin = synchronized {
-    catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+    if (name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
+      v2SessionCatalog.getOrElse {
+        throw new IllegalStateException("v2 session catalog not available")
+      }
+    } else {
+      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+    }
   }
 
   def defaultCatalog: Option[CatalogPlugin] = {
