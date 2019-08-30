@@ -39,7 +39,7 @@ describe the query output.
     <ul>
       <li>a <code>SELECT</code> statement</li>
       <li>a <code>CTE(Common table expression)</code> statement</li>
-      <li>a <code>INLINE TABLE</code> statement</li>
+      <li>an <code>INLINE TABLE</code> statement</li>
       <li>a <code>TABLE</code> statement</li>
       <li>a <code>FROM</code> statement</li>
     </ul>
