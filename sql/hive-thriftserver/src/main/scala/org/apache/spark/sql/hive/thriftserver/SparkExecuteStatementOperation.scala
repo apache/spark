@@ -280,14 +280,21 @@ private[hive] class SparkExecuteStatementOperation(
           }
         }
     }
-    setState(OperationState.FINISHED)
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    synchronized {
+      if (!getStatus.getState.isTerminal) {
+        setState(OperationState.FINISHED)
+        HiveThriftServer2.listener.onStatementFinish(statementId)
+      }
+    }
   }
 
   override def cancel(): Unit = {
-    logInfo(s"Cancel '$statement' with $statementId")
-    cleanup(OperationState.CANCELED)
-    HiveThriftServer2.listener.onStatementCanceled(statementId)
+    synchronized {
+      if (!getStatus.getState.isTerminal) {
+        setState(OperationState.FINISHED)
+        HiveThriftServer2.listener.onStatementFinish(statementId)
+      }
+    }
   }
 
   private def cleanup(state: OperationState) {
