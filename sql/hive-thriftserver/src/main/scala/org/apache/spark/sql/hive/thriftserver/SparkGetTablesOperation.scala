@@ -69,7 +69,6 @@ private[hive] class SparkGetTablesOperation(
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
     val logMsg = s"Listing tables '$cmdStr, tableTypes : $tableTypesStr, tableName : $tableName'"
     logInfo(s"$logMsg with $statementId")
-
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader

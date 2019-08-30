@@ -71,7 +71,6 @@ private[hive] class SparkGetColumnsOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
     logInfo(s"$logMsg with $statementId")
-
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader

@@ -62,7 +62,6 @@ private[hive] class SparkGetFunctionsOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
     logInfo(s"$logMsg with $statementId")
-
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
