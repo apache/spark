@@ -58,6 +58,13 @@ private[hive] class SparkGetSchemasOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
     logInfo(s"$logMsg with $statementId")
+    HiveThriftServer2.listener.onStatementPrepared(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      logMsg,
+      statementId,
+      parentSession.getUsername)
+
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
@@ -67,12 +74,7 @@ private[hive] class SparkGetSchemasOperation(
       authorizeMetaGets(HiveOperationType.GET_TABLES, null, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
-      statementId,
-      parentSession.getUsername)
+    HiveThriftServer2.listener.onStatementStart(statementId)
 
     try {
       val schemaPattern = convertSchemaPattern(schemaName)

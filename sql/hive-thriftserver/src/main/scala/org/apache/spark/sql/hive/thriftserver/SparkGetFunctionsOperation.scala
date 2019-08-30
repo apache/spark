@@ -62,6 +62,13 @@ private[hive] class SparkGetFunctionsOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing functions '$cmdStr, functionName : $functionName'"
     logInfo(s"$logMsg with $statementId")
+    HiveThriftServer2.listener.onStatementPrepared(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      logMsg,
+      statementId,
+      parentSession.getUsername)
+
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
@@ -80,12 +87,7 @@ private[hive] class SparkGetFunctionsOperation(
       authorizeMetaGets(HiveOperationType.GET_FUNCTIONS, privObjs, cmdStr)
     }
 
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      logMsg,
-      statementId,
-      parentSession.getUsername)
+    HiveThriftServer2.listener.onStatementStart(statementId)
 
     try {
       matchingDbs.foreach { db =>
