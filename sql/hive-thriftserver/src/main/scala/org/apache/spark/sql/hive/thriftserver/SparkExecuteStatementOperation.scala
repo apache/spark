@@ -258,18 +258,6 @@ private[hive] class SparkExecuteStatementOperation(
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
-      case e: HiveSQLException =>
-        val currentState = getStatus().getState()
-        if (currentState == OperationState.CANCELED ||
-          currentState == OperationState.CLOSED ||
-          currentState == OperationState.FINISHED) {
-          return
-        } else {
-          setState(OperationState.ERROR)
-          HiveThriftServer2.listener.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          throw e
-        }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
