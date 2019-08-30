@@ -228,15 +228,16 @@ private[hive] class SparkExecuteStatementOperation(
   }
 
   private def execute(): Unit = withSchedulerPool {
-    logInfo(s"Running query '$statement' with $statementId")
-    setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    HiveThriftServer2.listener.onStatementStart(statementId)
-    sqlContext.sparkContext.setJobGroup(statementId, statement)
     try {
+      logInfo(s"Running query '$statement' with $statementId")
+      setState(OperationState.RUNNING)
+      // Always use the latest class loader provided by executionHive's state.
+      val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+      Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
+
+      HiveThriftServer2.listener.onStatementStart(statementId)
+      sqlContext.sparkContext.setJobGroup(statementId, statement)
+
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
