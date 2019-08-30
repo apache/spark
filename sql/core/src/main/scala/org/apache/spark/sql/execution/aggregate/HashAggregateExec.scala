@@ -282,46 +282,53 @@ case class HashAggregateExec(
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
       aggCodeBlocks: Seq[Block],
       subExprs: Map[Expression, SubExprEliminationState]): Option[String] = {
-    val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
-      val inputVarsForOneFunc = aggExprsForOneFunc.map(
-        CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)).reduce(_ ++ _).toSeq
-      val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
-
-      // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
-      if (isValidParamLength(paramLength)) {
-        Some(inputVarsForOneFunc)
-      } else {
-        None
-      }
-    }
-
-    // Checks if all the aggregate code can be split into pieces.
-    // If the parameter length of at lease one `aggExprsForOneFunc` goes over the limit,
-    // we totally give up splitting aggregate code.
-    if (inputVars.forall(_.isDefined)) {
-      val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
-        val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
-        val argList = args.map(v => s"${v.javaType.getName} ${v.variableName}").mkString(", ")
-        val doAggFuncName = ctx.addNewFunction(doAggFunc,
-          s"""
-             |private void $doAggFunc($argList) throws java.io.IOException {
-             |  ${aggCodeBlocks(i)}
-             |}
-           """.stripMargin)
-
-        val inputVariables = args.map(_.variableName).mkString(", ")
-        s"$doAggFuncName($inputVariables);"
-      }
-      Some(splitCodes.mkString("\n").trim)
+    val exprValsInSubExprs = subExprs.flatMap { case (_, s) => s.value :: s.isNull :: Nil }
+    if (exprValsInSubExprs.exists(_.isInstanceOf[SimpleExprValue])) {
+      // `SimpleExprValue`s cannot be used as an input variable for split functions, so
+      // we give up splitting functions if it exists in `subExprs`.
+      None
     } else {
-      val errMsg = "Failed to split aggregate code into small functions because the parameter " +
-        "length of at least one split function went over the JVM limit: " +
-        CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
-      if (Utils.isTesting) {
-        throw new IllegalStateException(errMsg)
+      val inputVars = aggBufferUpdatingExprs.map { aggExprsForOneFunc =>
+        val inputVarsForOneFunc = aggExprsForOneFunc.map(
+          CodeGenerator.getLocalInputVariableValues(ctx, _, subExprs)).reduce(_ ++ _).toSeq
+        val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
+
+        // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
+        if (isValidParamLength(paramLength)) {
+          Some(inputVarsForOneFunc)
+        } else {
+          None
+        }
+      }
+
+      // Checks if all the aggregate code can be split into pieces.
+      // If the parameter length of at lease one `aggExprsForOneFunc` goes over the limit,
+      // we totally give up splitting aggregate code.
+      if (inputVars.forall(_.isDefined)) {
+        val splitCodes = inputVars.flatten.zipWithIndex.map { case (args, i) =>
+          val doAggFunc = ctx.freshName(s"doAggregate_${aggNames(i)}")
+          val argList = args.map(v => s"${v.javaType.getName} ${v.variableName}").mkString(", ")
+          val doAggFuncName = ctx.addNewFunction(doAggFunc,
+            s"""
+               |private void $doAggFunc($argList) throws java.io.IOException {
+               |  ${aggCodeBlocks(i)}
+               |}
+             """.stripMargin)
+
+          val inputVariables = args.map(_.variableName).mkString(", ")
+          s"$doAggFuncName($inputVariables);"
+        }
+        Some(splitCodes.mkString("\n").trim)
       } else {
-        logInfo(errMsg)
-        None
+        val errMsg = "Failed to split aggregate code into small functions because the parameter " +
+          "length of at least one split function went over the JVM limit: " +
+          CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+        if (Utils.isTesting) {
+          throw new IllegalStateException(errMsg)
+        } else {
+          logInfo(errMsg)
+          None
+        }
       }
     }
   }
