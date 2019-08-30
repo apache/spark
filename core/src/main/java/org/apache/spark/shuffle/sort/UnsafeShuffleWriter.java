@@ -470,7 +470,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           Closeables.close(resolvedChannel, copyThrewExecption);
         }
         long numBytes = writer.getNumBytesWritten();
-        partitionLengths[partition] = numBytes;
         writeMetrics.incBytesWritten(numBytes);
       }
       threwException = false;
@@ -482,7 +481,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         Closeables.close(spillInputChannels[i], threwException);
       }
     }
-    return partitionLengths;
   }
 
   @Override
