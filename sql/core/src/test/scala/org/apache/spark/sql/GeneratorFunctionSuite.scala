@@ -310,7 +310,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("generator in aggregate expression") {
-    Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceGlobalTempView("t1")
+    Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t1")
     checkAnswer(
       sql("select explode(array(min(c2), max(c2))) from t1"),
       Row(1) :: Row(3) :: Nil
