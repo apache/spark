@@ -25,7 +25,7 @@ The `INSERT OVERWRITE` statement overwrites the existing data in the table using
 
 ### Syntax
 {% highlight sql %}
-INSERT OVERWRITE [TABLE] table_name
+INSERT OVERWRITE [ TABLE ] table_name
     [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) [ IF NOT EXISTS ] ]
     { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
