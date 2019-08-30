@@ -490,7 +490,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 5)),
       (Success,
         MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 6)),
-      (Success, makeMapStatus("hostB", 1, taskAttemptId = 7))
+      (Success, makeMapStatus("hostB", 1, mapTaskId = 7))
     ))
     // map stage2 completes successfully, with one task on each executor
     complete(taskSets(1), Seq(
@@ -498,7 +498,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
         MapStatus(BlockManagerId("exec-hostA1", "hostA", 12345), Array.fill[Long](1)(2), 8)),
       (Success,
         MapStatus(BlockManagerId("exec-hostA2", "hostA", 12345), Array.fill[Long](1)(2), 9)),
-      (Success, makeMapStatus("hostB", 1, taskAttemptId = 10))
+      (Success, makeMapStatus("hostB", 1, mapTaskId = 10))
     ))
     // make sure our test setup is correct
     val initialMapStatus1 = mapOutputTracker.shuffleStatuses(firstShuffleId).mapStatuses
@@ -506,14 +506,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(initialMapStatus1.count(_ != null) === 3)
     assert(initialMapStatus1.map{_.location.executorId}.toSet ===
       Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
-    assert(initialMapStatus1.map{_.mapTaskAttemptId}.toSet === Set(5, 6, 7))
+    assert(initialMapStatus1.map{_.mapId}.toSet === Set(5, 6, 7))
 
     val initialMapStatus2 = mapOutputTracker.shuffleStatuses(secondShuffleId).mapStatuses
     //  val initialMapStatus1 = mapOutputTracker.mapStatuses.get(0).get
     assert(initialMapStatus2.count(_ != null) === 3)
     assert(initialMapStatus2.map{_.location.executorId}.toSet ===
       Set("exec-hostA1", "exec-hostA2", "exec-hostB"))
-    assert(initialMapStatus2.map{_.mapTaskAttemptId}.toSet === Set(8, 9, 10))
+    assert(initialMapStatus2.map{_.mapId}.toSet === Set(8, 9, 10))
 
     // reduce stage fails with a fetch failure from one host
     complete(taskSets(2), Seq(
@@ -3137,9 +3137,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 }
 
 object DAGSchedulerSuite {
-  def makeMapStatus(host: String, reduces: Int,
-      sizes: Byte = 2, taskAttemptId: Long = -1): MapStatus =
-    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), taskAttemptId)
+  def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
 
   def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

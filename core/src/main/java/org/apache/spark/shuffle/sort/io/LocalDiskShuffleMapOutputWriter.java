@@ -48,7 +48,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     LoggerFactory.getLogger(LocalDiskShuffleMapOutputWriter.class);
 
   private final int shuffleId;
-  private final long mapTaskAttemptId;
+  private final long mapId;
   private final IndexShuffleBlockResolver blockResolver;
   private final long[] partitionLengths;
   private final int bufferSize;
@@ -64,18 +64,18 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
 
   public LocalDiskShuffleMapOutputWriter(
       int shuffleId,
-      long mapTaskAttemptId,
+      long mapId,
       int numPartitions,
       IndexShuffleBlockResolver blockResolver,
       SparkConf sparkConf) {
     this.shuffleId = shuffleId;
-    this.mapTaskAttemptId = mapTaskAttemptId;
+    this.mapId = mapId;
     this.blockResolver = blockResolver;
     this.bufferSize =
       (int) (long) sparkConf.get(
         package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     this.partitionLengths = new long[numPartitions];
-    this.outputFile = blockResolver.getDataFile(shuffleId, mapTaskAttemptId);
+    this.outputFile = blockResolver.getDataFile(shuffleId, mapId);
     this.outputTempFile = null;
   }
 
@@ -112,8 +112,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     }
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
-    blockResolver.writeIndexFileAndCommit(
-        shuffleId, mapTaskAttemptId, partitionLengths, resolvedTmp);
+    blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
     return partitionLengths;
   }
 

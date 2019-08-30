@@ -78,7 +78,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final ShuffleWriteMetricsReporter writeMetrics;
   private final ShuffleExecutorComponents shuffleExecutorComponents;
   private final int shuffleId;
-  private final long mapTaskAttemptId;
+  private final long mapId;
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
@@ -122,7 +122,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
     this.blockManager = blockManager;
     this.memoryManager = memoryManager;
-    this.mapTaskAttemptId = taskContext.taskAttemptId();
+    this.mapId = taskContext.taskAttemptId();
     final ShuffleDependency<K, V, V> dep = handle.dependency();
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();
@@ -227,8 +227,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         }
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(
-      blockManager.shuffleServerId(), partitionLengths, mapTaskAttemptId);
+    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths, mapId);
   }
 
   @VisibleForTesting
