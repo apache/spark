@@ -17,85 +17,20 @@
 
 package org.apache.spark.sql.catalog.v2;
 
-import java.util.Map;
-
-import org.apache.spark.sql.catalog.v2.expressions.Transform;
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
-import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
-import org.apache.spark.sql.sources.v2.Table;
-import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
- * An API to extend the Spark built-in session catalog. Implementation can override some methods
- * to apply custom logic. For example, they can override {@code createTable}, do something else
- * before calling {@code super.createTable}.
+ * An API to extend the Spark built-in session catalog. Implementation can get the built-in session
+ * catalog from {@link #setDelegateCatalog(TableCatalog)}, implement catalog functions with
+ * some custom logic and call the built-in session catalog at the end. For example, they can
+ * implement {@code createTable}, do something else before calling {@code createTable} of the
+ * built-in session catalog.
  */
-public abstract class CatalogExtension implements TableCatalog {
-
-  private TableCatalog delegate;
+public interface CatalogExtension extends TableCatalog {
 
   /**
-   * This will be called only once by Spark to pass in the Spark built-in session catalog.
+   * This will be called only once by Spark to pass in the Spark built-in session catalog, after
+   * {@link #initialize(String, CaseInsensitiveStringMap)} is called.
    */
-  public final void setDelegateCatalog(TableCatalog delegate) {
-    this.delegate = delegate;
-  }
-
-  @Override
-  public String name() {
-    return delegate.name();
-  }
-
-  @Override
-  public final void initialize(String name, CaseInsensitiveStringMap options) {}
-
-  @Override
-  public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
-    return delegate.listTables(namespace);
-  }
-
-  @Override
-  public Table loadTable(Identifier ident) throws NoSuchTableException {
-    return delegate.loadTable(ident);
-  }
-
-  @Override
-  public void invalidateTable(Identifier ident) {
-    delegate.invalidateTable(ident);
-  }
-
-  @Override
-  public boolean tableExists(Identifier ident) {
-    return delegate.tableExists(ident);
-  }
-
-  @Override
-  public Table createTable(
-      Identifier ident,
-      StructType schema,
-      Transform[] partitions,
-      Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return delegate.createTable(ident, schema, partitions, properties);
-  }
-
-  @Override
-  public Table alterTable(
-      Identifier ident,
-      TableChange... changes) throws NoSuchTableException {
-    return delegate.alterTable(ident, changes);
-  }
-
-  @Override
-  public boolean dropTable(Identifier ident) {
-    return delegate.dropTable(ident);
-  }
-
-  @Override
-  public void renameTable(
-      Identifier oldIdent,
-      Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {
-    delegate.renameTable(oldIdent, newIdent);
-  }
+  void setDelegateCatalog(TableCatalog delegate);
 }

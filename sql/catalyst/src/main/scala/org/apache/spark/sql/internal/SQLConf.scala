@@ -1947,10 +1947,10 @@ object SQLConf {
     .createOptional
 
   val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("A catalog implementation which will be used as the session catalog for Spark " +
-        "queries. The implementation must either extend `CatalogExtension`, or implement " +
-        "`CatalogPlugin`. When extending `CatalogExtension`, the default session catalog " +
-        "will be passed in so that the implementation can fallback some functions to it.")
+      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
+        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
+        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
+        "built-in session catalog.")
       .stringConf
       .createOptional
 

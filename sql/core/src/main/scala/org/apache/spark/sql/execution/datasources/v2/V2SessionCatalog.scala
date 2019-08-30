@@ -48,9 +48,7 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
 
   def this(sessionState: SessionState) = this(sessionState.catalog, sessionState.conf)
 
-  def this() = {
-    this(SparkSession.active.sessionState)
-  }
+  def this() = this(SparkSession.active.sessionState)
 
   override val defaultNamespace: Array[String] = Array("default")
 
