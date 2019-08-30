@@ -21,43 +21,69 @@ license: |
 
 ### Description
 
-`ANALYZE TABLE` statement can be used to collect statistics about the table to be used by the query optimizer to find a better query execution plan.
+The `ANALYZE TABLE` statement collects statistics about the table to be used by the query optimizer to find a better query execution plan.
 
 ### Syntax
 {% highlight sql %}
-ANALYZE TABLE [db_name.]table_name [PARTITION partition_spec] COMPUTE STATISTICS
-  [analyze_option]
+ANALYZE TABLE table_name [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) ]
+    COMPUTE STATISTICS [ NOSCAN | FOR COLUMNS col [ , ... ] | FOR ALL COLUMNS ]
 
-partition_spec:
-    : (part_col_name1[=val1], part_col_name2[=val2], ...)
-
-analyze_option
-    : NOSCAN | FOR COLUMNS col1 [, col2, ...] | FOR ALL COLUMNS
-
-{% endhighlight %}
-
-### Example
-{% highlight sql %}
-ANALYZE TABLE table1 COMPUTE STATISTICS FOR COLUMNS id, value
-
-ANALYZE TABLE db.table1 PARTITION(ds='2008-04-09') COMPUTE STATISTICS NOSCAN
 {% endhighlight %}
 
 ### Parameters
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>The name of an existing table.</dd>
+</dl>
 
-#### ***table_name***:
-The name of an existing table.
+<dl>
+  <dt><code><em>PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )</em></code></dt>
+  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+</dl>
 
-#### ***partition_spec***:
-Partition column specification.
+<dl>
+  <dt><code><em>[ NOSCAN | FOR COLUMNS col [ , ... ] | FOR ALL COLUMNS ]</em></code></dt>
+    <dd>
+      <ul>
+        <li> If no analyze option is specified, <code>ANALYZE TABLE</code> collects the table's number of rows and size in bytes. </li>
+        <li> NOSCAN
+          <br> Collect only the table's size in bytes ( which does not require scanning the entire table ). </li>
+        <li> FOR COLUMNS col [ , ... ] <code> | </code> FOR ALL COLUMNS
+          <br> Collect column statistics for each column specified, or alternatively for every column, as well as table statistics.
+        </li>
+      </ul>
+     </dd>
+</dl>
 
-#### ***analyze_option***:
-If no analyze option is specified, `ANALYZE TABLE` collects the table's number of rows and size in bytes.
+### Examples
+{% highlight sql %}
+ ANALYZE TABLE students COMPUTE STATISTICS NOSCAN;
 
-- NOSCAN
+ DESC EXTENDED students;
+     ......
+     Statistics	2820 bytes
+     ......
 
-  Collect only the table's size in bytes (which does not require scanning the entire table)
+ ANALYZE TABLE students COMPUTE STATISTICS;
 
-- FOR COLUMNS col1 [, col2, ...] `|` FOR ALL COLUMNS
+ DESC EXTENDED students;
+     ......
+     Statistics	2820 bytes, 3 rows
+     ......
 
-  Collect column statistics for each column specified, or alternatively for every column, as well as table statistics.
+ ANALYZE TABLE students COMPUTE STATISTICS FOR COLUMNS name;
+
+ DESC EXTENDED students name;
+     =default tbl=students
+     col_name	name
+     data_type	string
+     comment	NULL
+     min	NULL
+     max	NULL
+     num_nulls	0
+     distinct_count	3
+     avg_col_len	11
+     max_col_len	13
+     histogram	NULL
+
+{% endhighlight %}
