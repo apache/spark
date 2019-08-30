@@ -138,7 +138,7 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] object ExecutionState extends Enumeration {
-    val STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
+    val PREPARED, STARTED, COMPILED, CANCELED, FAILED, FINISHED, CLOSED = Value
     type ExecutionState = Value
   }
 
@@ -219,18 +219,22 @@ object HiveThriftServer2 extends Logging {
       trimSessionIfNecessary()
     }
 
-    def onStatementStart(
-        id: String,
-        sessionId: String,
-        statement: String,
-        groupId: String,
-        userName: String = "UNKNOWN"): Unit = synchronized {
+    def onStatementPrepared(
+                          id: String,
+                          sessionId: String,
+                          statement: String,
+                          groupId: String,
+                          userName: String = "UNKNOWN"): Unit = synchronized {
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
-      info.state = ExecutionState.STARTED
+      info.state = ExecutionState.PREPARED
       executionList.put(id, info)
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
       executionList(id).groupId = groupId
+    }
+
+    def onStatementStart(id: String): Unit = synchronized {
+      executionList(id).state = ExecutionState.STARTED
       totalRunning += 1
     }
 
@@ -239,23 +243,20 @@ object HiveThriftServer2 extends Logging {
       executionList(id).state = ExecutionState.COMPILED
     }
 
-    def onStatementCanceled(id: String): Unit = {
-      synchronized {
-        executionList(id).finishTimestamp = System.currentTimeMillis
-        executionList(id).state = ExecutionState.CANCELED
-        totalRunning -= 1
-        trimExecutionIfNecessary()
-      }
+    def onStatementCanceled(id: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).state = ExecutionState.CANCELED
+      totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
-    def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
-      synchronized {
-        executionList(id).finishTimestamp = System.currentTimeMillis
-        executionList(id).detail = errorMessage
-        executionList(id).state = ExecutionState.FAILED
-        totalRunning -= 1
-        trimExecutionIfNecessary()
-      }
+
+    def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = synchronized {
+      executionList(id).finishTimestamp = System.currentTimeMillis
+      executionList(id).detail = errorMessage
+      executionList(id).state = ExecutionState.FAILED
+      totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
     def onStatementFinish(id: String): Unit = synchronized {

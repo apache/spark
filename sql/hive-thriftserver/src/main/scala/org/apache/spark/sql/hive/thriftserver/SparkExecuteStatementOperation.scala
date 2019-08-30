@@ -160,9 +160,16 @@ private[hive] class SparkExecuteStatementOperation(
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
+    statementId = UUID.randomUUID().toString
+    HiveThriftServer2.listener.onStatementPrepared(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      statement,
+      statementId,
+      parentSession.getUsername)
 
     if (!runInBackground) {
-      execute()
+      executeWhenNotTerminalStatus()
     } else {
       val sparkServiceUGI = Utils.getUGI()
 
@@ -175,7 +182,7 @@ private[hive] class SparkExecuteStatementOperation(
             override def run(): Unit = {
               registerCurrentOperationLog()
               try {
-                execute()
+                executeWhenNotTerminalStatus()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
@@ -212,20 +219,22 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
+  private def executeWhenNotTerminalStatus(): Unit = {
+      if(getStatus.getState != OperationState.CANCELED &&
+        getStatus.getState != OperationState.CLOSED &&
+        getStatus.getState != OperationState.FINISHED) {
+        execute()
+      }
+  }
+
   private def execute(): Unit = withSchedulerPool {
-    statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      statement,
-      statementId,
-      parentSession.getUsername)
+    HiveThriftServer2.listener.onStatementStart(statementId)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
     try {
       result = sqlContext.sql(statement)
@@ -250,7 +259,10 @@ private[hive] class SparkExecuteStatementOperation(
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
-        if (getStatus().getState() == OperationState.CANCELED) {
+        val currentState = getStatus().getState()
+        if (currentState == OperationState.CANCELED ||
+          currentState == OperationState.CLOSED ||
+          currentState == OperationState.FINISHED) {
           return
         } else {
           setState(OperationState.ERROR)
@@ -262,7 +274,11 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         val currentState = getStatus().getState()
-        if (currentState == OperationState.CANCELED) {
+        if (currentState == OperationState.CANCELED ||
+          currentState == OperationState.CLOSED ||
+          currentState == OperationState.FINISHED) {
+          // This may happen if the execution was cancelled, and then closed from another thread.
+          logWarning(s"Ignore exception in terminal state with $statementId: $e")
           return
         } else {
           logError(s"Error executing query, currentState $currentState, ", e)
