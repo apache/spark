@@ -169,7 +169,10 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
 
     if (!runInBackground) {
-      executeWhenNotTerminalStatus()
+      if (getStatus.getState.isTerminal) {
+        return
+      }
+      execute()
     } else {
       val sparkServiceUGI = Utils.getUGI()
 
@@ -182,7 +185,10 @@ private[hive] class SparkExecuteStatementOperation(
             override def run(): Unit = {
               registerCurrentOperationLog()
               try {
-                executeWhenNotTerminalStatus()
+                if (getStatus.getState.isTerminal) {
+                  return
+                }
+                execute()
               } catch {
                 case e: HiveSQLException =>
                   setOperationException(e)
@@ -217,12 +223,6 @@ private[hive] class SparkExecuteStatementOperation(
           throw new HiveSQLException(e)
       }
     }
-  }
-
-  private def executeWhenNotTerminalStatus(): Unit = {
-      if(!getStatus.getState.isTerminal) {
-        execute()
-      }
   }
 
   private def execute(): Unit = withSchedulerPool {
@@ -261,9 +261,7 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         val currentState = getStatus().getState()
-        if (currentState == OperationState.CANCELED ||
-          currentState == OperationState.CLOSED ||
-          currentState == OperationState.FINISHED) {
+        if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
           logWarning(s"Ignore exception in terminal state with $statementId: $e")
           return
@@ -290,8 +288,9 @@ private[hive] class SparkExecuteStatementOperation(
   override def cancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
-        setState(OperationState.FINISHED)
-        HiveThriftServer2.listener.onStatementFinish(statementId)
+        logInfo(s"Cancel '$statement' with $statementId")
+        cleanup(OperationState.CANCELED)
+        HiveThriftServer2.listener.onStatementCanceled(statementId)
       }
     }
   }

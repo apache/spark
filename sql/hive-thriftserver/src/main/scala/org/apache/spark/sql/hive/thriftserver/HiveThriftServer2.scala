@@ -251,7 +251,9 @@ object HiveThriftServer2 extends Logging {
     }
 
 
-    def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = synchronized {
+    def onStatementError(id: String,
+                         errorMessage: String,
+                         errorTrace: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).detail = errorMessage
       executionList(id).state = ExecutionState.FAILED
