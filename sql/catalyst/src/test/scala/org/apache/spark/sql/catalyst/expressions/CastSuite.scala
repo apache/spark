@@ -846,6 +846,7 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkCast("off", false)
     checkCast("of", false)
 
+    checkEvaluation(cast("o", BooleanType), null)
     checkEvaluation(cast("abc", BooleanType), null)
     checkEvaluation(cast("", BooleanType), null)
   }
