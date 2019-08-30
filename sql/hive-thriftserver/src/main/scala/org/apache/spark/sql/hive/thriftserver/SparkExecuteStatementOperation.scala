@@ -220,9 +220,7 @@ private[hive] class SparkExecuteStatementOperation(
   }
 
   private def executeWhenNotTerminalStatus(): Unit = {
-      if(getStatus.getState != OperationState.CANCELED &&
-        getStatus.getState != OperationState.CLOSED &&
-        getStatus.getState != OperationState.FINISHED) {
+      if(!getStatus.getState.isTerminal) {
         execute()
       }
   }
