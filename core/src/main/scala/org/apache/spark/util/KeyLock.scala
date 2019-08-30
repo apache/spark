@@ -45,10 +45,8 @@ private[spark] class KeyLock[K] {
 
   private def releaseLock(key: K): Unit = {
     val lock = lockMap.remove(key)
-    if (lock != null) {
-      lock.synchronized {
-        lock.notifyAll()
-      }
+    lock.synchronized {
+      lock.notifyAll()
     }
   }
 
