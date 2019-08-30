@@ -33,7 +33,7 @@ describe the query output.
 <dl>
   <dt><code><em>query</em></code></dt>
   <dd>
-    Specifies a result set producing statement and may be specified in one of the following ways: 
+    Specifies a result set producing statement and may be one of the following: 
     <ul>
       <li>a <code>SELECT</code> statement</li>
       <li>a <code>CTE(Common table expression)</code> statement</li>
