@@ -21,29 +21,81 @@ license: |
 
 ### Description
 The `DESCRIBE QUERY` statement is used to return the metadata of output
-of a query. 
+of a query. A shorthand `DESC` may be used instead of `DESCRIBE` to
+describe the query output.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} [QUERY] query 
-
-query:= {cte | select-query | inline-table | TABLE table-name}
+{DESC | DESCRIBE} [QUERY] query
 {% endhighlight %}
-**Note**
-* For detailed syntax of query parameter please refer to [select-statement](sql-ref-syntax-qry-select.html)
-  and the examples below.
-* `DESC` and `DESCRIBE` are interchangeble and mean the same thing.
+
+### Parameters
+<dl>
+  <dt><code><em>query</em></code></dt>
+  <dd>
+    Specifies a result set producing statement and may be specified in one of the following ways: 
+    <ul>
+      <li>a <code>SELECT</code> statement</li>
+      <li>a <code>CTE(Common table expression)</code> statement</li>
+      <li>a <code>INLINE TABLE</code> statement</li>
+      <li>a <code>TABLE</code> statement</li>
+      <li>a <code>FROM</code> statement</li>
+    </ul>
+    Please refer to <a href="sql-ref-syntax-qry-select.html">select-statement</a>
+    for a detailed syntax of the query parameter.
+  </dd>
+</dl>
 
 ### Examples
 {% highlight sql %}
--- Returns column name, column type and comment info for a simple select query
-DESCRIBE QUERY select * customer;
--- Returns column name, column type and comment info for a inline table.
-DESC QUERY VALUES(1.00D, 'hello') as test_tab(c1, c2);
--- Returns column name, column type and comment info for query with set operations.
-DESC QUERY SELECT int_col FROM int_tab UNION ALL select double_col from double_tab
--- Returns column name, column type and comment info for CTE.
-DESCRIBE QUERY WITH cte AS (SELECT cust_id from customer) SELECT * FROM cte;
+-- Create table `person`
+CREATE TABLE person (name STRING , age INT COMMENT 'Age column', address STRING);
+
+-- Returns column metadata information for a simple select query
+DESCRIBE QUERY select age, sum(age) FROM person GROUP BY age;
+  +--------+---------+----------+
+  |col_name|data_type|comment   |
+  +--------+---------+----------+
+  |age     |int      |Age column|
+  |sum(age)|bigint   |null      |
+  +--------+---------+----------+
+
+-- Returns column metadata information for common table experession (`CTE`).
+DESCRIBE QUERY WITH all_names_cte
+  AS (SELECT name from person) SELECT * FROM all_names_cte;
+  +--------+---------+-------+
+  |col_name|data_type|comment|
+  +--------+---------+-------+
+  |name    |string   |null   |
+  +--------+---------+-------+
+
+-- Returns column metadata information for a inline table.
+DESC QUERY VALUES(100, 'John', 10000.20D) AS employee(id, name, salary);
+  +--------+---------+-------+
+  |col_name|data_type|comment|
+  +--------+---------+-------+
+  |id      |int      |null   |
+  |name    |string   |null   |
+  |salary  |double   |null   |
+  +--------+---------+-------+
+
+-- Returns column metadata information for `TABLE` statement.
+DESC QUERY TABLE person;
+  +--------+---------+----------+
+  |col_name|data_type|comment   |
+  +--------+---------+----------+
+  |name    |string   |null      |
+  |age     |int      |Age column|
+  |address |string   |null      |
+  +--------+---------+----------+
+
+-- Returns column metadata information for a `FROM` statement.
+DESCRIBE QUERY FROM person SELECT age;
+  +--------+---------+----------+
+  |col_name|data_type|comment   |
+  +--------+---------+----------+
+  |age     |int      |Age column|
+  +--------+---------+----------+
 {% endhighlight %}
 
 ### Related Statements
