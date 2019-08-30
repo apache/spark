@@ -2295,7 +2295,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.1.1</version>
+          <version>4.2.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2327,8 +2327,8 @@
             <scalaVersion>${scala.version}</scalaVersion>
             <checkMultipleScalaVersions>true</checkMultipleScalaVersions>
             <failOnMultipleScalaVersions>true</failOnMultipleScalaVersions>
-            <recompileMode>all</recompileMode>
-            <!-- <useZincServer>true</useZincServer> -->
+            <recompileMode>incremental</recompileMode>
+            <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
               <arg>-deprecation</arg>
