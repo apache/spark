@@ -275,56 +275,6 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     assert(table.properties === Map("prop" -> "value").asJava)
   }
 
-  test("Create: asText") {
-    spark.table("source").writeTo("testcat.table_name").asText.create()
-
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
-
-    assert(table.name === "testcat.table_name")
-    assert(table.properties === Map("provider" -> "text").asJava)
-  }
-
-  test("Create: asCsv") {
-    spark.table("source").writeTo("testcat.table_name").asCsv.create()
-
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
-
-    assert(table.name === "testcat.table_name")
-    assert(table.properties === Map("provider" -> "csv").asJava)
-  }
-
-  test("Create: asJson") {
-    spark.table("source").writeTo("testcat.table_name").asJson.create()
-
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
-
-    assert(table.name === "testcat.table_name")
-    assert(table.properties === Map("provider" -> "json").asJava)
-  }
-
-  test("Create: asParquet") {
-    spark.table("source").writeTo("testcat.table_name").asParquet.create()
-
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
-
-    assert(table.name === "testcat.table_name")
-    assert(table.properties === Map("provider" -> "parquet").asJava)
-  }
-
-  test("Create: asOrc") {
-    spark.table("source").writeTo("testcat.table_name").asOrc.create()
-
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
-
-    assert(table.name === "testcat.table_name")
-    assert(table.properties === Map("provider" -> "orc").asJava)
-  }
-
   test("Create: identity partitioned table") {
     spark.table("source").writeTo("testcat.table_name").partitionedBy($"id").create()
 

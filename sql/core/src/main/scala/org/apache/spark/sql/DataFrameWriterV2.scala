@@ -359,56 +359,6 @@ trait CreateTableWriter[T] extends WriteConfigMethods[CreateTableWriter[T]] {
   def using(provider: String): CreateTableWriter[T]
 
   /**
-   * Use the "csv" provider.
-   *
-   * This is equivalent to:
-   * {{{
-   *   using("csv")
-   * }}}
-   */
-  def asCsv: CreateTableWriter[T] = using("csv")
-
-  /**
-   * Use the "text" provider.
-   *
-   * This is equivalent to:
-   * {{{
-   *   using("text")
-   * }}}
-   */
-  def asText: CreateTableWriter[T] = using("text")
-
-  /**
-   * Use the "json" provider.
-   *
-   * This is equivalent to:
-   * {{{
-   *   using("json")
-   * }}}
-   */
-  def asJson: CreateTableWriter[T] = using("json")
-
-  /**
-   * Use the "parquet" provider.
-   *
-   * This is equivalent to:
-   * {{{
-   *   using("parquet")
-   * }}}
-   */
-  def asParquet: CreateTableWriter[T] = using("parquet")
-
-  /**
-   * Use the "orc" provider.
-   *
-   * This is equivalent to:
-   * {{{
-   *   using("orc")
-   * }}}
-   */
-  def asOrc: CreateTableWriter[T] = using("orc")
-
-  /**
    * Add a table property.
    */
   def tableProperty(property: String, value: String): CreateTableWriter[T]
