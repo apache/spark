@@ -22,22 +22,24 @@ import scala.collection.JavaConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.catalog.v2.{ Identifier, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, YearsTransform}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
 class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
   import org.apache.spark.sql.functions._
   import testImplicits._
 
-  private def catalog(name: String): CatalogPlugin = {
-    spark.sessionState.catalogManager.catalog(name)
+  private def catalog(name: String): TableCatalog = {
+    spark.sessionState.catalogManager.catalog(name).asTableCatalog
   }
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -228,8 +230,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType()
@@ -246,8 +247,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType()
@@ -264,8 +264,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType()
@@ -282,8 +281,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.schema === new StructType()
@@ -301,8 +299,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .partitionedBy(partitioning.years($"ts"))
         .create()
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(YearsTransform(FieldReference("ts"))))
@@ -316,8 +313,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .partitionedBy(partitioning.months($"ts"))
         .create()
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(MonthsTransform(FieldReference("ts"))))
@@ -331,8 +327,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .partitionedBy(partitioning.days($"ts"))
         .create()
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(DaysTransform(FieldReference("ts"))))
@@ -346,8 +341,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .partitionedBy(partitioning.hours($"ts"))
         .create()
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.partitioning === Seq(HoursTransform(FieldReference("ts"))))
@@ -360,8 +354,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
         .partitionedBy(partitioning.bucket(4, $"id"))
         .create()
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
     assert(table.partitioning ===
@@ -378,8 +371,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     assert(exc.getMessage.contains("table_name"))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // table should not have been changed
     assert(table.name === "testcat.table_name")
@@ -397,8 +389,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
@@ -414,8 +405,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
 
-    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val replaced = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
@@ -435,8 +425,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
@@ -452,8 +441,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
 
-    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val replaced = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
@@ -480,8 +468,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
 
-    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val replaced = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
@@ -501,8 +488,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(1L, "a"), Row(2L, "b"), Row(3L, "c")))
 
-    val table = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the initial table
     assert(table.name === "testcat.table_name")
@@ -518,8 +504,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
       spark.table("testcat.table_name"),
       Seq(Row(4L, "d", "even"), Row(5L, "e", "odd"), Row(6L, "f", "even")))
 
-    val replaced = catalog("testcat").asInstanceOf[TestInMemoryTableCatalog]
-        .loadTable(Identifier.of(Array(), "table_name"))
+    val replaced = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
