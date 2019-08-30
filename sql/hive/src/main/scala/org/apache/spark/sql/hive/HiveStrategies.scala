@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+  ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
@@ -134,8 +134,8 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
       conf.defaultSizeInBytes
     }
 
-    val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-    relation.copy(tableMeta = withStats)
+    val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
+    relation.copy(tableStats = stats)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
