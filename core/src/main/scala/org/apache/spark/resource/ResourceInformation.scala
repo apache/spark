@@ -52,6 +52,8 @@ class ResourceInformation(
   }
 
   override def hashCode(): Int = Seq(name, addresses.toSeq).hashCode()
+
+  def toJson(): JValue = ResourceInformationJson(name, addresses).toJValue
 }
 
 private[spark] object ResourceInformation {

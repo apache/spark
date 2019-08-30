@@ -92,7 +92,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
   }
 
   test("Python UDF should not break column pruning/filter pushdown -- Parquet V1") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       withTempPath { f =>
         spark.range(10).select($"id".as("a"), $"id".as("b"))
           .write.parquet(f.getCanonicalPath)
@@ -129,7 +129,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
   }
 
   test("Python UDF should not break column pruning/filter pushdown -- Parquet V2") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { f =>
         spark.range(10).select($"id".as("a"), $"id".as("b"))
           .write.parquet(f.getCanonicalPath)

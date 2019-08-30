@@ -308,7 +308,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
 
   test("Throw exception on unsafe table insertion with strict casting policy") {
     withSQLConf(
-      SQLConf.USE_V1_SOURCE_WRITER_LIST.key -> "parquet",
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
       SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.STRICT.toString) {
       withTable("t") {
         sql("create table t(i int, d double) using parquet")
@@ -323,6 +323,28 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSparkSession with 
         // The API `saveAsTable` matches the fields by name.
         Seq((4.0, 3)).toDF("d", "i").write.mode("append").saveAsTable("t")
         checkAnswer(sql("select * from t"), Seq(Row(1, 2.0), Row(3, 4.0)))
+      }
+    }
+  }
+
+  test("Throw exception on unsafe cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.USE_V1_SOURCE_LIST.key -> "parquet",
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("create table t(i int, d double) using parquet")
+        // Calling `saveAsTable` to an existing table with append mode results in table insertion.
+        var msg = intercept[AnalysisException] {
+          Seq(("a", "b")).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': StringType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': StringType to DoubleType"))
+
+        msg = intercept[AnalysisException] {
+          Seq((true, false)).toDF("i", "d").write.mode("append").saveAsTable("t")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': BooleanType to IntegerType") &&
+          msg.contains("Cannot safely cast 'd': BooleanType to DoubleType"))
       }
     }
   }
