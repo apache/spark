@@ -68,7 +68,7 @@ SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
 -- !query 7 schema
 struct<col1:int,col2:int>
 -- !query 7 output
-1	11
+1	1
 
 
 -- !query 8

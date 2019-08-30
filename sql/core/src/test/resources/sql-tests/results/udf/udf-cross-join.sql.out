@@ -48,7 +48,7 @@ SELECT * FROM nt1 cross join nt2 where udf(nt1.k) = udf(nt2.k)
 struct<k:string,v1:int,k:string,v2:int>
 -- !query 3 output
 one	1	one	1
-one	1	one	51
+one	1	one	5
 two	2	two	22
 
 

@@ -15,7 +15,7 @@ SELECT true AS true
 -- !query 1 schema
 struct<true:boolean>
 -- !query 1 output
-true1
+true
 
 
 -- !query 2

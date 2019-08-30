@@ -55,7 +55,7 @@ SELECT CAST('1234567890123' AS int)
 -- !query 6 schema
 struct<CAST(1234567890123 AS INT):int>
 -- !query 6 output
-NULL1
+NULL
 
 
 -- !query 7
