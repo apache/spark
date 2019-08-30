@@ -275,25 +275,6 @@ trait HasOutputCols extends Params {
 }
 
 /**
- * Trait for shared param numFeatures (default: 1 << 18). This trait may be changed or
- * removed between minor versions.
- */
-@DeveloperApi
-trait HasNumFeatures extends Params {
-
-  /**
-   * Param for number of features.
-   * @group param
-   */
-  final val numFeatures: IntParam = new IntParam(this, "numFeatures", "number of features", ParamValidators.gt(0))
-
-  setDefault(numFeatures, 1 << 18)
-
-  /** @group getParam */
-  final def getNumFeatures: Int = $(numFeatures)
-}
-
-/**
  * Trait for shared param checkpointInterval. This trait may be changed or
  * removed between minor versions.
  */
@@ -525,7 +506,7 @@ trait HasLoss extends Params {
 }
 
 /**
- * Trait for shared param distanceMeasure (default: "euclidean"). This trait may be changed or
+ * Trait for shared param distanceMeasure (default: org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
@@ -535,9 +516,9 @@ trait HasDistanceMeasure extends Params {
    * Param for The distance measure. Supported options: 'euclidean' and 'cosine'.
    * @group param
    */
-  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", ParamValidators.inArray(Array("euclidean", "cosine")))
+  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", (value: String) => org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value))
 
-  setDefault(distanceMeasure, "euclidean")
+  setDefault(distanceMeasure, org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN)
 
   /** @group getParam */
   final def getDistanceMeasure: String = $(distanceMeasure)

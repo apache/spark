@@ -20,10 +20,12 @@ import sys
 if sys.version >= '3':
     xrange = range
 
+from pyspark import since
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml import Estimator, Transformer, Model
 from pyspark.ml.param import Params
+from pyspark.ml.param.shared import *
 from pyspark.ml.util import _jvm
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
@@ -372,7 +374,7 @@ class JavaPredictorParams(HasLabelCol, HasFeaturesCol, HasPredictionCol):
 
 
 @inherit_doc
-class JavaPredictor(JavaPredictorParams):
+class JavaPredictor(JavaEstimator, JavaPredictorParams):
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
@@ -426,3 +428,10 @@ class JavaPredictionModel(JavaModel, JavaPredictorParams):
         Returns the number of features the model was trained on. If unknown, returns -1
         """
         return self._call_java("numFeatures")
+
+    @since("3.0.0")
+    def predict(self, value):
+        """
+        Predict label for the given features.
+        """
+        return self._call_java("predict", value)

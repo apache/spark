@@ -20,7 +20,6 @@ import sys
 import os
 import time
 import uuid
-import warnings
 
 if sys.version > '3':
     basestring = str
