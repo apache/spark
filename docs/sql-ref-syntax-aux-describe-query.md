@@ -26,12 +26,14 @@ describe the query output.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} [QUERY] query
+{DESC | DESCRIBE} [QUERY] input_statement
 {% endhighlight %}
 
 ### Parameters
 <dl>
-  <dt><code><em>query</em></code></dt>
+  <dt><code><em>QUERY</em></code></dt>
+  <dd>This clause is optional and may be omitted.</dd>
+  <dt><code><em>input_statement</em></code></dt>
   <dd>
     Specifies a result set producing statement and may be one of the following: 
     <ul>
@@ -90,7 +92,8 @@ DESC QUERY TABLE person;
   +--------+---------+----------+
 
 -- Returns column metadata information for a `FROM` statement.
-DESCRIBE QUERY FROM person SELECT age;
+-- `QUERY` clause is optional and can be omitted.
+DESCRIBE FROM person SELECT age;
   +--------+---------+----------+
   |col_name|data_type|comment   |
   +--------+---------+----------+
