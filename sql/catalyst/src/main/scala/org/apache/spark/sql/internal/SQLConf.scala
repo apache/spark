@@ -1050,7 +1050,7 @@ object SQLConf {
   val CODEGEN_SPLIT_AGGREGATE_FUNC =
     buildConf("spark.sql.codegen.aggregate.splitAggregateFunc.enabled")
       .internal()
-      .doc("When true, the code generator would aggregate code into individual methods " +
+      .doc("When true, the code generator would split aggregate code into individual methods " +
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .booleanConf

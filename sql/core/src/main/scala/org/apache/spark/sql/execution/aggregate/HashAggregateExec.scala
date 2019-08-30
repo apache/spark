@@ -262,6 +262,7 @@ case class HashAggregateExec(
   }
 
   private def isValidParamLength(paramLength: Int): Boolean = {
+    // This config is only for testing
     sqlContext.getConf("spark.sql.HashAggregateExec.isValidParamLength", null) match {
       case null | "" => CodeGenerator.isValidParamLength(paramLength)
       case validLength => paramLength <= validLength.toInt
