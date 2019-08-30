@@ -95,9 +95,8 @@ INSERT INTO [ TABLE ] table_name
 {% endhighlight %}
 
 #### Insert Using a SELECT Statement
-Assuming the `persons` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the persons table has already been created and populated.
  SELECT * FROM persons;
 
      + -------------- + ------------------------------ + -------------- +
@@ -127,9 +126,8 @@ Assuming the `persons` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a TABLE Statement
-Assuming the `visiting_students` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the visiting_students table has already been created and populated.
  SELECT * FROM visiting_students;
 
      + -------------- + ------------------------------ + -------------- +
@@ -162,9 +160,8 @@ Assuming the `visiting_students` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a FROM Statement
-Assuming the `applicants` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the applicants table has already been created and populated.
  SELECT * FROM applicants;
 
      + -------------- + ------------------------------ + -------------- + -------------- +
