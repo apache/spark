@@ -18,16 +18,17 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Locale
 
-import io.fabric8.kubernetes.api.model.Pod
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{ContainerStatus, Pod}
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import collection.JavaConversions._
 
 /**
  * An immutable view of the current executor pods that are running in the cluster.
  */
-private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorState]) {
+private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorPodState]) {
 
   import ExecutorPodsSnapshot._
 
@@ -43,26 +44,26 @@ object ExecutorPodsSnapshot extends Logging {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
   }
 
-  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorState])
+  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState])
 
-  private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorState] = {
+  private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
     executorPods.map { pod =>
       (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong, toState(pod))
     }.toMap
   }
 
-  private def toState(pod: Pod): ExecutorState = {
+  private def toState(pod: Pod): ExecutorPodState = {
     if (isDeleted(pod)) {
-      ExecutorPodDeleted(pod)
+      PodDeleted(pod)
     } else {
       val phase = pod.getStatus.getPhase.toLowerCase(Locale.ROOT)
       phase match {
         case "pending" =>
-          ExecutorPending(pod)
+          PodPending(pod)
         case "running" =>
           // Checking executor container status is not terminated
           // Pod status can still be running if sidecar container status is running
-          val executorContainerStatusCode = pod.getStatus.getContainerStatuses.
+          val executorContainerStatusCode = pod.getStatus.getContainerStatuses.asScala.
             filter(_.getName == DEFAULT_EXECUTOR_CONTAINER_NAME).
             flatMap(c => Option(c.getState.getTerminated)).
             map(_.getExitCode).
@@ -72,18 +73,18 @@ object ExecutorPodsSnapshot extends Logging {
               logWarning(s"Received Pod phase $phase with " + DEFAULT_EXECUTOR_CONTAINER_NAME +
                 s" container phase terminated(ExitCode: ${statusCode})" +
                 s" in namespace ${pod.getMetadata.getNamespace}, Report Pod failed.")
-              ExecutorFailed(pod)
+              PodFailed(pod)
             case _ =>
-              ExecutorRunning(pod)
+              PodRunning(pod)
           }
         case "failed" =>
-          ExecutorFailed(pod)
+          PodFailed(pod)
         case "succeeded" =>
-          ExecutorSucceeded(pod)
+          PodSucceeded(pod)
         case _ =>
           logWarning(s"Received unknown phase $phase for executor pod with name" +
             s" ${pod.getMetadata.getName} in namespace ${pod.getMetadata.getNamespace}")
-          ExecutorPodUnknown(pod)
+          PodUnknown(pod)
       }
     }
   }

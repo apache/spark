@@ -18,20 +18,20 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.api.model.Pod
 
-sealed trait ExecutorState {
+sealed trait ExecutorPodState {
   def pod: Pod
 }
 
-case class ExecutorRunning(pod: Pod) extends ExecutorState
+case class PodRunning(pod: Pod) extends ExecutorPodState
 
-case class ExecutorPending(pod: Pod) extends ExecutorState
+case class PodPending(pod: Pod) extends ExecutorPodState
 
-sealed trait FinalExecutorState extends ExecutorState
+sealed trait FinalPodState extends ExecutorPodState
 
-case class ExecutorSucceeded(pod: Pod) extends FinalExecutorState
+case class PodSucceeded(pod: Pod) extends FinalPodState
 
-case class ExecutorFailed(pod: Pod) extends FinalExecutorState
+case class PodFailed(pod: Pod) extends FinalPodState
 
-case class ExecutorPodDeleted(pod: Pod) extends FinalExecutorState
+case class PodDeleted(pod: Pod) extends FinalPodState
 
-case class ExecutorPodUnknown(pod: Pod) extends ExecutorState
+case class PodUnknown(pod: Pod) extends ExecutorPodState

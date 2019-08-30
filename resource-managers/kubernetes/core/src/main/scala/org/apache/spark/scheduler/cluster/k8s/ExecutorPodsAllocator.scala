@@ -130,13 +130,13 @@ private[spark] class ExecutorPodsAllocator(
     }
 
     val currentRunningCount = lastSnapshot.executorPods.values.count {
-      case ExecutorRunning(_) => true
+      case PodRunning(_) => true
       case _ => false
     }
 
     val currentPendingExecutors = lastSnapshot.executorPods
       .filter {
-        case (_, ExecutorPending(_)) => true
+        case (_, PodPending(_)) => true
         case _ => false
       }
       .map { case (id, _) => id }

@@ -59,16 +59,16 @@ private[spark] class ExecutorPodsLifecycleManager(
     snapshots.foreach { snapshot =>
       snapshot.executorPods.foreach { case (execId, state) =>
         state match {
-          case deleted@ExecutorPodDeleted(_) =>
+          case deleted@PodDeleted(_) =>
             logDebug(s"Snapshot reported deleted executor with id $execId," +
               s" pod name ${state.pod.getMetadata.getName}")
             removeExecutorFromSpark(schedulerBackend, deleted, execId)
             execIdsRemovedInThisRound += execId
-          case failed@ExecutorFailed(_) =>
+          case failed@PodFailed(_) =>
             logDebug(s"Snapshot reported failed executor with id $execId," +
               s" pod name ${state.pod.getMetadata.getName}")
             onFinalNonDeletedState(failed, execId, schedulerBackend, execIdsRemovedInThisRound)
-          case succeeded@ExecutorSucceeded(_) =>
+          case succeeded@PodSucceeded(_) =>
             if (schedulerBackend.isExecutorActive(execId.toString)) {
               logInfo(s"Snapshot reported succeeded executor with id $execId, " +
                 "even though the application has not requested for it to be removed.")
@@ -114,13 +114,13 @@ private[spark] class ExecutorPodsLifecycleManager(
   }
 
   private def onFinalNonDeletedState(
-      executorState: FinalExecutorState,
+      podState: FinalPodState,
       execId: Long,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       execIdsRemovedInRound: mutable.Set[Long]): Unit = {
-    removeExecutorFromSpark(schedulerBackend, executorState, execId)
+    removeExecutorFromSpark(schedulerBackend, podState, execId)
     if (shouldDeleteExecutors) {
-      removeExecutorFromK8s(executorState.pod)
+      removeExecutorFromK8s(podState.pod)
     }
     execIdsRemovedInRound += execId
   }
@@ -140,29 +140,29 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private def removeExecutorFromSpark(
       schedulerBackend: KubernetesClusterSchedulerBackend,
-      executorState: FinalExecutorState,
+      podState: FinalPodState,
       execId: Long): Unit = {
     if (removedExecutorsCache.getIfPresent(execId) == null) {
       removedExecutorsCache.put(execId, execId)
-      val exitReason = findExitReason(executorState, execId)
+      val exitReason = findExitReason(podState, execId)
       schedulerBackend.doRemoveExecutor(execId.toString, exitReason)
     }
   }
 
-  private def findExitReason(executorState: FinalExecutorState, execId: Long): ExecutorExited = {
-    val exitCode = findExitCode(executorState)
-    val (exitCausedByApp, exitMessage) = executorState match {
-      case ExecutorPodDeleted(_) =>
+  private def findExitReason(podState: FinalPodState, execId: Long): ExecutorExited = {
+    val exitCode = findExitCode(podState)
+    val (exitCausedByApp, exitMessage) = podState match {
+      case PodDeleted(_) =>
         (false, s"The executor with id $execId was deleted by a user or the framework.")
       case _ =>
-        val msg = exitReasonMessage(executorState, execId, exitCode)
+        val msg = exitReasonMessage(podState, execId, exitCode)
         (true, msg)
     }
     ExecutorExited(exitCode, exitCausedByApp, exitMessage)
   }
 
-  private def exitReasonMessage(executorState: FinalExecutorState, execId: Long, exitCode: Int) = {
-    val pod = executorState.pod
+  private def exitReasonMessage(podState: FinalPodState, execId: Long, exitCode: Int) = {
+    val pod = podState.pod
     val reason = Option(pod.getStatus.getReason)
     val message = Option(pod.getStatus.getMessage)
     s"""
@@ -175,8 +175,8 @@ private[spark] class ExecutorPodsLifecycleManager(
       """.stripMargin
   }
 
-  private def findExitCode(executorState: FinalExecutorState): Int = {
-    executorState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
+  private def findExitCode(podState: FinalPodState): Int = {
+    podState.pod.getStatus.getContainerStatuses.asScala.find { containerStatus =>
       containerStatus.getName == DEFAULT_EXECUTOR_CONTAINER_NAME &
       containerStatus.getState.getTerminated != null
     }.map { terminatedContainer =>
