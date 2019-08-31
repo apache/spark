@@ -25,7 +25,7 @@ The `INSERT OVERWRITE` statement overwrites the existing data in the table using
 
 ### Syntax
 {% highlight sql %}
-INSERT OVERWRITE [TABLE] table_name
+INSERT OVERWRITE [ TABLE ] table_name
     [ PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] ) [ IF NOT EXISTS ] ]
     { { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] } | query }
 {% endhighlight %}
@@ -59,10 +59,8 @@ INSERT OVERWRITE [TABLE] table_name
 
 ### Examples
 #### Insert Using a VALUES Clause
-
-Assuming the `students` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the students table has already been created and populated.
  SELECT * FROM students;
 
      + -------------- + ------------------------------ + -------------- +
@@ -101,9 +99,8 @@ Assuming the `students` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a SELECT Statement
-Assuming the `persons` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the persons table has already been created and populated.
  SELECT * FROM persons;
 
       + -------------- + ------------------------------ + -------------- +
@@ -129,9 +126,8 @@ Assuming the `persons` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a TABLE Statement
-Assuming the `visiting_students` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the visiting_students table has already been created and populated.
  SELECT * FROM visiting_students;
 
       + -------------- + ------------------------------ + -------------- +
@@ -156,9 +152,8 @@ Assuming the `visiting_students` table has already been created and populated.
 {% endhighlight %}
 
 #### Insert Using a FROM Statement
-Assuming the `applicants` table has already been created and populated.
-
 {% highlight sql %}
+ -- Assuming the applicants table has already been created and populated.
  SELECT * FROM applicants;
 
      + -------------- + ------------------------------ + -------------- + -------------- +
@@ -185,7 +180,7 @@ Assuming the `applicants` table has already been created and populated.
      + -------------- + ------------------------------ + -------------- +
 {% endhighlight %}
 
-Related Statements:
+### Related Statements
   * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
   * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)
   * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
