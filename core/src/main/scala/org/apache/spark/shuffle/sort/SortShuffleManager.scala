@@ -133,10 +133,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle: ShuffleHandle,
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
-    taskIdMapsForShuffle.synchronized {
-      taskIdMapsForShuffle.putIfAbsent(handle.shuffleId, ArrayBuffer.empty[Long])
-      taskIdMapsForShuffle.get(handle.shuffleId).append(context.taskAttemptId())
-    }
+    val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
+      handle.shuffleId, _ => ArrayBuffer.empty[Long])
+    mapTaskIds.synchronized { mapTaskIds.append(context.taskAttemptId()) }
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
