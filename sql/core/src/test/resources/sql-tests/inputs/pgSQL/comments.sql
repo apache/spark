@@ -3,7 +3,7 @@
 --
 --
 -- COMMENTS
--- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/comments.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/comments.sql
 --
 
 SELECT 'trailing' AS first; -- trailing single line
