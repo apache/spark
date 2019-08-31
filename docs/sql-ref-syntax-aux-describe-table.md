@@ -34,12 +34,12 @@ to return the metadata pertaining to a partition or column respectively.
   <dt><code><em>format</em></code></dt>
   <dd>
     Specifies the optional format of describe output. If `EXTENDED` is specified
-    then additional metadata information such as parent database, owner, access time
-    are returned. 
+    then additional metadata information (such as parent database, owner, and access time)
+    is returned. 
   </dd>
   <dt><code><em>table_identifier</em></code></dt>
   <dd>
-    Specifies a table name which may be optionally qualified with a database name.<br><br>
+    Specifies a table name, which may be optionally qualified with a database name.<br><br>
     <b>Syntax:</b>
       <code>
         [database_name.]table_name
