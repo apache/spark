@@ -233,9 +233,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
     assert(table.properties.isEmpty)
   }
@@ -250,9 +248,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
     assert(table.properties === Map("provider" -> "foo").asJava)
   }
@@ -267,9 +263,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning.isEmpty)
     assert(table.properties === Map("prop" -> "value").asJava)
   }
@@ -284,9 +278,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.schema === new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    assert(table.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(table.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(table.properties.isEmpty)
   }
@@ -410,9 +402,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.schema === new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType)
-        .add("even_or_odd", StringType, nullable = false))
+        .add("even_or_odd", StringType))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties.isEmpty)
   }
@@ -446,9 +438,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.schema === new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType)
-        .add("even_or_odd", StringType, nullable = false))
+        .add("even_or_odd", StringType))
     assert(replaced.partitioning === Seq(IdentityTransform(FieldReference("id"))))
     assert(replaced.properties.isEmpty)
   }
@@ -472,9 +464,7 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
-    assert(replaced.schema === new StructType()
-        .add("id", LongType, nullable = false)
-        .add("data", StringType))
+    assert(replaced.schema === new StructType().add("id", LongType).add("data", StringType))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties.isEmpty)
   }
@@ -509,9 +499,9 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // validate the replacement table
     assert(replaced.name === "testcat.table_name")
     assert(replaced.schema === new StructType()
-        .add("id", LongType, nullable = false)
+        .add("id", LongType)
         .add("data", StringType)
-        .add("even_or_odd", StringType, nullable = false))
+        .add("even_or_odd", StringType))
     assert(replaced.partitioning.isEmpty)
     assert(replaced.properties.isEmpty)
   }
