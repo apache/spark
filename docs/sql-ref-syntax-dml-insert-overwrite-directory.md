@@ -79,7 +79,7 @@ INSERT OVERWRITE DIRECTORY
     SELECT * FROM test_table;
 {% endhighlight %}
 
-Related Statements:
+### Related Statements
   * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
   * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
   * [INSERT OVERWRITE DIRECTORY with Hive format statement](sql-ref-syntax-dml-insert-overwrite-directory-hive.html)
