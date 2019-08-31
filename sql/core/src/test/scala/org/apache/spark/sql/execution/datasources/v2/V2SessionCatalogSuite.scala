@@ -34,7 +34,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class V2SessionCatalogSuite extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
+class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
 
   val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
   val schema: StructType = new StructType()
@@ -52,12 +52,13 @@ class V2SessionCatalogSuite extends SparkFunSuite with SharedSparkSession with B
   }
 }
 
-class V2SessionCatalogTableSuite extends V2SessionCatalogSuite {
+class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
+    // TODO: when there is a public API for v2 catalogs, use that instead
     val catalog = newCatalog()
     catalog.createNamespace(Array("db"), emptyProps)
     catalog.createNamespace(Array("db2"), emptyProps)
@@ -760,7 +761,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogSuite {
   }
 }
 
-class V2SessionCatalogNamespaceSuite extends V2SessionCatalogSuite {
+class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
@@ -768,7 +769,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogSuite {
       expected: scala.collection.Map[String, String],
       actual: scala.collection.Map[String, String]): Unit = {
     // remove location and comment that are automatically added by HMS unless they are expected
-    val toRemove = Seq("location", "comment").filter(expected.contains)
+    val toRemove = V2SessionCatalog.RESERVED_PROPERTIES.filter(expected.contains)
     assert(expected -- toRemove === actual)
   }
 
@@ -838,11 +839,32 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogSuite {
 
   test("createNamespace: basic behavior") {
     val catalog = newCatalog()
+    val expectedPath = sqlContext.sessionState.catalog.getDefaultDBPath(testNs(0)).toString
 
     catalog.createNamespace(testNs, Map("property" -> "value").asJava)
 
+    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
     assert(catalog.namespaceExists(testNs) === true)
-    checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
+    val metadata = catalog.loadNamespaceMetadata(testNs).asScala
+    checkMetadata(metadata, Map("property" -> "value"))
+    assert(expectedPath === metadata("location"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: initialize location") {
+    val catalog = newCatalog()
+    val expectedPath = "file:/tmp/db.db"
+
+    catalog.createNamespace(testNs, Map("location" -> expectedPath).asJava)
+
+    assert(expectedPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    assert(catalog.namespaceExists(testNs) === true)
+    val metadata = catalog.loadNamespaceMetadata(testNs).asScala
+    checkMetadata(metadata, Map.empty)
+    assert(expectedPath === metadata("location"))
 
     catalog.dropNamespace(testNs)
   }
@@ -861,6 +883,21 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogSuite {
     checkMetadata(catalog.loadNamespaceMetadata(testNs).asScala, Map("property" -> "value"))
 
     catalog.dropNamespace(testNs)
+  }
+
+  test("createNamespace: fail nested namespace") {
+    val catalog = newCatalog()
+
+    // ensure the parent exists
+    catalog.createNamespace(Array("db"), emptyProps)
+
+    val exc = intercept[IllegalArgumentException] {
+      catalog.createNamespace(Array("db", "nested"), emptyProps)
+    }
+
+    assert(exc.getMessage.contains("Invalid namespace name: db.nested"))
+
+    catalog.dropNamespace(Array("db"))
   }
 
   test("createTable: fail if namespace does not exist") {
@@ -942,6 +979,37 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogSuite {
     catalog.dropNamespace(testNs)
   }
 
+  test("alterNamespace: update namespace location") {
+    val catalog = newCatalog()
+    val initialPath = sqlContext.sessionState.catalog.getDefaultDBPath(testNs(0)).toString
+    val newPath = "file:/tmp/db.db"
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    assert(initialPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("location", newPath))
+
+    assert(newPath === spark.catalog.getDatabase(testNs(0)).locationUri.toString)
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: update namespace comment") {
+    val catalog = newCatalog()
+    val newComment = "test db"
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    assert(spark.catalog.getDatabase(testNs(0)).description.isEmpty)
+
+    catalog.alterNamespace(testNs, NamespaceChange.setProperty("comment", newComment))
+
+    assert(newComment === spark.catalog.getDatabase(testNs(0)).description)
+
+    catalog.dropNamespace(testNs)
+  }
+
   test("alterNamespace: fail if namespace doesn't exist") {
     val catalog = newCatalog()
 
@@ -952,5 +1020,33 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogSuite {
     }
 
     assert(exc.getMessage.contains(testNs.quoted))
+  }
+
+  test("alterNamespace: fail to remove location") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, emptyProps)
+
+    val exc = intercept[UnsupportedOperationException] {
+      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("location"))
+    }
+
+    assert(exc.getMessage.contains("Cannot remove reserved property: location"))
+
+    catalog.dropNamespace(testNs)
+  }
+
+  test("alterNamespace: fail to remove comment") {
+    val catalog = newCatalog()
+
+    catalog.createNamespace(testNs, Map("comment" -> "test db").asJava)
+
+    val exc = intercept[UnsupportedOperationException] {
+      catalog.alterNamespace(testNs, NamespaceChange.removeProperty("comment"))
+    }
+
+    assert(exc.getMessage.contains("Cannot remove reserved property: comment"))
+
+    catalog.dropNamespace(testNs)
   }
 }

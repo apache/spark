@@ -25,8 +25,8 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalog.v2.{Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.NamespaceChange.RemoveProperty
-import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
+import org.apache.spark.sql.catalog.v2.NamespaceChange.{RemoveProperty, SetProperty}
+import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
@@ -94,7 +94,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
     val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
     val provider = properties.getOrDefault("provider", sessionState.conf.defaultDataSourceName)
     val tableProperties = properties.asScala
-    val location = Option(properties.get("location"))
+    val location = Option(properties.get(LOCATION_TABLE_PROP))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
         .copy(locationUri = location.map(CatalogUtils.stringToURI))
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -109,7 +109,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
       tracksPartitionsInCatalog = sessionState.conf.manageFilesourcePartitions,
-      comment = Option(properties.get("comment")))
+      comment = Option(properties.get(COMMENT_TABLE_PROP)))
 
     try {
       catalog.createTable(tableDesc, ignoreIfExists = false)
@@ -236,8 +236,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       case Array(db) =>
         // validate that this catalog's reserved properties are not removed
         changes.foreach {
-          case remove: RemoveProperty
-              if remove.property == "location" || remove.property == "comment" =>
+          case remove: RemoveProperty if RESERVED_PROPERTIES.contains(remove.property) =>
             throw new UnsupportedOperationException(
               s"Cannot remove reserved property: ${remove.property}")
           case _ =>
@@ -272,6 +271,10 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
 }
 
 private[sql] object V2SessionCatalog {
+  val COMMENT_TABLE_PROP: String = "comment"
+  val LOCATION_TABLE_PROP: String = "location"
+  val RESERVED_PROPERTIES: Set[String] = Set(COMMENT_TABLE_PROP, LOCATION_TABLE_PROP)
+
   /**
    * Convert v2 Transforms to v1 partition columns and an optional bucket spec.
    */
@@ -300,8 +303,8 @@ private[sql] object V2SessionCatalog {
       defaultLocation: Option[URI] = None): CatalogDatabase = {
     CatalogDatabase(
       name = db,
-      description = metadata.getOrDefault("comment", ""),
-      locationUri = Option(metadata.get("location"))
+      description = metadata.getOrDefault(COMMENT_TABLE_PROP, ""),
+      locationUri = Option(metadata.get(LOCATION_TABLE_PROP))
           .map(CatalogUtils.stringToURI)
           .orElse(defaultLocation)
           .getOrElse(throw new IllegalArgumentException("Missing database location")),
@@ -315,8 +318,8 @@ private[sql] object V2SessionCatalog {
       catalogDatabase.properties.foreach {
         case (key, value) => metadata.put(key, value)
       }
-      metadata.put("location", catalogDatabase.locationUri.toString)
-      metadata.put("comment", catalogDatabase.description)
+      metadata.put(LOCATION_TABLE_PROP, catalogDatabase.locationUri.toString)
+      metadata.put(COMMENT_TABLE_PROP, catalogDatabase.description)
 
       metadata.asJava
     }
