@@ -136,8 +136,8 @@ Summary metrics for all task are represented in a table and in a timeline.
 * **Result serialization time** is the time spent serializing the task result on a executor before sending it back to the driver.
 * **Getting result time** is the time that the driver spends fetching task results from workers.
 * **Scheduler delay** is the time the task waits to be scheduled for execution.
-* **Peak execution memory** it's the maximum memory used by the internal data structures created during shuffles, aggregations and joins.
-* **Shuffle Read Size / Records**.Total shuffle bytes read, includes both data read locally and data read from remote executors.
+* **Peak execution memory** is the maximum memory used by the internal data structures created during shuffles, aggregations and joins.
+* **Shuffle Read Size / Records**. Total shuffle bytes read, includes both data read locally and data read from remote executors.
 * **Shuffle Read Blocked Time** is the time that tasks spent blocked waiting for shuffle data to be read from remote machines.
 * **Shuffle Remote Reads** is the total shuffle bytes read from remote executors.
 * **Shuffle spill (memory)** is the size of the deserialized form of the shuffled data in memory.
@@ -147,19 +147,19 @@ Summary metrics for all task are represented in a table and in a timeline.
   <img src="img/AllStagesPageDetail6.png" title="Stages metrics" alt="Stages metrics">
 </p>
 
-Aggregated metrics by executor show the same information aggregated by executor
+Aggregated metrics by executor show the same information aggregated by executor.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail7.png" title="Stages metrics per executor" alt="Stages metrics per executors">
 </p>
 
-**Accumulators** are a type of shared variables, it provide a mutable variable that can be updated inside of a variety of transformations. It is possible to create accumulators with and without name, but only named accumulators are displayed.
+**[Accumulators](rdd-programming-guide.html#accumulators)** are a type of shared variables. It provides a mutable variable that can be updated inside of a variety of transformations. It is possible to create accumulators with and without name, but only named accumulators are displayed.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail8.png" title="Stage accumulator" alt="Stage accumulator">
 </p>
 
-Tasks details show the information of every task
+Tasks details basically includes the same information as in the summary section but detailed by task. It also includes links to review the logs and the task attempt number if it fails for any reason. If there are named accumulators, here it is possible to see the accumulator value at the end of each task.
 
 <p style="text-align: center;">
   <img src="img/AllStagesPageDetail9.png" title="Tasks" alt="Tasks">
