@@ -96,7 +96,6 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
 
     // Make sure our secret files are mounted correctly
     val files = Utils.executeCommand("ls", s"$SECRET_MOUNT_PATH")
-    println(s"Found files ${files}")
     files should include (ENV_SECRET_KEY_1)
     files should include (ENV_SECRET_KEY_2)
     // Validate the contents

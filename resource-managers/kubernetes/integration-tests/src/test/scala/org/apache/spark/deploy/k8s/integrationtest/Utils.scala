@@ -62,7 +62,6 @@ object Utils extends Logging {
       }
 
       override def onClose(a: Int, b: String) {
-        println("closed")
         closeLatch.countDown()
       }
 
