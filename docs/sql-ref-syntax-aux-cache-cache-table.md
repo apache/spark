@@ -20,33 +20,64 @@ license: |
 ---
 
 ### Description
-`CACHE TABLE` caches the table's contents in the RDD cache within memory or disk. This reduces scanning of the original files in future queries.
+`CACHE TABLE` statement caches the table's contents with the given storage level. This reduces scanning of the original files in future queries.
 
 ### Syntax
 {% highlight sql %}
-CACHE [LAZY] TABLE [db_name.]table_name
-  [OPTIONS (table_property_list)] [[AS] query]
-
-table_property_list:
-    : (table_property_key1 [[=]table_property_value1], table_property_key2 [[=]table_property_value2], ...)
-
+CACHE [ LAZY ] TABLE table_name
+    [ OPTIONS ( 'storageLevel' [ = ] value ) ] [ [ AS ] query ]
 {% endhighlight %}
 
-### Example
+### Parameters
+<dl>
+  <dt><code><em>LAZY</em></code></dt>
+  <dd>Only cache the table when it is first used, instead of immediately.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>The name of the table to be cached.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>OPTIONS ( 'storageLevel' [ = ] value )</em></code></dt>
+  <dd>
+  <code>OPTIONS</code> clause with <code>storageLevel</code> key and value pair. If a key other than <code>storageLevel</code> is used, a WARN with message "org.apache.spark.sql.execution.command.CacheTableCommand: Invalid options: XXXX -> XXXX" will be issued. The valid options for <code>storageLevel</code> are:
+    <ul>
+      <li><code>NONE</code></li>
+      <li><code>DISK_ONLY</code></li>
+      <li><code>DISK_ONLY_2</code></li>
+      <li><code>MEMORY_ONLY</code></li>
+      <li><code>MEMORY_ONLY_2</code></li>
+      <li><code>MEMORY_ONLY_SER</code></li>
+      <li><code>MEMORY_ONLY_SER_2</code></li>
+      <li><code>MEMORY_AND_DISK</code></li>
+      <li><code>MEMORY_AND_DISK_2</code></li>
+      <li><code>MEMORY_AND_DISK_SER</code></li>
+      <li><code>MEMORY_AND_DISK_SER_2</code></li>
+      <li><code>OFF_HEAP</code></li>
+    </ul>
+    If invalid value is set for <code>storageLevel</code>, "java.lang.IllegalArgumentException: Invalid StorageLevel: XXXX" will be issued. If <code>storageLevel</code> is not explicitly set using <code>OPTIONS</code> clause,the default <code>storageLevel</code> is set to <code>MEMORY_AND_DISK</code>.
+  </dd>
+</dl>
+
+<dl>
+  <dt><code><em>query</em></code></dt>
+  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
+    <ul>
+      <li>a <code>SELECT</code> statement</li>
+      <li>a <code>TABLE</code> statement</li>
+      <li>a <code>FROM</code> statement</li>
+    </ul>
+   </dd>
+</dl>
+
+### Examples
 {% highlight sql %}
 CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testData
 {% endhighlight %}
 
-### Parameters
+### Related Statements
+  * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+  * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 
-#### ***LAZY***:
-Only cache the table when it is first used, instead of immediately.
-
-#### ***table_name***:
-The name of an existing table.
-
-#### ***table_property_list***:
-Table property key value pairs.
-
-#### ***query***:
-A SELECT statement.
