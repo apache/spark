@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.InsertAdaptiveSparkPlan
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, SQLExecutionRDD}
 import org.apache.spark.util.Utils
 
 /**
@@ -105,7 +105,7 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
+  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(executedPlan.execute(), SQLConf.get)
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
