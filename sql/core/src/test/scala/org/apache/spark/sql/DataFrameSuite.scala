@@ -2202,4 +2202,12 @@ class DataFrameSuite extends QueryTest with SharedSparkSession {
           |*(1) Range (0, 10, step=1, splits=2)""".stripMargin))
     }
   }
+
+  test("SPARK-28916: subexrepssion elimination can cause 64kb code limit") {
+    val df = spark.range(2).selectExpr((0 to 5000).map(i => s"id as field_$i"): _*)
+    df.createOrReplaceTempView("spark64kb")
+    val data = spark.sql("select * from spark64kb limit 10")
+    // This fails if 64Kb limit is reached in code generation
+    data.describe()
+  }
 }
