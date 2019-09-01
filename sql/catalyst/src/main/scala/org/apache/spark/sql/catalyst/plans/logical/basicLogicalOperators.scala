@@ -489,7 +489,7 @@ case class ReplaceTableAsSelect(
   override def tableSchema: StructType = query.schema
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = {
+  override lazy val resolved: Boolean = childrenResolved && {
     // the table schema is created from the query schema, so the only resolution needed is to check
     // that the columns referenced by the table's partitioning exist in the query schema
     val references = partitioning.flatMap(_.references).toSet
@@ -507,15 +507,22 @@ case class ReplaceTableAsSelect(
 case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
+    writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand
 
 object AppendData {
-  def byName(table: NamedRelation, df: LogicalPlan): AppendData = {
-    new AppendData(table, df, isByName = true)
+  def byName(
+      table: NamedRelation,
+      df: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): AppendData = {
+    new AppendData(table, df, writeOptions, isByName = true)
   }
 
-  def byPosition(table: NamedRelation, query: LogicalPlan): AppendData = {
-    new AppendData(table, query, isByName = false)
+  def byPosition(
+      table: NamedRelation,
+      query: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): AppendData = {
+    new AppendData(table, query, writeOptions, isByName = false)
   }
 }
 
@@ -526,19 +533,26 @@ case class OverwriteByExpression(
     table: NamedRelation,
     deleteExpr: Expression,
     query: LogicalPlan,
+    writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
   override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
 }
 
 object OverwriteByExpression {
   def byName(
-      table: NamedRelation, df: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, df, isByName = true)
+      table: NamedRelation,
+      df: LogicalPlan,
+      deleteExpr: Expression,
+      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, df, writeOptions, isByName = true)
   }
 
   def byPosition(
-      table: NamedRelation, query: LogicalPlan, deleteExpr: Expression): OverwriteByExpression = {
-    OverwriteByExpression(table, deleteExpr, query, isByName = false)
+      table: NamedRelation,
+      query: LogicalPlan,
+      deleteExpr: Expression,
+      writeOptions: Map[String, String] = Map.empty): OverwriteByExpression = {
+    OverwriteByExpression(table, deleteExpr, query, writeOptions, isByName = false)
   }
 }
 
@@ -548,15 +562,22 @@ object OverwriteByExpression {
 case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
+    writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand
 
 object OverwritePartitionsDynamic {
-  def byName(table: NamedRelation, df: LogicalPlan): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, df, isByName = true)
+  def byName(
+      table: NamedRelation,
+      df: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, df, writeOptions, isByName = true)
   }
 
-  def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
-    OverwritePartitionsDynamic(table, query, isByName = false)
+  def byPosition(
+      table: NamedRelation,
+      query: LogicalPlan,
+      writeOptions: Map[String, String] = Map.empty): OverwritePartitionsDynamic = {
+    OverwritePartitionsDynamic(table, query, writeOptions, isByName = false)
   }
 }
 
