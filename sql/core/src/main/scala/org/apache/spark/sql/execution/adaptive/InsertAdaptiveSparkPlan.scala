@@ -41,9 +41,6 @@ case class InsertAdaptiveSparkPlan(
 
   private val conf = session.sessionState.conf
 
-  // Subquery-reuse is shared across the entire query.
-  private val subqueryCache = new TrieMap[SparkPlan, BaseSubqueryExec]()
-
   // Exchange-reuse is shared across the entire query, including sub-queries.
   private val stageCache = new TrieMap[SparkPlan, QueryStageExec]()
 
@@ -62,7 +59,7 @@ case class InsertAdaptiveSparkPlan(
         // Run pre-processing rules.
         val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
         logDebug(s"Adaptive execution enabled for plan: $plan")
-        AdaptiveSparkPlanExec(newPlan, session, preprocessingRules, subqueryCache, stageCache, qe)
+        AdaptiveSparkPlanExec(newPlan, session, preprocessingRules, stageCache, qe)
       } catch {
         case SubqueryAdaptiveNotSupportedException(subquery) =>
           logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} is enabled " +
@@ -110,7 +107,7 @@ case class InsertAdaptiveSparkPlan(
   }
 
   def compileSubquery(plan: LogicalPlan): SparkPlan = {
-    val queryExec = new QueryExecution(session, plan)
+    val queryExec = new QueryExecution(session, plan, subqueryCache = queryExecution.subqueryCache)
     // Apply the same instance of this rule to sub-queries so that sub-queries all share the
     // same `stageCache` for Exchange reuse.
     this.applyInternal(queryExec.sparkPlan, queryExec)

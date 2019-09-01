@@ -1373,6 +1373,39 @@ class SubquerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Subquery reuse across all subquery levels") {
+    Seq(true, false).foreach { reuse =>
+      withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> reuse.toString) {
+        val df = sql(
+          """
+            |SELECT (SELECT avg(key) FROM testData), (SELECT (SELECT avg(key) FROM testData))
+            |FROM testData
+            |LIMIT 1
+          """.stripMargin)
+
+        var countSubqueryExec = 0
+        var countReuseSubqueryExec = 0
+        df.queryExecution.executedPlan.transformAllExpressions {
+          case s @ ScalarSubquery(_: SubqueryExec, _) =>
+            countSubqueryExec = countSubqueryExec + 1
+            s
+          case s @ ScalarSubquery(_: ReusedSubqueryExec, _) =>
+            countReuseSubqueryExec = countReuseSubqueryExec + 1
+            s
+        }
+
+        if (reuse) {
+          assert(countSubqueryExec == 1, "Subquery reusing not working correctly")
+          assert(countReuseSubqueryExec == 1, "Subquery reusing not working correctly")
+        } else {
+          assert(countSubqueryExec == 2, "expect 2 SubqueryExec when not reusing")
+          assert(countReuseSubqueryExec == 0,
+            "expect 0 ReusedSubqueryExec when not reusing")
+        }
+      }
+    }
+  }
+
   test("Scalar subquery name should start with scalar-subquery#") {
     val df = sql("SELECT a FROM l WHERE a = (SELECT max(c) FROM r WHERE c = 1)".stripMargin)
     var subqueryExecs: ArrayBuffer[SubqueryExec] = ArrayBuffer.empty

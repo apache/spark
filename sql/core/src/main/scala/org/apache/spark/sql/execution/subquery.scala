@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
@@ -174,11 +173,15 @@ case class InSubqueryExec(
 /**
  * Plans scalar subqueries from that are present in the given [[SparkPlan]].
  */
-case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
+case class PlanSubqueries(
+    sparkSession: SparkSession,
+    subqueryCache: mutable.Map[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
-        val executedPlan = new QueryExecution(sparkSession, subquery.plan).executedPlan
+        val executedPlan =
+          new QueryExecution(sparkSession, subquery.plan, subqueryCache = subqueryCache)
+            .executedPlan
         ScalarSubquery(
           SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
@@ -202,23 +205,20 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
  * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
  * references.
  */
-case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
-
+case class ReuseSubquery(
+    conf: SQLConf,
+    subqueryCache: mutable.Map[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.subqueryReuseEnabled) {
       return plan
     }
-    // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
-    val subqueries = mutable.HashMap[StructType, ArrayBuffer[BaseSubqueryExec]]()
-    plan transformAllExpressions {
+
+    plan.transformAllExpressions {
       case sub: ExecSubqueryExpression =>
-        val sameSchema =
-          subqueries.getOrElseUpdate(sub.plan.schema, ArrayBuffer[BaseSubqueryExec]())
-        val sameResult = sameSchema.find(_.sameResult(sub.plan))
-        if (sameResult.isDefined) {
-          sub.withNewPlan(ReusedSubqueryExec(sameResult.get))
+        val newPlan = subqueryCache.getOrElseUpdate(sub.plan.canonicalized, sub.plan)
+        if (newPlan.ne(sub.plan)) {
+          sub.withNewPlan(ReusedSubqueryExec(newPlan))
         } else {
-          sameSchema += sub.plan
           sub
         }
     }

@@ -75,6 +75,7 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
     plan.collect {
       case e: ReusedSubqueryExec => Seq(e)
+      case a: AdaptiveSparkPlanExec => findReusedSubquery(a.executedPlan)
       case s: QueryStageExec => findReusedSubquery(s.plan)
       case p: SparkPlan => p.subqueries.flatMap(findReusedSubquery)
     }.flatten
@@ -272,6 +273,26 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
         "SELECT a FROM testData join testData2 ON key = a " +
         "where value >= (SELECT max(a) from testData join testData2 ON key = a) " +
         "and a <= (SELECT max(a) from testData join testData2 ON key = a)")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 1)
+      val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+      assert(bhj.size == 1)
+      val ex = findReusedExchange(adaptivePlan)
+      assert(ex.isEmpty)
+      val sub = findReusedSubquery(adaptivePlan)
+      assert(sub.nonEmpty)
+    }
+  }
+
+  test("Subquery reuse across all subquery levels") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT a FROM testData join testData2 ON key = a " +
+          "where value >= (SELECT max(a) from testData join testData2 ON key = a) " +
+          "and a <= (SELECT (SELECT max(a) from testData join testData2 ON key = a))")
+
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 1)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)

@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
@@ -46,8 +49,9 @@ import org.apache.spark.util.Utils
 class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
-    val tracker: QueryPlanningTracker = new QueryPlanningTracker) {
-
+    val tracker: QueryPlanningTracker = new QueryPlanningTracker,
+    // Subquery-reuse is shared across the entire query.
+    private[sql] val subqueryCache: mutable.Map[SparkPlan, BaseSubqueryExec] = new TrieMap()) {
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
@@ -121,13 +125,13 @@ class QueryExecution(
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     InsertAdaptiveSparkPlan(sparkSession, this),
     PlanDynamicPruningFilters(sparkSession),
-    PlanSubqueries(sparkSession),
+    PlanSubqueries(sparkSession, subqueryCache),
     EnsureRequirements(sparkSession.sessionState.conf),
     ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
       sparkSession.sessionState.columnarRules),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
-    ReuseSubquery(sparkSession.sessionState.conf))
+    ReuseSubquery(sparkSession.sessionState.conf, subqueryCache))
 
   def simpleString: String = simpleString(false)
 
