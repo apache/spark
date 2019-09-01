@@ -29,14 +29,14 @@ object V2WriteSupportCheck extends (LogicalPlan => Unit) {
   def failAnalysis(msg: String): Unit = throw new AnalysisException(msg)
 
   override def apply(plan: LogicalPlan): Unit = plan foreach {
-    case AppendData(rel: DataSourceV2Relation, _, _) if !rel.table.supports(BATCH_WRITE) =>
+    case AppendData(rel: DataSourceV2Relation, _, _, _) if !rel.table.supports(BATCH_WRITE) =>
       failAnalysis(s"Table does not support append in batch mode: ${rel.table}")
 
-    case OverwritePartitionsDynamic(rel: DataSourceV2Relation, _, _)
+    case OverwritePartitionsDynamic(rel: DataSourceV2Relation, _, _, _)
       if !rel.table.supports(BATCH_WRITE) || !rel.table.supports(OVERWRITE_DYNAMIC) =>
       failAnalysis(s"Table does not support dynamic overwrite in batch mode: ${rel.table}")
 
-    case OverwriteByExpression(rel: DataSourceV2Relation, expr, _, _) =>
+    case OverwriteByExpression(rel: DataSourceV2Relation, expr, _, _, _) =>
       expr match {
         case Literal(true, BooleanType) =>
           if (!rel.table.supports(BATCH_WRITE) ||

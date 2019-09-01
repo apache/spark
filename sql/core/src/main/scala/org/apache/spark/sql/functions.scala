@@ -69,6 +69,7 @@ import org.apache.spark.util.Utils
  * @groupname window_funcs Window functions
  * @groupname string_funcs String functions
  * @groupname collection_funcs Collection functions
+ * @groupname partition_transforms Partition transform functions
  * @groupname Ungrouped Support functions for DataFrames
  * @since 1.3.0
  */
@@ -3941,6 +3942,69 @@ object functions {
    * @since 3.0.0
    */
   def to_csv(e: Column): Column = to_csv(e, Map.empty[String, String].asJava)
+
+  // turn off style check that object names must start with a capital letter
+  // scalastyle:off
+  object partitioning {
+    // scalastyle:on
+
+    /**
+     * A transform for timestamps and dates to partition data into years.
+     *
+     * @group partition_transforms
+     * @since 3.0.0
+     */
+    def years(e: Column): Column = withExpr { Years(e.expr) }
+
+    /**
+     * A transform for timestamps and dates to partition data into months.
+     *
+     * @group partition_transforms
+     * @since 3.0.0
+     */
+    def months(e: Column): Column = withExpr { Months(e.expr) }
+
+    /**
+     * A transform for timestamps and dates to partition data into days.
+     *
+     * @group partition_transforms
+     * @since 3.0.0
+     */
+    def days(e: Column): Column = withExpr { Days(e.expr) }
+
+    /**
+     * A transform for timestamps to partition data into hours.
+     *
+     * @group partition_transforms
+     * @since 3.0.0
+     */
+    def hours(e: Column): Column = withExpr { Hours(e.expr) }
+
+    /**
+     * A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 3.0.0
+     */
+    def bucket(numBuckets: Column, e: Column): Column = withExpr {
+      numBuckets.expr match {
+        case lit @ Literal(_, IntegerType) =>
+          Bucket(lit, e.expr)
+        case _ =>
+          throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+      }
+    }
+
+    /**
+     * A transform for any type that partitions by a hash of the input column.
+     *
+     * @group partition_transforms
+     * @since 3.0.0
+     */
+    def bucket(numBuckets: Int, e: Column): Column = withExpr {
+      Bucket(Literal(numBuckets), e.expr)
+    }
+  }
 
   // scalastyle:off line.size.limit
   // scalastyle:off parameter.number
