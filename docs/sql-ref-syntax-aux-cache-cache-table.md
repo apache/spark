@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`CACHE TABLE` statement caches the table's contents with the given storage level. This reduces scanning of the original files in future queries.
+`CACHE TABLE` statement caches contents of a table or output of a query with the given storage level. This reduces scanning of the original files in future queries.
 
 ### Syntax
 {% highlight sql %}
@@ -42,7 +42,7 @@ CACHE [ LAZY ] TABLE table_name
 <dl>
   <dt><code><em>OPTIONS ( 'storageLevel' [ = ] value )</em></code></dt>
   <dd>
-  <code>OPTIONS</code> clause with <code>storageLevel</code> key and value pair. If a key other than <code>storageLevel</code> is used, a WARN with message "org.apache.spark.sql.execution.command.CacheTableCommand: Invalid options: XXXX -> XXXX" will be issued. The valid options for <code>storageLevel</code> are:
+  <code>OPTIONS</code> clause with <code>storageLevel</code> key and value pair. A Warning is issued when a key other than <code>storageLevel</code> is used. The valid options for <code>storageLevel</code> are:
     <ul>
       <li><code>NONE</code></li>
       <li><code>DISK_ONLY</code></li>
@@ -57,13 +57,13 @@ CACHE [ LAZY ] TABLE table_name
       <li><code>MEMORY_AND_DISK_SER_2</code></li>
       <li><code>OFF_HEAP</code></li>
     </ul>
-    If invalid value is set for <code>storageLevel</code>, "java.lang.IllegalArgumentException: Invalid StorageLevel: XXXX" will be issued. If <code>storageLevel</code> is not explicitly set using <code>OPTIONS</code> clause,the default <code>storageLevel</code> is set to <code>MEMORY_AND_DISK</code>.
+    An Exception is thrown when an invalid value is set for <code>storageLevel</code>. If <code>storageLevel</code> is not explicitly set using <code>OPTIONS</code> clause, the default <code>storageLevel</code> is set to <code>MEMORY_AND_DISK</code>.
   </dd>
 </dl>
 
 <dl>
   <dt><code><em>query</em></code></dt>
-  <dd>A query that produces the rows to be inserted. It can be in one of following formats:
+  <dd>A query that produces the rows to be cached. It can be in one of following formats:
     <ul>
       <li>a <code>SELECT</code> statement</li>
       <li>a <code>TABLE</code> statement</li>
@@ -74,7 +74,7 @@ CACHE [ LAZY ] TABLE table_name
 
 ### Examples
 {% highlight sql %}
-CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testData
+CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testData;
 {% endhighlight %}
 
 ### Related Statements
