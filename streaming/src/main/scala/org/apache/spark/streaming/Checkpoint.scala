@@ -102,7 +102,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
 private[streaming]
 object Checkpoint extends Logging {
   val PREFIX = "checkpoint-"
-  val REGEX = (PREFIX + """([\d]+)([\w\.]*)""").r
+  val REGEX = (PREFIX + """([\d]{9,})([\w\.]*)""").r
 
   /** Get the checkpoint file for the given checkpoint time */
   def checkpointFile(checkpointDir: String, checkpointTime: Time): Path = {
@@ -131,8 +131,8 @@ object Checkpoint extends Logging {
     try {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
-        val paths = statuses.map(_.getPath)
-        val filtered = paths.filter(p => REGEX.findFirstIn(p.toString).nonEmpty)
+        val paths = statuses.filterNot(_.isDirectory).map(_.getPath)
+        val filtered = paths.filter(p => REGEX.findFirstIn(p.getName).nonEmpty)
         filtered.sortWith(sortFunc)
       } else {
         logWarning(s"Listing $path returned null")
