@@ -310,20 +310,22 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("generator in aggregate expression") {
-    Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createOrReplaceTempView("t1")
-    checkAnswer(
-      sql("select explode(array(min(c2), max(c2))) from t1"),
-      Row(1) :: Row(3) :: Nil
-    )
-    checkAnswer(
-      sql("select posexplode(array(min(c2), max(c2))) from t1 group by c1"),
-      Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Row(1, 3) :: Nil
-    )
-    // test generator "stack" which require foldable argument
-    checkAnswer(
-      sql("select stack(2, min(c1), max(c1), min(c2), max(c2)) from t1"),
-      Row(1, 2) :: Row(1, 3) :: Nil
-    )
+    withTempView("t1") {
+      Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createTempView("t1")
+      checkAnswer(
+        sql("select explode(array(min(c2), max(c2))) from t1"),
+        Row(1) :: Row(3) :: Nil
+      )
+      checkAnswer(
+        sql("select posexplode(array(min(c2), max(c2))) from t1 group by c1"),
+        Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Row(1, 3) :: Nil
+      )
+      // test generator "stack" which require foldable argument
+      checkAnswer(
+        sql("select stack(2, min(c1), max(c1), min(c2), max(c2)) from t1"),
+        Row(1, 2) :: Row(1, 3) :: Nil
+      )
+    }
   }
 }
 

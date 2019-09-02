@@ -2028,11 +2028,9 @@ class Analyzer(
         throw new AnalysisException("Only one generator allowed per aggregate clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
-      case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
-        case AliasedGenerator(generator, _, _) => generator.childrenResolved
-        case other => other.resolved
-      } =>
-        // Holds the resolved generator, if one exists in the project list.
+      case agg @ Aggregate(groupList, aggList, child)
+        if aggList.forall(_.resolved) && aggList.exists(hasGenerator) =>
+        // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
 
         val projectExprs = Array.ofDim[NamedExpression](aggList.length)
