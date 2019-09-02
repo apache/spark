@@ -100,7 +100,7 @@ class KafkaDelegationTokenSuite extends StreamTest with SharedSparkSession with 
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.security.protocol", SASL_PLAINTEXT.name)
-      .option("startingOffsets", s"earliest")
+      .option("startingOffsets", "earliest")
       .option("subscribe", topic)
       .load()
       .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")

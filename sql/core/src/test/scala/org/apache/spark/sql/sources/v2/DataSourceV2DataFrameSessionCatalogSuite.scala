@@ -110,7 +110,7 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
 
         // fail if the last column in the schema was dropped
         if (schema.fields.isEmpty) {
-          throw new IllegalArgumentException(s"Cannot drop all fields")
+          throw new IllegalArgumentException("Cannot drop all fields")
         }
 
         val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
