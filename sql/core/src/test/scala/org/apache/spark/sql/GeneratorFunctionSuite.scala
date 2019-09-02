@@ -325,6 +325,21 @@ class GeneratorFunctionSuite extends QueryTest with SharedSQLContext {
         sql("select stack(2, min(c1), max(c1), min(c2), max(c2)) from t1"),
         Row(1, 2) :: Row(1, 3) :: Nil
       )
+
+      val msg1 = intercept[AnalysisException] {
+        sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
+      }.getMessage
+      assert(msg1.contains("Generators are not supported when it's nested in expressions"))
+
+      val msg2 = intercept[AnalysisException] {
+        sql(
+          """select
+            |  explode(array(min(c2), max(c2))),
+            |  posexplode(array(min(c2), max(c2)))
+            |from t1 group by c1
+          """.stripMargin)
+      }.getMessage
+      assert(msg2.contains("Only one generator allowed per aggregate clause"))
     }
   }
 }
