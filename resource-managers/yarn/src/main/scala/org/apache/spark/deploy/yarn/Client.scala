@@ -48,8 +48,10 @@ import org.apache.hadoop.yarn.security.AMRMTokenIdentifier
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
+import org.apache.spark.deploy.yarn.ResourceRequestHelper._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -238,12 +240,15 @@ private[spark] class Client(
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
       containerContext: ContainerLaunchContext): ApplicationSubmissionContext = {
-    val amResources =
-      if (isClusterMode) {
-        sparkConf.getAllWithPrefix(config.YARN_DRIVER_RESOURCE_TYPES_PREFIX).toMap
-      } else {
-        sparkConf.getAllWithPrefix(config.YARN_AM_RESOURCE_TYPES_PREFIX).toMap
-      }
+
+    val componentName = if (isClusterMode) {
+      config.YARN_DRIVER_RESOURCE_TYPES_PREFIX
+    } else {
+      config.YARN_AM_RESOURCE_TYPES_PREFIX
+    }
+    val yarnAMResources = getYarnResourcesAndAmounts(sparkConf, componentName)
+    val amResources = yarnAMResources ++
+      getYarnResourcesFromSparkResources(SPARK_DRIVER_PREFIX, sparkConf)
     logDebug(s"AM resources: $amResources")
     val appContext = newApp.getApplicationSubmissionContext
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
@@ -762,15 +767,8 @@ private[spark] class Client(
       val props = confToProperties(sparkConf)
 
       // If propagating the keytab to the AM, override the keytab name with the name of the
-      // distributed file. Otherwise remove princpal/keytab from the conf, so they're not seen
-      // by the AM at all.
-      amKeytabFileName match {
-        case Some(kt) =>
-          props.setProperty(KEYTAB.key, kt)
-        case None =>
-          props.remove(PRINCIPAL.key)
-          props.remove(KEYTAB.key)
-      }
+      // distributed file.
+      amKeytabFileName.foreach { kt => props.setProperty(KEYTAB.key, kt) }
 
       writePropertiesToArchive(props, SPARK_CONF_FILE, confStream)
 
@@ -1197,7 +1195,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.8.1-src.zip")
+        val py4jFile = new File(pyLibPath, PythonUtils.PY4J_ZIP_NAME)
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())

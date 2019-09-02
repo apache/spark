@@ -70,7 +70,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
@@ -134,16 +134,17 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
  *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
  * }}}
  *
- * @param queryExecution the query execution object of the plan to explain
+ * @param logicalPlan plan to explain
  * @param extended whether to do extended explain or not
  * @param codegen whether to output generated code from whole-stage codegen or not
  * @param cost whether to show cost information for operators.
  */
 case class ExplainCommand(
-    queryExecution: QueryExecution,
+    logicalPlan: LogicalPlan,
     extended: Boolean = false,
     codegen: Boolean = false,
-    cost: Boolean = false)
+    cost: Boolean = false,
+    formatted: Boolean = false)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -151,6 +152,8 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
+    val queryExecution = ExplainCommandUtil.explainedQueryExecution(sparkSession, logicalPlan,
+      sparkSession.sessionState.executePlan(logicalPlan))
     val outputString =
       if (codegen) {
         codegenString(queryExecution.executedPlan)
@@ -158,6 +161,8 @@ case class ExplainCommand(
         queryExecution.toString
       } else if (cost) {
         queryExecution.stringWithStats
+      } else if (formatted) {
+        queryExecution.simpleString(formatted = true)
       } else {
         queryExecution.simpleString
       }
@@ -167,38 +172,21 @@ case class ExplainCommand(
   }
 }
 
-object ExplainCommand {
-  /**
-   * Initializes an `ExplainCommand` object by passing `LogicalPlan`. This logical plan will be
-   * run through the analyzer and optimizer when this command is actually run.
-   */
-  def apply(
+object ExplainCommandUtil {
+  // Returns `QueryExecution` which is used to explain a logical plan.
+  def explainedQueryExecution(
+      sparkSession: SparkSession,
       logicalPlan: LogicalPlan,
-      extended: Boolean,
-      codegen: Boolean,
-      cost: Boolean): ExplainCommand = {
-    val sparkSession = SparkSession.active
-
-    val queryExecution =
-      if (logicalPlan.isStreaming) {
-        // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
-        // output mode does not matter since there is no `Sink`.
-        new IncrementalExecution(
-          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
-          UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
-      } else {
-        sparkSession.sessionState.executePlan(logicalPlan)
-      }
-    new ExplainCommand(queryExecution, extended, codegen, cost)
-  }
-
-  /**
-   * This is mainly used for tests.
-   */
-  def apply(
-      logicalPlan: LogicalPlan,
-      extended: Boolean): ExplainCommand = {
-    ExplainCommand(logicalPlan, extended, codegen = false, cost = false)
+      queryExecution: => QueryExecution): QueryExecution = {
+    if (logicalPlan.isStreaming) {
+      // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
+      // output mode does not matter since there is no `Sink`.
+      new IncrementalExecution(
+        sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
+        UUID.randomUUID, UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
+    } else {
+      queryExecution
+    }
   }
 }
 

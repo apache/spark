@@ -114,10 +114,12 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case relation: HiveTableRelation
-        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
-      val table = relation.tableMeta
-      val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
+    case relation @ HiveTableRelation(table, _, partitionCols)
+      if DDLUtils.isHiveTable(table) && table.stats.isEmpty =>
+      val conf = session.sessionState.conf
+      // For partitioned tables, the partition directory may be outside of the table directory.
+      // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
+      val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
         try {
           val hadoopConf = session.sessionState.newHadoopConf()
           val tablePath = new Path(table.location)
@@ -125,11 +127,11 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
           fs.getContentSummary(tablePath).getLength
         } catch {
           case e: IOException =>
-            logWarning("Failed to get table size from hdfs.", e)
-            session.sessionState.conf.defaultSizeInBytes
+            logWarning("Failed to get table size from HDFS.", e)
+            conf.defaultSizeInBytes
         }
       } else {
-        session.sessionState.conf.defaultSizeInBytes
+        conf.defaultSizeInBytes
       }
 
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
@@ -153,11 +155,12 @@ object HiveAnalysis extends Rule[LogicalPlan] {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
-    case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
+    case CreateTable(tableDesc, mode, Some(query))
+        if DDLUtils.isHiveTable(tableDesc) && query.resolved =>
       CreateHiveTableAsSelectCommand(tableDesc, query, query.output.map(_.name), mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
-        if DDLUtils.isHiveTable(provider) =>
+        if DDLUtils.isHiveTable(provider) && child.resolved =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 

@@ -142,20 +142,20 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.am.resource.{resource-type}</code></td>
+  <td><code>spark.yarn.am.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
   <td>
     Amount of resource to use for the YARN Application Master in client mode.
-    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;</code> instead.
+    In cluster mode, use <code>spark.yarn.driver.resource.&lt;resource-type&gt;.amount</code> instead.
     Please note that this feature can be used only with YARN 3.0+
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
     Example: 
-    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu</code>
+    To request GPU resources from YARN, use: <code>spark.yarn.am.resource.yarn.io/gpu.amount</code>
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.driver.resource.{resource-type}</code></td>
+  <td><code>spark.yarn.driver.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
   <td>
     Amount of resource to use for the YARN Application Master in cluster mode.
@@ -163,11 +163,11 @@ To use a custom metrics.properties for the application master and executors, upd
     For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
     <p/>
     Example: 
-    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu</code>
+    To request GPU resources from YARN, use: <code>spark.yarn.driver.resource.yarn.io/gpu.amount</code>
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.executor.resource.{resource-type}</code></td>
+  <td><code>spark.yarn.executor.resource.{resource-type}.amount</code></td>
   <td><code>(none)</code></td>
  <td>
      Amount of resource to use per executor process.
@@ -175,7 +175,7 @@ To use a custom metrics.properties for the application master and executors, upd
      For reference, see YARN Resource Model documentation: https://hadoop.apache.org/docs/r3.0.1/hadoop-yarn/hadoop-yarn-site/ResourceModel.html
      <p/>
      Example: 
-     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu</code>
+     To request GPU resources from YARN, use: <code>spark.yarn.executor.resource.yarn.io/gpu.amount</code>
  </td>
 </tr>
 <tr>
@@ -553,12 +553,9 @@ For example, suppose you would like to point log url link to Job History Server 
 
 Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
 
-In YARN mode, when accessing Hadoop filesystems, Spark will automatically obtain delegation tokens
-for:
-
-- the filesystem hosting the staging directory of the Spark application (which is the default
-  filesystem if `spark.yarn.stagingDir` is not set);
-- if Hadoop federation is enabled, all the federated filesystems in the configuration.
+In YARN mode, when accessing Hadoop file systems, aside from the default file system in the hadoop
+configuration, Spark will also automatically obtain delegation tokens for the service hosting the
+staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 

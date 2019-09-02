@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit

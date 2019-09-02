@@ -68,6 +68,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * If a query has an empty ground truth set, the average precision will be zero and a log
    * warning is generated.
    */
+  @Since("1.2.0")
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
       val labSet = lab.toSet

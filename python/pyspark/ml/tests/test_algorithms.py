@@ -86,7 +86,7 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
-        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1))
 
 
 class OneVsRestTests(SparkSessionTestCase):
@@ -334,7 +334,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -56,13 +56,13 @@ acquire_sbt_jar () {
       wget --quiet ${URL1} -O "${JAR_DL}" &&\
         mv "${JAR_DL}" "${JAR}"
     else
-      printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
+      printf "You do not have curl or wget installed, please install sbt manually from https://www.scala-sbt.org/\n"
       exit -1
     fi
     fi
     if [ ! -f "${JAR}" ]; then
     # We failed to download
-    printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
+    printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from https://www.scala-sbt.org/\n"
     exit -1
     fi
     printf "Launching sbt from ${JAR}\n"

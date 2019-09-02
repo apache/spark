@@ -428,6 +428,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("overlay") {
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("_"),
+      Literal.create(6, IntegerType)), "Spark_SQL")
+    checkEvaluation(new Overlay(Literal("Spark SQL"), Literal("CORE"),
+      Literal.create(7, IntegerType)), "Spark CORE")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("ANSI "),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), "Spark ANSI SQL")
+    checkEvaluation(Overlay(Literal("Spark SQL"), Literal("tructured"),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), "Structured SQL")
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("_"),
+      Literal.create(6, IntegerType)), null)
+    checkEvaluation(new Overlay(Literal.create(null, StringType), Literal("CORE"),
+      Literal.create(7, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("ANSI "),
+      Literal.create(7, IntegerType), Literal.create(0, IntegerType)), null)
+    checkEvaluation(Overlay(Literal.create(null, StringType), Literal("tructured"),
+      Literal.create(2, IntegerType), Literal.create(4, IntegerType)), null)
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(new Overlay(Literal("Spark的SQL"), Literal("_"),
+      Literal.create(6, IntegerType)), "Spark_SQL")
+    // scalastyle:on
+  }
+
   test("translate") {
     checkEvaluation(
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
@@ -465,6 +489,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrim(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrim(Literal.create(null, StringType), Literal("a")), null)
+
+    checkEvaluation(StringTrim(Literal("yxTomxx"), Literal("xyz")), "Tom")
+    checkEvaluation(StringTrim(Literal("xxxbarxxx"), Literal("x")), "bar")
   }
 
   test("LTRIM") {
@@ -489,6 +516,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal("a")), null)
     checkEvaluation(StringTrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+
+    checkEvaluation(StringTrimLeft(Literal("zzzytest"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimLeft(Literal("zzzytestxyz"), Literal("xyz")), "testxyz")
+    checkEvaluation(StringTrimLeft(Literal("xyxXxyLAST WORD"), Literal("xy")), "XxyLAST WORD")
   }
 
   test("RTRIM") {
@@ -514,6 +545,10 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
     checkEvaluation(StringTrimRight(Literal("a"), Literal.create(null, StringType)), null)
     checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal("a")), null)
+
+    checkEvaluation(StringTrimRight(Literal("testxxzx"), Literal("xyz")), "test")
+    checkEvaluation(StringTrimRight(Literal("xyztestxxzx"), Literal("xyz")), "xyztest")
+    checkEvaluation(StringTrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
   }
 
   test("FORMAT") {
@@ -603,6 +638,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringLPad(s1, s2, s3), null, row3)
     checkEvaluation(StringLPad(s1, s2, s3), null, row4)
     checkEvaluation(StringLPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringLPad(Literal("hi"), Literal(5)), "   hi")
+    checkEvaluation(StringLPad(Literal("hi"), Literal(1)), "h")
 
     checkEvaluation(StringRPad(Literal("hi"), Literal(5), Literal("??")), "hi???", row1)
     checkEvaluation(StringRPad(Literal("hi"), Literal(1), Literal("??")), "h", row1)
@@ -611,6 +648,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringRPad(s1, s2, s3), null, row3)
     checkEvaluation(StringRPad(s1, s2, s3), null, row4)
     checkEvaluation(StringRPad(s1, s2, s3), null, row5)
+    checkEvaluation(StringRPad(Literal("hi"), Literal(5)), "hi   ")
+    checkEvaluation(StringRPad(Literal("hi"), Literal(1)), "h")
   }
 
   test("REPEAT") {

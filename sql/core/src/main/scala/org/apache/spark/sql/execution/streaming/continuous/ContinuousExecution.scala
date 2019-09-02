@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2
 import org.apache.spark.sql.sources.v2.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, PartitionOffset}
-import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
 
 class ContinuousExecution(
@@ -93,7 +93,7 @@ class ContinuousExecution(
   }
 
   private val triggerExecutor = trigger match {
-    case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTime(t), triggerClock)
+    case ContinuousTrigger(t) => ProcessingTimeExecutor(ProcessingTimeTrigger(t), triggerClock)
     case _ => throw new IllegalStateException(s"Unsupported type of trigger: $trigger")
   }
 
@@ -352,8 +352,7 @@ class ContinuousExecution(
     // number of batches that must be retained and made recoverable, so we should keep the
     // specified number of metadata that have been committed.
     if (minLogEntriesToMaintain <= epoch) {
-      offsetLog.purge(epoch + 1 - minLogEntriesToMaintain)
-      commitLog.purge(epoch + 1 - minLogEntriesToMaintain)
+      purge(epoch + 1 - minLogEntriesToMaintain)
     }
 
     awaitProgressLock.lock()

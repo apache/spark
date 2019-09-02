@@ -215,7 +215,7 @@ private[spark] class ApplicationMaster(
 
         // Set the master and deploy mode property to match the requested mode.
         System.setProperty("spark.master", "yarn")
-        System.setProperty("spark.submit.deployMode", "cluster")
+        System.setProperty(SUBMIT_DEPLOY_MODE.key, "cluster")
 
         // Set this internal configuration if it is running on cluster mode, this
         // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
@@ -851,7 +851,9 @@ object ApplicationMaster extends Logging {
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
-      case Some(principal) =>
+      // We only need to log in with the keytab in cluster mode. In client mode, the driver
+      // handles the user keytab.
+      case Some(principal) if amArgs.userClass != null =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()

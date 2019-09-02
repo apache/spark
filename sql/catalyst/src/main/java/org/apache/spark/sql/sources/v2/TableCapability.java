@@ -84,5 +84,19 @@ public enum TableCapability {
    * <p>
    * See {@code org.apache.spark.sql.sources.v2.writer.SupportsDynamicOverwrite}.
    */
-  OVERWRITE_DYNAMIC
+  OVERWRITE_DYNAMIC,
+
+  /**
+   * Signals that the table accepts input of any schema in a write operation.
+   */
+  ACCEPT_ANY_SCHEMA,
+
+  /**
+   * Signals that the table supports append writes using the V1 InsertableRelation interface.
+   * <p>
+   * Tables that return this capability must create a V1WriteBuilder and may also support additional
+   * write modes, like {@link #TRUNCATE}, and {@link #OVERWRITE_BY_FILTER}, but cannot support
+   * {@link #OVERWRITE_DYNAMIC}.
+   */
+  V1_BATCH_WRITE
 }

@@ -17,11 +17,9 @@
 
 package org.apache.spark.ui
 
-import java.util.{Date, List => JList, ServiceLoader}
+import java.util.Date
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.{JobExecutionStatus, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler._
@@ -32,7 +30,6 @@ import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
 import org.apache.spark.ui.storage.StorageTab
-import org.apache.spark.util.Utils
 
 /**
  * Top level user interface for a Spark application.
@@ -141,6 +138,9 @@ private[spark] class SparkUI private (
     streamingJobProgressListener = Option(sparkListener)
   }
 
+  def clearStreamingJobProgressListener(): Unit = {
+    streamingJobProgressListener = None
+  }
 }
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)

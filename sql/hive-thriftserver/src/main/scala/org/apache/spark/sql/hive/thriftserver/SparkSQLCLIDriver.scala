@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{ArrayList => JArrayList, Locale}
 import java.util.concurrent.TimeUnit
 
@@ -26,13 +27,11 @@ import scala.collection.JavaConverters._
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.HiveInterruptUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
@@ -99,9 +98,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -143,7 +142,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       var loader = conf.getClassLoader
       val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
       if (StringUtils.isNotBlank(auxJars)) {
-        loader = Utilities.addToClassPath(loader, StringUtils.split(auxJars, ","))
+        loader = ThriftserverShimUtils.addToClassPath(loader, StringUtils.split(auxJars, ","))
       }
       conf.setClassLoader(loader)
       Thread.currentThread().setContextClassLoader(loader)
@@ -169,9 +168,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // will set the output into an invalid buffer.
     sessionState.in = System.in
     try {
-      sessionState.out = new PrintStream(System.out, true, "UTF-8")
-      sessionState.info = new PrintStream(System.err, true, "UTF-8")
-      sessionState.err = new PrintStream(System.err, true, "UTF-8")
+      sessionState.out = new PrintStream(System.out, true, UTF_8.name())
+      sessionState.info = new PrintStream(System.err, true, UTF_8.name())
+      sessionState.err = new PrintStream(System.err, true, UTF_8.name())
     } catch {
       case e: UnsupportedEncodingException => System.exit(3)
     }
@@ -297,9 +296,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
-
-  private val console = new SessionState.LogHelper(LOG)
+  private val console = ThriftserverShimUtils.getConsole
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)

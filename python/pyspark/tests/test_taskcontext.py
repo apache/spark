@@ -16,12 +16,14 @@
 #
 import os
 import random
+import stat
 import sys
+import tempfile
 import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase
+from pyspark.testing.utils import PySparkTestCase, SPARK_HOME
 
 
 class TaskContextTests(PySparkTestCase):
@@ -42,6 +44,15 @@ class TaskContextTests(PySparkTestCase):
         self.assertEqual(stage1 + 1, stage2)
         self.assertEqual(stage1 + 2, stage3)
         self.assertEqual(stage2 + 1, stage3)
+
+    def test_resources(self):
+        """Test the resources are empty by default."""
+        rdd = self.sc.parallelize(range(10))
+        resources1 = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
+        # Test using the constructor directly rather than the get()
+        resources2 = rdd.map(lambda x: TaskContext().resources()).take(1)[0]
+        self.assertEqual(len(resources1), 0)
+        self.assertEqual(len(resources2), 0)
 
     def test_partition_id(self):
         """Test the partition id."""
@@ -174,13 +185,42 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         self.sc.stop()
 
 
+class TaskContextTestsWithResources(unittest.TestCase):
+
+    def setUp(self):
+        class_name = self.__class__.__name__
+        self.tempFile = tempfile.NamedTemporaryFile(delete=False)
+        self.tempFile.write(b'echo {\\"name\\": \\"gpu\\", \\"addresses\\": [\\"0\\"]}')
+        self.tempFile.close()
+        os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
+                 stat.S_IROTH | stat.S_IXOTH)
+        conf = SparkConf().set("spark.test.home", SPARK_HOME)
+        conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
+        conf = conf.set("spark.worker.resource.gpu.amount", 1)
+        conf = conf.set("spark.task.resource.gpu.amount", "1")
+        conf = conf.set("spark.executor.resource.gpu.amount", "1")
+        self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
+
+    def test_resources(self):
+        """Test the resources are available."""
+        rdd = self.sc.parallelize(range(10))
+        resources = rdd.map(lambda x: TaskContext.get().resources()).take(1)[0]
+        self.assertEqual(len(resources), 1)
+        self.assertTrue('gpu' in resources)
+        self.assertEqual(resources['gpu'].name, 'gpu')
+        self.assertEqual(resources['gpu'].addresses, ['0'])
+
+    def tearDown(self):
+        os.unlink(self.tempFile.name)
+        self.sc.stop()
+
 if __name__ == "__main__":
     import unittest
     from pyspark.tests.test_taskcontext import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

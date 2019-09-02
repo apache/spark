@@ -24,7 +24,7 @@ import org.apache.spark.graphx.util.GraphGenerators
 
 object GridPageRank {
   def apply(nRows: Int, nCols: Int, nIter: Int, resetProb: Double): Seq[(VertexId, Double)] = {
-    val inNbrs = Array.fill(nRows * nCols)(collection.mutable.MutableList.empty[Int])
+    val inNbrs = Array.fill(nRows * nCols)(collection.mutable.ArrayBuffer.empty[Int])
     val outDegree = Array.fill(nRows * nCols)(0)
     // Convert row column address into vertex ids (row major order)
     def sub2ind(r: Int, c: Int): Int = r * nCols + c

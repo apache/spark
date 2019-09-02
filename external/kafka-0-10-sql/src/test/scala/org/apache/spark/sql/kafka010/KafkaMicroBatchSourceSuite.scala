@@ -34,6 +34,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
@@ -44,10 +45,10 @@ import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.sources.v2.reader.streaming.SparkDataStream
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
+abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -660,7 +661,23 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
+  test("allow group.id prefix") {
+    testGroupId("groupIdPrefix", (expected, actual) => {
+      assert(actual.exists(_.startsWith(expected)) && !actual.exists(_ === expected),
+        "Valid consumer groups don't contain the expected group id - " +
+        s"Valid consumer groups: $actual / expected group id: $expected")
+    })
+  }
+
   test("allow group.id override") {
+    testGroupId("kafka.group.id", (expected, actual) => {
+      assert(actual.exists(_ === expected), "Valid consumer groups don't " +
+        s"contain the expected group id - Valid consumer groups: $actual / " +
+        s"expected group id: $expected")
+    })
+  }
+
+  private def testGroupId(groupIdKey: String, validateGroupId: (String, Iterable[String]) => Unit) {
     // Tests code path KafkaSourceProvider.{sourceSchema(.), createSource(.)}
     // as well as KafkaOffsetReader.createConsumer(.)
     val topic = newTopic()
@@ -673,7 +690,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     val dsKafka = spark
       .readStream
       .format("kafka")
-      .option("kafka.group.id", customGroupId)
+      .option(groupIdKey, customGroupId)
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("subscribe", topic)
       .option("startingOffsets", "earliest")
@@ -689,9 +706,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         val consumerGroups = testUtils.listConsumerGroups()
         val validGroups = consumerGroups.valid().get()
         val validGroupsId = validGroups.asScala.map(_.groupId())
-        assert(validGroupsId.exists(_ === customGroupId), "Valid consumer groups don't " +
-          s"contain the expected group id - Valid consumer groups: $validGroupsId / " +
-          s"expected group id: $customGroupId")
+        validateGroupId(customGroupId, validGroupsId)
       }
     )
   }
@@ -1052,7 +1067,7 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
-      "spark.sql.streaming.disabledV2MicroBatchReaders",
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key,
       classOf[KafkaSourceProvider].getCanonicalName)
   }
 
@@ -1128,7 +1143,7 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
         val stream = table.newScanBuilder(dsOptions).build().toMicroBatchStream(dir.getAbsolutePath)
         val inputPartitions = stream.planInputPartitions(
           KafkaSourceOffset(Map(tp -> 0L)),
-          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaMicroBatchInputPartition])
+          KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
           inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
@@ -1322,14 +1337,16 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
       (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
         SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
-      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map(optionKey -> optionValue)), optionKey, answer)
       assert(offset === answer)
     }
 
     for ((optionKey, answer) <- Seq(
       (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
       (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
-      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map.empty), optionKey, answer)
       assert(offset === answer)
     }
   }

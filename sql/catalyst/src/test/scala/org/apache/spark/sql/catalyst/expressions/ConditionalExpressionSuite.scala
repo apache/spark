@@ -248,4 +248,28 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
       .contains("CASE WHEN ... THEN struct<x:int> WHEN ... THEN struct<y:int> " +
         "ELSE struct<z:int> END"))
   }
+
+  test("SPARK-27917 test semantic equals of CaseWhen") {
+    val attrRef = AttributeReference("ACCESS_CHECK", StringType)()
+    val aliasAttrRef = attrRef.withName("access_check")
+    // Test for Equality
+    var caseWhenObj1 = CaseWhen(Seq((attrRef, Literal("A"))))
+    var caseWhenObj2 = CaseWhen(Seq((aliasAttrRef, Literal("A"))))
+    assert(caseWhenObj1.semanticEquals(caseWhenObj2))
+    assert(caseWhenObj2.semanticEquals(caseWhenObj1))
+    // Test for inEquality
+    caseWhenObj2 = CaseWhen(Seq((attrRef, Literal("a"))))
+    assert(!caseWhenObj1.semanticEquals(caseWhenObj2))
+    assert(!caseWhenObj2.semanticEquals(caseWhenObj1))
+    // Test with elseValue with Equality
+    caseWhenObj1 = CaseWhen(Seq((attrRef, Literal("A"))), attrRef.withName("ELSEVALUE"))
+    caseWhenObj2 = CaseWhen(Seq((aliasAttrRef, Literal("A"))), aliasAttrRef.withName("elsevalue"))
+    assert(caseWhenObj1.semanticEquals(caseWhenObj2))
+    assert(caseWhenObj2.semanticEquals(caseWhenObj1))
+    caseWhenObj1 = CaseWhen(Seq((attrRef, Literal("A"))), Literal("ELSEVALUE"))
+    caseWhenObj2 = CaseWhen(Seq((aliasAttrRef, Literal("A"))), Literal("elsevalue"))
+    // Test with elseValue with inEquality
+    assert(!caseWhenObj1.semanticEquals(caseWhenObj2))
+    assert(!caseWhenObj2.semanticEquals(caseWhenObj1))
+  }
 }
