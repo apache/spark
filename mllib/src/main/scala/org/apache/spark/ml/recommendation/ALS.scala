@@ -1234,16 +1234,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
-    inBlocks.map { case (srcBlockId, inBlock) =>
-      val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
-      val factors = Array.fill(inBlock.srcIds.length) {
-        val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-        val nrm = blas.snrm2(rank, factor, 1)
-        blas.sscal(rank, 1.0f / nrm, factor, 1)
-        factor
+    inBlocks.mapPartitions({ iter =>
+      iter.map {
+        case (srcBlockId, inBlock) =>
+          val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
+          val factors = Array.fill(inBlock.srcIds.length) {
+            val factor = Array.fill(rank)(random.nextGaussian().toFloat)
+            val nrm = blas.snrm2(rank, factor, 1)
+            blas.sscal(rank, 1.0f / nrm, factor, 1)
+            factor
+          }
+          (srcBlockId, factors)
       }
-      (srcBlockId, factors)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**
