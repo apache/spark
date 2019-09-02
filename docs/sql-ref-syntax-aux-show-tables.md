@@ -19,33 +19,72 @@ license: |
   limitations under the License.
 ---
 ### Description
-Return all tables form the database. It shows databse name and whether a table is temporary.
+
+List all the `tables` from the database with `database-name` and `is temporary table`.
 
 ### Syntax
 {% highlight sql %}
-SHOW TABLES [{FROM|IN} dbname] [LIKE 'pattern']
+SHOW TABLES [{FROM|IN} database_name] [LIKE 'regex_pattern']
 {% endhighlight %}
 
 ### Parameter
-
- **dbname**
-
- All the tables from this *Database* are returned, if not provided it takes the current *Database*.
-
- **FROM** or **IN**
-
- Return all tables from or in a database.
-
- **LIKE 'pattern'**
-
- Returns tables which are all match the pattern. In pattern '*' matches any number of characters.
-
+<dl>
+  <dt><code><em>{FROM|IN} database_name</em></code></dt>
+  <dd>
+     Listing the tables from this `database`.
+  </dd>
+  <dt><code><em>LIKE 'regex_pattern'</em></code></dt>
+  <dd>
+     A regex pattern that is used to filter out unwanted functions.
+       <br> - Only `*` and `|` are allowed as wildcard pattern.
+       <br> - Excluding `*` and `|` the remaining pattern follows the regex semantics.
+       <br> - The leading and trailing blanks are trimmed in the input pattern before processing.  
+  </dd>
+</dl>
 
 ### Example
 {% highlight sql %}
-SHOW TABLES
-SHOW TABLES FROM userdb
-SHOW TABLES IN userdb
-SHOW TABLES FROM userdb LIKE employeedb*
+-- List all tables in default database
+SHOW TABLES;
++-----------+------------+--------------+--+
+| database  | tableName  | isTemporary  |
++-----------+------------+--------------+--+
+| default   | sam        | false        |
+| default   | sam1       | false        |
+| default   | suj        | false        |
++-----------+------------+--------------+--+
+
+-- List all tables from userdb database 
+SHOW TABLES FROM userdb;
++-----------+------------+--------------+--+
+| database  | tableName  | isTemporary  |
++-----------+------------+--------------+--+
+| userdb    | user1      | false        |
+| userdb    | user2      | false        |
++-----------+------------+--------------+--+
+
+-- List all tables in userdb database
+SHOW TABLES IN userdb;
++-----------+------------+--------------+--+
+| database  | tableName  | isTemporary  |
++-----------+------------+--------------+--+
+| userdb    | user1      | false        |
+| userdb    | user2      | false        |
++-----------+------------+--------------+--+
+
+-- List all tables from default database matching the pattern `sam*`
+SHOW TABLES FROM default LIKE 'sam*';
++-----------+------------+--------------+--+
+| database  | tableName  | isTemporary  |
++-----------+------------+--------------+--+
+| default   | sam        | false        |
+| default   | sam1       | false        |
++-----------+------------+--------------+--+
+
 {% endhighlight %}
 
+### Related statements.
+- [CREATE TABLE ](sql-ref-syntax-ddl-create-table.html)
+- [DROP TABLE ](ssql-ref-syntax-ddl-drop-table.html)
+- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
