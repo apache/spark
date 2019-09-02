@@ -254,36 +254,32 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
           HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> conversion) {
           withTable("dummy_orc_partitioned") {
-            withTempPath { dir =>
-              spark.sessionState.refreshTable("dummy_orc_partitioned")
-              val path = dir.getCanonicalPath
-              spark.sql(
-                s"""
-                   |CREATE TABLE dummy_orc_partitioned(key INT, value STRING)
-                   |PARTITIONED by (`date` STRING)
-                   |STORED AS ORC
-                   |LOCATION '${dir.toURI}'
+            spark.sessionState.refreshTable("dummy_orc_partitioned")
+            spark.sql(
+              s"""
+                 |CREATE TABLE dummy_orc_partitioned(key INT, value STRING)
+                 |PARTITIONED by (`date` STRING)
+                 |STORED AS ORC
                  """.stripMargin)
 
-              spark.sql(
-                s"""
-                   |INSERT INTO TABLE dummy_orc_partitioned
-                   |PARTITION (`date` = '2019-04-01')
-                   |SELECT key, value FROM single
+            spark.sql(
+              s"""
+                 |INSERT INTO TABLE dummy_orc_partitioned
+                 |PARTITION (`date` = '2019-04-01')
+                 |SELECT key, value FROM single
                  """.stripMargin)
 
-              val orcPartitionedTable = TableIdentifier("dummy_orc_partitioned", Some("default"))
-              if (conversion == "true") {
-                // if converted, it's cached as a datasource table.
-                checkCached(orcPartitionedTable)
-              } else {
-                // otherwise, not cached.
-                assert(getCachedDataSourceTable(orcPartitionedTable) === null)
-              }
-
-              val df = spark.sql("SELECT key, value FROM dummy_orc_partitioned WHERE key=0")
-              checkAnswer(df, singleRowDF)
+            val orcPartitionedTable = TableIdentifier("dummy_orc_partitioned", Some("default"))
+            if (conversion == "true") {
+              // if converted, it's cached as a datasource table.
+              checkCached(orcPartitionedTable)
+            } else {
+              // otherwise, not cached.
+              assert(getCachedDataSourceTable(orcPartitionedTable) === null)
             }
+
+            val df = spark.sql("SELECT key, value FROM dummy_orc_partitioned WHERE key=0")
+            checkAnswer(df, singleRowDF)
           }
         }
       }
