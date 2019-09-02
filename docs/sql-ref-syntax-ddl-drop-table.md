@@ -20,37 +20,69 @@ license: |
 ---
 
 ### Description
-Removes the table and corresponding directory associated with table from the file system if current
-table is not an external table.
+
+Deletes the table and removes the directory associated with this table from the file system if this
+is not EXTERNAL table. If the table is not present it throws exception.
+
+In case of External table it only deletes the metadata and it will not remove the directory 
+associated with this table.
 
 ### Syntax
 {% highlight sql %}
-DROP TABLE [IF EXISTS] [dbname.]tableName
+DROP TABLE [IF EXISTS] [database_name.]table_name
 {% endhighlight %}
 
 ### Parameter
-
-**dbname**
-
-*Database* name where table present, if not provided it takes the current *Database*.
-
-**tableName**
-
-*Table* to be dropped
-
-**IF EXISTS**
-
-If specified will not throw exception if *table* is not present.
-
+<dl>
+  <dt><code><em>IF EXISTS</em></code></dt>
+  <dd>
+     If specified, no exception is thrown when the table does not exist.
+  </dd>
+  <dt><code><em>database_name</em></code></dt>
+  <dd>
+     Database name where table is present.
+  </dd>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>
+     table name to be dropped.
+  </dd>
+</dl>
 
 ### Example
 {% highlight sql %}
-DROP TABLE USERDB.USERTABLE
-DROP TABLE USERTABLE
-DROP TABLE IF EXISTS USERDB.USERTABLE
-DROP TABLE IF EXISTS USERTABLE
+-- Assumes a table name `employeetable` exist.
+DROP TABLE employeetable;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
+-- Assumes a table name `employeetable` exist in `userdb` database
+DROP TABLE userdb.employeetable;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
+-- Assumes a table name `employeetable` does not exist.
+-- Throws exception
+DROP TABLE employeetable;
+Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeetable;
+(state=,code=0)
+
+-- Assumes a table name `employeetable` does not exist,Try with IF EXISTS
+-- this time it will not throw exception
+DROP TABLE IF EXISTS employeetable;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
 {% endhighlight %}
 
-
+### Related Statements
+- [CREATE TABLE ](sql-ref-syntax-ddl-create-table.html)
+- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
 
 
