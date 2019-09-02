@@ -20,33 +20,63 @@ license: |
 ---
 
 ### Description
-Removes the view, which was created by CREATE VIEW statement. DROP VIEW only involves
-changes in metadata in the metastore database.
+Drops the specified `VIEW`, which was created by `CREATE VIEW` statement. `DROP VIEW` only involves
+changes in metadata from the metastore database.
 
 ### Syntax
 {% highlight sql %}
-DROP VIEW [IF EXISTS] [dbname.]viewName
+DROP VIEW [IF EXISTS] [database_name.]view_name
 {% endhighlight %}
 
 ### Parameter
-
-**dbname**
-
-*Database* name where view present, if not provided it takes the *current Database*.
-
-**viewName**
-
-*View* to be dropped
-
-**IF EXISTS**
-
-If specified will not throw exception if *view* is not present.
+<dl>
+  <dt><code><em>IF EXISTS</em></code></dt>
+  <dd>
+     If specified, no exception is thrown when the view does not exist.
+  </dd>
+  <dt><code><em>database_name</em></code></dt>
+  <dd>
+     Database name where view is present.
+  </dd>
+  <dt><code><em>view_name</em></code></dt>
+  <dd>
+     view name to be dropped.
+  </dd>
+</dl>
 
 ### Example
 {% highlight sql %}
-DROP VIEW USERDB.USERVIEW
-DROP TABLE USERVIEW
-DROP VIEW IF EXISTS USERDB.USERVIEW
-DROP VIEW IF EXISTS USERVIEW
+-- Assumes a view name `employeeView` exist.
+DROP VIEW employeeView;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
+-- Assumes a view name `employeeView` exist in `userdb` database
+DROP VIEW userdb.employeeView;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
+-- Assumes a view name `employeeView` does not exist.
+-- Throws exception
+DROP VIEW employeeView;
+Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeeView;
+(state=,code=0)
+
+-- Assumes a view name `employeeView` does not exist,Try with IF EXISTS
+-- this time it will not throw exception
+DROP VIEW IF EXISTS employeeView;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
 {% endhighlight %}
 
+### Related Statements
+- [CREATE VIEW ](sql-ref-syntax-ddl-create-view.html)
+- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)

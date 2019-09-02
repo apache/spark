@@ -21,10 +21,10 @@ license: |
 
 ### Description
 
-Deletes the table and removes the directory associated with this table from the file system if this
-is not `EXTERNAL` table. If the table is not present it throws exception.
+Deletes the table and removes the directory associated with this table from the file system
+if this is not `EXTERNAL` table. If the table is not present it throws exception.
 
-In case of External table it only deletes the metadata and it will not remove the directory 
+In case of External table it only deletes the metadata from metastore database and it will not remove the directory 
 associated with this table.
 
 ### Syntax
