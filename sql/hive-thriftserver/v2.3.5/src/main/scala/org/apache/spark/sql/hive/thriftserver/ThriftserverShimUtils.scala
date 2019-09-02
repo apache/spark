@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.security.AccessController
-
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.hive.ql.exec.AddToClassPathAction
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.thrift.Type

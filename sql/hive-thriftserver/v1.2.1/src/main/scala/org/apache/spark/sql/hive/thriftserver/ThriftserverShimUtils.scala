@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.commons.logging.LogFactory
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema, Type}
 import org.apache.hive.service.cli.thrift.TProtocolVersion._
