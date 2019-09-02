@@ -999,6 +999,7 @@ class CodegenContext {
    */
   def subexprFunctionsCode: String = {
     // Wholestage codegen does not allow subexpression elimination
+    assert(currentVars == null)
     splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
