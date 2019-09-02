@@ -998,8 +998,7 @@ class CodegenContext {
    * Returns the code for subexpression elimination after splitting it if necessary.
    */
   def subexprFunctionsCode: String = {
-    // Wholestage codegen does not allow subexpression elimination: in that case, subexprFunctions
-    // is empty and an empty string is returned
+    // Whole-stage codegen's subexpression elimination is handled in another code path
     splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
