@@ -56,13 +56,6 @@ private[thriftserver] object ThriftserverShimUtils {
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
-  private[thriftserver] def addToClassPath(
-      loader: ClassLoader,
-      auxJars: Array[String]): ClassLoader = {
-    val addAction = new AddToClassPathAction(loader, auxJars.toList.asJava)
-    AccessController.doPrivileged(addAction)
-  }
-
   private[thriftserver] val testedProtocolVersions = Seq(
     HIVE_CLI_SERVICE_PROTOCOL_V1,
     HIVE_CLI_SERVICE_PROTOCOL_V2,

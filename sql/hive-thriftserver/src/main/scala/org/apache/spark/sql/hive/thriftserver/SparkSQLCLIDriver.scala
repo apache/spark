@@ -42,7 +42,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.util.ShutdownHookManager
 
@@ -139,10 +139,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // Hadoop-20 and above - we need to augment classpath using hiveconf
       // components.
       // See also: code in ExecDriver.java
-      var loader = conf.getClassLoader
+      val loader = conf.getClassLoader
       val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
       if (StringUtils.isNotBlank(auxJars)) {
-        loader = ThriftserverShimUtils.addToClassPath(loader, StringUtils.split(auxJars, ","))
+        val hiveClient = SparkSQLEnv.sqlContext.sharedState.externalCatalog.unwrapped
+          .asInstanceOf[HiveExternalCatalog].client
+        StringUtils.split(auxJars, ",").foreach(hiveClient.addJar(_))
       }
       conf.setClassLoader(loader)
       Thread.currentThread().setContextClassLoader(loader)
