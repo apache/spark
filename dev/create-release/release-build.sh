@@ -164,7 +164,6 @@ DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
 rm .gitignore
-rm -rf .git
 cd ..
 
 if [[ "$1" == "package" ]]; then
