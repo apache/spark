@@ -731,10 +731,11 @@ object SQLConf {
     .createWithDefault(100000)
 
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
+    .internal()
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
@@ -1215,12 +1216,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
-    .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
-      " This is useful in determining if a table is small enough to use auto broadcast joins.")
-    .booleanConf
-    .createWithDefault(false)
-
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -1229,6 +1224,16 @@ object SQLConf {
       "knows for sure its size is small enough.")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(Long.MaxValue)
+
+  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS = buildConf("spark.sql.statistics.fallBackToHdfs")
+    .doc("When true, it will fall back to HDFS if the table statistics are not available from " +
+      "table metadata. This is useful in determining if a table is small enough to use " +
+      "broadcast joins. This flag is effective only for non-partitioned Hive tables. " +
+      "For non-partitioned data source tables, it will be automatically recalculated if table " +
+      "statistics are not available. For partitioned data source and partitioned Hive tables, " +
+      s"It is '${DEFAULT_SIZE_IN_BYTES.key}' if table statistics are not available.")
+    .booleanConf
+    .createWithDefault(false)
 
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
@@ -1589,21 +1594,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
-  val USE_V1_SOURCE_READER_LIST = buildConf("spark.sql.sources.read.useV1SourceList")
+  val USE_V1_SOURCE_LIST = buildConf("spark.sql.sources.useV1SourceList")
     .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 read paths are disabled. Reads from these" +
-      " sources will fall back to the V1 sources.")
+    .doc("A comma-separated list of data source short names or fully qualified data source " +
+      "implementation class names for which Data Source V2 code path is disabled. These data " +
+      "sources will fallback to Data Source V1 code path.")
     .stringConf
     .createWithDefault("")
-
-  val USE_V1_SOURCE_WRITER_LIST = buildConf("spark.sql.sources.write.useV1SourceList")
-    .internal()
-    .doc("A comma-separated list of data source short names or fully qualified data source" +
-      " register class names for which data source V2 write paths are disabled. Writes from these" +
-      " sources will fall back to the V1 sources.")
-    .stringConf
-    .createWithDefault("csv,json,orc,text,parquet")
 
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .doc("A comma-separated list of fully qualified data source register class names for which" +
@@ -1644,17 +1641,23 @@ object SQLConf {
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
 
   object StoreAssignmentPolicy extends Enumeration {
-    val LEGACY, STRICT = Value
+    val ANSI, LEGACY, STRICT = Value
   }
 
   val STORE_ASSIGNMENT_POLICY =
     buildConf("spark.sql.storeAssignmentPolicy")
       .doc("When inserting a value into a column with different data type, Spark will perform " +
-        "type coercion. Currently we support 2 policies for the type coercion rules: legacy and " +
-        "strict. With legacy policy, Spark allows casting any value to any data type. " +
-        "The legacy policy is the only behavior in Spark 2.x and it is compatible with Hive. " +
+        "type coercion. Currently, we support 3 policies for the type coercion rules: ANSI, " +
+        "legacy and strict. With ANSI policy, Spark performs the type coercion as per ANSI SQL. " +
+        "In practice, the behavior is mostly the same as PostgreSQL. " +
+        "It disallows certain unreasonable type conversions such as converting " +
+        "`string` to `int` or `double` to `boolean`. " +
+        "With legacy policy, Spark allows the type coercion as long as it is a valid `Cast`, " +
+        "which is very loose. e.g. converting `string` to `int` or `double` to `boolean` is " +
+        "allowed. It is also the only behavior in Spark 2.x and it is compatible with Hive. " +
         "With strict policy, Spark doesn't allow any possible precision loss or data truncation " +
-        "in type coercion, e.g. `int` to `long` and `float` to `double` are not allowed."
+        "in type coercion, e.g. converting `double` to `int` or `decimal` to `double` is " +
+        "not allowed."
       )
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2351,10 +2354,6 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
-
-  def useV1SourceReaderList: String = getConf(USE_V1_SOURCE_READER_LIST)
-
-  def useV1SourceWriterList: String = getConf(USE_V1_SOURCE_WRITER_LIST)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 

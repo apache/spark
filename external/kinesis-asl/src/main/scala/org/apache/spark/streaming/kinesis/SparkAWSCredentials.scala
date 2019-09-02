@@ -19,7 +19,6 @@ package org.apache.spark.streaming.kinesis
 
 import com.amazonaws.auth._
 
-import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 
 /**
@@ -83,14 +82,12 @@ private[kinesis] final case class STSCredentials(
   }
 }
 
-@Evolving
 object SparkAWSCredentials {
   /**
    * Builder for [[SparkAWSCredentials]] instances.
    *
    * @since 2.2.0
    */
-  @Evolving
   class Builder {
     private var basicCreds: Option[BasicCredentials] = None
     private var stsCreds: Option[STSCredentials] = None

@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,7 +39,7 @@ class TableCatalogSuite extends SparkFunSuite {
       .add("data", StringType)
 
   private def newCatalog(): TableCatalog with SupportsNamespaces = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -94,7 +95,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
-    assert(parsed == Seq("`", ".", "test_table"))
+    assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.schema == schema)
     assert(table.properties.asScala == Map())
 
@@ -112,7 +113,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
-    assert(parsed == Seq("`", ".", "test_table"))
+    assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.schema == schema)
     assert(table.properties == properties)
 
@@ -130,7 +131,7 @@ class TableCatalogSuite extends SparkFunSuite {
       catalog.createTable(testIdent, schema, Array.empty, emptyProps)
     }
 
-    assert(exc.message.contains(table.name()))
+    assert(exc.message.contains(testIdent.quoted))
     assert(exc.message.contains("already exists"))
 
     assert(catalog.tableExists(testIdent))

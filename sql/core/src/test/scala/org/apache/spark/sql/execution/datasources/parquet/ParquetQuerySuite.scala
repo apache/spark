@@ -911,8 +911,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("returning batch for wide table") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
@@ -945,7 +944,7 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("returning batch for wide table") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {

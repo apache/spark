@@ -223,4 +223,12 @@ class SparkMetadataOperationSuite extends HiveThriftJdbcTest {
       assert(!rs.next())
     }
   }
+
+  test("Spark's own GetCatalogsOperation(SparkGetCatalogsOperation)") {
+    withJdbcStatement() { statement =>
+      val metaData = statement.getConnection.getMetaData
+      val rs = metaData.getCatalogs
+      assert(!rs.next())
+    }
+  }
 }

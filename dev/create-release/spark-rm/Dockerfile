@@ -78,7 +78,7 @@ RUN apt-get clean && apt-get update && $APT_INSTALL gnupg ca-certificates && \
   Rscript -e "devtools::install_github('jimhester/lintr')" && \
   # Install tools needed to build the documentation.
   $APT_INSTALL ruby2.3 ruby2.3-dev mkdocs && \
-  gem install jekyll --no-rdoc --no-ri && \
+  gem install jekyll --no-rdoc --no-ri -v 3.8.6 && \
   gem install jekyll-redirect-from && \
   gem install pygments.rb
 
