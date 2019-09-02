@@ -25,7 +25,7 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature.Instance
@@ -797,7 +797,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 }
 
 /**
- * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
  * training weights except for the objective trace.
  *
@@ -805,7 +804,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
@@ -835,7 +833,6 @@ class LinearRegressionTrainingSummary private[regression] (
 }
 
 /**
- * :: Experimental ::
  * Linear regression results evaluated on a dataset.
  *
  * @param predictions predictions output by the model's `transform` method.
@@ -845,7 +842,6 @@ class LinearRegressionTrainingSummary private[regression] (
  * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,

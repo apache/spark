@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -120,13 +120,11 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
 }
 
 /**
- * :: Experimental ::
  * Fit a parametric survival regression model named accelerated failure time (AFT) model
  * (see <a href="https://en.wikipedia.org/wiki/Accelerated_failure_time_model">
  * Accelerated failure time model (Wikipedia)</a>)
  * based on the Weibull distribution of the survival time.
  */
-@Experimental
 @Since("1.6.0")
 class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[AFTSurvivalRegressionModel] with AFTSurvivalRegressionParams
@@ -307,10 +305,8 @@ object AFTSurvivalRegression extends DefaultParamsReadable[AFTSurvivalRegression
 }
 
 /**
- * :: Experimental ::
  * Model produced by [[AFTSurvivalRegression]].
  */
-@Experimental
 @Since("1.6.0")
 class AFTSurvivalRegressionModel private[ml] (
     @Since("1.6.0") override val uid: String,

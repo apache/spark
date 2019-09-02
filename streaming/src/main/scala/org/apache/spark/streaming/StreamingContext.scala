@@ -34,7 +34,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 
 import org.apache.spark._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.input.FixedLengthBinaryInputFormat
 import org.apache.spark.internal.Logging
@@ -772,11 +772,8 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Get the currently active context, if there is one. Active means started but not stopped.
    */
-  @Experimental
   def getActive(): Option[StreamingContext] = {
     ACTIVATION_LOCK.synchronized {
       Option(activeContext.get())
@@ -784,13 +781,10 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Either return the "active" StreamingContext (that is, started but not stopped), or create a
    * new StreamingContext that is
    * @param creatingFunc   Function to create a new StreamingContext
    */
-  @Experimental
   def getActiveOrCreate(creatingFunc: () => StreamingContext): StreamingContext = {
     ACTIVATION_LOCK.synchronized {
       getActive().getOrElse { creatingFunc() }
@@ -798,8 +792,6 @@ object StreamingContext extends Logging {
   }
 
   /**
-   * :: Experimental ::
-   *
    * Either get the currently active StreamingContext (that is, started but not stopped),
    * OR recreate a StreamingContext from checkpoint data in the given path. If checkpoint data
    * does not exist in the provided, then create a new StreamingContext by calling the provided
@@ -813,7 +805,6 @@ object StreamingContext extends Logging {
    *                       error in reading checkpoint data. By default, an exception will be
    *                       thrown on error.
    */
-  @Experimental
   def getActiveOrCreate(
       checkpointPath: String,
       creatingFunc: () => StreamingContext,

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -30,14 +30,12 @@ import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
  * A feature transformer that adds size information to the metadata of a vector column.
  * VectorAssembler needs size information for its input columns and cannot be used on streaming
  * dataframes without this metadata.
  *
  * Note: VectorSizeHint modifies `inputCol` to include size metadata and does not have an outputCol.
  */
-@Experimental
 @Since("2.3.0")
 class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   extends Transformer with HasInputCol with HasHandleInvalid with DefaultParamsWritable {
@@ -180,8 +178,6 @@ class VectorSizeHint @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   override def copy(extra: ParamMap): this.type = defaultCopy(extra)
 }
 
-/** :: Experimental :: */
-@Experimental
 @Since("2.3.0")
 object VectorSizeHint extends DefaultParamsReadable[VectorSizeHint] {
 

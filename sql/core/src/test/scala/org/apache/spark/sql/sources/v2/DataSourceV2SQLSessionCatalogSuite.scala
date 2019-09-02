@@ -18,13 +18,14 @@
 package org.apache.spark.sql.sources.v2
 
 import org.apache.spark.sql.{DataFrame, SaveMode}
+import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.InMemoryTable
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 
 class DataSourceV2SQLSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)
+  with AlterTableTests
   with SessionCatalogTest[InMemoryTable, InMemoryTableSessionCatalog] {
-
-  import testImplicits._
 
   override protected val catalogAndNamespace = ""
 
@@ -42,5 +43,12 @@ class DataSourceV2SQLSessionCatalogSuite
     checkAnswer(sql(s"SELECT * FROM $tableName"), expected)
     checkAnswer(sql(s"SELECT * FROM default.$tableName"), expected)
     checkAnswer(sql(s"TABLE $tableName"), expected)
+  }
+
+  override def getTableMetadata(tableName: String): Table = {
+    val v2Catalog = spark.sessionState.catalogManager.v2SessionCatalog.get
+    val nameParts = spark.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    v2Catalog.asInstanceOf[TableCatalog]
+      .loadTable(Identifier.of(Array.empty, nameParts.last))
   }
 }

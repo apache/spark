@@ -18,14 +18,15 @@
 package org.apache.spark.sql.sources.v2
 
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
   import testImplicits._
 
   before {
-    spark.conf.set("spark.sql.catalog.testcat", classOf[TestInMemoryTableCatalog].getName)
-    spark.conf.set("spark.sql.catalog.testcat2", classOf[TestInMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
   }
 
   after {
