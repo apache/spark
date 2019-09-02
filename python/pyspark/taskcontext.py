@@ -24,8 +24,6 @@ from pyspark.serializers import write_int, UTF8Deserializer
 class TaskContext(object):
 
     """
-    .. note:: Experimental
-
     Contextual information about a task which can be read or mutated during
     execution. To access the TaskContext for a running task, use:
     :meth:`TaskContext.get`.

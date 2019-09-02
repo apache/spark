@@ -51,8 +51,6 @@ class GroupedData(object):
     A set of methods for aggregations on a :class:`DataFrame`,
     created by :func:`DataFrame.groupBy`.
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 
@@ -237,8 +235,6 @@ class GroupedData(object):
         .. note:: This function requires a full shuffle. all the data of a group will be loaded
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
-
-        .. note:: Experimental
 
         :param udf: a grouped map user-defined function returned by
             :func:`pyspark.sql.functions.pandas_udf`.

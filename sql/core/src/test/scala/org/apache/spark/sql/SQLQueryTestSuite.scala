@@ -342,39 +342,44 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       stringToFile(resultFile, goldenOutput)
     }
 
-    // Read back the golden file.
-    val expectedOutputs: Seq[QueryOutput] = {
-      val goldenOutput = fileToString(new File(testCase.resultFile))
-      val segments = goldenOutput.split("-- !query.+\n")
+    // This is a temporary workaround for SPARK-28894. The test names are truncated after
+    // the last dot due to a bug in SBT. This makes easier to debug via Jenkins test result
+    // report. See SPARK-28894.
+    withClue(s"${testCase.name}${System.lineSeparator()}") {
+      // Read back the golden file.
+      val expectedOutputs: Seq[QueryOutput] = {
+        val goldenOutput = fileToString(new File(testCase.resultFile))
+        val segments = goldenOutput.split("-- !query.+\n")
 
-      // each query has 3 segments, plus the header
-      assert(segments.size == outputs.size * 3 + 1,
-        s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
-        s"Try regenerate the result files.")
-      Seq.tabulate(outputs.size) { i =>
-        QueryOutput(
-          sql = segments(i * 3 + 1).trim,
-          schema = segments(i * 3 + 2).trim,
-          output = segments(i * 3 + 3).replaceAll("\\s+$", "")
-        )
+        // each query has 3 segments, plus the header
+        assert(segments.size == outputs.size * 3 + 1,
+          s"Expected ${outputs.size * 3 + 1} blocks in result file but got ${segments.size}. " +
+            s"Try regenerate the result files.")
+        Seq.tabulate(outputs.size) { i =>
+          QueryOutput(
+            sql = segments(i * 3 + 1).trim,
+            schema = segments(i * 3 + 2).trim,
+            output = segments(i * 3 + 3).replaceAll("\\s+$", "")
+          )
+        }
       }
-    }
 
-    // Compare results.
-    assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
-      outputs.size
-    }
+      // Compare results.
+      assertResult(expectedOutputs.size, s"Number of queries should be ${expectedOutputs.size}") {
+        outputs.size
+      }
 
-    outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
-      assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
-        output.sql
-      }
-      assertResult(expected.schema,
-        s"Schema did not match for query #$i\n${expected.sql}: $output") {
-        output.schema
-      }
-      assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
-        output.output
+      outputs.zip(expectedOutputs).zipWithIndex.foreach { case ((output, expected), i) =>
+        assertResult(expected.sql, s"SQL query did not match for query #$i\n${expected.sql}") {
+          output.sql
+        }
+        assertResult(expected.schema,
+          s"Schema did not match for query #$i\n${expected.sql}: $output") {
+          output.schema
+        }
+        assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {
+          output.output
+        }
       }
     }
   }

@@ -1027,6 +1027,18 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.directory.api</groupId>
+            <artifactId>api-ldap-schema-data</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
@@ -2283,7 +2295,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.4.4</version>
+          <version>4.2.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2882,6 +2894,18 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <!--
+        Couple of dependencies are coming in bundle format (bundle is just a normal jar which
+        contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
+        any other jar. Since maven doesn't have native bundle support it needs an external plugin
+        handle it. If the plugin is not added then the build can't resolve bundle dependencies.
+      -->
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>4.2.0</version>
+        <extensions>true</extensions>
       </plugin>
     </plugins>
   </build>
