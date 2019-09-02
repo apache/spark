@@ -23,7 +23,7 @@ license: |
 `DESCRIBE FUNCTION` statement returns the basic metadata information of a
 existing function. The metadata information includes function name, implementing
 class and the usage details.  If the optional `EXTENDED` option is specified then basic
-metadata augmented with extended usage information are returned.
+metadata information is returned along with extended usage information.
 
 ### Syntax
 {% highlight sql %}
@@ -36,7 +36,7 @@ metadata augmented with extended usage information are returned.
   <dd>
     Specifies a name of an existing function in the syetem. The function name may be
     optionally qualified with a database name. If `function_name` is qualified with
-    a database then the function is resolved from the qualified database, otherwise
+    a database then the function is resolved from the user specified database, otherwise
     it is resolved from the current database.<br><br>
     <b>Syntax:</b>
       <code>
@@ -49,21 +49,61 @@ metadata augmented with extended usage information are returned.
 {% highlight sql %}
 -- Describe a builtin scalar function.
 -- Returns function name, implementing class and usage
-DESC FUNCTION Trim;
+DESC FUNCTION abs;
+  +-------------------------------------------------------------------+
+  |function_desc                                                      |
+  +-------------------------------------------------------------------+
+  |Function: abs                                                      |
+  |Class: org.apache.spark.sql.catalyst.expressions.Abs               |
+  |Usage: abs(expr) - Returns the absolute value of the numeric value.|
+  +-------------------------------------------------------------------+
+
 -- Describe a builtin scalar function.
 -- Returns function name, implementing class and usage and examples.
-DESC FUNCTION EXTENDED trim;
+DESC FUNCTION EXTENDED abs;
+  +-------------------------------------------------------------------+
+  |function_desc                                                      |
+  +-------------------------------------------------------------------+
+  |Function: abs                                                      |
+  |Class: org.apache.spark.sql.catalyst.expressions.Abs               |
+  |Usage: abs(expr) - Returns the absolute value of the numeric value.|
+  |Extended Usage:                                                    |
+  |    Examples:                                                      |
+  |      > SELECT abs(-1);                                            |
+  |       1                                                           |
+  |                                                                   |
+  +-------------------------------------------------------------------+
+
 -- Describe a builtin aggregate function
-DESC FUNCTION Max;
+DESC FUNCTION max;
+  +--------------------------------------------------------------+
+  |function_desc                                                 |
+  +--------------------------------------------------------------+
+  |Function: max                                                 |
+  |Class: org.apache.spark.sql.catalyst.expressions.aggregate.Max|
+  |Usage: max(expr) - Returns the maximum value of `expr`.       |
+  +--------------------------------------------------------------+
+
 -- Describe a builtin user defined aggregate function
 -- Returns function name, implementing class and usage and examples.
-DESC FUNCTION EXTENDED Explode
--- Create a UDF
-CREATE FUNCTION myFunc
-AS 'com.mycompany.functions.myFunc'
-USING JAR 'jar-file-uri'
--- describe the user defined function
-DESC FUNCTION myFunc
+DESC FUNCTION EXTENDED explode
+  +---------------------------------------------------------------+
+  |function_desc                                                  |
+  +---------------------------------------------------------------+
+  |Function: explode                                              |
+  |Class: org.apache.spark.sql.catalyst.expressions.Explode       | 
+  |Usage: explode(expr) - Separates the elements of array `expr`  |
+  | into multiple rows, or the elements of map `expr` into        |
+  | multiple rows and columns. Unless specified otherwise, uses   |
+  | the default column name `col` for elements of the array or    |
+  | `key` and `value` for the elements of the map.                |
+  |Extended Usage:                                                |
+  |    Examples:                                                  |
+  |      > SELECT explode(array(10, 20));                         |
+  |       10                                                      |
+  |       20                                                      |
+  +---------------------------------------------------------------+
+
 {% endhighlight %}
 
 ### Related Statements
