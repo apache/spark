@@ -64,9 +64,4 @@ class SQLExecutionRDD(
       firstParent[InternalRow].iterator(split, context)
     }
   }
-
-  override def clearDependencies() {
-    super.clearDependencies()
-    sqlRDD = null
-  }
 }
