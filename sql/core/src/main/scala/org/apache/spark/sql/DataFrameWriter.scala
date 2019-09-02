@@ -271,14 +271,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           modeForDSV2 match {
             case SaveMode.Append =>
               runCommand(df.sparkSession, "save") {
-                AppendData.byName(relation, df.logicalPlan, extraOptions.toMap)
+                AppendData.byName(relation, df.logicalPlan)
               }
 
             case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
               // truncate the table
               runCommand(df.sparkSession, "save") {
-                OverwriteByExpression.byName(
-                  relation, df.logicalPlan, Literal(true), extraOptions.toMap)
+                OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
               }
 
             case other =>
@@ -384,7 +383,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val command = modeForDSV2 match {
       case SaveMode.Append =>
-        AppendData.byPosition(table, df.logicalPlan, extraOptions.toMap)
+        AppendData.byPosition(table, df.logicalPlan)
 
       case SaveMode.Overwrite =>
         val conf = df.sparkSession.sessionState.conf
@@ -392,9 +391,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
 
         if (dynamicPartitionOverwrite) {
-          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan, extraOptions.toMap)
+          OverwritePartitionsDynamic.byPosition(table, df.logicalPlan)
         } else {
-          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true), extraOptions.toMap)
+          OverwriteByExpression.byPosition(table, df.logicalPlan, Literal(true))
         }
 
       case other =>
