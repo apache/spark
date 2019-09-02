@@ -27,6 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.ThreadUtils
 
 private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
+  def start(): Unit
   def awaitCompletion(): Unit
 }
 
@@ -53,7 +54,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
 
   private def phase: String = pod.map(_.getStatus.getPhase).getOrElse("unknown")
 
-  def start(): Unit = {
+  override def start(): Unit = {
     maybeLoggingInterval.foreach { interval =>
       scheduler.scheduleAtFixedRate(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
     }

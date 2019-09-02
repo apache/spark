@@ -145,6 +145,7 @@ private[spark] class Client(
         s"${resolvedDriverPod.getMetadata.getName}"
       if (waitForAppCompletion) {
         logInfo(s"Waiting for application ${conf.appName} with submission ID ${sId} to finish...")
+        watcher.start()
         watcher.awaitCompletion()
         logInfo(s"Application ${conf.appName} with submission ID ${sId} finished.")
       } else {
