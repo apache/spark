@@ -135,23 +135,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val remoteMode = isRemoteMode(sessionState)
     // "-h" option has been passed, so connect to Hive thrift server.
-    if (!remoteMode) {
-      // Hadoop-20 and above - we need to augment classpath using hiveconf
-      // components.
-      // See also: code in ExecDriver.java
-      val loader = conf.getClassLoader
-      val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
-      if (StringUtils.isNotBlank(auxJars)) {
-        val hiveClient = SparkSQLEnv.sqlContext.sharedState.externalCatalog.unwrapped
-          .asInstanceOf[HiveExternalCatalog].client
-        StringUtils.split(auxJars, ",").foreach(hiveClient.addJar(_))
-      }
-      conf.setClassLoader(loader)
-      Thread.currentThread().setContextClassLoader(loader)
-    } else {
-      // Hive 1.2 + not supported in CLI
-      throw new RuntimeException("Remote operations not supported")
-    }
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
     val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
@@ -165,6 +148,16 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
+
+    // Hadoop-20 and above - we need to augment classpath using hiveconf
+    // components.
+    // See also: code in ExecDriver.java
+    val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
+    if (StringUtils.isNotBlank(auxJars)) {
+      val hiveClient = SparkSQLEnv.sqlContext.sharedState.externalCatalog.unwrapped
+        .asInstanceOf[HiveExternalCatalog].client
+      StringUtils.split(auxJars, ",").foreach(hiveClient.addJar(_))
+    }
 
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
