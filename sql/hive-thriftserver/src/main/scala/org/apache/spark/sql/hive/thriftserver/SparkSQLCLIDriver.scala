@@ -133,7 +133,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
-    val remoteMode = isRemoteMode(sessionState)
     // "-h" option has been passed, so connect to Hive thrift server.
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
@@ -154,9 +153,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // See also: code in ExecDriver.java
     val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
     if (StringUtils.isNotBlank(auxJars)) {
-      val hiveClient = SparkSQLEnv.sqlContext.sharedState.externalCatalog.unwrapped
-        .asInstanceOf[HiveExternalCatalog].client
-      StringUtils.split(auxJars, ",").foreach(hiveClient.addJar(_))
+      val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
+      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
     }
 
     // TODO work around for set the log output to console, because the HiveContext
