@@ -14,11 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.internal
+package org.apache.spark.sql.execution
 
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * It is just a wrapper over `sqlRDD`, which sets and makes effective all the configs from the
@@ -32,6 +33,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 class SQLExecutionRDD(
     var sqlRDD: RDD[InternalRow], @transient conf: SQLConf) extends RDD[InternalRow](sqlRDD) {
   private val sqlConfigs = conf.getAllConfs
+  @transient private var tasksRunning = 0
+  @transient private var originalLocalProps: Map[String, String] = _
 
   override val partitioner = firstParent[InternalRow].partitioner
 
@@ -41,22 +44,32 @@ class SQLExecutionRDD(
     // If we are in the context of a tracked SQL operation, `SQLExecution.EXECUTION_ID_KEY` is set
     // and we have nothing to do here. Otherwise, we use the `SQLConf` captured at the creation of
     // this RDD.
-    if (context.getLocalProperty("spark.sql.execution.id") == null) {
-      val originalLocalProps = sqlConfigs.collect {
-        case (key, value) if key.startsWith("spark") =>
-          val originalValue = context.getLocalProperty(key)
-          context.getLocalProperties.setProperty(key, value)
-          (key, originalValue)
+    if (context.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
+      synchronized {
+        if (tasksRunning == 0) {
+          originalLocalProps = sqlConfigs.collect {
+            case (key, value) if key.startsWith("spark") =>
+              val originalValue = context.getLocalProperty(key)
+              context.getLocalProperties.setProperty(key, value)
+              (key, originalValue)
+          }
+        }
+        tasksRunning += 1
       }
 
       try {
         firstParent[InternalRow].iterator(split, context)
       } finally {
-        for ((key, value) <- originalLocalProps) {
-          if (value == null) {
-            context.getLocalProperties.remove(key)
-          } else {
-            context.getLocalProperties.setProperty(key, value)
+        synchronized {
+          tasksRunning -= 1
+          if (tasksRunning == 0) {
+            for ((key, value) <- originalLocalProps) {
+              if (value == null) {
+                context.getLocalProperties.remove(key)
+              } else {
+                context.getLocalProperties.setProperty(key, value)
+              }
+            }
           }
         }
       }
