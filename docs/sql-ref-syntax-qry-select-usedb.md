@@ -20,22 +20,40 @@ license: |
 ---
 
 ### Description
-Set the provided database as current database. All subsequent queries will resolve
-table names to this database if database name is not provided. The default database name is 'default'
+Set the provided database as current database. All subsequent queries that do not explicitly
+provide a database will resolve table names to this database. 
+The default database name is 'default'.
 
 ### Syntax
 {% highlight sql %}
-USE dbname
+USE database_name
 {% endhighlight %}
 
 ### Parameter
 
- **dbname**
-
- dbname is used as current database. If the provided database does not exist, an exception is thrown.
-
+<dl>
+  <dt><code><em>{FROM|IN} database_name</em></code></dt>
+  <dd>
+     Name of the database will be used. If the database is not exist exception will be thrown.
+  </dd>
+</dl>
 
 ### Example
 {% highlight sql %}
+-- Use the 'userdb' which is exist.
 USE userdb;
++---------+--+
+| Result  |
++---------+--+
++---------+--+
+
+-- Use the 'userdb1' which does't exist
+USE userdb1;
+Error: org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: Database 'userdb1' not found;(state=,code=0)
 {% endhighlight %}
+
+### Related statements.
+- [CREATE DATABASE](sql-ref-syntax-ddl-create-database.html)
+- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
+- [CREATE TABLE ](sql-ref-syntax-ddl-create-table.html)
+
