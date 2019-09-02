@@ -51,7 +51,7 @@ import org.apache.spark.sql.types._
   usage = """
     _FUNC_(col, percentage [, accuracy]) - Returns the approximate percentile value of numeric
       column `col` at the given percentage. The value of percentage must be between 0.0
-      and 1.0. The `accuracy` parameter (default: 10000) is a positive numeric literal which
+      and 1.0. The `accuracy` parameter (default: 100000) is a positive numeric literal which
       controls approximation accuracy at the cost of memory. Higher value of `accuracy` yields
       better accuracy, `1.0/accuracy` is the relative error of the approximation.
       When `percentage` is an array, each value of the percentage array must be between 0.0 and 1.0.
@@ -200,7 +200,7 @@ object ApproximatePercentile {
 
   // Default accuracy of Percentile approximation. Larger value means better accuracy.
   // The default relative error can be deduced by defaultError = 1.0 / DEFAULT_PERCENTILE_ACCURACY
-  val DEFAULT_PERCENTILE_ACCURACY: Int = 10000
+  val DEFAULT_PERCENTILE_ACCURACY: Int = 100000
 
   /**
    * PercentileDigest is a probabilistic data structure used for approximating percentiles
