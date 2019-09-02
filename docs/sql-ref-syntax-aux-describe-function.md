@@ -20,15 +20,30 @@ license: |
 ---
 ### Description
 
-Return the metadata such as qualified function name, implementing class and usage of an existing function.
-Input parameter `function_name` may be optionally qualified. If the function is not qualified then the function is
-resolved from the current database. If the `EXTENDED` option is specified then additionally extended usage information
-including usage examples are returned. 
+`DESCRIBE FUNCTION` statement returns the basic metadata information of a
+existing function. The metadata information includes function name, implementing
+class and the usage details.  If the optional `EXTENDED` option is specified then basic
+metadata augmented with extended usage information are returned.
 
 ### Syntax
 {% highlight sql %}
-{DESC | DESCRIBE} FUNCTION [EXTENDED] [db_name.]function_name
+{DESC | DESCRIBE} FUNCTION [EXTENDED] function_name
 {% endhighlight %}
+
+### Parameters
+<dl>
+  <dt><code><em>function_name</em></code></dt>
+  <dd>
+    Specifies a name of an existing function in the syetem. The function name may be
+    optionally qualified with a database name. If `function_name` is qualified with
+    a database then the function is resolved from the qualified database, otherwise
+    it is resolved from the current database.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [database_name.]function_name
+      </code>
+  </dd>
+</dl>
 
 ### Examples
 {% highlight sql %}
