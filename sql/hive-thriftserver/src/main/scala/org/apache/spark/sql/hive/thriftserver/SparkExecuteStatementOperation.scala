@@ -169,9 +169,6 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getUsername)
 
     if (!runInBackground) {
-      if (getStatus.getState.isTerminal) {
-        return
-      }
       execute()
     } else {
       val sparkServiceUGI = Utils.getUGI()
