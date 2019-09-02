@@ -152,9 +152,7 @@ object ResolveHints {
            numPartitions: Int, exprs: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
         val errExprs = exprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (errExprs.nonEmpty) throw new AnalysisException(
-          s"""Invalid type exprs : $errExprs
-             |expects UnresolvedAttribute type
-             |""".stripMargin)
+          "Repartition hint parameter should be columns but was $errExprs")
         RepartitionByExpression(
           exprs.map(_.asInstanceOf[UnresolvedAttribute]), h.child, numPartitions)
       }
@@ -186,6 +184,8 @@ object ResolveHints {
         val sortOrder: Seq[SortOrder] = exprs.map {
           case expr: SortOrder => expr
           case expr: Expression => SortOrder(expr, Ascending)
+          case _ => throw new AnalysisException(
+            "RepartitionByRange hint parameter should be columns but was $exprs")
         }
         RepartitionByExpression(sortOrder, h.child, numPartitions)
       }

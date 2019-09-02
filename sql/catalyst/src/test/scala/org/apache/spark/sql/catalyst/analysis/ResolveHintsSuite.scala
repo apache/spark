@@ -209,7 +209,7 @@ class ResolveHintsSuite extends AnalysisTest {
         table("TaBlE")),
       Seq(errMsg3))
 
-    val errMsg4 = "expects UnresolvedAttribute type"
+    val errMsg4 = "Repartition hint parameter should be columns but was"
 
     assertAnalysisError(
       UnresolvedHint("REPARTITION",

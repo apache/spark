@@ -73,8 +73,18 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
       df.hint("REPARTITION", 10, $"id".expr),
       UnresolvedHint("REPARTITION", Seq(10, $"id".expr), df.logicalPlan))
 
+    val e1 = intercept[AnalysisException] {
+      df.hint("REPARTITION", 10, $"id").queryExecution.logical
+    }
+    assert(e1.message.contains("Repartition hint parameter should be columns but was"))
+
     check(
       df.hint("REPARTITIONBYRANGE", 10, $"id".expr),
       UnresolvedHint("REPARTITIONBYRANGE", Seq(10, $"id".expr), df.logicalPlan))
+
+    val e2 = intercept[AnalysisException] {
+      df.hint("REPARTITIONBYRANGE", 10, $"id").queryExecution.logical
+    }
+    assert(e2.message.contains("REPARTITIONBYRANGE hint parameter should be columns but was"))
   }
 }
