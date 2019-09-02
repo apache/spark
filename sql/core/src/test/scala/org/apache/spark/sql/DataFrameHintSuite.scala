@@ -85,6 +85,6 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
     val e2 = intercept[AnalysisException] {
       df.hint("REPARTITIONBYRANGE", 10, $"id").queryExecution.logical
     }
-    assert(e2.message.contains("REPARTITIONBYRANGE hint parameter should be columns but was"))
+    assert(e2.message.contains("RepartitionByRange hint parameter should be columns but was"))
   }
 }
