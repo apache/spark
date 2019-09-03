@@ -1950,7 +1950,7 @@ case class MakeTime(hour: Expression, min: Expression, sec: Expression)
       } else {
         LocalTime.of(hour, min, seconds, nanos)
       }
-      localTime.getLong(MICRO_OF_DAY)
+      localTimeToMicros(localTime)
     } catch {
       case _: DateTimeException => null
     }
@@ -1977,7 +1977,7 @@ case class MakeTime(hour: Expression, min: Expression, sec: Expression)
         } else {
           localTime = java.time.LocalTime.of($hour, $min, seconds, nanos);
         }
-        localTime.getLong(java.time.temporal.ChronoField.MICRO_OF_DAY);
+        ${ev.value} = $dtu.localTimeToMicros(localTime);
       } catch (java.time.DateTimeException e) {
         ${ev.isNull} = true;
       }"""
