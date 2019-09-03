@@ -46,9 +46,9 @@ ANALYZE TABLE table_name [ PARTITION ( partition_col_name [ = partition_col_val 
     <dd>
       <ul>
         <li> If no analyze option is specified, <code>ANALYZE TABLE</code> collects the table's number of rows and size in bytes. </li>
-        <li> NOSCAN
+        <li> <b>NOSCAN</b>
           <br> Collect only the table's size in bytes ( which does not require scanning the entire table ). </li>
-        <li> FOR COLUMNS col [ , ... ] <code> | </code> FOR ALL COLUMNS
+        <li> <b>FOR COLUMNS col [ , ... ] <code> | </code> FOR ALL COLUMNS</b>
           <br> Collect column statistics for each column specified, or alternatively for every column, as well as table statistics.
         </li>
       </ul>
@@ -69,6 +69,13 @@ ANALYZE TABLE table_name [ PARTITION ( partition_col_name [ = partition_col_val 
  DESC EXTENDED students;
      ......
      Statistics	2820 bytes, 3 rows
+     ......
+
+ ANALYZE TABLE students PARTITION (student_id = 111111) COMPUTE STATISTICS;
+
+ DESC EXTENDED students PARTITION (student_id = 111111);
+     ......
+     Partition Statistics	919 bytes, 1 rows
      ......
 
  ANALYZE TABLE students COMPUTE STATISTICS FOR COLUMNS name;
