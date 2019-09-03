@@ -20,10 +20,10 @@ license: |
 ---
 ### Description
 
-`DESCRIBE FUNCTION` statement returns the basic metadata information of a
-existing function. The metadata information includes function name, implementing
-class and the usage details.  If the optional `EXTENDED` option is specified then basic
-metadata information is returned along with extended usage information.
+`DESCRIBE FUNCTION` statement returns the basic metadata information of an
+existing function. The metadata information includes the function name, implementing
+class and the usage details.  If the optional `EXTENDED` option is specified, the basic
+metadata information is returned along with the extended usage information.
 
 ### Syntax
 {% highlight sql %}
