@@ -48,7 +48,7 @@ private[hive] class SparkExecuteStatementOperation(
     runInBackground: Boolean = true)
     (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
-    with Logging {
+  with Logging {
 
   private var result: DataFrame = _
 
@@ -208,7 +208,7 @@ private[hive] class SparkExecuteStatementOperation(
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
-          logError("Error submit query in background, query rejected", rejected)
+          logError("Error submitting query in background, query rejected", rejected)
           setState(OperationState.ERROR)
           HiveThriftServer2.listener.onStatementError(
             statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
@@ -240,7 +240,6 @@ private[hive] class SparkExecuteStatementOperation(
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
       sqlContext.sparkContext.setJobGroup(statementId, statement)
-
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
@@ -269,7 +268,6 @@ private[hive] class SparkExecuteStatementOperation(
         if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
           logWarning(s"Ignore exception in terminal state with $statementId: $e")
-          return
         } else {
           logError(s"Error executing query with $statementId, currentState $currentState, ", e)
           setState(OperationState.ERROR)
@@ -283,8 +281,10 @@ private[hive] class SparkExecuteStatementOperation(
         }
     } finally {
       synchronized {
-        setState(OperationState.FINISHED)
-        HiveThriftServer2.listener.onStatementFinish(statementId)
+        if (!getStatus.getState.isTerminal) {
+          setState(OperationState.FINISHED)
+          HiveThriftServer2.listener.onStatementFinish(statementId)
+        }
       }
       sqlContext.sparkContext.clearJobGroup()
     }
