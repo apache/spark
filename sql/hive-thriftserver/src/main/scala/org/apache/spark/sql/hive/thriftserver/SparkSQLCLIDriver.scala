@@ -111,6 +111,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
+    // Use startup ClassLoader replace hiveConf's UDFClassLoader
+    conf.setClassLoader(Thread.currentThread().getContextClassLoader)
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
@@ -133,8 +135,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
-    Thread.currentThread().setContextClassLoader(conf.getClassLoader)
-    
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
     val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
