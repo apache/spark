@@ -31,6 +31,7 @@ import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
+import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
@@ -38,6 +39,7 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
@@ -921,6 +923,23 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
       assert(s"SPARK_$context" ===
         callerContext.getMethod("getCurrent").invoke(null).toString)
+    }
+  }
+
+  test("test class ClassCastException") {
+    // CallerContext added after hadoop-2.8.0 for HDFS-9184
+    if (VersionInfo.getVersion >= "2.8") {
+      try {
+        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
+        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        val builderInst = builder.getConstructor(classOf[String]).newInstance("test")
+        val hdfsContext = builder.getMethod("build").invoke(builderInst)
+        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
+      } catch {
+        case NonFatal(e) =>
+          assert(e.toString == "java.lang.ClassCastException: " +
+            "org.apache.hadoop.ipc.CallerContext$Builder cannot be cast to scala.runtime.Nothing$")
+      }
     }
   }
 
