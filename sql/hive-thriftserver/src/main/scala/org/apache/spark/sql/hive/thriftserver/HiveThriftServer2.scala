@@ -174,12 +174,10 @@ object HiveThriftServer2 extends Logging {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
-    private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
     private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
     private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
-    private var totalRunning = 0
 
     def getOnlineSessionNum: Int = synchronized {
       sessionList.count(_._2.finishTimestamp == 0)
@@ -225,14 +223,12 @@ object HiveThriftServer2 extends Logging {
       synchronized {
         val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
         sessionList.put(sessionId, info)
-        onlineSessionNum += 1
         trimSessionIfNecessary()
       }
     }
 
     def onSessionClosed(sessionId: String): Unit = synchronized {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
-      onlineSessionNum -= 1
       trimSessionIfNecessary()
     }
 
@@ -248,7 +244,6 @@ object HiveThriftServer2 extends Logging {
       trimExecutionIfNecessary()
       sessionList(sessionId).totalExecution += 1
       executionList(id).groupId = groupId
-      totalRunning += 1
     }
 
     def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
@@ -259,7 +254,6 @@ object HiveThriftServer2 extends Logging {
     def onStatementCanceled(id: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.CANCELED
-      totalRunning -= 1
       trimExecutionIfNecessary()
     }
 
@@ -271,24 +265,18 @@ object HiveThriftServer2 extends Logging {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).detail = errorMessage
       executionList(id).state = ExecutionState.FAILED
-      totalRunning -= 1
       trimExecutionIfNecessary()
     }
 
     def onStatementFinish(id: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.FINISHED
-      totalRunning -= 1
       trimExecutionIfNecessary()
     }
 
     def onOperationClosed(id: String): Unit = synchronized {
       executionList(id).closeTimestamp = System.currentTimeMillis
-      val lastState = executionList(id).state
       executionList(id).state = ExecutionState.CLOSED
-      if (lastState == ExecutionState.STARTED || lastState == ExecutionState.COMPILED) {
-        totalRunning -= 1
-      }
     }
 
     private def trimExecutionIfNecessary() = {
