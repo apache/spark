@@ -222,26 +222,30 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val DYNAMIC_PARTITION_PRUNING_WITH_STATS =
-    buildConf("spark.sql.optimizer.dynamicPartitionPruningWithStats")
+  val DYNAMIC_PARTITION_PRUNING_USE_STATS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.useStats")
       .internal()
-      .doc("When true, distinct count statistics will be used to evaluate the " +
-        "selectivity and the benefit of the dynamic partition pruning filter.")
+      .doc("When true, distinct count statistics will be used for computing the data size of the " +
+        "partitioned table after dynamic partition pruning, in order to evaluate if it is worth " +
+        "adding an extra subquery as the pruning filter if broadcast reuse is not applicable.")
       .booleanConf
       .createWithDefault(true)
 
-  val JOIN_FILTER_RATIO = buildConf("spark.sql.optimizer.joinFilterRatio")
+  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO = buildConf(
+    "spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
     .internal()
-    .doc("We run a subquery for dynamic partition pruning inserted if the estimated size of " +
-      "the filtered data on the partitioned table exceeds the estimated size of the other table.")
+    .doc("When statistics are not available or configured not to be used, this config will be " +
+      "used as the fallback filter ratio for computing the data size of the partitioned table " +
+      "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
+      "subquery as the pruning filter if broadcast reuse is not applicable.")
     .doubleConf
     .createWithDefault(0.5)
 
-  val DYNAMIC_PRUNING_REUSE_BROADCAST =
-    buildConf("spark.sql.optimizer.dynamicPruningReuseBroadcast")
+  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcast")
       .internal()
-      .doc("When set to true, dynamic pruning rules both for partitioned and non-partitioned " +
-        "columns will seek to reuse the broadcast results from a broadcast hash join operation.")
+      .doc("When true, dynamic partition pruning will seek to reuse the broadcast results from " +
+        "a broadcast hash join operation.")
       .booleanConf
       .createWithDefault(true)
 
@@ -1998,11 +2002,13 @@ class SQLConf extends Serializable with Logging {
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
 
-  def dynamicPartitionPruningWithStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_WITH_STATS)
+  def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
 
-  def joinFilterRatio: Double = getConf(JOIN_FILTER_RATIO)
+  def dynamicPartitionPruningFallbackFilterRatio: Double =
+    getConf(DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO)
 
-  def dynamicPruningReuseBroadcast: Boolean = getConf(DYNAMIC_PRUNING_REUSE_BROADCAST)
+  def dynamicPartitionPruningReuseBroadcast: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST)
 
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 

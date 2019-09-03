@@ -19,7 +19,7 @@ package org.apache.spark.sql.dynamicpruning
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -37,7 +37,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
     extends Rule[SparkPlan] with PredicateHelper {
 
   private def reuseBroadcast: Boolean =
-    SQLConf.get.dynamicPruningReuseBroadcast && SQLConf.get.exchangeReuseEnabled
+    SQLConf.get.dynamicPartitionPruningReuseBroadcast && SQLConf.get.exchangeReuseEnabled
 
   /**
    * Identify the shape in which keys of a given plan are broadcasted.

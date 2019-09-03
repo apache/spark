@@ -87,7 +87,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       joinKeys: Seq[Expression],
       hasBenefit: Boolean,
       broadcastHint: Boolean): LogicalPlan = {
-    val reuseEnabled = SQLConf.get.dynamicPruningReuseBroadcast
+    val reuseEnabled = SQLConf.get.dynamicPartitionPruningReuseBroadcast
     val index = joinKeys.indexOf(filteringKey)
     if (hasBenefit || reuseEnabled) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
@@ -126,12 +126,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
 
     // the default filtering ratio when CBO stats are missing, but there is a
     // predicate that is likely to be selective
-    val fallbackRatio = SQLConf.get.joinFilterRatio
+    val fallbackRatio = SQLConf.get.dynamicPartitionPruningFallbackFilterRatio
     // the filtering ratio based on the type of the join condition and on the column statistics
     val filterRatio = (partExpr.references.toList, otherExpr.references.toList) match {
       // filter out expressions with more than one attribute on any side of the operator
       case (leftAttr :: Nil, rightAttr :: Nil)
-        if SQLConf.get.dynamicPartitionPruningWithStats =>
+        if SQLConf.get.dynamicPartitionPruningUseStats =>
           // get the CBO stats for each attribute in the join condition
           val partDistinctCount = distinctCounts(leftAttr, partPlan)
           val otherDistinctCount = distinctCounts(rightAttr, otherPlan)

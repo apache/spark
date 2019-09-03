@@ -221,7 +221,7 @@ class DynamicPartitionPruningSuite
    */
   test("simple inner join triggers DPP with mock-up tables") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       withTable("df1", "df2") {
         spark.range(1000)
           .select(col("id"), col("id").as("k"))
@@ -253,7 +253,7 @@ class DynamicPartitionPruningSuite
    */
   test("self-join on a partitioned table should not trigger DPP") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       withTable("fact") {
         sql(
           s"""
@@ -284,7 +284,7 @@ class DynamicPartitionPruningSuite
    */
   test("static scan metrics") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       withTable("fact", "dim") {
         spark.range(10)
           .map { x => Tuple3(x, x + 1, 0) }
@@ -351,8 +351,8 @@ class DynamicPartitionPruningSuite
 
   test("DPP should not be rewritten as an existential join") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.JOIN_FILTER_RATIO.key -> "1.5",
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1.5",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       val df = sql(
         s"""
            |SELECT * FROM product p WHERE p.store_id NOT IN
@@ -377,7 +377,7 @@ class DynamicPartitionPruningSuite
    */
   test("DPP triggers only for certain types of query") {
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       Given("dynamic partition pruning disabled")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
         val df = sql(
@@ -456,10 +456,10 @@ class DynamicPartitionPruningSuite
    */
   test("filtering ratio policy fallback") {
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       Given("no stats and selective predicate")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
@@ -472,7 +472,7 @@ class DynamicPartitionPruningSuite
 
       Given("no stats and selective predicate with the size of dim too large")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
@@ -501,7 +501,7 @@ class DynamicPartitionPruningSuite
 
       Given("no stats and selective predicate with the size of dim small")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_sk f
@@ -525,10 +525,10 @@ class DynamicPartitionPruningSuite
    */
   test("filtering ratio policy with stats when the broadcast pruning is disabled") {
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false") {
       Given("disabling the use of stats in the DPP heuristic")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -541,7 +541,7 @@ class DynamicPartitionPruningSuite
 
       Given("filtering ratio with stats disables pruning")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -555,7 +555,7 @@ class DynamicPartitionPruningSuite
 
       Given("filtering ratio with stats enables pruning")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -575,7 +575,7 @@ class DynamicPartitionPruningSuite
 
       Given("join condition more complex than fact.attr = dim.attr")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id
@@ -596,9 +596,9 @@ class DynamicPartitionPruningSuite
   test("partition pruning in broadcast hash joins with non-deterministic probe part") {
     Given("alias with simple join condition, and non-deterministic query")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid, f.sid FROM
@@ -613,9 +613,9 @@ class DynamicPartitionPruningSuite
 
     Given("alias over multiple sub-queries with simple join condition")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid, f.sid FROM
@@ -634,9 +634,9 @@ class DynamicPartitionPruningSuite
   test("partition pruning in broadcast hash joins with aliases") {
     Given("alias with simple join condition, using attribute names only")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid, f.sid FROM
@@ -657,9 +657,9 @@ class DynamicPartitionPruningSuite
 
     Given("alias with expr as join condition")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid, f.sid FROM
@@ -680,9 +680,9 @@ class DynamicPartitionPruningSuite
 
     Given("alias over multiple sub-queries with simple join condition")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid, f.sid FROM
@@ -705,9 +705,9 @@ class DynamicPartitionPruningSuite
 
     Given("alias over multiple sub-queries with simple join condition")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid_d as pid, f.sid_d as sid FROM
@@ -736,10 +736,10 @@ class DynamicPartitionPruningSuite
   test("partition pruning in broadcast hash joins") {
     Given("disable broadcast pruning and disable subquery duplication")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -759,9 +759,9 @@ class DynamicPartitionPruningSuite
 
     Given("disable reuse broadcast results and enable subquery duplication")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "false",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0.5") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0.5") {
       val df = sql(
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -781,9 +781,9 @@ class DynamicPartitionPruningSuite
 
     Given("enable reuse broadcast results and disable query duplication")
       withSQLConf(
-        SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-        SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -803,10 +803,10 @@ class DynamicPartitionPruningSuite
 
     Given("disable broadcast hash join and disable query duplication")
       withSQLConf(
-        SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-        SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
         val df = sql(
           """
             |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -825,9 +825,9 @@ class DynamicPartitionPruningSuite
     }
 
     Given("disable broadcast hash join and enable query duplication")
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "true") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true") {
       val df = sql(
         """
           |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
@@ -847,9 +847,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("broadcast a single key in a HashedRelation") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",
@@ -907,9 +907,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("broadcast multiple keys in a LongHashedRelation") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",
@@ -944,9 +944,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("broadcast multiple keys in an UnsafeHashedRelation") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",
@@ -981,9 +981,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("different broadcast subqueries with identical children") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",
@@ -1055,7 +1055,7 @@ class DynamicPartitionPruningSuite
   }
 
   test("avoid reordering broadcast join keys to match input hash partitioning") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTable("large", "dimTwo", "dimThree") {
         spark.range(100).select(
@@ -1105,9 +1105,9 @@ class DynamicPartitionPruningSuite
    * duplicated partitioning keys, also used to uniquely identify the dynamic pruning filters.
    */
   test("dynamic partition pruning ambiguity issue across nested joins") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("store", "date", "item") {
         spark.range(500)
           .select((($"id" + 30) % 50).as("ss_item_sk"),
@@ -1145,9 +1145,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("cleanup any DPP filter that isn't pushed down due to expression id clashes") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("fact", "dim") {
         spark.range(1000).select($"id".as("A"), $"id".as("AA"))
           .write.partitionBy("A").format(tableFormat).mode("overwrite").saveAsTable("fact")
@@ -1169,9 +1169,9 @@ class DynamicPartitionPruningSuite
 
   test("cleanup any DPP filter that isn't pushed down due to non-determinism") {
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.pid, f.sid FROM
@@ -1186,9 +1186,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("join key with multiple references on the filtering plan") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       withTable("fact", "dim") {
         spark.range(100).select(
           $"id",
@@ -1220,9 +1220,9 @@ class DynamicPartitionPruningSuite
   }
 
   test("Make sure dynamic pruning works on uncorrelated queries") {
-    withSQLConf(SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT d.store_id,
@@ -1247,9 +1247,9 @@ class DynamicPartitionPruningSuite
   test("Plan broadcast pruning only when the broadcast can be reused") {
     Given("dynamic pruning filter on the build side")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT f.date_id, f.store_id, f.product_id, f.units_sold FROM fact_np f
@@ -1269,9 +1269,9 @@ class DynamicPartitionPruningSuite
 
     Given("dynamic pruning filter on the probe side")
     withSQLConf(
-      SQLConf.DYNAMIC_PRUNING_REUSE_BROADCAST.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_WITH_STATS.key -> "false",
-      SQLConf.JOIN_FILTER_RATIO.key -> "0") {
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0") {
       val df = sql(
         """
           |SELECT /*+ BROADCAST(f)*/
