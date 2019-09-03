@@ -465,49 +465,50 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-23760: CodegenContext.withSubExprEliminationExprs should save/restore correctly") {
+    withSQLConf(SQLConf.STRUCTURAL_SUBEXPRESSION_ELIMINATION_ENABLED.key -> "false") {
+      val ref = BoundReference(0, IntegerType, true)
+      val add1 = Add(ref, ref)
+      val add2 = Add(add1, add1)
+      val dummy = SubExprEliminationState(
+        JavaCode.variable("dummy", BooleanType),
+        JavaCode.variable("dummy", BooleanType))
 
-    val ref = BoundReference(0, IntegerType, true)
-    val add1 = Add(ref, ref)
-    val add2 = Add(add1, add1)
-    val dummy = SubExprEliminationState(
-      JavaCode.variable("dummy", BooleanType),
-      JavaCode.variable("dummy", BooleanType))
-
-    // raw testing of basic functionality
-    {
-      val ctx = new CodegenContext
-      val e = ref.genCode(ctx)
-      // before
-      ctx.subExprEliminationExprs += ref -> SubExprEliminationState(e.isNull, e.value)
-      assert(ctx.subExprEliminationExprs.contains(ref))
-      // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(add1 -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(add1))
-        assert(!ctx.subExprEliminationExprs.contains(ref))
-        Seq.empty
-      }
-      // after
-      assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(ref))
-      assert(!ctx.subExprEliminationExprs.contains(add1))
-    }
-
-    // emulate an actual codegen workload
-    {
-      val ctx = new CodegenContext
-      // before
-      ctx.generateExpressions(Seq(add2, add1), doSubexpressionElimination = true) // trigger CSE
-      assert(ctx.subExprEliminationExprs.contains(add1))
-      // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(ref -> dummy)) {
+      // raw testing of basic functionality
+      {
+        val ctx = new CodegenContext
+        val e = ref.genCode(ctx)
+        // before
+        ctx.subExprEliminationExprs += ref -> SubExprEliminationState(e.isNull, e.value)
+        assert(ctx.subExprEliminationExprs.contains(ref))
+        // call withSubExprEliminationExprs
+        ctx.withSubExprEliminationExprs(Map(add1 -> dummy)) {
+          assert(ctx.subExprEliminationExprs.contains(add1))
+          assert(!ctx.subExprEliminationExprs.contains(ref))
+          Seq.empty
+        }
+        // after
+        assert(ctx.subExprEliminationExprs.nonEmpty)
         assert(ctx.subExprEliminationExprs.contains(ref))
         assert(!ctx.subExprEliminationExprs.contains(add1))
-        Seq.empty
       }
-      // after
-      assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(add1))
-      assert(!ctx.subExprEliminationExprs.contains(ref))
+
+      // emulate an actual codegen workload
+      {
+        val ctx = new CodegenContext
+        // before
+        ctx.generateExpressions(Seq(add2, add1), doSubexpressionElimination = true) // trigger CSE
+        assert(ctx.subExprEliminationExprs.contains(add1))
+        // call withSubExprEliminationExprs
+        ctx.withSubExprEliminationExprs(Map(ref -> dummy)) {
+          assert(ctx.subExprEliminationExprs.contains(ref))
+          assert(!ctx.subExprEliminationExprs.contains(add1))
+          Seq.empty
+        }
+        // after
+        assert(ctx.subExprEliminationExprs.nonEmpty)
+        assert(ctx.subExprEliminationExprs.contains(add1))
+        assert(!ctx.subExprEliminationExprs.contains(ref))
+      }
     }
   }
 

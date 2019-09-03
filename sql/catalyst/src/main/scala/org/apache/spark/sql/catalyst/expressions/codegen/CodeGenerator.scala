@@ -408,6 +408,9 @@ class CodegenContext {
   // Foreach expression that is participating in subexpression elimination, the state to use.
   var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
+  // This tracks the current parameters needed to pass into functions of common sub-expressions.
+  var subExprEliminationParameters = Seq.empty[ParameterizedBoundReference]
+
   // The collection of sub-expression result resetting methods that need to be called on each row.
   val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
@@ -825,10 +828,11 @@ class CodegenContext {
     if (INPUT_ROW == null || currentVars != null) {
       expressions.mkString("\n")
     } else {
+      val structuralSubExpressionsArgs = subExprEliminationParameters.map("int" -> _.parameter)
       splitExpressions(
         expressions,
         funcName,
-        ("InternalRow", INPUT_ROW) +: extraArguments,
+        ("InternalRow", INPUT_ROW) +: (extraArguments ++ structuralSubExpressionsArgs),
         returnType,
         makeSplitFunction,
         foldFunctions)
@@ -1023,7 +1027,7 @@ class CodegenContext {
     val localSubExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
-    expressions.foreach(equivalentExpressions.addExprTree)
+    expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
@@ -1040,11 +1044,103 @@ class CodegenContext {
   }
 
   /**
-   * Checks and sets up the state and codegen for subexpression elimination. This finds the
-   * common subexpressions, generates the functions that evaluate those expressions and populates
-   * the mapping of common subexpressions to the generated functions.
+   * Returns the code for subexpression elimination after splitting it if necessary.
    */
-  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
+  def subexprFunctionsCode: String = {
+    // Whole-stage codegen's subexpression elimination is handled in another code path
+    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
+  }
+
+  /**
+   * This is for sub-expression elimination targeting structurally equivalent expressions.
+   * This is only supported in non whole-stage codegen.
+   *
+   * Two expressions are structurally equivalent if they are the same except for the individual
+   * input slot in current processing row (i.e., `INPUT_ROW`).
+   *
+   * For example, expression a is input[1] + input[2], expression b is input[3] + input[4]. They
+   * are not semantically equivalent in SparkSQL, but they have the same computation on different
+   * input data.
+   *
+   * This method generates a common function for a set of structurally equivalent expressions.
+   * Among the set, the expressions with same semantics are replaced with a function call to the
+   * generated function, by passing in input slots of current processing row.
+   */
+  private def structuralSubexpressionElimination(expressions: Seq[Expression]): Unit = {
+    // Add each expression tree and compute the structurally common subexpressions.
+    expressions.foreach(equivalentExpressions.addStructuralExprTree(this, _))
+
+    val structuralExprs = equivalentExpressions.getAllStructuralExpressions
+
+    structuralExprs.flatMap { case (key, exprMap) =>
+      val exprGroups = exprMap.values.flatMap {
+        case a if a.size > 1 => Some(a)
+        case _ => None
+      }
+      if (exprGroups.isEmpty) {
+        None
+      } else {
+        Some((key.e, exprGroups))
+      }
+    }.foreach { case (expr, exprGroups) =>
+      val parameters = expr.collect {
+        case b: ParameterizedBoundReference => b
+      }
+      val resultIndex = freshName("resultIndex")
+      val parameterString = (parameters.map(p => s"int ${p.parameter}") ++
+        Seq(s"InternalRow $INPUT_ROW", s"int $resultIndex")).mkString(", ")
+
+      val fnName = freshName("subExpr")
+      val isNull = addMutableState(s"${JAVA_BOOLEAN}[]", "subExprIsNull",
+        v => s"$v = new ${JAVA_BOOLEAN}[${exprGroups.size}];")
+
+      val resultJavaType = javaType(expr.dataType)
+      val value = if (resultJavaType.contains("[]")) {
+        // If this expr returns an (multi-dimension) array.
+        val baseIdx = resultJavaType.indexOf("[]")
+        val baseType = resultJavaType.substring(0, baseIdx)
+        val arrayPart = resultJavaType.substring(baseIdx, resultJavaType.length)
+        addMutableState(s"$resultJavaType[]", "subExprValue",
+          v => s"$v = new $baseType[${exprGroups.size}]$arrayPart;")
+      } else {
+        addMutableState(s"${javaType(expr.dataType)}[]", "subExprValue",
+          v => s"$v = new ${javaType(expr.dataType)}[${exprGroups.size}];")
+      }
+
+      // Generate the code for this expression tree and wrap it in a function.
+      // Sets the current parameters.
+      subExprEliminationParameters = parameters
+      val eval = expr.genCode(this)
+      val fn =
+        s"""
+           |private void $fnName($parameterString) {
+           |  ${eval.code}
+           |  $isNull[$resultIndex] = ${eval.isNull};
+           |  $value[$resultIndex] = ${eval.value};
+           |}
+           """.stripMargin
+
+      val funcName = addNewFunction(fnName, fn)
+
+      // Generate sub-expr function calls to the generated function, for each group
+      // of semantically equivalent sub-expressions.
+      exprGroups.zipWithIndex.foreach { case (exprs, idx) =>
+        val e = exprs.head
+        val arguments = (e.collect {
+          case b: BoundReference => b.ordinal.toString
+        } ++ Seq(INPUT_ROW, idx)).mkString(", ")
+        subexprFunctions += s"$funcName($arguments);"
+
+        val state = SubExprEliminationState(
+          JavaCode.isNullGlobal(s"$isNull[$idx]"),
+          JavaCode.global(s"$value[$idx]", expr.dataType))
+        subExprEliminationExprs ++= exprs.map(_ -> state).toMap
+      }
+    }
+    subExprEliminationParameters = Seq.empty
+  }
+
+  private def semanticSubexpressionElimination(expressions: Seq[Expression]): Unit = {
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
@@ -1087,6 +1183,19 @@ class CodegenContext {
         JavaCode.isNullGlobal(isNull),
         JavaCode.global(value, expr.dataType))
       subExprEliminationExprs ++= e.map(_ -> state).toMap
+    }
+  }
+
+  /**
+   * Checks and sets up the state and codegen for subexpression elimination. This finds the
+   * common subexpressions, generates the functions that evaluate those expressions and populates
+   * the mapping of common subexpressions to the generated functions.
+   */
+  private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
+    if (SQLConf.get.structuralSubexpressionEliminationEnabled) {
+      structuralSubexpressionElimination(expressions)
+    } else {
+      semanticSubexpressionElimination(expressions)
     }
   }
 

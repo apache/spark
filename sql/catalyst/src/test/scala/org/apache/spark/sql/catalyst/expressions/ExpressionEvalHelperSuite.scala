@@ -50,6 +50,8 @@ class ExpressionEvalHelperSuite extends SparkFunSuite with ExpressionEvalHelper 
  * instances of the expression.
  */
 case class BadCodegenExpression() extends LeafExpression {
+  // This is invalid expression. Prevent structural sub-expression elimination work on this.
+  override lazy val deterministic: Boolean = false
   override def nullable: Boolean = false
   override def eval(input: InternalRow): Any = 10
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

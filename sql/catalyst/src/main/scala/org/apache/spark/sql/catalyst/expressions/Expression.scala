@@ -167,13 +167,20 @@ abstract class Expression extends TreeNode[Expression] {
         ""
       }
 
+      // Appends necessary parameters from sub-expression elimination.
+      val arguments = (ctx.subExprEliminationParameters.map(_.parameter) ++
+        Seq(ctx.INPUT_ROW)).mkString(", ")
+
+      val parameterString = (ctx.subExprEliminationParameters.map(p => s"int ${p.parameter}") ++
+        Seq(s"InternalRow ${ctx.INPUT_ROW}")).mkString(", ")
+
       val javaType = CodeGenerator.javaType(dataType)
       val newValue = ctx.freshName("value")
 
       val funcName = ctx.freshName(nodeName)
       val funcFullName = ctx.addNewFunction(funcName,
         s"""
-           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |private $javaType $funcName($parameterString) {
            |  ${eval.code}
            |  $setIsNull
            |  return ${eval.value};
@@ -181,7 +188,7 @@ abstract class Expression extends TreeNode[Expression] {
            """.stripMargin)
 
       eval.value = JavaCode.variable(newValue, dataType)
-      eval.code = code"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
+      eval.code = code"$javaType $newValue = $funcFullName($arguments);"
     }
   }
 

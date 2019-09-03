@@ -65,6 +65,40 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   }
 }
 
+/**
+ * This bound reference points to a parameterized slot in an input tuple. It is used in
+ * common sub-expression elimination. When some common sub-expressions have same structural
+ * but different slots of input tuple, we replace `BoundReference` with this parameterized
+ * version. The slot position is parameterized and is given at runtime.
+ */
+case class ParameterizedBoundReference(parameter: String, dataType: DataType, nullable: Boolean)
+  extends LeafExpression {
+
+  override def toString: String = s"input[$parameter, ${dataType.simpleString}, $nullable]"
+
+  override def eval(input: InternalRow): Any = {
+    throw new UnsupportedOperationException(
+      "ParameterizedBoundReference does not implement eval")
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    assert(ctx.currentVars == null && ctx.INPUT_ROW != null,
+      "ParameterizedBoundReference can not be used in whole-stage codegen yet.")
+    val javaType = JavaCode.javaType(dataType)
+    val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, parameter)
+    if (nullable) {
+      ev.copy(code =
+        code"""
+           |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($parameter);
+           |$javaType ${ev.value} = ${ev.isNull} ?
+           |  ${CodeGenerator.defaultValue(dataType)} : ($value);
+         """.stripMargin)
+    } else {
+      ev.copy(code = code"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
+    }
+  }
+}
+
 object BindReferences extends Logging {
 
   def bindReference[A <: Expression](

@@ -345,6 +345,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STRUCTURAL_SUBEXPRESSION_ELIMINATION_ENABLED =
+    buildConf("spark.sql.structuralSubexpressionElimination.enabled")
+      .internal()
+      .doc("When true, structurally equivalent common subexpressions will be eliminated. " +
+        "This config is effective only when spark.sql.subexpressionElimination.enabled is true.")
+      .booleanConf
+      .createWithDefault(true)
+
   val CASE_SENSITIVE = buildConf("spark.sql.caseSensitive")
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -2157,6 +2165,9 @@ class SQLConf extends Serializable with Logging {
 
   def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
+
+  def structuralSubexpressionEliminationEnabled: Boolean =
+    getConf(STRUCTURAL_SUBEXPRESSION_ELIMINATION_ENABLED)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
