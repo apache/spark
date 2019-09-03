@@ -341,11 +341,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     insertInto(tableName,None)
   }
 
+  /**
+    * Inserts the content of the `DataFrame` to the specific table partition.
+    *
+    * {{{
+    *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto(ptTableName,"pt1='0101',pt2='0202'")
+    * }}}
+    *
+    * @since 3.0
+    */
   def insertInto(tableName: String,partionInfo: String): Unit = {
     insertInto(tableName,Some(partionInfo))
   }
 
-  def insertInto(tableName: String,partionInfo: Option[String]): Unit = {
+  private def insertInto(tableName: String,partionInfo: Option[String]): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
