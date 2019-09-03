@@ -42,7 +42,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
 import org.apache.spark.util.ShutdownHookManager
 
@@ -135,6 +135,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
+    isRemoteMode(sessionState) {
+      // Hive 1.2 + not supported in CLI
+      throw new RuntimeException("Remote operations not supported")
+    }
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
     val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
