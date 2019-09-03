@@ -34,7 +34,7 @@ SHOW [ function_kind ] FUNCTIONS ([LIKE] function_name | regex_pattern)
 <dl>
   <dt><code><em>function_kind</em></code></dt>
   <dd>
-    Specifies the name space of the function to be . The valid name spaces are :
+    Specifies the name space of the function to be searched upon. The valid name spaces are :
     <ul>
       <li><b>USER</b> - Looks up the function(s) among the user defined functions.</li>
       <li><b>SYSTEM</b> - Looks up the function(s) among the system defined functions.</li>
