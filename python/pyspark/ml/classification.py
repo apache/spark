@@ -2146,7 +2146,8 @@ class MultilayerPerceptronClassifier(JavaProbabilisticClassifier, MultilayerPerc
 
 
 class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationModel,
-                                              JavaMLWritable, JavaMLReadable):
+                                              MultilayerPerceptronParams, JavaMLWritable,
+                                              JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 

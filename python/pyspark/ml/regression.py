@@ -29,573 +29,673 @@ from pyspark.ml.common import inherit_doc
 from pyspark.sql import DataFrame
 
 
-__all__ = [
-            # 'AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
+__all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
-           # 'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel',
-           # 'GeneralizedLinearRegressionSummary', 'GeneralizedLinearRegressionTrainingSummary',
-           # 'IsotonicRegression', 'IsotonicRegressionModel',
-           # 'LinearRegression', 'LinearRegressionModel',
-           # 'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
-           'RandomForestRegressor', 'RandomForestRegressionModel'
-           ]
+           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel',
+           'GeneralizedLinearRegressionSummary', 'GeneralizedLinearRegressionTrainingSummary',
+           'IsotonicRegression', 'IsotonicRegressionModel',
+           'LinearRegression', 'LinearRegressionModel',
+           'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
+           'RandomForestRegressor', 'RandomForestRegressionModel']
 
-#
-# @inherit_doc
-# class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-#                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-#                        HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth, HasLoss,
-#                        JavaMLWritable, JavaMLReadable):
-#     """
-#     Linear regression.
-#
-#     The learning objective is to minimize the specified loss function, with regularization.
-#     This supports two kinds of loss:
-#
-#     * squaredError (a.k.a squared loss)
-#     * huber (a hybrid of squared error for relatively small errors and absolute error for \
-#     relatively large ones, and we estimate the scale parameter from training data)
-#
-#     This supports multiple types of regularization:
-#
-#     * none (a.k.a. ordinary least squares)
-#     * L2 (ridge regression)
-#     * L1 (Lasso)
-#     * L2 + L1 (elastic net)
-#
-#     Note: Fitting with huber loss only supports none and L2 regularization.
-#
-#     >>> from pyspark.ml.linalg import Vectors
-#     >>> df = spark.createDataFrame([
-#     ...     (1.0, 2.0, Vectors.dense(1.0)),
-#     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
-#     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
-#     >>> model = lr.fit(df)
-#     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-#     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
-#     True
-#     >>> abs(model.coefficients[0] - 1.0) < 0.001
-#     True
-#     >>> abs(model.intercept - 0.0) < 0.001
-#     True
-#     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-#     >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
-#     True
-#     >>> lr.setParams("vector")
-#     Traceback (most recent call last):
-#         ...
-#     TypeError: Method setParams forces keyword arguments.
-#     >>> lr_path = temp_path + "/lr"
-#     >>> lr.save(lr_path)
-#     >>> lr2 = LinearRegression.load(lr_path)
-#     >>> lr2.getMaxIter()
-#     5
-#     >>> model_path = temp_path + "/lr_model"
-#     >>> model.save(model_path)
-#     >>> model2 = LinearRegressionModel.load(model_path)
-#     >>> model.coefficients[0] == model2.coefficients[0]
-#     True
-#     >>> model.intercept == model2.intercept
-#     True
-#     >>> model.numFeatures
-#     1
-#     >>> model.write().format("pmml").save(model_path + "_2")
-#
-#     .. versionadded:: 1.4.0
-#     """
-#
-#     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-#                    "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
-#
-#     loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
-#                  "options: squaredError, huber.", typeConverter=TypeConverters.toString)
-#
-#     epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
-#                     "robustness. Must be > 1.0. Only valid when loss is huber",
-#                     typeConverter=TypeConverters.toFloat)
-#
-#     @keyword_only
-#     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-#                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-#                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-#                  loss="squaredError", epsilon=1.35):
-#         """
-#         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-#                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-#                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-#                  loss="squaredError", epsilon=1.35)
-#         """
-#         super(LinearRegression, self).__init__()
-#         self._java_obj = self._new_java_obj(
-#             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-#         self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35)
-#         kwargs = self._input_kwargs
-#         self.setParams(**kwargs)
-#
-#     @keyword_only
-#     @since("1.4.0")
-#     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-#                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-#                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
-#                   loss="squaredError", epsilon=1.35):
-#         """
-#         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-#                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-#                   standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
-#                   loss="squaredError", epsilon=1.35)
-#         Sets params for linear regression.
-#         """
-#         kwargs = self._input_kwargs
-#         return self._set(**kwargs)
-#
-#     def _create_model(self, java_model):
-#         return LinearRegressionModel(java_model)
-#
-#     @since("2.3.0")
-#     def setEpsilon(self, value):
-#         """
-#         Sets the value of :py:attr:`epsilon`.
-#         """
-#         return self._set(epsilon=value)
-#
-#     @since("2.3.0")
-#     def getEpsilon(self):
-#         """
-#         Gets the value of epsilon or its default value.
-#         """
-#         return self.getOrDefault(self.epsilon)
-#
-#
-# class LinearRegressionModel(JavaModel, JavaPredictionModel, GeneralJavaMLWritable, JavaMLReadable,
-#                             HasTrainingSummary):
-#     """
-#     Model fitted by :class:`LinearRegression`.
-#
-#     .. versionadded:: 1.4.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def coefficients(self):
-#         """
-#         Model coefficients.
-#         """
-#         return self._call_java("coefficients")
-#
-#     @property
-#     @since("1.4.0")
-#     def intercept(self):
-#         """
-#         Model intercept.
-#         """
-#         return self._call_java("intercept")
-#
-#     @property
-#     @since("2.3.0")
-#     def scale(self):
-#         r"""
-#         The value by which :math:`\|y - X'w\|` is scaled down when loss is "huber", otherwise 1.0.
-#         """
-#         return self._call_java("scale")
-#
-#     @property
-#     @since("2.0.0")
-#     def summary(self):
-#         """
-#         Gets summary (e.g. residuals, mse, r-squared ) of model on
-#         training set. An exception is thrown if
-#         `trainingSummary is None`.
-#         """
-#         if self.hasSummary:
-#             return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
-#         else:
-#             raise RuntimeError("No training summary available for this %s" %
-#                                self.__class__.__name__)
-#
-#     @since("2.0.0")
-#     def evaluate(self, dataset):
-#         """
-#         Evaluates the model on a test dataset.
-#
-#         :param dataset:
-#           Test dataset to evaluate model on, where dataset is an
-#           instance of :py:class:`pyspark.sql.DataFrame`
-#         """
-#         if not isinstance(dataset, DataFrame):
-#             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
-#         java_lr_summary = self._call_java("evaluate", dataset)
-#         return LinearRegressionSummary(java_lr_summary)
-#
-#
-# class LinearRegressionSummary(JavaWrapper):
-#     """
-#     .. note:: Experimental
-#
-#     Linear regression results evaluated on a dataset.
-#
-#     .. versionadded:: 2.0.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def predictions(self):
-#         """
-#         Dataframe outputted by the model's `transform` method.
-#         """
-#         return self._call_java("predictions")
-#
-#     @property
-#     @since("2.0.0")
-#     def predictionCol(self):
-#         """
-#         Field in "predictions" which gives the predicted value of
-#         the label at each instance.
-#         """
-#         return self._call_java("predictionCol")
-#
-#     @property
-#     @since("2.0.0")
-#     def labelCol(self):
-#         """
-#         Field in "predictions" which gives the true label of each
-#         instance.
-#         """
-#         return self._call_java("labelCol")
-#
-#     @property
-#     @since("2.0.0")
-#     def featuresCol(self):
-#         """
-#         Field in "predictions" which gives the features of each instance
-#         as a vector.
-#         """
-#         return self._call_java("featuresCol")
-#
-#     @property
-#     @since("2.0.0")
-#     def explainedVariance(self):
-#         r"""
-#         Returns the explained variance regression score.
-#         explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
-#
-#         .. seealso:: `Wikipedia explain variation
-#             <http://en.wikipedia.org/wiki/Explained_variation>`_
-#
-#         .. note:: This ignores instance weights (setting all to 1.0) from
-#             `LinearRegression.weightCol`. This will change in later Spark
-#             versions.
-#         """
-#         return self._call_java("explainedVariance")
-#
-#     @property
-#     @since("2.0.0")
-#     def meanAbsoluteError(self):
-#         """
-#         Returns the mean absolute error, which is a risk function
-#         corresponding to the expected value of the absolute error
-#         loss or l1-norm loss.
-#
-#         .. note:: This ignores instance weights (setting all to 1.0) from
-#             `LinearRegression.weightCol`. This will change in later Spark
-#             versions.
-#         """
-#         return self._call_java("meanAbsoluteError")
-#
-#     @property
-#     @since("2.0.0")
-#     def meanSquaredError(self):
-#         """
-#         Returns the mean squared error, which is a risk function
-#         corresponding to the expected value of the squared error
-#         loss or quadratic loss.
-#
-#         .. note:: This ignores instance weights (setting all to 1.0) from
-#             `LinearRegression.weightCol`. This will change in later Spark
-#             versions.
-#         """
-#         return self._call_java("meanSquaredError")
-#
-#     @property
-#     @since("2.0.0")
-#     def rootMeanSquaredError(self):
-#         """
-#         Returns the root mean squared error, which is defined as the
-#         square root of the mean squared error.
-#
-#         .. note:: This ignores instance weights (setting all to 1.0) from
-#             `LinearRegression.weightCol`. This will change in later Spark
-#             versions.
-#         """
-#         return self._call_java("rootMeanSquaredError")
-#
-#     @property
-#     @since("2.0.0")
-#     def r2(self):
-#         """
-#         Returns R^2, the coefficient of determination.
-#
-#         .. seealso:: `Wikipedia coefficient of determination
-#             <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
-#
-#         .. note:: This ignores instance weights (setting all to 1.0) from
-#             `LinearRegression.weightCol`. This will change in later Spark
-#             versions.
-#         """
-#         return self._call_java("r2")
-#
-#     @property
-#     @since("2.4.0")
-#     def r2adj(self):
-#         """
-#         Returns Adjusted R^2, the adjusted coefficient of determination.
-#
-#         .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2
-#             <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
-#
-#         .. note:: This ignores instance weights (setting all to 1.0) from
-#             `LinearRegression.weightCol`. This will change in later Spark versions.
-#         """
-#         return self._call_java("r2adj")
-#
-#     @property
-#     @since("2.0.0")
-#     def residuals(self):
-#         """
-#         Residuals (label - predicted value)
-#         """
-#         return self._call_java("residuals")
-#
-#     @property
-#     @since("2.0.0")
-#     def numInstances(self):
-#         """
-#         Number of instances in DataFrame predictions
-#         """
-#         return self._call_java("numInstances")
-#
-#     @property
-#     @since("2.2.0")
-#     def degreesOfFreedom(self):
-#         """
-#         Degrees of freedom.
-#         """
-#         return self._call_java("degreesOfFreedom")
-#
-#     @property
-#     @since("2.0.0")
-#     def devianceResiduals(self):
-#         """
-#         The weighted residuals, the usual residuals rescaled by the
-#         square root of the instance weights.
-#         """
-#         return self._call_java("devianceResiduals")
-#
-#     @property
-#     @since("2.0.0")
-#     def coefficientStandardErrors(self):
-#         """
-#         Standard error of estimated coefficients and intercept.
-#         This value is only available when using the "normal" solver.
-#
-#         If :py:attr:`LinearRegression.fitIntercept` is set to True,
-#         then the last element returned corresponds to the intercept.
-#
-#         .. seealso:: :py:attr:`LinearRegression.solver`
-#         """
-#         return self._call_java("coefficientStandardErrors")
-#
-#     @property
-#     @since("2.0.0")
-#     def tValues(self):
-#         """
-#         T-statistic of estimated coefficients and intercept.
-#         This value is only available when using the "normal" solver.
-#
-#         If :py:attr:`LinearRegression.fitIntercept` is set to True,
-#         then the last element returned corresponds to the intercept.
-#
-#         .. seealso:: :py:attr:`LinearRegression.solver`
-#         """
-#         return self._call_java("tValues")
-#
-#     @property
-#     @since("2.0.0")
-#     def pValues(self):
-#         """
-#         Two-sided p-value of estimated coefficients and intercept.
-#         This value is only available when using the "normal" solver.
-#
-#         If :py:attr:`LinearRegression.fitIntercept` is set to True,
-#         then the last element returned corresponds to the intercept.
-#
-#         .. seealso:: :py:attr:`LinearRegression.solver`
-#         """
-#         return self._call_java("pValues")
-#
-#
-# @inherit_doc
-# class LinearRegressionTrainingSummary(LinearRegressionSummary):
-#     """
-#     .. note:: Experimental
-#
-#     Linear regression training results. Currently, the training summary ignores the
-#     training weights except for the objective trace.
-#
-#     .. versionadded:: 2.0.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def objectiveHistory(self):
-#         """
-#         Objective function (scaled loss + regularization) at each
-#         iteration.
-#         This value is only available when using the "l-bfgs" solver.
-#
-#         .. seealso:: :py:attr:`LinearRegression.solver`
-#         """
-#         return self._call_java("objectiveHistory")
-#
-#     @property
-#     @since("2.0.0")
-#     def totalIterations(self):
-#         """
-#         Number of training iterations until termination.
-#         This value is only available when using the "l-bfgs" solver.
-#
-#         .. seealso:: :py:attr:`LinearRegression.solver`
-#         """
-#         return self._call_java("totalIterations")
-#
-#
-# @inherit_doc
-# class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-#                          HasWeightCol, JavaMLWritable, JavaMLReadable):
-#     """
-#     Currently implemented using parallelized pool adjacent violators algorithm.
-#     Only univariate (single feature) algorithm supported.
-#
-#     >>> from pyspark.ml.linalg import Vectors
-#     >>> df = spark.createDataFrame([
-#     ...     (1.0, Vectors.dense(1.0)),
-#     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-#     >>> ir = IsotonicRegression()
-#     >>> model = ir.fit(df)
-#     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-#     >>> model.transform(test0).head().prediction
-#     0.0
-#     >>> model.boundaries
-#     DenseVector([0.0, 1.0])
-#     >>> ir_path = temp_path + "/ir"
-#     >>> ir.save(ir_path)
-#     >>> ir2 = IsotonicRegression.load(ir_path)
-#     >>> ir2.getIsotonic()
-#     True
-#     >>> model_path = temp_path + "/ir_model"
-#     >>> model.save(model_path)
-#     >>> model2 = IsotonicRegressionModel.load(model_path)
-#     >>> model.boundaries == model2.boundaries
-#     True
-#     >>> model.predictions == model2.predictions
-#     True
-#
-#     .. versionadded:: 1.6.0
-#     """
-#
-#     isotonic = \
-#         Param(Params._dummy(), "isotonic",
-#               "whether the output sequence should be isotonic/increasing (true) or" +
-#               "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
-#     featureIndex = \
-#         Param(Params._dummy(), "featureIndex",
-#               "The index of the feature if featuresCol is a vector column, no effect otherwise.",
-#               typeConverter=TypeConverters.toInt)
-#
-#     @keyword_only
-#     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-#                  weightCol=None, isotonic=True, featureIndex=0):
-#         """
-#         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-#                  weightCol=None, isotonic=True, featureIndex=0):
-#         """
-#         super(IsotonicRegression, self).__init__()
-#         self._java_obj = self._new_java_obj(
-#             "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
-#         self._setDefault(isotonic=True, featureIndex=0)
-#         kwargs = self._input_kwargs
-#         self.setParams(**kwargs)
-#
-#     @keyword_only
-#     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-#                   weightCol=None, isotonic=True, featureIndex=0):
-#         """
-#         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-#                  weightCol=None, isotonic=True, featureIndex=0):
-#         Set the params for IsotonicRegression.
-#         """
-#         kwargs = self._input_kwargs
-#         return self._set(**kwargs)
-#
-#     def _create_model(self, java_model):
-#         return IsotonicRegressionModel(java_model)
-#
-#     def setIsotonic(self, value):
-#         """
-#         Sets the value of :py:attr:`isotonic`.
-#         """
-#         return self._set(isotonic=value)
-#
-#     def getIsotonic(self):
-#         """
-#         Gets the value of isotonic or its default value.
-#         """
-#         return self.getOrDefault(self.isotonic)
-#
-#     def setFeatureIndex(self, value):
-#         """
-#         Sets the value of :py:attr:`featureIndex`.
-#         """
-#         return self._set(featureIndex=value)
-#
-#     def getFeatureIndex(self):
-#         """
-#         Gets the value of featureIndex or its default value.
-#         """
-#         return self.getOrDefault(self.featureIndex)
-#
-#
-# class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
-#     """
-#     Model fitted by :class:`IsotonicRegression`.
-#
-#     .. versionadded:: 1.6.0
-#     """
-#
-#     @property
-#     @since("1.6.0")
-#     def boundaries(self):
-#         """
-#         Boundaries in increasing order for which predictions are known.
-#         """
-#         return self._call_java("boundaries")
-#
-#     @property
-#     @since("1.6.0")
-#     def predictions(self):
-#         """
-#         Predictions associated with the boundaries at the same index, monotone because of isotonic
-#         regression.
-#         """
-#         return self._call_java("predictions")
-#
-#
-#
+
+class LinearRegressionParams(HasRegParam, HasElasticNetParam, HasMaxIter, HasTol, HasFitIntercept,
+                             HasStandardization, HasWeightCol, HasSolver, HasAggregationDepth, HasLoss):
+    """
+    (Private) Params for linear regression.
+
+    .. versionadded:: 3.0.0
+    """
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
+
+    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
+                 "options: squaredError, huber.", typeConverter=TypeConverters.toString)
+
+    epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
+                    "robustness. Must be > 1.0. Only valid when loss is huber",
+                    typeConverter=TypeConverters.toFloat)
+
+    def getEpsilon(self):
+        """
+        Gets the value of epsilon or its default value.
+        """
+        return self.getOrDefault(self.epsilon)
+
+
+@inherit_doc
+class LinearRegression(JavaPredictor, LinearRegressionParams, JavaMLWritable, JavaMLReadable):
+    """
+    Linear regression.
+
+    The learning objective is to minimize the specified loss function, with regularization.
+    This supports two kinds of loss:
+
+    * squaredError (a.k.a squared loss)
+    * huber (a hybrid of squared error for relatively small errors and absolute error for \
+    relatively large ones, and we estimate the scale parameter from training data)
+
+    This supports multiple types of regularization:
+
+    * none (a.k.a. ordinary least squares)
+    * L2 (ridge regression)
+    * L1 (Lasso)
+    * L2 + L1 (elastic net)
+
+    Note: Fitting with huber loss only supports none and L2 regularization.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
+    ...     (1.0, 2.0, Vectors.dense(1.0)),
+    ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
+    >>> model = lr.fit(df)
+    >>> model.getSolver()
+    'normal'
+    >>> model.setFeaturesCol("features")
+    LinearRegression...
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
+    True
+    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    True
+    >>> abs(model.coefficients[0] - 1.0) < 0.001
+    True
+    >>> abs(model.intercept - 0.0) < 0.001
+    True
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    True
+    >>> lr.setParams("vector")
+    Traceback (most recent call last):
+        ...
+    TypeError: Method setParams forces keyword arguments.
+    >>> lr_path = temp_path + "/lr"
+    >>> lr.save(lr_path)
+    >>> lr2 = LinearRegression.load(lr_path)
+    >>> lr2.getMaxIter()
+    5
+    >>> model_path = temp_path + "/lr_model"
+    >>> model.save(model_path)
+    >>> model2 = LinearRegressionModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.intercept == model2.intercept
+    True
+    >>> model.numFeatures
+    1
+    >>> model.write().format("pmml").save(model_path + "_2")
+
+    .. versionadded:: 1.4.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
+                 loss="squaredError", epsilon=1.35):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
+                 loss="squaredError", epsilon=1.35)
+        """
+        super(LinearRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.LinearRegression", self.uid)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("1.4.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
+                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
+                  loss="squaredError", epsilon=1.35):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
+                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
+                  loss="squaredError", epsilon=1.35)
+        Sets params for linear regression.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return LinearRegressionModel(java_model)
+
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    def setStandardization(self, value):
+        """
+        Sets the value of :py:attr:`standardization`.
+        """
+        return self._set(standardization=value)
+
+    def setElasticNetParam(self, value):
+        """
+        Sets the value of :py:attr:`elasticNetParam`.
+        """
+        return self._set(elasticNetParam=value)
+
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    @since("2.3.0")
+    def setEpsilon(self, value):
+        """
+        Sets the value of :py:attr:`epsilon`.
+        """
+        return self._set(epsilon=value)
+
+
+class LinearRegressionModel(JavaPredictionModel, LinearRegressionParams,
+                            JavaMLWritable, JavaMLReadable, HasTrainingSummary):
+    """
+    Model fitted by :class:`LinearRegression`.
+
+    .. versionadded:: 1.4.0
+    """
+
+    @property
+    @since("2.0.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("1.4.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("2.3.0")
+    def scale(self):
+        r"""
+        The value by which :math:`\|y - X'w\|` is scaled down when loss is "huber", otherwise 1.0.
+        """
+        return self._call_java("scale")
+
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary (e.g. residuals, mse, r-squared ) of model on
+        training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            return LinearRegressionTrainingSummary(super(LinearRegressionModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("2.0.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_lr_summary = self._call_java("evaluate", dataset)
+        return LinearRegressionSummary(java_lr_summary)
+
+
+class LinearRegressionSummary(JavaWrapper):
+    """
+    Linear regression results evaluated on a dataset.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        Dataframe outputted by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.0.0")
+    def predictionCol(self):
+        """
+        Field in "predictions" which gives the predicted value of
+        the label at each instance.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("2.0.0")
+    def labelCol(self):
+        """
+        Field in "predictions" which gives the true label of each
+        instance.
+        """
+        return self._call_java("labelCol")
+
+    @property
+    @since("2.0.0")
+    def featuresCol(self):
+        """
+        Field in "predictions" which gives the features of each instance
+        as a vector.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.0.0")
+    def explainedVariance(self):
+        r"""
+        Returns the explained variance regression score.
+        explainedVariance = :math:`1 - \frac{variance(y - \hat{y})}{variance(y)}`
+
+        .. seealso:: `Wikipedia explain variation
+            <http://en.wikipedia.org/wiki/Explained_variation>`_
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
+        """
+        return self._call_java("explainedVariance")
+
+    @property
+    @since("2.0.0")
+    def meanAbsoluteError(self):
+        """
+        Returns the mean absolute error, which is a risk function
+        corresponding to the expected value of the absolute error
+        loss or l1-norm loss.
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
+        """
+        return self._call_java("meanAbsoluteError")
+
+    @property
+    @since("2.0.0")
+    def meanSquaredError(self):
+        """
+        Returns the mean squared error, which is a risk function
+        corresponding to the expected value of the squared error
+        loss or quadratic loss.
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
+        """
+        return self._call_java("meanSquaredError")
+
+    @property
+    @since("2.0.0")
+    def rootMeanSquaredError(self):
+        """
+        Returns the root mean squared error, which is defined as the
+        square root of the mean squared error.
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
+        """
+        return self._call_java("rootMeanSquaredError")
+
+    @property
+    @since("2.0.0")
+    def r2(self):
+        """
+        Returns R^2, the coefficient of determination.
+
+        .. seealso:: `Wikipedia coefficient of determination
+            <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark
+            versions.
+        """
+        return self._call_java("r2")
+
+    @property
+    @since("2.4.0")
+    def r2adj(self):
+        """
+        Returns Adjusted R^2, the adjusted coefficient of determination.
+
+        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2
+            <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark versions.
+        """
+        return self._call_java("r2adj")
+
+    @property
+    @since("2.0.0")
+    def residuals(self):
+        """
+        Residuals (label - predicted value)
+        """
+        return self._call_java("residuals")
+
+    @property
+    @since("2.0.0")
+    def numInstances(self):
+        """
+        Number of instances in DataFrame predictions
+        """
+        return self._call_java("numInstances")
+
+    @property
+    @since("2.2.0")
+    def degreesOfFreedom(self):
+        """
+        Degrees of freedom.
+        """
+        return self._call_java("degreesOfFreedom")
+
+    @property
+    @since("2.0.0")
+    def devianceResiduals(self):
+        """
+        The weighted residuals, the usual residuals rescaled by the
+        square root of the instance weights.
+        """
+        return self._call_java("devianceResiduals")
+
+    @property
+    @since("2.0.0")
+    def coefficientStandardErrors(self):
+        """
+        Standard error of estimated coefficients and intercept.
+        This value is only available when using the "normal" solver.
+
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
+        """
+        return self._call_java("coefficientStandardErrors")
+
+    @property
+    @since("2.0.0")
+    def tValues(self):
+        """
+        T-statistic of estimated coefficients and intercept.
+        This value is only available when using the "normal" solver.
+
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
+        """
+        return self._call_java("tValues")
+
+    @property
+    @since("2.0.0")
+    def pValues(self):
+        """
+        Two-sided p-value of estimated coefficients and intercept.
+        This value is only available when using the "normal" solver.
+
+        If :py:attr:`LinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
+        """
+        return self._call_java("pValues")
+
+
+@inherit_doc
+class LinearRegressionTrainingSummary(LinearRegressionSummary):
+    """
+    Linear regression training results. Currently, the training summary ignores the
+    training weights except for the objective trace.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def objectiveHistory(self):
+        """
+        Objective function (scaled loss + regularization) at each
+        iteration.
+        This value is only available when using the "l-bfgs" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
+        """
+        return self._call_java("objectiveHistory")
+
+    @property
+    @since("2.0.0")
+    def totalIterations(self):
+        """
+        Number of training iterations until termination.
+        This value is only available when using the "l-bfgs" solver.
+
+        .. seealso:: :py:attr:`LinearRegression.solver`
+        """
+        return self._call_java("totalIterations")
+
+
+class IsotonicRegressionBase(HasFeaturesCol, HasLabelCol, HasPredictionCol, HasWeightCol):
+    """
+    (Private) Params for isotonic regressionBase.
+    """
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    def setFeatureIndex(self, value):
+        """
+        Sets the value of :py:attr:`featureIndex`.
+        """
+        return self._set(featureIndex=value)
+
+    isotonic = \
+        Param(Params._dummy(), "isotonic",
+              "whether the output sequence should be isotonic/increasing (true) or" +
+              "antitonic/decreasing (false).", typeConverter=TypeConverters.toBoolean)
+
+    def getIsotonic(self):
+        """
+        Gets the value of isotonic or its default value.
+        """
+        return self.getOrDefault(self.isotonic)
+
+    featureIndex = \
+        Param(Params._dummy(), "featureIndex",
+              "The index of the feature if featuresCol is a vector column, no effect otherwise.",
+              typeConverter=TypeConverters.toInt)
+
+    def getFeatureIndex(self):
+        """
+        Gets the value of featureIndex or its default value.
+        """
+        return self.getOrDefault(self.featureIndex)
+
+
+@inherit_doc
+class IsotonicRegression(JavaEstimator, IsotonicRegressionBase, JavaMLWritable, JavaMLReadable):
+    """
+    Currently implemented using parallelized pool adjacent violators algorithm.
+    Only univariate (single feature) algorithm supported.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0)),
+    ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
+    >>> ir = IsotonicRegression()
+    >>> ir.getIsotonic()
+    True
+    >>> model = ir.fit(df)
+    >>> model.getLabelCol()
+    'label'
+    >>> model.setFeaturesCol("features")
+    IsotonicRegression...
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.transform(test0).head().prediction
+    0.0
+    >>> model.boundaries
+    DenseVector([0.0, 1.0])
+    >>> ir_path = temp_path + "/ir"
+    >>> ir.save(ir_path)
+    >>> ir2 = IsotonicRegression.load(ir_path)
+    >>> ir2.getIsotonic()
+    True
+    >>> model_path = temp_path + "/ir_model"
+    >>> model.save(model_path)
+    >>> model2 = IsotonicRegressionModel.load(model_path)
+    >>> model.boundaries == model2.boundaries
+    True
+    >>> model.predictions == model2.predictions
+    True
+
+    .. versionadded:: 1.6.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 weightCol=None, isotonic=True, featureIndex=0):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 weightCol=None, isotonic=True, featureIndex=0):
+        """
+        super(IsotonicRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.IsotonicRegression", self.uid)
+        self._setDefault(isotonic=True, featureIndex=0)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  weightCol=None, isotonic=True, featureIndex=0):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 weightCol=None, isotonic=True, featureIndex=0):
+        Set the params for IsotonicRegression.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return IsotonicRegressionModel(java_model)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setIsotonic(self, value):
+        """
+        Sets the value of :py:attr:`isotonic`.
+        """
+        return self._set(isotonic=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+
+class IsotonicRegressionModel(JavaModel, IsotonicRegressionBase, JavaMLWritable, JavaMLReadable):
+    """
+    Model fitted by :class:`IsotonicRegression`.
+
+    .. versionadded:: 1.6.0
+    """
+
+    @property
+    @since("1.6.0")
+    def boundaries(self):
+        """
+        Boundaries in increasing order for which predictions are known.
+        """
+        return self._call_java("boundaries")
+
+    @property
+    @since("1.6.0")
+    def predictions(self):
+        """
+        Predictions associated with the boundaries at the same index, monotone because of isotonic
+        regression.
+        """
+        return self._call_java("predictions")
 
 
 class DecisionTreeRegressorParams(DecisionTreeParams, TreeRegressorParams, HasVarianceCol):
     """
     (Private) Params for DecisionTree Regressor.
+
+    .. versionadded:: 3.0.0
     """
     pass
 
@@ -612,7 +712,7 @@ class DecisionTreeRegressor(JavaPredictor, DecisionTreeRegressorParams,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance", leafCol="leafId")
+    >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
     >>> model = dt.fit(df)
     >>> model.getVarianceCol()
     'variance'
@@ -627,6 +727,10 @@ class DecisionTreeRegressor(JavaPredictor, DecisionTreeRegressorParams,
     >>> model.numFeatures
     1
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> model.predictLeaf(test0.head().features)
+    0.0
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -779,7 +883,6 @@ class DecisionTreeRegressor(JavaPredictor, DecisionTreeRegressorParams,
         return self._set(weightCol=value)
 
 
-@inherit_doc
 class DecisionTreeRegressionModel(DecisionTreeModel, DecisionTreeRegressorParams,
                                   JavaMLWritable, JavaMLReadable):
     """
@@ -809,9 +912,12 @@ class DecisionTreeRegressionModel(DecisionTreeModel, DecisionTreeRegressorParams
         """
         return self._call_java("featureImportances")
 
+
 class RandomForestRegressorParams(RandomForestParams, TreeRegressorParams):
     """
     (Private) Params for RandomForest Regressor.
+
+    .. versionadded:: 3.0.0
     """
     pass
 
@@ -829,13 +935,21 @@ class RandomForestRegressor(JavaPredictor, RandomForestRegressorParams,
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42, leafCol="leafId")
+    >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
     >>> model = rf.fit(df)
+    >>> model.getSeed()
+    42
+    >>> model.setLeafCol("leafId")
+    RandomForestRegressionModel...
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> model.predictLeaf(test0.head().features)
+    DenseVector([0.0, 0.0])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1005,7 +1119,7 @@ class RandomForestRegressionModel(TreeEnsembleModel, RandomForestRegressorParams
 
 class GBTRegressorParams(GBTParams, TreeRegressorParams):
     """
-    Private class to track supported GBTRegressor params.
+    (Private) class to track supported GBTRegressor params.
 
     .. versionadded:: 3.0.0
     """
@@ -1038,11 +1152,15 @@ class GBTRegressor(JavaPredictor, GBTRegressorParams, JavaMLWritable, JavaMLRead
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42, leafCol="leafId")
-    >>> print(gbt.getImpurity())
-    variance
-    >>> print(gbt.getFeatureSubsetStrategy())
-    all
+    >>> gbt.getImpurity()
+    'variance'
+    >>> gbt.getFeatureSubsetStrategy()
+    'all'
     >>> model = gbt.fit(df)
+    >>> model.getMaxDepth()
+    2
+    >>> model.setFeaturesCol("features")
+    GBTRegressionModel...
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> model.numFeatures
@@ -1050,6 +1168,10 @@ class GBTRegressor(JavaPredictor, GBTRegressorParams, JavaMLWritable, JavaMLRead
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
+    >>> model.predictLeaf(test0.head().features)
+    DenseVector([0.0, 0.0, 0.0, 0.0, 0.0])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -1169,6 +1291,12 @@ class GBTRegressor(JavaPredictor, GBTRegressorParams, JavaMLWritable, JavaMLRead
         """
         return self._set(cacheNodeIds=value)
 
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
     @since("1.4.0")
     def setImpurity(self, value):
         """
@@ -1177,18 +1305,36 @@ class GBTRegressor(JavaPredictor, GBTRegressorParams, JavaMLWritable, JavaMLRead
         return self._set(impurity=value)
 
     @since("1.4.0")
-    def setLossType(self, value):
-        """
-        Sets the value of :py:attr:`lossType`.
-        """
-        return self._set(lossType=value)
-
-    @since("1.4.0")
     def setSubsamplingRate(self, value):
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
         return self._set(subsamplingRate=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
+
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("1.4.0")
+    def setLossType(self, value):
+        """
+        Sets the value of :py:attr:`lossType`.
+        """
+        return self._set(lossType=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
@@ -1248,639 +1394,728 @@ class GBTRegressionModel(TreeEnsembleModel, GBTRegressorParams,
         """
         return self._call_java("evaluateEachIteration", dataset, loss)
 
-#
-# @inherit_doc
-# class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-#                             HasFitIntercept, HasMaxIter, HasTol, HasAggregationDepth,
-#                             JavaMLWritable, JavaMLReadable):
-#     """
-#     .. note:: Experimental
-#
-#     Accelerated Failure Time (AFT) Model Survival Regression
-#
-#     Fit a parametric AFT survival regression model based on the Weibull distribution
-#     of the survival time.
-#
-#     .. seealso:: `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
-#
-#     >>> from pyspark.ml.linalg import Vectors
-#     >>> df = spark.createDataFrame([
-#     ...     (1.0, Vectors.dense(1.0), 1.0),
-#     ...     (1e-40, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
-#     >>> aftsr = AFTSurvivalRegression()
-#     >>> model = aftsr.fit(df)
-#     >>> model.predict(Vectors.dense(6.3))
-#     1.0
-#     >>> model.predictQuantiles(Vectors.dense(6.3))
-#     DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
-#     >>> model.transform(df).show()
-#     +-------+---------+------+----------+
-#     |  label| features|censor|prediction|
-#     +-------+---------+------+----------+
-#     |    1.0|    [1.0]|   1.0|       1.0|
-#     |1.0E-40|(1,[],[])|   0.0|       1.0|
-#     +-------+---------+------+----------+
-#     ...
-#     >>> aftsr_path = temp_path + "/aftsr"
-#     >>> aftsr.save(aftsr_path)
-#     >>> aftsr2 = AFTSurvivalRegression.load(aftsr_path)
-#     >>> aftsr2.getMaxIter()
-#     100
-#     >>> model_path = temp_path + "/aftsr_model"
-#     >>> model.save(model_path)
-#     >>> model2 = AFTSurvivalRegressionModel.load(model_path)
-#     >>> model.coefficients == model2.coefficients
-#     True
-#     >>> model.intercept == model2.intercept
-#     True
-#     >>> model.scale == model2.scale
-#     True
-#
-#     .. versionadded:: 1.6.0
-#     """
-#
-#     censorCol = Param(Params._dummy(), "censorCol",
-#                       "censor column name. The value of this column could be 0 or 1. " +
-#                       "If the value is 1, it means the event has occurred i.e. " +
-#                       "uncensored; otherwise censored.", typeConverter=TypeConverters.toString)
-#     quantileProbabilities = \
-#         Param(Params._dummy(), "quantileProbabilities",
-#               "quantile probabilities array. Values of the quantile probabilities array " +
-#               "should be in the range (0, 1) and the array should be non-empty.",
-#               typeConverter=TypeConverters.toListFloat)
-#     quantilesCol = Param(Params._dummy(), "quantilesCol",
-#                          "quantiles column name. This column will output quantiles of " +
-#                          "corresponding quantileProbabilities if it is set.",
-#                          typeConverter=TypeConverters.toString)
-#
-#     @keyword_only
-#     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-#                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-#                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-#                  quantilesCol=None, aggregationDepth=2):
-#         """
-#         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-#                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
-#                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-#                  quantilesCol=None, aggregationDepth=2)
-#         """
-#         super(AFTSurvivalRegression, self).__init__()
-#         self._java_obj = self._new_java_obj(
-#             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
-#         self._setDefault(censorCol="censor",
-#                          quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-#                          maxIter=100, tol=1E-6)
-#         kwargs = self._input_kwargs
-#         self.setParams(**kwargs)
-#
-#     @keyword_only
-#     @since("1.6.0")
-#     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-#                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-#                   quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
-#                   quantilesCol=None, aggregationDepth=2):
-#         """
-#         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-#                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
-#                   quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
-#                   quantilesCol=None, aggregationDepth=2):
-#         """
-#         kwargs = self._input_kwargs
-#         return self._set(**kwargs)
-#
-#     def _create_model(self, java_model):
-#         return AFTSurvivalRegressionModel(java_model)
-#
-#     @since("1.6.0")
-#     def setCensorCol(self, value):
-#         """
-#         Sets the value of :py:attr:`censorCol`.
-#         """
-#         return self._set(censorCol=value)
-#
-#     @since("1.6.0")
-#     def getCensorCol(self):
-#         """
-#         Gets the value of censorCol or its default value.
-#         """
-#         return self.getOrDefault(self.censorCol)
-#
-#     @since("1.6.0")
-#     def setQuantileProbabilities(self, value):
-#         """
-#         Sets the value of :py:attr:`quantileProbabilities`.
-#         """
-#         return self._set(quantileProbabilities=value)
-#
-#     @since("1.6.0")
-#     def getQuantileProbabilities(self):
-#         """
-#         Gets the value of quantileProbabilities or its default value.
-#         """
-#         return self.getOrDefault(self.quantileProbabilities)
-#
-#     @since("1.6.0")
-#     def setQuantilesCol(self, value):
-#         """
-#         Sets the value of :py:attr:`quantilesCol`.
-#         """
-#         return self._set(quantilesCol=value)
-#
-#     @since("1.6.0")
-#     def getQuantilesCol(self):
-#         """
-#         Gets the value of quantilesCol or its default value.
-#         """
-#         return self.getOrDefault(self.quantilesCol)
-#
-#
-# class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
-#     """
-#     .. note:: Experimental
-#
-#     Model fitted by :class:`AFTSurvivalRegression`.
-#
-#     .. versionadded:: 1.6.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def coefficients(self):
-#         """
-#         Model coefficients.
-#         """
-#         return self._call_java("coefficients")
-#
-#     @property
-#     @since("1.6.0")
-#     def intercept(self):
-#         """
-#         Model intercept.
-#         """
-#         return self._call_java("intercept")
-#
-#     @property
-#     @since("1.6.0")
-#     def scale(self):
-#         """
-#         Model scale parameter.
-#         """
-#         return self._call_java("scale")
-#
-#     @since("2.0.0")
-#     def predictQuantiles(self, features):
-#         """
-#         Predicted Quantiles
-#         """
-#         return self._call_java("predictQuantiles", features)
-#
-#     @since("2.0.0")
-#     def predict(self, features):
-#         """
-#         Predicted value
-#         """
-#         return self._call_java("predict", features)
-#
-#
-# @inherit_doc
-# class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
-#                                   HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
-#                                   HasSolver, JavaMLWritable, JavaMLReadable):
-#     """
-#     .. note:: Experimental
-#
-#     Generalized Linear Regression.
-#
-#     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
-#     predictor (link function) and a description of the error distribution (family). It supports
-#     "gaussian", "binomial", "poisson", "gamma" and "tweedie" as family. Valid link functions for
-#     each family is listed below. The first link function of each family is the default one.
-#
-#     * "gaussian" -> "identity", "log", "inverse"
-#
-#     * "binomial" -> "logit", "probit", "cloglog"
-#
-#     * "poisson"  -> "log", "identity", "sqrt"
-#
-#     * "gamma"    -> "inverse", "identity", "log"
-#
-#     * "tweedie"  -> power link function specified through "linkPower". \
-#                     The default link power in the tweedie family is 1 - variancePower.
-#
-#     .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
-#
-#     >>> from pyspark.ml.linalg import Vectors
-#     >>> df = spark.createDataFrame([
-#     ...     (1.0, Vectors.dense(0.0, 0.0)),
-#     ...     (1.0, Vectors.dense(1.0, 2.0)),
-#     ...     (2.0, Vectors.dense(0.0, 0.0)),
-#     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
-#     >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
-#     >>> model = glr.fit(df)
-#     >>> transformed = model.transform(df)
-#     >>> abs(transformed.head().prediction - 1.5) < 0.001
-#     True
-#     >>> abs(transformed.head().p - 1.5) < 0.001
-#     True
-#     >>> model.coefficients
-#     DenseVector([1.5..., -1.0...])
-#     >>> model.numFeatures
-#     2
-#     >>> abs(model.intercept - 1.5) < 0.001
-#     True
-#     >>> glr_path = temp_path + "/glr"
-#     >>> glr.save(glr_path)
-#     >>> glr2 = GeneralizedLinearRegression.load(glr_path)
-#     >>> glr.getFamily() == glr2.getFamily()
-#     True
-#     >>> model_path = temp_path + "/glr_model"
-#     >>> model.save(model_path)
-#     >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
-#     >>> model.intercept == model2.intercept
-#     True
-#     >>> model.coefficients[0] == model2.coefficients[0]
-#     True
-#
-#     .. versionadded:: 2.0.0
-#     """
-#
-#     family = Param(Params._dummy(), "family", "The name of family which is a description of " +
-#                    "the error distribution to be used in the model. Supported options: " +
-#                    "gaussian (default), binomial, poisson, gamma and tweedie.",
-#                    typeConverter=TypeConverters.toString)
-#     link = Param(Params._dummy(), "link", "The name of link function which provides the " +
-#                  "relationship between the linear predictor and the mean of the distribution " +
-#                  "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
-#                  "and sqrt.", typeConverter=TypeConverters.toString)
-#     linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
-#                               "predictor) column name", typeConverter=TypeConverters.toString)
-#     variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
-#                           "of the Tweedie distribution which characterizes the relationship " +
-#                           "between the variance and mean of the distribution. Only applicable " +
-#                           "for the Tweedie family. Supported values: 0 and [1, Inf).",
-#                           typeConverter=TypeConverters.toFloat)
-#     linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
-#                       "Only applicable to the Tweedie family.",
-#                       typeConverter=TypeConverters.toFloat)
-#     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
-#                    "options: irls.", typeConverter=TypeConverters.toString)
-#     offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
-#                       "or empty, we treat all instance offsets as 0.0",
-#                       typeConverter=TypeConverters.toString)
-#
-#     @keyword_only
-#     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
-#                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-#                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
-#                  variancePower=0.0, linkPower=None, offsetCol=None):
-#         """
-#         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
-#                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-#                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-#                  variancePower=0.0, linkPower=None, offsetCol=None)
-#         """
-#         super(GeneralizedLinearRegression, self).__init__()
-#         self._java_obj = self._new_java_obj(
-#             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
-#         self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
-#                          variancePower=0.0)
-#         kwargs = self._input_kwargs
-#
-#         self.setParams(**kwargs)
-#
-#     @keyword_only
-#     @since("2.0.0")
-#     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
-#                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-#                   regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
-#                   variancePower=0.0, linkPower=None, offsetCol=None):
-#         """
-#         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
-#                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-#                   regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
-#                   variancePower=0.0, linkPower=None, offsetCol=None)
-#         Sets params for generalized linear regression.
-#         """
-#         kwargs = self._input_kwargs
-#         return self._set(**kwargs)
-#
-#     def _create_model(self, java_model):
-#         return GeneralizedLinearRegressionModel(java_model)
-#
-#     @since("2.0.0")
-#     def setFamily(self, value):
-#         """
-#         Sets the value of :py:attr:`family`.
-#         """
-#         return self._set(family=value)
-#
-#     @since("2.0.0")
-#     def getFamily(self):
-#         """
-#         Gets the value of family or its default value.
-#         """
-#         return self.getOrDefault(self.family)
-#
-#     @since("2.0.0")
-#     def setLinkPredictionCol(self, value):
-#         """
-#         Sets the value of :py:attr:`linkPredictionCol`.
-#         """
-#         return self._set(linkPredictionCol=value)
-#
-#     @since("2.0.0")
-#     def getLinkPredictionCol(self):
-#         """
-#         Gets the value of linkPredictionCol or its default value.
-#         """
-#         return self.getOrDefault(self.linkPredictionCol)
-#
-#     @since("2.0.0")
-#     def setLink(self, value):
-#         """
-#         Sets the value of :py:attr:`link`.
-#         """
-#         return self._set(link=value)
-#
-#     @since("2.0.0")
-#     def getLink(self):
-#         """
-#         Gets the value of link or its default value.
-#         """
-#         return self.getOrDefault(self.link)
-#
-#     @since("2.2.0")
-#     def setVariancePower(self, value):
-#         """
-#         Sets the value of :py:attr:`variancePower`.
-#         """
-#         return self._set(variancePower=value)
-#
-#     @since("2.2.0")
-#     def getVariancePower(self):
-#         """
-#         Gets the value of variancePower or its default value.
-#         """
-#         return self.getOrDefault(self.variancePower)
-#
-#     @since("2.2.0")
-#     def setLinkPower(self, value):
-#         """
-#         Sets the value of :py:attr:`linkPower`.
-#         """
-#         return self._set(linkPower=value)
-#
-#     @since("2.2.0")
-#     def getLinkPower(self):
-#         """
-#         Gets the value of linkPower or its default value.
-#         """
-#         return self.getOrDefault(self.linkPower)
-#
-#     @since("2.3.0")
-#     def setOffsetCol(self, value):
-#         """
-#         Sets the value of :py:attr:`offsetCol`.
-#         """
-#         return self._set(offsetCol=value)
-#
-#     @since("2.3.0")
-#     def getOffsetCol(self):
-#         """
-#         Gets the value of offsetCol or its default value.
-#         """
-#         return self.getOrDefault(self.offsetCol)
-#
-#
-# class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable,
-#                                        JavaMLReadable, HasTrainingSummary):
-#     """
-#     .. note:: Experimental
-#
-#     Model fitted by :class:`GeneralizedLinearRegression`.
-#
-#     .. versionadded:: 2.0.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def coefficients(self):
-#         """
-#         Model coefficients.
-#         """
-#         return self._call_java("coefficients")
-#
-#     @property
-#     @since("2.0.0")
-#     def intercept(self):
-#         """
-#         Model intercept.
-#         """
-#         return self._call_java("intercept")
-#
-#     @property
-#     @since("2.0.0")
-#     def summary(self):
-#         """
-#         Gets summary (e.g. residuals, deviance, pValues) of model on
-#         training set. An exception is thrown if
-#         `trainingSummary is None`.
-#         """
-#         if self.hasSummary:
-#             return GeneralizedLinearRegressionTrainingSummary(
-#                 super(GeneralizedLinearRegressionModel, self).summary)
-#         else:
-#             raise RuntimeError("No training summary available for this %s" %
-#                                self.__class__.__name__)
-#
-#     @since("2.0.0")
-#     def evaluate(self, dataset):
-#         """
-#         Evaluates the model on a test dataset.
-#
-#         :param dataset:
-#           Test dataset to evaluate model on, where dataset is an
-#           instance of :py:class:`pyspark.sql.DataFrame`
-#         """
-#         if not isinstance(dataset, DataFrame):
-#             raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
-#         java_glr_summary = self._call_java("evaluate", dataset)
-#         return GeneralizedLinearRegressionSummary(java_glr_summary)
-#
-#
-# class GeneralizedLinearRegressionSummary(JavaWrapper):
-#     """
-#     .. note:: Experimental
-#
-#     Generalized linear regression results evaluated on a dataset.
-#
-#     .. versionadded:: 2.0.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def predictions(self):
-#         """
-#         Predictions output by the model's `transform` method.
-#         """
-#         return self._call_java("predictions")
-#
-#     @property
-#     @since("2.0.0")
-#     def predictionCol(self):
-#         """
-#         Field in :py:attr:`predictions` which gives the predicted value of each instance.
-#         This is set to a new column name if the original model's `predictionCol` is not set.
-#         """
-#         return self._call_java("predictionCol")
-#
-#     @property
-#     @since("2.2.0")
-#     def numInstances(self):
-#         """
-#         Number of instances in DataFrame predictions.
-#         """
-#         return self._call_java("numInstances")
-#
-#     @property
-#     @since("2.0.0")
-#     def rank(self):
-#         """
-#         The numeric rank of the fitted linear model.
-#         """
-#         return self._call_java("rank")
-#
-#     @property
-#     @since("2.0.0")
-#     def degreesOfFreedom(self):
-#         """
-#         Degrees of freedom.
-#         """
-#         return self._call_java("degreesOfFreedom")
-#
-#     @property
-#     @since("2.0.0")
-#     def residualDegreeOfFreedom(self):
-#         """
-#         The residual degrees of freedom.
-#         """
-#         return self._call_java("residualDegreeOfFreedom")
-#
-#     @property
-#     @since("2.0.0")
-#     def residualDegreeOfFreedomNull(self):
-#         """
-#         The residual degrees of freedom for the null model.
-#         """
-#         return self._call_java("residualDegreeOfFreedomNull")
-#
-#     @since("2.0.0")
-#     def residuals(self, residualsType="deviance"):
-#         """
-#         Get the residuals of the fitted model by type.
-#
-#         :param residualsType: The type of residuals which should be returned.
-#                               Supported options: deviance (default), pearson, working, and response.
-#         """
-#         return self._call_java("residuals", residualsType)
-#
-#     @property
-#     @since("2.0.0")
-#     def nullDeviance(self):
-#         """
-#         The deviance for the null model.
-#         """
-#         return self._call_java("nullDeviance")
-#
-#     @property
-#     @since("2.0.0")
-#     def deviance(self):
-#         """
-#         The deviance for the fitted model.
-#         """
-#         return self._call_java("deviance")
-#
-#     @property
-#     @since("2.0.0")
-#     def dispersion(self):
-#         """
-#         The dispersion of the fitted model.
-#         It is taken as 1.0 for the "binomial" and "poisson" families, and otherwise
-#         estimated by the residual Pearson's Chi-Squared statistic (which is defined as
-#         sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
-#         """
-#         return self._call_java("dispersion")
-#
-#     @property
-#     @since("2.0.0")
-#     def aic(self):
-#         """
-#         Akaike's "An Information Criterion"(AIC) for the fitted model.
-#         """
-#         return self._call_java("aic")
-#
-#
-# @inherit_doc
-# class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSummary):
-#     """
-#     .. note:: Experimental
-#
-#     Generalized linear regression training results.
-#
-#     .. versionadded:: 2.0.0
-#     """
-#
-#     @property
-#     @since("2.0.0")
-#     def numIterations(self):
-#         """
-#         Number of training iterations.
-#         """
-#         return self._call_java("numIterations")
-#
-#     @property
-#     @since("2.0.0")
-#     def solver(self):
-#         """
-#         The numeric solver used for training.
-#         """
-#         return self._call_java("solver")
-#
-#     @property
-#     @since("2.0.0")
-#     def coefficientStandardErrors(self):
-#         """
-#         Standard error of estimated coefficients and intercept.
-#
-#         If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
-#         then the last element returned corresponds to the intercept.
-#         """
-#         return self._call_java("coefficientStandardErrors")
-#
-#     @property
-#     @since("2.0.0")
-#     def tValues(self):
-#         """
-#         T-statistic of estimated coefficients and intercept.
-#
-#         If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
-#         then the last element returned corresponds to the intercept.
-#         """
-#         return self._call_java("tValues")
-#
-#     @property
-#     @since("2.0.0")
-#     def pValues(self):
-#         """
-#         Two-sided p-value of estimated coefficients and intercept.
-#
-#         If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
-#         then the last element returned corresponds to the intercept.
-#         """
-#         return self._call_java("pValues")
-#
-#     def __repr__(self):
-#         return self._call_java("toString")
+
+class AFTSurvivalRegressionParams(HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                                  HasFitIntercept, HasMaxIter, HasTol, HasAggregationDepth):
+    """
+    (Private) Params for AFTSurvival Regression.
+
+    .. versionadded:: 3.0.0
+    """
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`predictionCol`.
+        """
+        return self._set(predictionCol=value)
+
+    def setQuantileProbabilities(self, value):
+        """
+        Sets the value of :py:attr:`quantileProbabilities`.
+        """
+        return self._set(quantileProbabilities=value)
+
+    def setQuantilesCol(self, value):
+        """
+        Sets the value of :py:attr:`quantilesCol`.
+        """
+        return self._set(quantilesCol=value)
+
+    censorCol = Param(Params._dummy(), "censorCol",
+                      "censor column name. The value of this column could be 0 or 1. " +
+                      "If the value is 1, it means the event has occurred i.e. " +
+                      "uncensored; otherwise censored.", typeConverter=TypeConverters.toString)
+
+    def getCensorCol(self):
+        """
+        Gets the value of censorCol or its default value.
+        """
+        return self.getOrDefault(self.censorCol)
+
+    quantileProbabilities = \
+        Param(Params._dummy(), "quantileProbabilities",
+              "quantile probabilities array. Values of the quantile probabilities array " +
+              "should be in the range (0, 1) and the array should be non-empty.",
+              typeConverter=TypeConverters.toListFloat)
+
+    def getQuantileProbabilities(self):
+        """
+        Gets the value of quantileProbabilities or its default value.
+        """
+        return self.getOrDefault(self.quantileProbabilities)
+
+    quantilesCol = Param(Params._dummy(), "quantilesCol",
+                         "quantiles column name. This column will output quantiles of " +
+                         "corresponding quantileProbabilities if it is set.",
+                         typeConverter=TypeConverters.toString)
+
+    def getQuantilesCol(self):
+        """
+        Gets the value of quantilesCol or its default value.
+        """
+        return self.getOrDefault(self.quantilesCol)
+
+
+@inherit_doc
+class AFTSurvivalRegression(JavaEstimator, AFTSurvivalRegressionParams,
+                            JavaMLWritable, JavaMLReadable):
+    """
+    Accelerated Failure Time (AFT) Model Survival Regression
+
+    Fit a parametric AFT survival regression model based on the Weibull distribution
+    of the survival time.
+
+    .. seealso:: `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(1.0), 1.0),
+    ...     (1e-40, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
+    >>> aftsr = AFTSurvivalRegression()
+    >>> model = aftsr.fit(df)
+    >>> model.getAggregationDepth()
+    2
+    >>> model.setFeaturesCol("features")
+    AFTSurvivalRegression...
+    >>> model.predict(Vectors.dense(6.3))
+    1.0
+    >>> model.predictQuantiles(Vectors.dense(6.3))
+    DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
+    >>> model.transform(df).show()
+    +-------+---------+------+----------+
+    |  label| features|censor|prediction|
+    +-------+---------+------+----------+
+    |    1.0|    [1.0]|   1.0|       1.0|
+    |1.0E-40|(1,[],[])|   0.0|       1.0|
+    +-------+---------+------+----------+
+    ...
+    >>> aftsr_path = temp_path + "/aftsr"
+    >>> aftsr.save(aftsr_path)
+    >>> aftsr2 = AFTSurvivalRegression.load(aftsr_path)
+    >>> aftsr2.getMaxIter()
+    100
+    >>> model_path = temp_path + "/aftsr_model"
+    >>> model.save(model_path)
+    >>> model2 = AFTSurvivalRegressionModel.load(model_path)
+    >>> model.coefficients == model2.coefficients
+    True
+    >>> model.intercept == model2.intercept
+    True
+    >>> model.scale == model2.scale
+    True
+
+    .. versionadded:: 1.6.0
+    """
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
+                 quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                 quantilesCol=None, aggregationDepth=2):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
+                 quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
+                 quantilesCol=None, aggregationDepth=2)
+        """
+        super(AFTSurvivalRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
+        self._setDefault(censorCol="censor",
+                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
+                         maxIter=100, tol=1E-6)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("1.6.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
+                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                  quantilesCol=None, aggregationDepth=2):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
+                  quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99], \
+                  quantilesCol=None, aggregationDepth=2):
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return AFTSurvivalRegressionModel(java_model)
+
+    @since("1.6.0")
+    def setCensorCol(self, value):
+        """
+        Sets the value of :py:attr:`censorCol`.
+        """
+        return self._set(censorCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    def setAggregationDepth(self, value):
+        """
+        Sets the value of :py:attr:`aggregationDepth`.
+        """
+        return self._set(aggregationDepth=value)
+
+
+class AFTSurvivalRegressionModel(JavaModel, AFTSurvivalRegressionParams, JavaMLWritable,
+                                 JavaMLReadable):
+    """
+    Model fitted by :class:`AFTSurvivalRegression`.
+
+    .. versionadded:: 1.6.0
+    """
+
+    @property
+    @since("2.0.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("1.6.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("1.6.0")
+    def scale(self):
+        """
+        Model scale parameter.
+        """
+        return self._call_java("scale")
+
+    @since("2.0.0")
+    def predictQuantiles(self, features):
+        """
+        Predicted Quantiles
+        """
+        return self._call_java("predictQuantiles", features)
+
+    @since("2.0.0")
+    def predict(self, features):
+        """
+        Predicted value
+        """
+        return self._call_java("predict", features)
+
+
+class GeneralizedLinearRegressionBase(HasFitIntercept, HasMaxIter, HasTol, HasRegParam,
+                                      HasWeightCol, HasSolver):
+    """
+    (Private) Params for Generalized Linear Regression.
+
+    .. versionadded:: 3.0.0
+    """
+
+    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
+                   "the error distribution to be used in the model. Supported options: " +
+                   "gaussian (default), binomial, poisson, gamma and tweedie.",
+                   typeConverter=TypeConverters.toString)
+
+    def getFamily(self):
+        """
+        Gets the value of family or its default value.
+        """
+        return self.getOrDefault(self.family)
+
+    variancePower = Param(Params._dummy(), "variancePower", "The power in the variance function " +
+                          "of the Tweedie distribution which characterizes the relationship " +
+                          "between the variance and mean of the distribution. Only applicable " +
+                          "for the Tweedie family. Supported values: 0 and [1, Inf).",
+                          typeConverter=TypeConverters.toFloat)
+
+    def getVariancePower(self):
+        """
+        Gets the value of variancePower or its default value.
+        """
+        return self.getOrDefault(self.variancePower)
+
+    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
+                 "relationship between the linear predictor and the mean of the distribution " +
+                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
+                 "and sqrt.", typeConverter=TypeConverters.toString)
+
+    def getLink(self):
+        """
+        Gets the value of link or its default value.
+        """
+        return self.getOrDefault(self.link)
+
+    linkPower = Param(Params._dummy(), "linkPower", "The index in the power link function. " +
+                      "Only applicable to the Tweedie family.",
+                      typeConverter=TypeConverters.toFloat)
+
+    def getLinkPower(self):
+        """
+        Gets the value of linkPower or its default value.
+        """
+        return self.getOrDefault(self.linkPower)
+
+    linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
+                              "predictor) column name", typeConverter=TypeConverters.toString)
+
+    def setLinkPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`linkPredictionCol`.
+        """
+        return self._set(linkPredictionCol=value)
+
+    def getLinkPredictionCol(self):
+        """
+        Gets the value of linkPredictionCol or its default value.
+        """
+        return self.getOrDefault(self.linkPredictionCol)
+
+    offsetCol = Param(Params._dummy(), "offsetCol", "The offset column name. If this is not set " +
+                      "or empty, we treat all instance offsets as 0.0",
+                      typeConverter=TypeConverters.toString)
+
+    def getOffsetCol(self):
+        """
+        Gets the value of offsetCol or its default value.
+        """
+        return self.getOrDefault(self.offsetCol)
+
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: irls.", typeConverter=TypeConverters.toString)
+
+
+@inherit_doc
+class GeneralizedLinearRegression(JavaPredictor, GeneralizedLinearRegressionBase,
+                                  JavaMLWritable, JavaMLReadable):
+    """
+    Generalized Linear Regression.
+
+    Fit a Generalized Linear Model specified by giving a symbolic description of the linear
+    predictor (link function) and a description of the error distribution (family). It supports
+    "gaussian", "binomial", "poisson", "gamma" and "tweedie" as family. Valid link functions for
+    each family is listed below. The first link function of each family is the default one.
+
+    * "gaussian" -> "identity", "log", "inverse"
+
+    * "binomial" -> "logit", "probit", "cloglog"
+
+    * "poisson"  -> "log", "identity", "sqrt"
+
+    * "gamma"    -> "inverse", "identity", "log"
+
+    * "tweedie"  -> power link function specified through "linkPower". \
+                    The default link power in the tweedie family is 1 - variancePower.
+
+    .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
+    ...     (1.0, Vectors.dense(0.0, 0.0)),
+    ...     (1.0, Vectors.dense(1.0, 2.0)),
+    ...     (2.0, Vectors.dense(0.0, 0.0)),
+    ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
+    >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
+    >>> model = glr.fit(df)
+    >>> model.getFamily()
+    'gaussian'
+    >>> model.setFeaturesCol("features")
+    GeneralizedLinearRegression...
+    >>> transformed = model.transform(df)
+    >>> abs(model.predict(transformed.head().features) - 1.5) < 0.001
+    True
+    >>> abs(transformed.head().prediction - 1.5) < 0.001
+    True
+    >>> abs(transformed.head().p - 1.5) < 0.001
+    True
+    >>> model.coefficients
+    DenseVector([1.5..., -1.0...])
+    >>> model.numFeatures
+    2
+    >>> abs(model.intercept - 1.5) < 0.001
+    True
+    >>> glr_path = temp_path + "/glr"
+    >>> glr.save(glr_path)
+    >>> glr2 = GeneralizedLinearRegression.load(glr_path)
+    >>> glr.getFamily() == glr2.getFamily()
+    True
+    >>> model_path = temp_path + "/glr_model"
+    >>> model.save(model_path)
+    >>> model2 = GeneralizedLinearRegressionModel.load(model_path)
+    >>> model.intercept == model2.intercept
+    True
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+
+    .. versionadded:: 2.0.0
+    """
+
+    @keyword_only
+    def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
+                 family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
+                 variancePower=0.0, linkPower=None, offsetCol=None):
+        """
+        __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
+                 family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
+                 variancePower=0.0, linkPower=None, offsetCol=None)
+        """
+        super(GeneralizedLinearRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
+                         variancePower=0.0)
+        kwargs = self._input_kwargs
+
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
+                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None,
+                  variancePower=0.0, linkPower=None, offsetCol=None):
+        """
+        setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
+                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None, \
+                  variancePower=0.0, linkPower=None, offsetCol=None)
+        Sets params for generalized linear regression.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return GeneralizedLinearRegressionModel(java_model)
+
+    @since("2.0.0")
+    def setFamily(self, value):
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        return self._set(family=value)
+
+    @since("2.0.0")
+    def setLink(self, value):
+        """
+        Sets the value of :py:attr:`link`.
+        """
+        return self._set(link=value)
+
+    @since("2.2.0")
+    def setVariancePower(self, value):
+        """
+        Sets the value of :py:attr:`variancePower`.
+        """
+        return self._set(variancePower=value)
+
+    @since("2.2.0")
+    def setLinkPower(self, value):
+        """
+        Sets the value of :py:attr:`linkPower`.
+        """
+        return self._set(linkPower=value)
+
+    def setFitIntercept(self, value):
+        """
+        Sets the value of :py:attr:`fitIntercept`.
+        """
+        return self._set(fitIntercept=value)
+
+    def setMaxIter(self, value):
+        """
+        Sets the value of :py:attr:`maxIter`.
+        """
+        return self._set(maxIter=value)
+
+    def setTol(self, value):
+        """
+        Sets the value of :py:attr:`tol`.
+        """
+        return self._set(tol=value)
+
+    def setRegParam(self, value):
+        """
+        Sets the value of :py:attr:`regParam`.
+        """
+        return self._set(regParam=value)
+
+    def setWeightCol(self, value):
+        """
+        Sets the value of :py:attr:`weightCol`.
+        """
+        return self._set(weightCol=value)
+
+    @since("2.3.0")
+    def setOffsetCol(self, value):
+        """
+        Sets the value of :py:attr:`offsetCol`.
+        """
+        return self._set(offsetCol=value)
+
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+
+class GeneralizedLinearRegressionModel(JavaPredictionModel, GeneralizedLinearRegressionBase,
+                                       JavaMLWritable, JavaMLReadable, HasTrainingSummary):
+    """
+    Model fitted by :class:`GeneralizedLinearRegression`.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("2.0.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
+
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary (e.g. residuals, deviance, pValues) of model on
+        training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        if self.hasSummary:
+            return GeneralizedLinearRegressionTrainingSummary(
+                super(GeneralizedLinearRegressionModel, self).summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
+
+    @since("2.0.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_glr_summary = self._call_java("evaluate", dataset)
+        return GeneralizedLinearRegressionSummary(java_glr_summary)
+
+
+class GeneralizedLinearRegressionSummary(JavaWrapper):
+    """
+    Generalized linear regression results evaluated on a dataset.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        Predictions output by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.0.0")
+    def predictionCol(self):
+        """
+        Field in :py:attr:`predictions` which gives the predicted value of each instance.
+        This is set to a new column name if the original model's `predictionCol` is not set.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("2.2.0")
+    def numInstances(self):
+        """
+        Number of instances in DataFrame predictions.
+        """
+        return self._call_java("numInstances")
+
+    @property
+    @since("2.0.0")
+    def rank(self):
+        """
+        The numeric rank of the fitted linear model.
+        """
+        return self._call_java("rank")
+
+    @property
+    @since("2.0.0")
+    def degreesOfFreedom(self):
+        """
+        Degrees of freedom.
+        """
+        return self._call_java("degreesOfFreedom")
+
+    @property
+    @since("2.0.0")
+    def residualDegreeOfFreedom(self):
+        """
+        The residual degrees of freedom.
+        """
+        return self._call_java("residualDegreeOfFreedom")
+
+    @property
+    @since("2.0.0")
+    def residualDegreeOfFreedomNull(self):
+        """
+        The residual degrees of freedom for the null model.
+        """
+        return self._call_java("residualDegreeOfFreedomNull")
+
+    @since("2.0.0")
+    def residuals(self, residualsType="deviance"):
+        """
+        Get the residuals of the fitted model by type.
+
+        :param residualsType: The type of residuals which should be returned.
+                              Supported options: deviance (default), pearson, working, and response.
+        """
+        return self._call_java("residuals", residualsType)
+
+    @property
+    @since("2.0.0")
+    def nullDeviance(self):
+        """
+        The deviance for the null model.
+        """
+        return self._call_java("nullDeviance")
+
+    @property
+    @since("2.0.0")
+    def deviance(self):
+        """
+        The deviance for the fitted model.
+        """
+        return self._call_java("deviance")
+
+    @property
+    @since("2.0.0")
+    def dispersion(self):
+        """
+        The dispersion of the fitted model.
+        It is taken as 1.0 for the "binomial" and "poisson" families, and otherwise
+        estimated by the residual Pearson's Chi-Squared statistic (which is defined as
+        sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
+        """
+        return self._call_java("dispersion")
+
+    @property
+    @since("2.0.0")
+    def aic(self):
+        """
+        Akaike's "An Information Criterion"(AIC) for the fitted model.
+        """
+        return self._call_java("aic")
+
+
+@inherit_doc
+class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSummary):
+    """
+    Generalized linear regression training results.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def numIterations(self):
+        """
+        Number of training iterations.
+        """
+        return self._call_java("numIterations")
+
+    @property
+    @since("2.0.0")
+    def solver(self):
+        """
+        The numeric solver used for training.
+        """
+        return self._call_java("solver")
+
+    @property
+    @since("2.0.0")
+    def coefficientStandardErrors(self):
+        """
+        Standard error of estimated coefficients and intercept.
+
+        If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+        """
+        return self._call_java("coefficientStandardErrors")
+
+    @property
+    @since("2.0.0")
+    def tValues(self):
+        """
+        T-statistic of estimated coefficients and intercept.
+
+        If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+        """
+        return self._call_java("tValues")
+
+    @property
+    @since("2.0.0")
+    def pValues(self):
+        """
+        Two-sided p-value of estimated coefficients and intercept.
+
+        If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+        """
+        return self._call_java("pValues")
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 if __name__ == "__main__":

@@ -21,7 +21,6 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, \
     JavaPredictor, JavaPredictionModel
-from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 
@@ -51,6 +50,13 @@ class DecisionTreeModel(JavaPredictionModel):
         """Full description of model."""
         return self._call_java("toDebugString")
 
+    @since("3.0.0")
+    def predictLeaf(self, value):
+        """
+        Predict the indices of the leaves corresponding to the feature vector.
+        """
+        return self._call_java("predictLeaf", value)
+
     def __repr__(self):
         return self._call_java("toString")
 
@@ -77,6 +83,14 @@ class DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
                                 "the left or right child to have fewer than " +
                                 "minInstancesPerNode, the split will be discarded as invalid. " +
                                 "Should be >= 1.", typeConverter=TypeConverters.toInt)
+
+    minWeightFractionPerNode = Param(Params._dummy(), "minWeightFractionPerNode", "Minimum "
+                                     "fraction of the weighted sample count that each child "
+                                     "must have after split. If a split causes the fraction "
+                                     "of the total weight in the left or right child to be "
+                                     "less than minWeightFractionPerNode, the split will be "
+                                     "discarded as invalid. Should be in interval [0.0, 0.5).",
+                                     typeConverter=TypeConverters.toFloat)
 
     minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split " +
                         "to be considered at a tree node.", typeConverter=TypeConverters.toFloat)
@@ -126,6 +140,12 @@ class DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
         """
         return self.getOrDefault(self.minInstancesPerNode)
 
+    def getMinWeightFractionPerNode(self):
+        """
+        Gets the value of minWeightFractionPerNode or its default value.
+        """
+        return self.getOrDefault(self.minWeightFractionPerNode)
+
     def getMinInfoGain(self):
         """
         Gets the value of minInfoGain or its default value.
@@ -146,7 +166,7 @@ class DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
 
 
 @inherit_doc
-class TreeEnsembleModel(JavaWrapper):
+class TreeEnsembleModel(JavaPredictionModel):
     """
     (private abstraction)
 
@@ -182,6 +202,13 @@ class TreeEnsembleModel(JavaWrapper):
     def toDebugString(self):
         """Full description of model."""
         return self._call_java("toDebugString")
+
+    @since("3.0.0")
+    def predictLeaf(self, value):
+        """
+        Predict the indices of the leaves corresponding to the feature vector.
+        """
+        return self._call_java("predictLeaf", value)
 
     def __repr__(self):
         return self._call_java("toString")
