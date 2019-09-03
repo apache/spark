@@ -28,7 +28,8 @@ Rename the existing view. If the view name already exists in the database, an ex
 support moving the views cross databases. 
 ##### Syntax
 {% highlight sql %}
-ALTER VIEW [db_name.]view_name RENAME TO [db_name.]new_view_name
+ALTER VIEW viewIdentifier RENAME TO viewIdentifier
+viewIdentifier:= [db_name.]view_name
 {% endhighlight %}
 
 
@@ -38,7 +39,8 @@ the values are replaced with the new values. If the properties' keys does not ex
 the properties.
 ##### Syntax
 {% highlight sql %}
-ALTER VIEW view_name SET TBLPROPERTIES (key1=val1, key2=val2, ...)
+ALTER VIEW viewIdentifier SET TBLPROPERTIES (key1=val1, key2=val2, ...)
+viewIdentifier:= [db_name.]view_name
 {% endhighlight %}
 
 
@@ -47,7 +49,8 @@ Drop one or more properties of an existing view. If the specified keys do not ex
 `IF EXISTS` to avoid the exception. 
 ##### Syntax
 {% highlight sql %}
-ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] (key1=val1, key2=val2, ...)
+ALTER VIEW viewIdentifier UNSET TBLPROPERTIES [IF EXISTS] (key1=val1, key2=val2, ...)
+viewIdentifier:= [db_name.]view_name
 {% endhighlight %}
 
 
@@ -56,14 +59,17 @@ ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] (key1=val1, key2=val2, ...)
 must exist.
 ##### Syntax
 {% highlight sql %}
-ALTER VIEW view_name AS select_statement
+ALTER VIEW viewIdentifier AS select_statement
+viewIdentifier:= [db_name.]view_name
+select_statement:= [select_statement](sql-ref-syntax-qry-select.html)
 {% endhighlight %}
 
 
 #### Example
 {% highlight sql %}
 -- Rename only change the view name.
-ALTER VIEW tempdb.view1 RENAME TO tempdb.view2
+-- The source and target databases of the view have to be the same, use qualified or unqualified name for the target view  
+ALTER VIEW tempdb.view1 RENAME TO view2
 {% endhighlight %}
 
 {% highlight sql %}
@@ -73,7 +79,7 @@ ALTER VIEW tempdb.view1 SET TBLPROPERTIES ('propKey1' = "propVal1", 'propKey2' =
 
 {% highlight sql %}
 -- Use `DESC TABLE EXTENDED tempdb.view1` before and after the `ALTER VIEW` to verify the change.
-ALTER VIEW tempdb.view1 UNSET TBLPROPERTIES ('propKey1'')
+ALTER VIEW tempdb.view1 UNSET TBLPROPERTIES ('propKey1')
 {% endhighlight %}
 
 {% highlight sql %}
@@ -81,7 +87,10 @@ ALTER VIEW tempdb.view1 UNSET TBLPROPERTIES ('propKey1'')
 ALTER VIEW tempdb.view1 AS SELECT * FROM tempdb.view2
 {% endhighlight %}
 
-You can use [describe-table](sql-ref-syntax-aux-describe-table.html) command to verify the setting
+#### Related Statements
+[describe-table](sql-ref-syntax-aux-describe-table.html) 
+[create-view](sql-ref-syntax-ddl-create-view.html)
+[drop-view](sql-ref-syntax-ddl-drop-view.html)
 ##### Note:
 `ALTER VIEW` statement does not support `SET SERDE` or `SET SERDEPROPERTIES` properties
 
