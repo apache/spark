@@ -332,6 +332,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
   }
 
+  test("encoding/decoding TimeType to/from java.time.LocalTime") {
+    val schema = new StructType().add("t", TimeType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val localTime = java.time.LocalTime.parse("20:38:45.123456")
+    val row = encoder.toRow(Row(localTime))
+    assert(row.getLong(0) === DateTimeUtils.localTimeToMicros(localTime))
+    val readback = encoder.fromRow(row)
+    assert(readback.get(0).equals(localTime))
+  }
+
   for {
     elementType <- Seq(IntegerType, StringType)
     containsNull <- Seq(true, false)

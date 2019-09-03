@@ -101,6 +101,15 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForJavaLocalTime(inputObject: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      TimeType,
+      "localTimeToMicros",
+      inputObject :: Nil,
+      returnNullable = false)
+  }
+
   def createSerializerForJavaBigDecimal(inputObject: Expression): Expression = {
     CheckOverflow(StaticInvoke(
       Decimal.getClass,

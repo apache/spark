@@ -118,6 +118,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForLocalTime(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalTime]),
+      "microsToLocalTime",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForJavaBigDecimal(
       path: Expression,
       returnNullable: Boolean): Expression = {

@@ -1630,7 +1630,7 @@ object CodeGenerator extends Logging {
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
     case IntegerType | DateType => JAVA_INT
-    case LongType | TimestampType => JAVA_LONG
+    case LongType | TimestampType | TimeType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
     case _: DecimalType => "Decimal"

@@ -230,6 +230,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createDeserializerForSqlTimestamp(path)
 
+      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) =>
+        createDeserializerForLocalTime(path)
+
       case t if isSubtype(t, localTypeOf[java.lang.String]) =>
         createDeserializerForString(path, returnNullable = false)
 
@@ -496,6 +499,9 @@ object ScalaReflection extends ScalaReflection {
 
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => createSerializerForSqlDate(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) =>
+        createSerializerForJavaLocalTime(inputObject)
+
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         createSerializerForScalaBigDecimal(inputObject)
 
@@ -671,6 +677,7 @@ object ScalaReflection extends ScalaReflection {
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => Schema(DateType, nullable = true)
+      case t if isSubtype(t, localTypeOf[java.time.LocalTime]) => Schema(TimeType, nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -771,6 +778,7 @@ object ScalaReflection extends ScalaReflection {
     StringType -> classOf[UTF8String],
     DateType -> classOf[DateType.InternalType],
     TimestampType -> classOf[TimestampType.InternalType],
+    TimeType -> classOf[TimeType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
     CalendarIntervalType -> classOf[CalendarInterval]
   )
@@ -784,7 +792,8 @@ object ScalaReflection extends ScalaReflection {
     FloatType -> classOf[java.lang.Float],
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
-    TimestampType -> classOf[java.lang.Long]
+    TimestampType -> classOf[java.lang.Long],
+    TimeType -> classOf[java.lang.Long]
   )
 
   def dataTypeJavaClass(dt: DataType): Class[_] = {
