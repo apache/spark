@@ -23,13 +23,16 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.io.ByteStreams
+import com.google.common.io.{ByteStreams, Closeables}
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
-import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
+import org.apache.spark.shuffle.ShufflePartitionPairsWriter
+import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
+import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
+import org.apache.spark.util.{Utils => TryUtils}
 
 /**
  * Sorts and potentially merges a number of key-value pairs of type (K, V) to produce key-combiner
@@ -670,11 +673,9 @@ private[spark] class ExternalSorter[K, V, C](
   }
 
   /**
-   * Write all the data added into this ExternalSorter into a file in the disk store. This is
-   * called by the SortShuffleWriter.
-   *
-   * @param blockId block ID to write to. The index file will be blockId.name + ".index".
-   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+   * TODO(SPARK-28764): remove this, as this is only used by UnsafeRowSerializerSuite in the SQL
+   * project. We should figure out an alternative way to test that so that we can remove this
+   * otherwise unused code path.
    */
   def writePartitionedFile(
       blockId: BlockId,
@@ -716,6 +717,77 @@ private[spark] class ExternalSorter[K, V, C](
     context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
 
     lengths
+  }
+
+  /**
+   * Write all the data added into this ExternalSorter into a map output writer that pushes bytes
+   * to some arbitrary backing store. This is called by the SortShuffleWriter.
+   *
+   * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+   */
+  def writePartitionedMapOutput(
+      shuffleId: Int,
+      mapId: Int,
+      mapOutputWriter: ShuffleMapOutputWriter): Unit = {
+    var nextPartitionId = 0
+    if (spills.isEmpty) {
+      // Case where we only have in-memory data
+      val collection = if (aggregator.isDefined) map else buffer
+      val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
+      while (it.hasNext()) {
+        val partitionId = it.nextPartition()
+        var partitionWriter: ShufflePartitionWriter = null
+        var partitionPairsWriter: ShufflePartitionPairsWriter = null
+        TryUtils.tryWithSafeFinally {
+          partitionWriter = mapOutputWriter.getPartitionWriter(partitionId)
+          val blockId = ShuffleBlockId(shuffleId, mapId, partitionId)
+          partitionPairsWriter = new ShufflePartitionPairsWriter(
+            partitionWriter,
+            serializerManager,
+            serInstance,
+            blockId,
+            context.taskMetrics().shuffleWriteMetrics)
+          while (it.hasNext && it.nextPartition() == partitionId) {
+            it.writeNext(partitionPairsWriter)
+          }
+        } {
+          if (partitionPairsWriter != null) {
+            partitionPairsWriter.close()
+          }
+        }
+        nextPartitionId = partitionId + 1
+      }
+    } else {
+      // We must perform merge-sort; get an iterator by partition and write everything directly.
+      for ((id, elements) <- this.partitionedIterator) {
+        val blockId = ShuffleBlockId(shuffleId, mapId, id)
+        var partitionWriter: ShufflePartitionWriter = null
+        var partitionPairsWriter: ShufflePartitionPairsWriter = null
+        TryUtils.tryWithSafeFinally {
+          partitionWriter = mapOutputWriter.getPartitionWriter(id)
+          partitionPairsWriter = new ShufflePartitionPairsWriter(
+            partitionWriter,
+            serializerManager,
+            serInstance,
+            blockId,
+            context.taskMetrics().shuffleWriteMetrics)
+          if (elements.hasNext) {
+            for (elem <- elements) {
+              partitionPairsWriter.write(elem._1, elem._2)
+            }
+          }
+        } {
+          if (partitionPairsWriter != null) {
+            partitionPairsWriter.close()
+          }
+        }
+        nextPartitionId = id + 1
+      }
+    }
+
+    context.taskMetrics().incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics().incDiskBytesSpilled(diskBytesSpilled)
+    context.taskMetrics().incPeakExecutionMemory(peakMemoryUsedBytes)
   }
 
   def stop(): Unit = {
@@ -781,7 +853,7 @@ private[spark] class ExternalSorter[K, V, C](
         val inMemoryIterator = new WritablePartitionedIterator {
           private[this] var cur = if (upstream.hasNext) upstream.next() else null
 
-          def writeNext(writer: DiskBlockObjectWriter): Unit = {
+          def writeNext(writer: PairsWriter): Unit = {
             writer.write(cur._1._2, cur._2)
             cur = if (upstream.hasNext) upstream.next() else null
           }

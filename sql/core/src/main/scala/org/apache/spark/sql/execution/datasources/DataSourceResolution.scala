@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
-
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
@@ -31,8 +29,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowTablesStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.types.{HIVE_TYPE_STRING, HiveStringType, MetadataBuilder, StructField, StructType}
 
 case class DataSourceResolution(
@@ -48,7 +46,7 @@ case class DataSourceResolution(
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
         AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment, ifNotExists) =>
+        V1Provider(provider), options, location, comment, ifNotExists) =>
       // the source is v1, the identifier has no catalog, and there is no default v2 catalog
       val tableDesc = buildCatalogTable(table, schema, partitionCols, bucketSpec, properties,
         provider, options, location, comment, ifNotExists)
@@ -71,7 +69,7 @@ case class DataSourceResolution(
 
     case CreateTableAsSelectStatement(
         AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment, ifNotExists) =>
+        V1Provider(provider), options, location, comment, ifNotExists) =>
       // the source is v1, the identifier has no catalog, and there is no default v2 catalog
       val tableDesc = buildCatalogTable(table, new StructType, partitionCols, bucketSpec,
         properties, provider, options, location, comment, ifNotExists)
@@ -106,14 +104,14 @@ case class DataSourceResolution(
 
     case ReplaceTableStatement(
         AsTableIdentifier(table), schema, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment, orCreate) =>
+        V1Provider(provider), options, location, comment, orCreate) =>
         throw new AnalysisException(
           s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
             s" API. Write provider name: $provider, identifier: $table.")
 
     case ReplaceTableAsSelectStatement(
         AsTableIdentifier(table), query, partitionCols, bucketSpec, properties,
-        V1WriteProvider(provider), options, location, comment, orCreate) =>
+        V1Provider(provider), options, location, comment, orCreate) =>
       throw new AnalysisException(
         s"Replacing tables is not supported using the legacy / v1 Spark external catalog" +
           s" API. Write provider name: $provider, identifier: $table.")
@@ -205,21 +203,13 @@ case class DataSourceResolution(
       }
   }
 
-  object V1WriteProvider {
-    private val v1WriteOverrideSet =
-      conf.useV1SourceWriterList.toLowerCase(Locale.ROOT).split(",").toSet
-
+  object V1Provider {
     def unapply(provider: String): Option[String] = {
-      if (v1WriteOverrideSet.contains(provider.toLowerCase(Locale.ROOT))) {
-        Some(provider)
-      } else {
-        lazy val providerClass = DataSource.lookupDataSource(provider, conf)
-        provider match {
-          case _ if classOf[TableProvider].isAssignableFrom(providerClass) =>
-            None
-          case _ =>
-            Some(provider)
-        }
+      DataSource.lookupDataSourceV2(provider, conf) match {
+        // TODO(SPARK-28396): Currently file source v2 can't work with tables.
+        case Some(_: FileDataSourceV2) => Some(provider)
+        case Some(_) => None
+        case _ => Some(provider)
       }
     }
   }

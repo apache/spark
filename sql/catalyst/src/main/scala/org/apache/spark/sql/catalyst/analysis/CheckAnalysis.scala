@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.AlterTableStatement
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -354,6 +354,9 @@ trait CheckAnalysis extends PredicateHelper {
                 }
               case _ =>
             }
+
+          case alter: AlterTableStatement =>
+            alter.failAnalysis(s"Table or view not found: ${alter.tableName.quoted}")
 
           case alter: AlterTable if alter.childrenResolved =>
             val table = alter.table

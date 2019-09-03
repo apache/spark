@@ -15,28 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalog.v2
+package org.apache.spark.sql.connector
 
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.sql.catalog.v2.{Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.sources.v2.{Table, TableCapability}
+import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class TestTableCatalog extends TableCatalog with SupportsNamespaces {
-  import CatalogV2Implicits._
+class InMemoryTableCatalog extends TableCatalog with SupportsNamespaces {
+  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
-  override val defaultNamespace: Array[String] = Array()
   protected val namespaces: util.Map[List[String], Map[String, String]] =
     new ConcurrentHashMap[List[String], Map[String, String]]()
 
-  private val tables: util.Map[Identifier, Table] = new ConcurrentHashMap[Identifier, Table]()
+  protected val tables: util.Map[Identifier, InMemoryTable] =
+    new ConcurrentHashMap[Identifier, InMemoryTable]()
+
   private var _name: Option[String] = None
 
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
@@ -63,28 +65,29 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
     }
 
-    if (partitions.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"Catalog $name: Partitioned tables are not supported")
-    }
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
-    val table = InMemoryTable(ident.quoted, schema, properties)
-
+    val table = new InMemoryTable(s"$name.${ident.quoted}", schema, partitions, properties)
     tables.put(ident, table)
-
     table
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    val table = loadTable(ident)
+    val table = loadTable(ident).asInstanceOf[InMemoryTable]
     val properties = CatalogV2Util.applyPropertiesChanges(table.properties, changes)
     val schema = CatalogV2Util.applySchemaChanges(table.schema, changes)
-    val newTable = InMemoryTable(table.name, schema, properties)
+
+    // fail if the last column in the schema was dropped
+    if (schema.fields.isEmpty) {
+      throw new IllegalArgumentException(s"Cannot drop all fields")
+    }
+
+    val newTable = new InMemoryTable(table.name, schema, table.partitioning, properties)
+      .withData(table.data)
 
     tables.put(ident, newTable)
 
@@ -100,10 +103,14 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
 
     Option(tables.remove(oldIdent)) match {
       case Some(table) =>
-        tables.put(newIdent, InMemoryTable(table.name, table.schema, table.properties))
+        tables.put(newIdent, table)
       case _ =>
         throw new NoSuchTableException(oldIdent)
     }
+  }
+
+  def clearTables(): Unit = {
+    tables.clear()
   }
 
   private def allNamespaces: Seq[Seq[String]] = {
@@ -120,12 +127,12 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
 
   override def listNamespaces(namespace: Array[String]): Array[Array[String]] = {
     allNamespaces
-        .filter(_.size > namespace.length)
-        .filter(_.startsWith(namespace))
-        .map(_.take(namespace.length + 1))
-        .distinct
-        .map(_.toArray)
-        .toArray
+      .filter(_.size > namespace.length)
+      .filter(_.startsWith(namespace))
+      .map(_.take(namespace.length + 1))
+      .distinct
+      .map(_.toArray)
+      .toArray
   }
 
   override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = {
@@ -169,14 +176,13 @@ class TestTableCatalog extends TableCatalog with SupportsNamespaces {
   }
 }
 
-case class InMemoryTable(
-    name: String,
-    schema: StructType,
-    override val properties: util.Map[String, String]) extends Table {
-  override def partitioning: Array[Transform] = Array.empty
-  override def capabilities: util.Set[TableCapability] = InMemoryTable.CAPABILITIES
-}
+object InMemoryTableCatalog {
+  val SIMULATE_FAILED_CREATE_PROPERTY = "spark.sql.test.simulateFailedCreate"
+  val SIMULATE_DROP_BEFORE_REPLACE_PROPERTY = "spark.sql.test.simulateDropBeforeReplace"
 
-object InMemoryTable {
-  val CAPABILITIES: util.Set[TableCapability] = Set.empty[TableCapability].asJava
+  def maybeSimulateFailedTableCreation(tableProperties: util.Map[String, String]): Unit = {
+    if ("true".equalsIgnoreCase(tableProperties.get(SIMULATE_FAILED_CREATE_PROPERTY))) {
+      throw new IllegalStateException("Manual create table failure.")
+    }
+  }
 }
