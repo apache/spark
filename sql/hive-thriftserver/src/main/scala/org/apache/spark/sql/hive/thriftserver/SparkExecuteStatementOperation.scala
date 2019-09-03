@@ -183,9 +183,6 @@ private[hive] class SparkExecuteStatementOperation(
             override def run(): Unit = {
               registerCurrentOperationLog()
               try {
-                if (getStatus.getState.isTerminal) {
-                  return
-                }
                 execute()
               } catch {
                 case e: HiveSQLException =>
@@ -225,8 +222,15 @@ private[hive] class SparkExecuteStatementOperation(
 
   private def execute(): Unit = withSchedulerPool {
     try {
-      logInfo(s"Running query '$statement' with $statementId")
-      setState(OperationState.RUNNING)
+      synchronized {
+        if (getStatus.getState.isTerminal) {
+          logInfo(s"Query with $statementId in terminal state before it started running")
+          return
+        } else {
+          logInfo(s"Running query with $statementId")
+          setState(OperationState.RUNNING)
+        }
+      }
       // Always use the latest class loader provided by executionHive's state.
       val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
       Thread.currentThread().setContextClassLoader(executionHiveClassLoader)

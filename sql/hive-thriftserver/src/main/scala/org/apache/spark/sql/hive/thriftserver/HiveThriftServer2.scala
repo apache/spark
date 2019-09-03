@@ -181,9 +181,26 @@ object HiveThriftServer2 extends Logging {
     private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
     private var totalRunning = 0
 
-    def getOnlineSessionNum: Int = synchronized { onlineSessionNum }
+    def getOnlineSessionNum: Int = synchronized {
+      sessionList.count(_._2.finishTimestamp == 0)
+    }
 
-    def getTotalRunning: Int = synchronized { totalRunning }
+    def isExecutionActive(execInfo: ExecutionInfo): Boolean = {
+      !(execInfo.state == ExecutionState.FAILED ||
+        execInfo.state == ExecutionState.CANCELED ||
+        execInfo.state == ExecutionState.CLOSED)
+    }
+
+    /**
+     * When an error or a cancellation occurs, we set the finishTimestamp of the statement.
+     * Therefore, when we count the number of running statements, we need to exclude errors and
+     * cancellations and count all statements that have not been closed so far.
+     */
+    def getTotalRunning: Int = synchronized {
+      executionList.count {
+        case (_, v) => isExecutionActive(v)
+      }
+    }
 
     def getSessionList: Seq[SessionInfo] = synchronized { sessionList.values.toSeq }
 
@@ -247,7 +264,10 @@ object HiveThriftServer2 extends Logging {
     }
 
 
-    def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = synchronized {
+    def onStatementError(
+        id: String,
+        errorMessage: String,
+        errorTrace: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).detail = errorMessage
       executionList(id).state = ExecutionState.FAILED
