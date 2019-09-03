@@ -129,14 +129,7 @@ private[spark] object PoissonBounds {
   }
 
   private def numStd(s: Double): Double = {
-    // TODO: Make it tighter.
-    if (s < 6.0) {
-      12.0
-    } else if (s < 16.0) {
-      9.0
-    } else {
-      6.0
-    }
+    if (s < 6.0) 12.0 else if (s < 16.0) 9.0 else 6.0
   }
 }
 
