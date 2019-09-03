@@ -74,7 +74,6 @@ private[hive] class SparkExecuteStatementOperation(
     // RDDs will be cleaned automatically upon garbage collection.
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
-    sqlContext.sparkContext.clearJobGroup()
     HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
@@ -282,6 +281,7 @@ private[hive] class SparkExecuteStatementOperation(
         setState(OperationState.FINISHED)
         HiveThriftServer2.listener.onStatementFinish(statementId)
       }
+      sqlContext.sparkContext.clearJobGroup()
     }
   }
 
