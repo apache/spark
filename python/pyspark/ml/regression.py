@@ -853,7 +853,7 @@ class DecisionTreeRegressor(JavaPredictor, DecisionTreeRegressorParams,
 
     def setCheckpointInterval(self, value):
         """
-        Sets the value of :py:attr:`cacheNodeIds`.
+        Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
@@ -1058,12 +1058,24 @@ class RandomForestRegressor(JavaPredictor, RandomForestRegressorParams,
         """
         return self._set(cacheNodeIds=value)
 
+    def setCheckpointInterval(self, value):
+        """
+        Sets the value of :py:attr:`checkpointInterval`.
+        """
+        return self._set(checkpointInterval=value)
+
     @since("1.4.0")
     def setImpurity(self, value):
         """
         Sets the value of :py:attr:`impurity`.
         """
         return self._set(impurity=value)
+
+    def setSeed(self, value):
+        """
+        Sets the value of :py:attr:`seed`.
+        """
+        return self._set(seed=value)
 
     @since("1.4.0")
     def setNumTrees(self, value):

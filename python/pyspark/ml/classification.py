@@ -1200,7 +1200,7 @@ class DecisionTreeClassifier(JavaProbabilisticClassifier, DecisionTreeClassifier
 
     def setCheckpointInterval(self, value):
         """
-        Sets the value of :py:attr:`cacheNodeIds`.
+        Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
@@ -1385,13 +1385,6 @@ class RandomForestClassifier(JavaProbabilisticClassifier, RandomForestClassifier
         """
         return self._set(minInstancesPerNode=value)
 
-    @since("3.0.0")
-    def setMinWeightFractionPerNode(self, value):
-        """
-        Sets the value of :py:attr:`minWeightFractionPerNode`.
-        """
-        return self._set(minWeightFractionPerNode=value)
-
     def setMinInfoGain(self, value):
         """
         Sets the value of :py:attr:`minInfoGain`.
@@ -1412,7 +1405,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, RandomForestClassifier
 
     def setCheckpointInterval(self, value):
         """
-        Sets the value of :py:attr:`cacheNodeIds`.
+        Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
@@ -1676,7 +1669,7 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams,
 
     def setCheckpointInterval(self, value):
         """
-        Sets the value of :py:attr:`cacheNodeIds`.
+        Sets the value of :py:attr:`checkpointInterval`.
         """
         return self._set(checkpointInterval=value)
 
@@ -2186,19 +2179,23 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCo
         """
         return self.getOrDefault(self.classifier)
 
-    @since("3.0.0")
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
         return self._set(featuresCol=value)
 
-    @since("3.0.0")
     def setPredictionCol(self, value):
         """
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
+
+    def setRawPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`rawPredictionCol`.
+        """
+        return self._set(rawPredictionCol=value)
 
 
 @inherit_doc
