@@ -464,8 +464,8 @@ The following properties are available to configure the consumer pool:
 The size of the pool is limited by <code>spark.kafka.consumer.cache.capacity</code>,
 but it works as "soft-limit" to not block Spark tasks.
 
-Idle eviction thread periodically removes some consumers which are not used. If this threshold is reached when borrowing,
-it tries to remove the least-used entry that is currently not in use.
+Idle eviction thread periodically removes some consumers which are not used longer than given timeout. 
+If this threshold is reached when borrowing, it tries to remove the least-used entry that is currently not in use.
 
 If it cannot be removed, then the pool will keep growing. In the worst case, the pool will grow to
 the max number of concurrent tasks that can run in the executor (that is, number of tasks slots).
