@@ -85,7 +85,7 @@ import java.util.Arrays;
  * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Please consider
  * using SASL_SSL in production.
  */
-public class JavaStructuredKerberizedKafkaWordCount {
+public final class JavaStructuredKerberizedKafkaWordCount {
   public static void main(String[] args) throws Exception {
     if (args.length < 3) {
       System.err.println("Usage: JavaStructuredKerberizedKafkaWordCount <bootstrap-servers> " +
