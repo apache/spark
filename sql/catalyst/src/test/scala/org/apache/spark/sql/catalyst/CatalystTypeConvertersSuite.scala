@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
@@ -214,6 +214,35 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val localDate = DateTimeUtils.daysToLocalDate(days)
         assert(CatalystTypeConverters.createToScalaConverter(DateType)(days) === localDate)
       }
+    }
+  }
+
+  test("converting java.time.LocalTime to TimeType") {
+    Seq(
+      "00:00:00",
+      "01:02:03.999",
+      "02:59:01",
+      "12:30:02.0",
+      "22:00:00.000001",
+      "23:59:59.999999").foreach { time =>
+      val input = LocalTime.parse(time)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.localTimeToMicros(input)
+      assert(result === expected)
+    }
+  }
+
+  test("converting TimeType to java.time.LocalTime") {
+    Seq(
+      0,
+      1,
+      59000000,
+      3600000001L,
+      43200999999L,
+      86399000000L,
+      86399999999L).foreach { us =>
+      val localTime = DateTimeUtils.microsToLocalTime(us)
+      assert(CatalystTypeConverters.createToScalaConverter(TimeType)(us) === localTime)
     }
   }
 }

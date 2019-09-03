@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Instant, LocalDate, LocalTime}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -66,6 +66,7 @@ object CatalystTypeConverters {
       case DateType => DateConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
+      case TimeType => LocalTimeConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -341,6 +342,18 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToInstant(row.getLong(column))
   }
 
+  private object LocalTimeConverter extends CatalystTypeConverter[LocalTime, LocalTime, Any] {
+    override def toCatalystImpl(scalaValue: LocalTime): Long = {
+      DateTimeUtils.localTimeToMicros(scalaValue)
+    }
+    override def toScala(catalystValue: Any): LocalTime = {
+      if (catalystValue == null) null
+      else DateTimeUtils.microsToLocalTime(catalystValue.asInstanceOf[Long])
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): LocalTime =
+      DateTimeUtils.microsToLocalTime(row.getLong(column))
+  }
+
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
 
@@ -452,6 +465,7 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
+    case t: LocalTime => LocalTimeConverter.toCatalyst(t)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)

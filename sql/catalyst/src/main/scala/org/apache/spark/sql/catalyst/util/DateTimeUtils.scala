@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
+import java.time.temporal.ChronoField.MICRO_OF_DAY
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
@@ -362,6 +363,10 @@ object DateTimeUtils {
   }
 
   def daysToLocalDate(days: Int): LocalDate = LocalDate.ofEpochDay(days)
+
+  def localTimeToMicros(localTime: LocalTime): Long = localTime.getLong(MICRO_OF_DAY)
+
+  def microsToLocalTime(us: Long): LocalTime = LocalTime.ofNanoOfDay(us * NANOS_PER_MICROS)
 
   /**
    * Trim and parse a given UTF8 date string to a corresponding [[Int]] value.
