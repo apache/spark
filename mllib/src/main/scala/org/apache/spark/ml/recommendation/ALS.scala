@@ -990,16 +990,21 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         previousUserFactors.unpersist()
       }
     } else {
+      var previousCachedItemFactors: Option[RDD[(Int, FactorBlock)]] = None
       for (iter <- 0 until maxIter) {
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, solver = solver)
         if (shouldCheckpoint(iter)) {
+          itemFactors.setName(s"itemFactors-$iter").persist(intermediateRDDStorageLevel)
           val deps = itemFactors.dependencies
           itemFactors.checkpoint()
           itemFactors.count() // checkpoint item factors and cut lineage
           ALS.cleanShuffleDependencies(sc, deps)
           deletePreviousCheckpointFile()
+
+          previousCachedItemFactors.foreach(_.unpersist())
           previousCheckpointFile = itemFactors.getCheckpointFile
+          previousCachedItemFactors = Option(itemFactors)
         }
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
           itemLocalIndexEncoder, solver = solver)
@@ -1029,8 +1034,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       .persist(finalRDDStorageLevel)
     if (finalRDDStorageLevel != StorageLevel.NONE) {
       userIdAndFactors.count()
-      itemFactors.unpersist()
       itemIdAndFactors.count()
+      itemFactors.unpersist()
       userInBlocks.unpersist()
       userOutBlocks.unpersist()
       itemInBlocks.unpersist()
@@ -1229,16 +1234,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
     // This appears to create factorizations that have a slightly better reconstruction
     // (<1%) compared picking elements uniformly at random in [0,1].
-    inBlocks.map { case (srcBlockId, inBlock) =>
-      val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
-      val factors = Array.fill(inBlock.srcIds.length) {
-        val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-        val nrm = blas.snrm2(rank, factor, 1)
-        blas.sscal(rank, 1.0f / nrm, factor, 1)
-        factor
+    inBlocks.mapPartitions({ iter =>
+      iter.map {
+        case (srcBlockId, inBlock) =>
+          val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
+          val factors = Array.fill(inBlock.srcIds.length) {
+            val factor = Array.fill(rank)(random.nextGaussian().toFloat)
+            val nrm = blas.snrm2(rank, factor, 1)
+            blas.sscal(rank, 1.0f / nrm, factor, 1)
+            factor
+          }
+          (srcBlockId, factors)
       }
-      (srcBlockId, factors)
-    }
+    }, preservesPartitioning = true)
   }
 
   /**

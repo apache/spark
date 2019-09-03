@@ -118,7 +118,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.6.1</maven.version>
+    <maven.version>3.6.2</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -423,7 +423,7 @@
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
         <version>2.3.2</version>
-        <scope>runtime</scope>
+        <scope>compile</scope>
         <exclusions>
           <!-- for now, we only write XML in PMML export, and these can be excluded -->
           <exclusion>
@@ -1023,6 +1023,18 @@
           <exclusion>
             <groupId>javax.ws.rs</groupId>
             <artifactId>jsr311-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-minikdc</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.directory.api</groupId>
+            <artifactId>api-ldap-schema-data</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -2283,7 +2295,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>3.4.4</version>
+          <version>4.2.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2882,6 +2894,18 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <!--
+        Couple of dependencies are coming in bundle format (bundle is just a normal jar which
+        contains OSGi metadata in the manifest). If one don't use OSGi, then a bundle will work as
+        any other jar. Since maven doesn't have native bundle support it needs an external plugin
+        handle it. If the plugin is not added then the build can't resolve bundle dependencies.
+      -->
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>4.2.0</version>
+        <extensions>true</extensions>
       </plugin>
     </plugins>
   </build>

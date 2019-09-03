@@ -18,7 +18,7 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors}
@@ -30,8 +30,6 @@ import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
 
 /**
- * :: Experimental ::
- *
  * Evaluator for clustering results.
  * The metric computes the Silhouette measure using the specified distance measure.
  *
@@ -39,7 +37,6 @@ import org.apache.spark.sql.types.DoubleType
  * between 1 and -1, where a value close to 1 means that the points in a cluster are close to the
  * other points in the same cluster and far from the points of the other clusters.
  */
-@Experimental
 @Since("2.3.0")
 class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   extends Evaluator with HasPredictionCol with HasFeaturesCol with DefaultParamsWritable {

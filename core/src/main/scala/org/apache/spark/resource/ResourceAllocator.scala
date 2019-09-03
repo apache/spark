@@ -45,7 +45,6 @@ class ResourceAllocator(name: String, addresses: Seq[String]) extends Serializab
 
   /**
    * Sequence of currently assigned resource addresses.
-   * Exposed for testing only.
    */
   private[spark] def assignedAddrs: Seq[String] = addressAvailabilityMap
     .flatMap { case (addr, available) =>

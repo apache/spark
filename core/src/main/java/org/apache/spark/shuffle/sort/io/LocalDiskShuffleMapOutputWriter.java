@@ -96,10 +96,11 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
   }
 
   @Override
-  public void commitAllPartitions() throws IOException {
+  public long[] commitAllPartitions() throws IOException {
     cleanUp();
     File resolvedTmp = outputTempFile != null && outputTempFile.isFile() ? outputTempFile : null;
     blockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, resolvedTmp);
+    return partitionLengths;
   }
 
   @Override
