@@ -306,7 +306,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("SPARK-28840 test --jars command") {
+  test("SPARK-28954 test --jars command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
     runCliWithin(
       1.minute,
