@@ -53,6 +53,13 @@ package object kafka010 {   // scalastyle:ignore
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("5m")
 
+  private[kafka010] val CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
+    ConfigBuilder("spark.kafka.consumer.cache.evictorThreadRunInterval")
+      .doc("The interval of time between runs of the idle evictor thread for consumer pool. " +
+        "When non-positive, no idle evictor thread will be run.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("3m")
+
   private[kafka010] val FETCHED_DATA_CACHE_TIMEOUT =
     ConfigBuilder("spark.kafka.consumer.fetchedData.cache.timeout")
       .doc("The minimum amount of time a fetched data may sit idle in the pool before " +
@@ -60,13 +67,6 @@ package object kafka010 {   // scalastyle:ignore
         "When non-positive, no fetched data will be evicted from the pool due to idle time alone.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("5m")
-
-  private[kafka010] val CONSUMER_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
-    ConfigBuilder("spark.kafka.consumer.cache.evictorThreadRunInterval")
-      .doc("The interval of time between runs of the idle evictor thread for consumer pool. " +
-        "When non-positive, no idle evictor thread will be run.")
-      .timeConf(TimeUnit.MILLISECONDS)
-      .createWithDefaultString("3m")
 
   private[kafka010] val FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL =
     ConfigBuilder("spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval")
