@@ -72,7 +72,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    logDebug(s"CLOSING $statementId")
+    logInfo(s"Closed statement with $statementId")
     cleanup(OperationState.CLOSED)
     HiveThriftServer2.listener.onOperationClosed(statementId)
   }
