@@ -363,6 +363,42 @@ number of written shuffle records, total data size, etc.
 Clicking the 'Details' link on the bottom displays the logical plans and the physical plan, which
 illustrate how Spark parses, analyzes, optimizes and performs the query.
 
+### SQL metrics
+
+The metrics of SQL operators show in the block of operators. The SQL metrics can be useful when
+we want to dive into the execution details of each operator, for example, how many rows are output
+after a Filter operator. The related metrics are different for each type of operator, for example
+Exchange has the metrics called "shuffle bytes writte total" which shows the number of bytes written
+by shuffle.
+
+Here is the list of some SQL metrics:
+
+<table class="table">
+<tr><th>SQL metrics</th><th>Meaning</th><th>Operators</th></tr>
+<tr><td> <code>number of output rows</code> </td><td> the number of output rows of the operator </td><td> Aggregate operators, Join operators, Sample, Range, Scan operators, Filter, etc.</td>></tr>
+<tr><td> <code>data size</code> </td><td> the size of broadcasted/shuffled/collected data of the operator </td><td> BroadcastExchange, ShuffleExchange, Subquery </td></tr>
+<tr><td> <code>time to collect</code> </td><td> the time spent to collect data </td><td> BroadcastExchange, Subquery </td></tr>
+<tr><td> <code>scan time</code> </td><td> the time spent to scan data </td><td> ColumnarBatchScan, FileSourceScan </td></tr>
+<tr><td> <code>metadata time</code> </td><td> the time spent on getting metadata like number of partitions, number of files </td><td> FileSourceScan </td></tr>
+<tr><td> <code>shuffle bytes written</code> </td><td> number of bytes written </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>shuffle records written</code> </td><td> number of records written </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>shuffle write time</code> </td><td> the time on shuffle writing </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>remote blocks read</code> </td><td> number of blocks read remotely </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange</td></tr>
+<tr><td> <code>remote bytes read</code> </td><td> number of bytes read remotely </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>remote bytes read to disk</code> </td><td> number of bytes read from remote to local disk </td><td> CollectLimit, TakeOrderedAndProjecti, ShuffleExchange </td></tr>
+<tr><td> <code>local blocks read</code> </td><td> number of blocks read locally </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>local bytes read</code> </td><td> number of bytes read locally </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>fetch wait time</code> </td><td> the time spent on fetching data (local and remote)</td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>records read</code> </td><td> the number of records read </td><td> CollectLimit, TakeOrderedAndProject, ShuffleExchange </td></tr>
+<tr><td> <code>sort time</code> </td><td> the time on sorting </td><td> Sort </td></tr>
+<tr><td> <code>peak memory</code> </td><td>peak memory usage in the operator </td><td> Sort, HashAggregate </td></tr>
+<tr><td> <code>spill size</code> </td><td> number of bytes spilled to disk from memory in the operator </td><td> Sort, HashAggregate </td></tr>
+<tr><td> <code>time in aggregation build</code> </td><td> the time spent on aggregation </td><td> HashAggregate, ObjectHashAggregate </td></tr>
+<tr><td> <code>avg hash probe bucket list iters</code> </td><td> the average bucket list iterations per lookup during aggregation </td><td> HashAggregate </td></tr>
+<tr><td> <code>data size of build side</code> </td><td> the size of built hash map </td><td> ShuffledHashJoin </td></tr>
+<tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>
+
+</table>
 
 ## Streaming Tab
 The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
