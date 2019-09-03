@@ -257,7 +257,6 @@ object HiveThriftServer2 extends Logging {
       trimExecutionIfNecessary()
     }
 
-
     def onStatementError(id: String, errorMsg: String, errorTrace: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).detail = errorMsg
