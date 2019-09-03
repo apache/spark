@@ -23,21 +23,71 @@ Return the list of columns in a table. If the table does not exist, an exception
 
 ### Syntax
 {% highlight sql %}
-SHOW COLUMNS {IN | FROM} [db.]table {IN | FROM} database
+SHOW COLUMNS table [ database ]
 {% endhighlight %}
-**Note**
-- You can list the columns of a table in a database other than current database in one of following
-ways:
-  - By qualifying the table name with a database name other than current database.
-  - By specifying the database name in the database parameter.
-- Keywords `IN` and `FROM` are interchangeable.
+
+### Parameters
+<dl>
+  <dt><code><em>table</em></code></dt>
+  <dd>
+    Specifies the table name of an existing table. The table may be optionally qualified
+    with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        { IN | FROM } [database_name.]table_name
+      </code><br><br>
+    <b>Note:</b>
+    Keywords <code>IN</code> and <code>FROM</code> are interchangeable.
+  </dd>
+  <dt><code><em>database</em></code></dt>
+  <dd>
+    Specifies a optional database name. The table is resolved from this database when it
+    is specified. Please note that when this parameter is specified then table
+    name should not be qualified with a different database name. <br><br>
+    <b>Syntax:</b>
+      <code>
+        { IN | FROM } database_name
+      </code><br><br>
+    <b>Note:</b>
+    Keywords <code>IN</code> and <code>FROM</code> are interchangeable.
+  </dd>
+</dl>
 
 ### Examples
 {% highlight sql %}
--- List the columns of table employee in current database.
-SHOW COLUMNS IN employee
--- List the columns of table employee in salesdb database.
-SHOW COLUMNS IN salesdb.employee
--- List the columns of table employee in salesdb database
-SHOW COLUMNS IN employee IN salesdb
+-- Create `customer` table in `salesdb` database;
+USE salesdb;
+CREATE TABLE customer(cust_cd INT,
+  name VARCHAR(100),
+  cust_addr STRING);
+
+-- List the columns of `customer` table in current database.
+SHOW COLUMNS IN customer;
+  +---------+
+  |col_name |
+  +---------+
+  |cust_cd  |
+  |name     |
+  |cust_addr|
+  +---------+
+
+-- List the columns of `customer` table in `salesdb` database.
+SHOW COLUMNS IN salesdb.customer;
+  +---------+
+  |col_name |
+  +---------+
+  |cust_cd  |
+  |name     |
+  |cust_addr|
+  +---------+
+
+-- List the columns of `customer` table in `salesdb` database
+SHOW COLUMNS IN customer IN salesdb;
+  +---------+
+  |col_name |
+  +---------+
+  |cust_cd  |
+  |name     |
+  |cust_addr|
+  +---------+
 {% endhighlight %}
