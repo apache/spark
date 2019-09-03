@@ -2714,7 +2714,7 @@ object SparkContext extends Logging {
       case SparkMasterRegex.LOCAL_N_FAILURES_REGEX(threads, _) => convertToInt(threads)
       case "yarn" =>
         if (conf != null && conf.get(SUBMIT_DEPLOY_MODE) == "cluster") {
-          conf.getInt(DRIVER_CORES.key, 0)
+          conf.getInt(DRIVER_CORES.key, 1)
         } else {
           0
         }
