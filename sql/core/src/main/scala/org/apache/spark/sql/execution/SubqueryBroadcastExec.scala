@@ -67,12 +67,12 @@ case class SubqueryBroadcastExec(
         val (iter, expr) = if (broadcastRelation.isInstanceOf[LongHashedRelation]) {
           (broadcastRelation.keys(), HashJoin.writeKeyExprAt(buildKeys, index))
         } else {
-          (broadcastRelation.keys(buildKeys.size),
+          (broadcastRelation.keys(),
             BoundReference(index, buildKeys(index).dataType, buildKeys(index).nullable))
         }
 
         val proj = UnsafeProjection.create(expr)
-        val keyIter = iter.map(proj).map(_.copy)
+        val keyIter = iter.map(proj).map(_.copy())
 
         val rows = keyIter.toArray[InternalRow].distinct
         val beforeBuild = System.nanoTime()

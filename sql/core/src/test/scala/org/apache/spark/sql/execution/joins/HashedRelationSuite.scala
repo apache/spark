@@ -111,7 +111,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
     val os = new ByteArrayOutputStream()
     val out = new ObjectOutputStream(os)
-    val hashed = new UnsafeHashedRelation(1, binaryMap)
+    val hashed = new UnsafeHashedRelation(1, 1, binaryMap)
     hashed.writeExternal(out)
     out.flush()
     val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
@@ -403,13 +403,13 @@ class HashedRelationSuite extends SharedSparkSession {
 
   test("UnsafeHashedRelation: key set iterator on a contiguous array of keys") {
     val hashedRelation = UnsafeHashedRelation(contiguousRows.iterator, singleKey, 1, mm)
-    val keyIterator = hashedRelation.keys(1)
+    val keyIterator = hashedRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === contiguousArray)
   }
 
   test("UnsafeHashedRelation: key set iterator on a sparse array of keys") {
     val hashedRelation = UnsafeHashedRelation(sparseRows.iterator, singleKey, 1, mm)
-    val keyIterator = hashedRelation.keys(1)
+    val keyIterator = hashedRelation.keys()
     assert(keyIterator.map(key => key.getLong(0)).toArray === sparseArray)
   }
 

@@ -74,7 +74,7 @@ private[execution] sealed trait HashedRelation extends KnownSizeEstimation {
   /**
    * Returns an iterator for keys of InternalRow type.
    */
-  def keys(numFields: Int = 0): Iterator[InternalRow]
+  def keys(): Iterator[InternalRow]
 
   /**
    * Returns a read-only copy of this, to be safely used in current thread.
@@ -123,16 +123,17 @@ private[execution] object HashedRelation {
  *  [size of key] [size of value] [key bytes] [bytes for value]
  */
 private[joins] class UnsafeHashedRelation(
+    private var numKeys: Int,
     private var numFields: Int,
     private var binaryMap: BytesToBytesMap)
   extends HashedRelation with Externalizable with KryoSerializable {
 
-  private[joins] def this() = this(0, null)  // Needed for serialization
+  private[joins] def this() = this(0, 0, null)  // Needed for serialization
 
   override def keyIsUnique: Boolean = binaryMap.numKeys() == binaryMap.numValues()
 
   override def asReadOnlyCopy(): UnsafeHashedRelation = {
-    new UnsafeHashedRelation(numFields, binaryMap)
+    new UnsafeHashedRelation(numKeys, numFields, binaryMap)
   }
 
   override def estimatedSize: Long = binaryMap.getTotalMemoryConsumption
@@ -175,11 +176,11 @@ private[joins] class UnsafeHashedRelation(
     }
   }
 
-  override def keys(numKeyFields: Int): Iterator[InternalRow] = {
-    val iter = binaryMap.iterator()
+  override def keys(): Iterator[InternalRow] = {
+    val iter = binaryMap.safeIterator()
 
     new Iterator[InternalRow] {
-      val unsafeRow = new UnsafeRow(numKeyFields)
+      val unsafeRow = new UnsafeRow(numKeys)
 
       override def hasNext: Boolean = {
         iter.hasNext
@@ -340,7 +341,7 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
-    new UnsafeHashedRelation(numFields, binaryMap)
+    new UnsafeHashedRelation(key.size, numFields, binaryMap)
   }
 }
 
@@ -877,7 +878,7 @@ class LongHashedRelation(
   /**
    * Returns an iterator for keys of InternalRow type.
    */
-  override def keys(numKeyFields: Int = 0): Iterator[InternalRow] = map.keys()
+  override def keys(): Iterator[InternalRow] = map.keys()
 }
 
 /**
