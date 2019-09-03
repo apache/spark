@@ -48,7 +48,7 @@ private[hive] class SparkExecuteStatementOperation(
     runInBackground: Boolean = true)
     (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
-  with Logging {
+    with Logging {
 
   private var result: DataFrame = _
 
@@ -161,6 +161,7 @@ private[hive] class SparkExecuteStatementOperation(
     setState(OperationState.PENDING)
     setHasResultSet(true) // avoid no resultset for async run
     statementId = UUID.randomUUID().toString
+    logInfo(s"Submitting query '$statement' with $statementId")
     HiveThriftServer2.listener.onStatementStart(
       statementId,
       parentSession.getSessionHandle.getSessionId.toString,
@@ -262,7 +263,7 @@ private[hive] class SparkExecuteStatementOperation(
           logWarning(s"Ignore exception in terminal state with $statementId: $e")
           return
         } else {
-          logError(s"Error executing query, currentState $currentState, ", e)
+          logError(s"Error executing query with $statementId, currentState $currentState, ", e)
           setState(OperationState.ERROR)
           HiveThriftServer2.listener.onStatementError(
             statementId, e.getMessage, SparkUtils.exceptionString(e))
@@ -272,9 +273,8 @@ private[hive] class SparkExecuteStatementOperation(
             throw new HiveSQLException("Error running query: " + e.toString, e)
           }
         }
-    }
-    synchronized {
-      if (!getStatus.getState.isTerminal) {
+    } finally {
+      synchronized {
         setState(OperationState.FINISHED)
         HiveThriftServer2.listener.onStatementFinish(statementId)
       }
@@ -284,7 +284,7 @@ private[hive] class SparkExecuteStatementOperation(
   override def cancel(): Unit = {
     synchronized {
       if (!getStatus.getState.isTerminal) {
-        logInfo(s"Cancel '$statement' with $statementId")
+        logInfo(s"Cancel query with $statementId")
         cleanup(OperationState.CANCELED)
         HiveThriftServer2.listener.onStatementCanceled(statementId)
       }
