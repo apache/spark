@@ -183,11 +183,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * meet the following requirements:
    *   (1) it can not be a stream
    *   (2) it needs to contain a selective predicate used for filtering
-   *   (3) the join key is in the attribute set of the filtering plan
    */
   private def hasPartitionPruningFilter(key: Expression, plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan) &&
-      key.references.subsetOf(plan.outputSet)
+    !plan.isStreaming && hasSelectivePredicate(plan)
   }
 
   private def canPruneLeft(joinType: JoinType): Boolean = joinType match {
