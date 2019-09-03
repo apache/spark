@@ -91,3 +91,7 @@ SHOW COLUMNS IN customer IN salesdb;
   |cust_addr|
   +---------+
 {% endhighlight %}
+
+### Related Statements
+- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+- [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
