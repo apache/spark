@@ -102,7 +102,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
 private[streaming]
 object Checkpoint extends Logging {
   val PREFIX = "checkpoint-"
-  val REGEX = (PREFIX + """([\d]{9,})([\w\.]*)""").r
+  val REGEX = (PREFIX + """([\d]+)([\w\.]*)""").r
 
   /** Get the checkpoint file for the given checkpoint time */
   def checkpointFile(checkpointDir: String, checkpointTime: Time): Path = {
