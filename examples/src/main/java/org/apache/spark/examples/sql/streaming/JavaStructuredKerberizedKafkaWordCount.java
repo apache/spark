@@ -29,7 +29,7 @@ import java.util.Arrays;
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
- * Usage: JavaStructuredKerberiedKafkaWordCount <bootstrap-servers> <subscribe-type> <topics>
+ * Usage: JavaStructuredKerberizedKafkaWordCount <bootstrap-servers> <subscribe-type> <topics>
  *   <bootstrap-servers> The Kafka "bootstrap.servers" configuration. A
  *   comma-separated list of host:port.
  *   <subscribe-type> There are three kinds of type, i.e. 'assign', 'subscribe',
@@ -51,7 +51,7 @@ import java.util.Arrays;
  *      --conf \
  *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
  *      --master yarn
- *      sql.streaming.JavaStructuredKerberiedKafkaWordCount broker1-host:port,broker2-host:port \
+ *      sql.streaming.JavaStructuredKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
  *      subscribe topic1,topic2
  *   Yarn cluster:
  *    $ bin/run-example --files \
@@ -62,7 +62,7 @@ import java.util.Arrays;
  *      --conf \
  *      "spark.executor.extraJavaOptions=-Djava.security.auth.login.config=./kafka_jaas.conf" \
  *      --master yarn --deploy-mode cluster \
- *      sql.streaming.JavaStructuredKerberiedKafkaWordCount broker1-host:port,broker2-host:port \
+ *      sql.streaming.JavaStructuredKerberizedKafkaWordCount broker1-host:port,broker2-host:port \
  *      subscribe topic1,topic2
  *
  * kafka_jaas.conf can manually create, template as:
@@ -85,10 +85,10 @@ import java.util.Arrays;
  * SASL_PLAINTEXT has no SSL encryption and likely be less secure. Please consider
  * using SASL_SSL in production.
  */
-public class JavaStructuredKerberiedKafkaWordCount {
+public class JavaStructuredKerberizedKafkaWordCount {
   public static void main(String[] args) throws Exception {
     if (args.length < 3) {
-      System.err.println("Usage: JavaStructuredKerberiedKafkaWordCount <bootstrap-servers> " +
+      System.err.println("Usage: JavaStructuredKerberizedKafkaWordCount <bootstrap-servers> " +
         "<subscribe-type> <topics>");
       System.exit(1);
     }
@@ -99,7 +99,7 @@ public class JavaStructuredKerberiedKafkaWordCount {
 
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaStructuredKerberiedKafkaWordCount")
+      .appName("JavaStructuredKerberizedKafkaWordCount")
       .getOrCreate();
 
     // Create DataSet representing the stream of input lines from kafka
