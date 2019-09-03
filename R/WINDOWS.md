@@ -25,8 +25,7 @@ To build SparkR on Windows, the following steps are required
 2. Install R (>= 3.1) and [Rtools](https://cloud.r-project.org/bin/windows/Rtools/). Make sure to
 include Rtools and R in `PATH`. Note that support for R prior to version 3.4 is deprecated as of Spark 3.0.0.
 
-3. Install [JDK](https://www.oracle.com/technetwork/java/javase/downloads) that SparkR supports - see `R/pkg/DESCRIPTION`, and set
-`JAVA_HOME` in the system environment variables.
+3. Install JDK that SparkR supports (see `R/pkg/DESCRIPTION`), and set `JAVA_HOME` in the system environment variables.
 
 4. Download and install [Maven](https://maven.apache.org/download.html). Also include the `bin`
 directory in Maven in `PATH`.
@@ -40,6 +39,7 @@ directory in Maven in `PATH`.
     ```
 
     Note that `.\build\mvn` is a shell script so `mvn.cmd` on the system should be used directly on Windows.
+    Make sure your Maven version is matched to `maven.version` in `./pom.xml`.
 
 Note that it is a workaround for SparkR developers on Windows. Apache Spark does not officially support to _build_ on Windows yet whereas it supports to _run_ on Windows.
 
