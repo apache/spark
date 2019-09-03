@@ -41,7 +41,7 @@ SHOW COLUMNS table [ database ]
   </dd>
   <dt><code><em>database</em></code></dt>
   <dd>
-    Specifies a optional database name. The table is resolved from this database when it
+    Specifies an optional database name. The table is resolved from this database when it
     is specified. Please note that when this parameter is specified then table
     name should not be qualified with a different database name. <br><br>
     <b>Syntax:</b>
