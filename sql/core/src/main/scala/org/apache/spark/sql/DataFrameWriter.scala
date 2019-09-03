@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchT
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
@@ -523,8 +524,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     def getLocationIfExists: Option[(String, String)] = {
-      val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
-      storage.locationUri.map(uri => "location" -> CatalogUtils.URIToString(uri))
+      val opts = CaseInsensitiveMap(extraOptions.toMap)
+      opts.get("path").map("location" -> _)
     }
 
     val command = (mode, tableOpt) match {
