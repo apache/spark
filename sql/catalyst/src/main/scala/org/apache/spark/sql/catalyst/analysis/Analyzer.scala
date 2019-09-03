@@ -2029,9 +2029,9 @@ class Analyzer(
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
       case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
-          case AliasedGenerator(generator, _, _) => generator.childrenResolved
+          case AliasedGenerator(generator, _, _) => generator.resolved
           case other => other.resolved
-        } =>
+        } && aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
         var generatorVisited = false
 
@@ -2067,12 +2067,8 @@ class Analyzer(
               other :: Nil
           }
 
-        if (generatorVisited) {
-          val newAgg = Aggregate(groupList, newAggList, child)
-          Project(projectExprs.toList, newAgg)
-        } else {
-          agg
-        }
+        val newAgg = Aggregate(groupList, newAggList, child)
+        Project(projectExprs.toList, newAgg)
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
