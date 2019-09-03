@@ -179,7 +179,7 @@ object Literal {
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
       case IntegerType | DateType => v.isInstanceOf[Int]
-      case LongType | TimestampType => v.isInstanceOf[Long]
+      case LongType | TimestampType | TimeType => v.isInstanceOf[Long]
       case FloatType => v.isInstanceOf[Float]
       case DoubleType => v.isInstanceOf[Double]
       case _: DecimalType => v.isInstanceOf[Decimal]
