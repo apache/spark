@@ -26,8 +26,6 @@ from pyspark.sql.functions import lit
 
 class ChiSquareTest(object):
     """
-    .. note:: Experimental
-
     Conduct Pearson's independence test for every feature against the label. For each feature,
     the (feature, label) pairs are converted into a contingency matrix for which the Chi-squared
     statistic is computed. All label and feature values must be categorical.
@@ -77,8 +75,6 @@ class ChiSquareTest(object):
 
 class Correlation(object):
     """
-    .. note:: Experimental
-
     Compute the correlation matrix for the input dataset of Vectors using the specified method.
     Methods currently supported: `pearson` (default), `spearman`.
 
@@ -138,8 +134,6 @@ class Correlation(object):
 
 class KolmogorovSmirnovTest(object):
     """
-    .. note:: Experimental
-
     Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a continuous
     distribution.
 
@@ -199,8 +193,6 @@ class KolmogorovSmirnovTest(object):
 
 class Summarizer(object):
     """
-    .. note:: Experimental
-
     Tools for vectorized statistics on MLlib Vectors.
     The methods in this package provide various statistics for Vectors contained inside DataFrames.
     This class lets users pick the statistics they would like to extract for a given column.
@@ -355,8 +347,6 @@ class Summarizer(object):
 
 class SummaryBuilder(JavaWrapper):
     """
-    .. note:: Experimental
-
     A builder object that provides summary statistics about a given column.
 
     Users should not directly create such builders, but instead use one of the methods in

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+  ScriptTransformation, Statistics}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
@@ -113,29 +113,41 @@ class ResolveHiveSerdeTable(session: SparkSession) extends Rule[LogicalPlan] {
 }
 
 class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case relation @ HiveTableRelation(table, _, partitionCols)
-      if DDLUtils.isHiveTable(table) && table.stats.isEmpty =>
-      val conf = session.sessionState.conf
-      // For partitioned tables, the partition directory may be outside of the table directory.
-      // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
-      val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
-        try {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(table.location)
-          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          fs.getContentSummary(tablePath).getLength
-        } catch {
-          case e: IOException =>
-            logWarning("Failed to get table size from HDFS.", e)
-            conf.defaultSizeInBytes
-        }
-      } else {
-        conf.defaultSizeInBytes
+  private def hiveTableWithStats(relation: HiveTableRelation): HiveTableRelation = {
+    val table = relation.tableMeta
+    val partitionCols = relation.partitionCols
+    val conf = session.sessionState.conf
+    // For partitioned tables, the partition directory may be outside of the table directory.
+    // Which is expensive to get table size. Please see how we implemented it in the AnalyzeTable.
+    val sizeInBytes = if (conf.fallBackToHdfsForStatsEnabled && partitionCols.isEmpty) {
+      try {
+        val hadoopConf = session.sessionState.newHadoopConf()
+        val tablePath = new Path(table.location)
+        val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+        fs.getContentSummary(tablePath).getLength
+      } catch {
+        case e: IOException =>
+          logWarning("Failed to get table size from HDFS.", e)
+          conf.defaultSizeInBytes
       }
+    } else {
+      conf.defaultSizeInBytes
+    }
 
-      val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
-      relation.copy(tableMeta = withStats)
+    val stats = Some(Statistics(sizeInBytes = BigInt(sizeInBytes)))
+    relation.copy(tableStats = stats)
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case relation: HiveTableRelation
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      hiveTableWithStats(relation)
+
+    // handles InsertIntoTable specially as the table in InsertIntoTable is not added in its
+    // children, hence not matched directly by previous HiveTableRelation case.
+    case i @ InsertIntoTable(relation: HiveTableRelation, _, _, _, _)
+      if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
+      i.copy(table = hiveTableWithStats(relation))
   }
 }
 
@@ -196,9 +208,9 @@ case class RelationConversions(
     plan resolveOperators {
       // Write path
       case InsertIntoTable(r: HiveTableRelation, partition, query, overwrite, ifPartitionNotExists)
-        // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
-            !r.isPartitioned && isConvertible(r) =>
+            (!r.isPartitioned || SQLConf.get.getConf(HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE))
+            && isConvertible(r) =>
         InsertIntoTable(metastoreCatalog.convert(r), partition,
           query, overwrite, ifPartitionNotExists)
 

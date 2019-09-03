@@ -20,7 +20,7 @@ package org.apache.spark.ml.clustering
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
@@ -697,7 +697,6 @@ private class ExpectationAggregator(
 }
 
 /**
- * :: Experimental ::
  * Summary of GaussianMixture.
  *
  * @param predictions  `DataFrame` produced by `GaussianMixtureModel.transform()`.
@@ -710,7 +709,6 @@ private class ExpectationAggregator(
  * @param numIter  Number of iterations.
  */
 @Since("2.0.0")
-@Experimental
 class GaussianMixtureSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
