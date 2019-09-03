@@ -522,6 +522,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case _: NoSuchTableException => None
     }
 
+    def getLocationIfExists: Option[(String, String)] = {
+      val storage = DataSource.buildStorageFormatFromOptions(extraOptions.toMap)
+      storage.locationUri.map(uri => "location" -> CatalogUtils.URIToString(uri))
+    }
+
     val command = (mode, tableOpt) match {
       case (_, Some(table: UnresolvedTable)) =>
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
@@ -535,7 +540,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map("provider" -> source),            // properties can't be specified through this API
+          Map("provider" -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -548,7 +553,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map("provider" -> source),
+          Map("provider" -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           ignoreIfExists = other == SaveMode.Ignore)
     }
