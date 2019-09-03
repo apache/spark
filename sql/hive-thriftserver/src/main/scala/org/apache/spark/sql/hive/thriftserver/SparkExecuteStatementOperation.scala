@@ -158,7 +158,6 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
-    setHasResultSet(true) // avoid no resultset for async run
     statementId = UUID.randomUUID().toString
     logInfo(s"Submitting query '$statement' with $statementId")
     HiveThriftServer2.listener.onStatementStart(
@@ -167,6 +166,7 @@ private[hive] class SparkExecuteStatementOperation(
       statement,
       statementId,
       parentSession.getUsername)
+    setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
       execute()
