@@ -535,7 +535,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map.empty,            // properties can't be specified through this API
+          Map("provider" -> source),            // properties can't be specified through this API
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -548,7 +548,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map.empty,
+          Map("provider" -> source),
           extraOptions.toMap,
           ignoreIfExists = other == SaveMode.Ignore)
     }

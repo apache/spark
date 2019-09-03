@@ -98,6 +98,8 @@ class InMemoryTableSessionCatalog extends TestV2SessionCatalogBase[InMemoryTable
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): InMemoryTable = {
+    assert(properties.get("provider") == classOf[InMemoryTableProvider].getName,
+      "Did not get the correct provider information")
     new InMemoryTable(name, schema, partitions, properties)
   }
 
