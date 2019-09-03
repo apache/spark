@@ -149,10 +149,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
 
-    // "-h" option has been passed, so connect to Hive thrift server.
-    // Hadoop-20 and above - we need to augment classpath using hiveconf
-    // components.
-    // See also: code in ExecDriver.java
+    // In SparkSQL CLI, we may want to use jars augmented by hiveconf
+    // hive.aux.jars.path, here we add jars augmented by hiveconf to
+    // Spark's SessionResourceLoader to obtain these jars.
     val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
     if (StringUtils.isNotBlank(auxJars)) {
       val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
