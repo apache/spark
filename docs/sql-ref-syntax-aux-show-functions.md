@@ -29,12 +29,12 @@ may be used to quickly find the function and understand its usage.
 
 ### Syntax
 {% highlight sql %}
-SHOW [USER|SYSTEM|ALL] FUNCTIONS ([LIKE] qualified_function_name | regex_pattern)
+SHOW [ USER | SYSTEM | ALL] FUNCTIONS ([LIKE] function_name | regex_pattern)
 qualified_function_name:= [db.]function_name
 {% endhighlight %}
 
 ### Parameters
-- ##### ***qualified_function_name***:
+- ##### ***function_name***:
   Function name may be optionally qualified with database.
 - ##### ***regex_pattern***:
   A regex pattern that is used to filter out unwanted functions.
