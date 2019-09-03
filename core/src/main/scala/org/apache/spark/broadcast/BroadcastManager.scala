@@ -56,12 +56,11 @@ private[spark] class BroadcastManager(
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  private[broadcast] val cachedValues = {
+  private[broadcast] val cachedValues =
     Collections.synchronizedMap(
       new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
         .asInstanceOf[java.util.Map[Any, Any]]
     )
-  }
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
     val bid = nextBroadcastId.getAndIncrement()

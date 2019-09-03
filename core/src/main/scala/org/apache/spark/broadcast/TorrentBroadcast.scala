@@ -216,7 +216,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.torrentBroadcastLock.withLock(broadcastId) {
-      // As we just lock based on `broadcastId`, whenever using `broadcastCache`, we should just
+      // As we only lock based on `broadcastId`, whenever using `broadcastCache`, we should only
       // touch `broadcastId`.
       val broadcastCache = SparkEnv.get.broadcastManager.cachedValues
 
