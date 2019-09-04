@@ -782,16 +782,16 @@ class DDLParserSuite extends AnalysisTest {
   test("show namespaces") {
     comparePlans(
       parsePlan("SHOW NAMESPACES"),
-      ShowTablesStatement(None, None))
+      ShowNamespacesStatement(None, None))
     comparePlans(
       parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
       parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
     comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcast.ns1 LIKE '*pattern*'"),
-      ShowTablesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
+      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   private case class TableSpec(
