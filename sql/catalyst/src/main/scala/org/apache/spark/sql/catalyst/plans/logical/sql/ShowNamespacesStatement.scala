@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
 /**
- * A SHOW DATABASES statement, as parsed from SQL.
+ * A SHOW NAMESPACES statement, as parsed from SQL.
  */
-case class ShowDatabasesStatement(pattern: Option[String])
+case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
   extends ParsedStatement

@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, Filter, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowDatabases, ShowTables, SubqueryAlias}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowDatabasesStatement, ShowTablesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, Filter, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowDatabasesCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -178,15 +178,25 @@ case class DataSourceResolution(
       val aliased = delete.tableAlias.map(SubqueryAlias(_, relation)).getOrElse(relation)
       DeleteFromTable(aliased, delete.condition)
 
-    case ShowDatabasesStatement(pattern) =>
+    case ShowNamespacesStatement(None, pattern) =>
       defaultCatalog match {
         case Some(catalog: SupportsNamespaces) =>
-          ShowDatabases(catalog, pattern)
+          ShowNamespaces(catalog, None, pattern)
         case Some(_) =>
           throw new AnalysisException(
             "The default v2 catalog doesn't support showing namespaces.")
         case None =>
-          ShowDatabasesCommand(pattern)
+          throw new AnalysisException("No default v2 catalog is set.")
+      }
+
+    case ShowNamespacesStatement(Some(namespace), pattern) =>
+      val CatalogNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
+        case Some(catalog: SupportsNamespaces) =>
+          ShowNamespaces(catalog, Some(ns), pattern)
+        case _ =>
+          throw new AnalysisException(
+            s"No v2 catalog with showing namespaces is available for ${namespace.quoted}")
       }
 
     case ShowTablesStatement(None, pattern) =>

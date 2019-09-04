@@ -561,10 +561,11 @@ object OverwritePartitionsDynamic {
 }
 
 /**
- * The logical plan of the SHOW DATABASES command that works for v2 catalogs.
+ * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
  */
-case class ShowDatabases(
+case class ShowNamespaces(
     catalog: SupportsNamespaces,
+    namespace: Option[Seq[String]],
     pattern: Option[String]) extends Command {
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)())

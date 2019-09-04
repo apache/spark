@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransf
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowDatabasesStatement, ShowTablesStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -779,13 +779,19 @@ class DDLParserSuite extends AnalysisTest {
       ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
   }
 
-  test("show databases") {
+  test("show namespaces") {
     comparePlans(
-      parsePlan("SHOW DATABASES"),
-      ShowDatabasesStatement(None))
+      parsePlan("SHOW NAMESPACES"),
+      ShowTablesStatement(None, None))
     comparePlans(
-      parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowDatabasesStatement(Some("defau*")))
+      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcast.ns1 LIKE '*pattern*'"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   private case class TableSpec(

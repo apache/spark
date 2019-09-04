@@ -29,34 +29,36 @@ import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
- * Physical plan node for showing databases.
+ * Physical plan node for showing namespaces.
  */
-case class ShowDatabasesExec(
+case class ShowNamespacesExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
+    namespace: Option[Seq[String]],
     pattern: Option[String])
     extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
-    val namespaces = catalog.listNamespaces().flatMap(getNamespaces(catalog, _))
+    val namespaces = namespace.map{ ns =>
+        if (ns.nonEmpty) {
+          catalog.listNamespaces(ns.toArray)
+        }
+        else {
+          catalog.listNamespaces()
+        }
+      }
+      .getOrElse(catalog.listNamespaces())
 
     val rows = new ArrayBuffer[InternalRow]()
     val encoder = RowEncoder(schema).resolveAndBind()
 
-    namespaces.map(_.quoted).map { namespace =>
-      if (pattern.map(StringUtils.filterPattern(Seq(namespace), _).nonEmpty).getOrElse(true)) {
+    namespaces.map(_.quoted).map { ns =>
+      if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
         rows += encoder
-          .toRow(new GenericRowWithSchema(Array(namespace), schema))
+          .toRow(new GenericRowWithSchema(Array(ns), schema))
           .copy()
       }
     }
 
     sparkContext.parallelize(rows, 1)
-  }
-
-  private def getNamespaces(
-      catalog: SupportsNamespaces,
-      parentNamespace: Array[String]): Array[Array[String]] = {
-    val namespaces = catalog.listNamespaces(parentNamespace)
-    Array(parentNamespace) ++ namespaces.flatMap(getNamespaces(catalog, _))
   }
 }

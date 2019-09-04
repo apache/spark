@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog, InMemoryTableCatalogBase, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
@@ -747,39 +747,75 @@ class DataSourceV2SQLSuite
     assert(expected === df.collect())
   }
 
-  test("ShowDatabases: use v2 catalog if the default catalog is set") {
+  test("ShowNamespaces: show root namespaces with default v2 catalog") {
     spark.conf.set("spark.sql.default.catalog", "testcat")
+
+    runShowDatabasesSql("SHOW NAMESPACES", Seq())
 
     spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
     spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.ns1_2.table (id bigint) USING foo")
     spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.ns2_1.ns2_2.table (id bigint) USING foo")
 
-    runShowDatabasesSql(
-      "SHOW DATABASES",
-      Seq("ns1", "ns1.ns1_1", "ns1.ns1_1.ns1_2", "ns2", "ns2.ns2_1", "ns2.ns2_1.ns2_2"))
+    runShowDatabasesSql("SHOW NAMESPACES", Seq("ns1", "ns2"))
+    runShowDatabasesSql("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
 
-    runShowDatabasesSql(
-      "SHOW DATABASES LIKE '*_*'",
-      Seq("ns1.ns1_1", "ns1.ns1_1.ns1_2", "ns2.ns2_1", "ns2.ns2_1.ns2_2"))
+    // Try to look up only with catalog name, which should list root namespaces.
+    runShowDatabasesSql("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
   }
 
-  test("ShowDatabases: fallback to v1 catalog if no default catalog is set") {
-    spark.sql("CREATE TABLE testcat.ns.table (id bigint, data string) USING foo")
+  test("ShowNamespaces: show sub-namespaces") {
+    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns.ns1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns.ns2.table (id bigint) USING foo")
 
-    runShowDatabasesSql("SHOW DATABASES", Seq("default"), false)
+    runShowDatabasesSql("SHOW NAMESPACES IN testcat.ns", Seq("ns.ns1", "ns.ns2"))
+    runShowDatabasesSql("SHOW NAMESPACES IN testcat.ns LIKE '*2*'", Seq("ns.ns2"))
+
+    // Try to look up namespace that doesn't exist.
+    runShowDatabasesSql("SHOW NAMESPACES IN testcat.ns.ns3", Seq())
+  }
+
+  test("ShowNamespaces: default v2 catalog is not set") {
+    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
+
+    val exception = intercept[AnalysisException] {
+      runShowDatabasesSql("SHOW NAMESPACES", Seq(""))
+    }
+
+    assert(exception.getMessage.contains("No default v2 catalog is set."))
+  }
+
+  test("ShowNamespaces: default v2 catalog doesn't support namespace") {
+    spark.conf.set(
+      "spark.sql.catalog.testcat_no_namspace",
+      classOf[InMemoryTableCatalogBase].getName)
+    spark.conf.set("spark.sql.default.catalog", "testcat_no_namspace")
+
+    val exception = intercept[AnalysisException] {
+      runShowDatabasesSql("SHOW NAMESPACES", Seq(""))
+    }
+
+    assert(exception.getMessage.contains(
+      "The default v2 catalog doesn't support showing namespaces."))
+  }
+
+  test("ShowNamespaces: v2 catalog doesn't support namespace") {
+    spark.conf.set(
+      "spark.sql.catalog.testcat_no_namspace",
+      classOf[InMemoryTableCatalogBase].getName)
+
+    val exception = intercept[AnalysisException] {
+      runShowDatabasesSql("SHOW NAMESPACES in testcat_no_namspace", Seq(""))
+    }
+
+    assert(exception.getMessage.contains(
+      "No v2 catalog with showing namespaces is available"))
   }
 
   private def runShowDatabasesSql(
       sqlText: String,
-      expected: Seq[String],
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType().add("namespace", StringType, nullable = false)
-    } else {
-      new StructType().add("databaseName", StringType, nullable = false)
-    }
+      expected: Seq[String]): Unit = {
+    val schema = new StructType().add("namespace", StringType, nullable = false)
 
     val df = spark.sql(sqlText)
     assert(df.schema === schema)
