@@ -23,7 +23,7 @@ import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalog.v2._
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{CastSupport, DataSourceV2Helpers, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.sql._
@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.V1TableAsV2
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types._
 
 case class DataSourceResolution(
@@ -41,6 +40,7 @@ case class DataSourceResolution(
   extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util.loadTable
 
   def v2SessionCatalog: CatalogPlugin = sessionCatalog.getOrElse(
     throw new AnalysisException("No v2 session catalog implementation is available"))
@@ -150,98 +150,96 @@ case class DataSourceResolution(
     case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
       DropTableCommand(tableName, ifExists, isView = true, purge = false)
 
-    case AlterTableAddColumnsStatement(tableName, cols) =>
-      val changes = cols.map { col =>
-        TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+    case i @ InsertIntoStatement(UnresolvedRelation(
+        CatalogObjectIdentifier(None, ident)), _, _, _, _) if i.query.resolved =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(v1: V1Table) =>
+          InsertIntoTable(UnresolvedCatalogRelation(v1.v1Table),
+            i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
+        case tableOpt =>
+          tableOpt.map(DataSourceV2Helpers.resolveInsertInto(i, _, conf))
+            .getOrElse(InsertIntoTable(
+              i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists))
       }
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) if cols.forall(_.name.size == 1) =>
-          AlterTableAddColumnsCommand(ti, cols.map(convertToStructField))
-        case scala.Left(ti) =>
+
+    case AlterTableAddColumnsStatement(CatalogObjectIdentifier(None, ident), cols) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(v1: V1Table) if cols.forall(_.name.size == 1) =>
+          AlterTableAddColumnsCommand(v1.v1Table.identifier, cols.map(convertToStructField))
+        case Some(_: V1Table) =>
           throw new AnalysisException("Adding nested columns is not supported for V1 tables.")
-        case scala.Right(tableOpt) =>
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
+          val changes = DataSourceV2Helpers.addColumnChanges(cols)
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableAlterColumnStatement(tableName, colName, dataType, comment) =>
-      val typeChange = dataType.map { newDataType =>
-        TableChange.updateColumnType(colName.toArray, newDataType, true)
-      }
-
-      val commentChange = comment.map { newComment =>
-        TableChange.updateColumnComment(colName.toArray, newComment)
-      }
-      val changes = typeChange.toSeq ++ commentChange.toSeq
-
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) =>
+    case AlterTableAlterColumnStatement(
+        CatalogObjectIdentifier(None, ident), colName, dataType, comment) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(_: V1Table) =>
           throw new AnalysisException("ALTER COLUMN is not supported for V1 tables.")
-        case scala.Right(tableOpt) =>
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
+          val changes = DataSourceV2Helpers.alterColumnChanges(colName, dataType, comment)
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableRenameColumnStatement(tableName, col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) =>
+    case AlterTableRenameColumnStatement(CatalogObjectIdentifier(None, ident), col, newName) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(_: V1Table) =>
           throw new AnalysisException("RENAME COLUMN is not supported for V1 tables.")
-        case scala.Right(tableOpt) =>
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
+          val changes = Seq(TableChange.renameColumn(col.toArray, newName))
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableDropColumnsStatement(tableName, cols) =>
-      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) =>
+    case AlterTableDropColumnsStatement(CatalogObjectIdentifier(None, ident), cols) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(_: V1Table) =>
           throw new AnalysisException("RENAME COLUMN is not supported for V1 tables.")
-        case scala.Right(tableOpt) =>
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
+          val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableSetPropertiesStatement(tableName, props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) =>
-          AlterTableSetPropertiesCommand(ti, props, isView = false)
-        case scala.Right(tableOpt) =>
+    case AlterTableSetPropertiesStatement(CatalogObjectIdentifier(None, ident), props) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(v1: V1Table) =>
+          AlterTableSetPropertiesCommand(v1.v1Table.identifier, props, isView = false)
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
+          val changes = props.map { case (key, value) => TableChange.setProperty(key, value) }.toSeq
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableUnsetPropertiesStatement(tableName, keys, ifExists) =>
-
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) =>
-          AlterTableUnsetPropertiesCommand(ti, keys, ifExists, isView = false)
-        case scala.Right(tableOpt) =>
+    case AlterTableUnsetPropertiesStatement(CatalogObjectIdentifier(None, ident), keys, ifExists) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(v1: V1Table) =>
+          AlterTableUnsetPropertiesCommand(v1.v1Table.identifier, keys, ifExists, isView = false)
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
           val changes = keys.map(key => TableChange.removeProperty(key))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableSetLocationStatement(tableName, newLoc) =>
-
-      lookupV2Relation(tableName) match {
-        case scala.Left(ti) =>
-          AlterTableSetLocationCommand(ti, None, newLoc)
-        case scala.Right(tableOpt) =>
+    case AlterTableSetLocationStatement(CatalogObjectIdentifier(None, ident), newLoc) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(v1: V1Table) =>
+          AlterTableSetLocationCommand(v1.v1Table.identifier, None, newLoc)
+        case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(tableName))
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
           val changes = Seq(TableChange.setProperty("location", newLoc))
-          AlterTable(v2SessionCatalog.asTableCatalog, tableName.asIdentifier, relation, changes)
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
     case AlterViewSetPropertiesStatement(AsTableIdentifier(table), properties) =>
@@ -462,24 +460,5 @@ case class DataSourceResolution(
       cleanedDataType,
       nullable = true,
       builder.build())
-  }
-
-  private def lookupV2Relation(
-      identifier: Seq[String]): Either[TableIdentifier, Option[Table]] = {
-    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util.loadTable
-
-    identifier match {
-      case CatalogObjectIdentifier(None, ident) if ident.namespace().length > 1 =>
-        throw new AnalysisException(s"No catalog found for $ident")
-      case CatalogObjectIdentifier(None, ident) =>
-        loadTable(v2SessionCatalog, ident) match {
-          case Some(v1Table: V1TableAsV2) =>
-            scala.Left(TableIdentifier(ident.name(), ident.namespace().headOption))
-          case Some(v2Table) =>
-            scala.Right(Some(v2Table))
-          case None =>
-            scala.Right(None)
-        }
-    }
   }
 }

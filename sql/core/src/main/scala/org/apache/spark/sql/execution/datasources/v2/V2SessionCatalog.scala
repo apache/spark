@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.V1TableAsV2
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -71,7 +71,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog {
         throw new NoSuchTableException(ident)
     }
 
-    V1TableAsV2(catalogTable)
+    V1Table(catalogTable)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {

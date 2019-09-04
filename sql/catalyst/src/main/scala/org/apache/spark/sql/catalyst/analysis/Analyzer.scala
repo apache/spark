@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.V1TableAsV2
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types._
 
 /**
@@ -760,133 +760,15 @@ class Analyzer(
   }
 
   object ResolveInsertInto extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) if i.query.resolved =>
-        lookupV2Relation(u.multipartIdentifier) match {
-          case scala.Left((_, _, Some(v2Table: Table))) =>
-            resolveV2Insert(i, v2Table)
-          case scala.Right(Some(v2Table: Table)) =>
-            resolveV2Insert(i, v2Table)
-          case _ =>
-            InsertIntoTable(i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
-        }
-    }
-
-    private def resolveV2Insert(i: InsertIntoStatement, table: Table): LogicalPlan = {
-      val relation = DataSourceV2Relation.create(table)
-      // ifPartitionNotExists is append with validation, but validation is not supported
-      if (i.ifPartitionNotExists) {
-        throw new AnalysisException(
-          s"Cannot write, IF NOT EXISTS is not supported for table: ${relation.table.name}")
-      }
-
-      val partCols = partitionColumnNames(relation.table)
-      validatePartitionSpec(partCols, i.partitionSpec)
-
-      val staticPartitions = i.partitionSpec.filter(_._2.isDefined).mapValues(_.get)
-      val query = addStaticPartitionColumns(relation, i.query, staticPartitions)
-      val dynamicPartitionOverwrite = partCols.size > staticPartitions.size &&
-        conf.partitionOverwriteMode == PartitionOverwriteMode.DYNAMIC
-
-      if (!i.overwrite) {
-        AppendData.byPosition(relation, query)
-      } else if (dynamicPartitionOverwrite) {
-        OverwritePartitionsDynamic.byPosition(relation, query)
-      } else {
-        OverwriteByExpression.byPosition(
-          relation, query, staticDeleteExpression(relation, staticPartitions))
-      }
-    }
-
-    private def partitionColumnNames(table: Table): Seq[String] = {
-      // get partition column names. in v2, partition columns are columns that are stored using an
-      // identity partition transform because the partition values and the column values are
-      // identical. otherwise, partition values are produced by transforming one or more source
-      // columns and cannot be set directly in a query's PARTITION clause.
-      table.partitioning.flatMap {
-        case IdentityTransform(FieldReference(Seq(name))) => Some(name)
-        case _ => None
-      }
-    }
-
-    private def validatePartitionSpec(
-        partitionColumnNames: Seq[String],
-        partitionSpec: Map[String, Option[String]]): Unit = {
-      // check that each partition name is a partition column. otherwise, it is not valid
-      partitionSpec.keySet.foreach { partitionName =>
-        partitionColumnNames.find(name => conf.resolver(name, partitionName)) match {
-          case Some(_) =>
-          case None =>
-            throw new AnalysisException(
-              s"PARTITION clause cannot contain a non-partition column name: $partitionName")
-        }
-      }
-    }
-
-    private def addStaticPartitionColumns(
-        relation: DataSourceV2Relation,
-        query: LogicalPlan,
-        staticPartitions: Map[String, String]): LogicalPlan = {
-
-      if (staticPartitions.isEmpty) {
-        query
-
-      } else {
-        // add any static value as a literal column
-        val withStaticPartitionValues = {
-          // for each static name, find the column name it will replace and check for unknowns.
-          val outputNameToStaticName = staticPartitions.keySet.map(staticName =>
-            relation.output.find(col => conf.resolver(col.name, staticName)) match {
-              case Some(attr) =>
-                attr.name -> staticName
-              case _ =>
-                throw new AnalysisException(
-                  s"Cannot add static value for unknown column: $staticName")
-            }).toMap
-
-          val queryColumns = query.output.iterator
-
-          // for each output column, add the static value as a literal, or use the next input
-          // column. this does not fail if input columns are exhausted and adds remaining columns
-          // at the end. both cases will be caught by ResolveOutputRelation and will fail the
-          // query with a helpful error message.
-          relation.output.flatMap { col =>
-            outputNameToStaticName.get(col.name).flatMap(staticPartitions.get) match {
-              case Some(staticValue) =>
-                Some(Alias(Cast(Literal(staticValue), col.dataType), col.name)())
-              case _ if queryColumns.hasNext =>
-                Some(queryColumns.next)
-              case _ =>
-                None
-            }
-          } ++ queryColumns
-        }
-
-        Project(withStaticPartitionValues, query)
-      }
-    }
-
-    private def staticDeleteExpression(
-        relation: DataSourceV2Relation,
-        staticPartitions: Map[String, String]): Expression = {
-      if (staticPartitions.isEmpty) {
-        Literal(true)
-      } else {
-        staticPartitions.map { case (name, value) =>
-          relation.output.find(col => conf.resolver(col.name, name)) match {
-            case Some(attr) =>
-              // the delete expression must reference the table's column names, but these attributes
-              // are not available when CheckAnalysis runs because the relation is not a child of
-              // the logical operation. instead, expressions are resolved after
-              // ResolveOutputRelation runs, using the query's column names that will match the
-              // table names at that point. because resolution happens after a future rule, create
-              // an UnresolvedAttribute.
-              EqualTo(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
-            case None =>
-              throw new AnalysisException(s"Unknown static partition column: $name")
-          }
-        }.reduce(And)
-      }
+      case i @ InsertIntoStatement(UnresolvedRelation(
+          CatalogObjectIdentifier(Some(v2Catalog), ident)), _, _, _, _) if i.query.resolved =>
+        loadTable(v2Catalog, ident)
+          .map(DataSourceV2Helpers.resolveInsertInto(i, _, conf))
+          .getOrElse(InsertIntoTable(
+            i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists))
     }
   }
 
@@ -903,64 +785,47 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case alter @ AlterTableAddColumnsStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
-        val changes = cols.map { col =>
-          TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
-        }
         AlterTable(
           v2Catalog.asTableCatalog,
           ident,
           UnresolvedRelation(alter.tableName),
-          changes
+          DataSourceV2Helpers.addColumnChanges(cols)
         )
 
       case alter @ AlterTableAlterColumnStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), colName, dataType, comment) =>
-        val typeChange = dataType.map { newDataType =>
-          TableChange.updateColumnType(colName.toArray, newDataType, true)
-        }
-
-        val commentChange = comment.map { newComment =>
-          TableChange.updateColumnComment(colName.toArray, newComment)
-        }
-
         AlterTable(
           v2Catalog.asTableCatalog,
           ident,
           UnresolvedRelation(alter.tableName),
-          typeChange.toSeq ++ commentChange.toSeq
+          DataSourceV2Helpers.alterColumnChanges(colName, dataType, comment)
         )
 
       case alter @ AlterTableRenameColumnStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), col, newName) =>
-        val changes = Seq(TableChange.renameColumn(col.toArray, newName))
         AlterTable(
           v2Catalog.asTableCatalog,
           ident,
           UnresolvedRelation(alter.tableName),
-          changes
+          Seq(TableChange.renameColumn(col.toArray, newName))
         )
 
       case alter @ AlterTableDropColumnsStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), cols) =>
-        val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
         AlterTable(
           v2Catalog.asTableCatalog,
           ident,
           UnresolvedRelation(alter.tableName),
-          changes
+          cols.map(col => TableChange.deleteColumn(col.toArray))
         )
 
       case alter @ AlterTableSetPropertiesStatement(
           CatalogObjectIdentifier(Some(v2Catalog), ident), props) =>
-        val changes = props.map { case (key, value) =>
-          TableChange.setProperty(key, value)
-        }
-
         AlterTable(
           v2Catalog.asTableCatalog,
           ident,
           UnresolvedRelation(alter.tableName),
-          changes.toSeq
+          props.map { case (key, value) => TableChange.setProperty(key, value) }.toSeq
         )
 
       case alter @ AlterTableUnsetPropertiesStatement(
@@ -978,29 +843,6 @@ class Analyzer(
           ident,
           UnresolvedRelation(alter.tableName),
           Seq(TableChange.setProperty("location", newLoc)))
-    }
-
-    private def resolveV2Alter(
-        tableName: Seq[String],
-        changes: Seq[TableChange]): Option[AlterTable] = {
-      lookupV2Relation(tableName) match {
-        case scala.Left((v2Catalog, ident, tableOpt)) =>
-          Some(AlterTable(
-            v2Catalog.asTableCatalog,
-            ident,
-            tableOpt.map(DataSourceV2Relation.create).getOrElse(UnresolvedRelation(tableName)),
-            changes
-          ))
-        case scala.Right(tableOpt) =>
-          tableOpt.map { table =>
-            AlterTable(
-              sessionCatalog.get.asTableCatalog, // table being resolved means this exists
-              Identifier.of(tableName.init.toArray, tableName.last),
-              DataSourceV2Relation.create(table),
-              changes
-            )
-          }
-      }
     }
   }
   /**
@@ -2826,7 +2668,7 @@ class Analyzer(
         scala.Left((v2Catalog, ident, loadTable(v2Catalog, ident)))
       case CatalogObjectIdentifier(None, ident) =>
         catalogManager.v2SessionCatalog.flatMap(loadTable(_, ident)) match {
-          case Some(_: V1TableAsV2) => scala.Right(None)
+          case Some(_: V1Table) => scala.Right(None)
           case other => scala.Right(other)
         }
       case _ => scala.Right(None)
