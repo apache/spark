@@ -42,8 +42,10 @@ class RFormulaParserSuite extends SparkFunSuite {
     checkParse("y ~ x", "y", Seq("x"))
     checkParse("y ~ x + x", "y", Seq("x"))
     checkParse("y~x+z", "y", Seq("x", "z"))
+    checkParse("y   ~    x  +   z", "y", Seq("x", "z"))
     checkParse("y ~   ._fo..o  ", "y", Seq("._fo..o"))
     checkParse("resp ~ A_VAR + B + c123", "resp", Seq("A_VAR", "B", "c123"))
+    checkParse("resp~  A_VAR+B+ c123 ", "resp", Seq("A_VAR", "B", "c123"))
   }
 
   test("parse dot") {
@@ -113,6 +115,8 @@ class RFormulaParserSuite extends SparkFunSuite {
   test("factor cross distributive") {
     checkParse("y ~ (a + b)*c", "y", Seq("a", "b", "c", "a:c", "b:c"))
     checkParse("y ~ c*(a + b)", "y", Seq("c", "a", "b", "c:a", "c:b"))
+    checkParse("y ~ c  *(  a+ b)", "y", Seq("c", "a", "b", "c:a", "c:b"))
+    checkParse("y ~ c* (a+ b  )", "y", Seq("c", "a", "b", "c:a", "c:b"))
   }
 
   test("parse power") {
@@ -123,8 +127,13 @@ class RFormulaParserSuite extends SparkFunSuite {
       .add("d", "string", true)
     checkParse("a ~ (a + b)^2", "a", Seq("a", "b", "a:b"))
     checkParse("a ~ .^2", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d"), schema)
+    checkParse("a ~. ^2", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d"), schema)
+    checkParse("a ~ .^ 2", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d"), schema)
+    checkParse("a ~ .^2 ", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d"), schema)
     checkParse("a ~ .^3", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d", "b:c:d"), schema)
     checkParse("a ~ .^3-.", "a", Seq("b:c", "b:d", "c:d", "b:c:d"), schema)
+    checkParse("a ~ .^3  -.", "a", Seq("b:c", "b:d", "c:d", "b:c:d"), schema)
+    checkParse("a ~ .^3-  . ", "a", Seq("b:c", "b:d", "c:d", "b:c:d"), schema)
   }
 
   test("operator precedence") {
@@ -141,6 +150,8 @@ class RFormulaParserSuite extends SparkFunSuite {
     checkParse("a ~ .:b", "a", Seq("b", "c:b", "d:b"), schema)
     checkParse("a ~ b:.", "a", Seq("b", "b:c", "b:d"), schema)
     checkParse("a ~ .:b:.:.:c:d:.", "a", Seq("b:c:d"), schema)
+    checkParse("a ~.  :b: ( . ):.: c:   d:.   ", "a", Seq("b:c:d"), schema)
+    checkParse(" a~ . : b :.:.:  c :d: .", "a", Seq("b:c:d"), schema)
   }
 
   // Test data generated in R with terms.formula(y ~ .:., data = iris)
@@ -199,12 +210,48 @@ class RFormulaParserSuite extends SparkFunSuite {
       schema)
   }
 
+  test("parse whitespace skipping with iris") {
+    val schema = (new StructType)
+      .add("Sepal.Length", "double", true)
+      .add("Sepal.Width", "double", true)
+      .add("Petal.Length", "double", true)
+      .add("Petal.Width", "double", true)
+      .add("Species", "string", true)
+    checkParse(
+      "y ~ .  ^ 2  - .",
+      "y",
+      Seq(
+        "Sepal.Length:Sepal.Width",
+        "Sepal.Length:Petal.Length",
+        "Sepal.Length:Petal.Width",
+        "Sepal.Length:Species",
+        "Sepal.Width:Petal.Length",
+        "Sepal.Width:Petal.Width",
+        "Sepal.Width:Species",
+        "Petal.Length:Petal.Width",
+        "Petal.Length:Species",
+        "Petal.Width:Species"),
+      schema)
+    checkParse(
+      "y ~ Sepal.Length  :     Sepal.Width  * Species",
+      "y",
+      Seq(
+        "Sepal.Length:Sepal.Width",
+        "Species",
+        "Sepal.Length:Sepal.Width:Species"),
+      schema)
+  }
+
   test("parse skip whitespace") {
     val schema = (new StructType)
       .add("a", "int", true)
       .add("b", "long", false)
       .add("c", "string", true)
     checkParse(" ~a+  b :  c  ", "", Seq("a", "b:c"))
+    checkParse(" ~a+ b : c   +  1   ", "", Seq("a", "b:c"))
+    checkParse(" ~a + b:  c   -  1 ", "", Seq("a", "b:c"))
+    checkParse(" ~a + (b  ):  c   -  ( 1) ", "", Seq("a", "b:c"))
+    checkParse(" ~  a +b :(  c)-  (1 )", "", Seq("a", "b:c"))
     checkParse(" ~ a  *     b", "", Seq("a", "b", "a:b"))
     checkParse("~ (  a +b  )^  2", "", Seq("a", "b", "a:b"))
     checkParse("~  .  ^ 2  - a-b  -  c", "", Seq("a:b", "a:c", "b:c"), schema)
@@ -214,9 +261,19 @@ class RFormulaParserSuite extends SparkFunSuite {
   test("parse functions") {
     checkParse("y ~ I(a+b) + c", "y", Seq("a+b", "c"))
     checkParse("y ~ I(a+b)*c", "y", Seq("a+b", "c", "a+b:c"))
+    checkParse("y ~ I( a+ (b)  )  * c", "y", Seq(" a+ (b)  ", "c", " a+ (b)  :c"))
     checkParse("y ~ (I((a+b)) + c)^2", "y", Seq("(a+b)", "c", "(a+b):c"))
-    checkParse("y ~ I(log(a)*(log(a)*2)) + b", "y", Seq("log(a)*(log(a)*2)", "b"))
-    checkParse("y ~ exp(a) + (b + c)", "y", Seq("exp(a)", "b", "c"))
+    checkParse("y ~ ( I((a+b)) + c)^2", "y", Seq("(a+b)", "c", "(a+b):c"))
+    checkParse("y ~ (I( (a+b)) + c)^2", "y", Seq(" (a+b)", "c", " (a+b):c"))
+    checkParse("y ~ (I(( a +  b ) ) + c )^2", "y", Seq("( a +  b ) ", "c", "( a +  b ) :c"))
+    checkParse("y ~ I( log(a) *  (log(a)*2)) + b", "y", Seq(" log(a) *  (log(a)*2)", "b"))
+    checkParse("y ~ I( log(a) *(  log( a )* 2)) + b", "y", Seq(" log(a) *(  log( a )* 2)", "b"))
+    checkParse("y ~ exp( a ) + ( b +c)", "y", Seq("exp( a )", "b", "c"))
+    checkParse("y ~ percentile_approx(a, 0.5, 100) + (b + c)", "y",
+               Seq("percentile_approx(a, 0.5, 100)", "b", "c"))
+    checkParse("y ~ map_values(map(1, 2, 3, 4)) + (b + c)", "y",
+               Seq("map_values(map(1, 2, 3, 4))", "b", "c"))
+    checkParse("y ~ base64( a ) + (b + c)", "y", Seq("base64( a )", "b", "c"))
     checkParse("log(y) ~ a + log(b)", "log(y)", Seq("a", "log(b)"))
     checkParse("I(c+d) ~ a + log(b)", "c+d", Seq("a", "log(b)"))
   }

@@ -127,7 +127,7 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
 /**
  * Implements the transforms required for fitting a dataset against an R model formula. Currently
  * we support a limited subset of the R operators, including '~', '.', ':', '+', '-', '*', '^'
- * and 'I()'. Arithmetic expressions which use spark functions or registered UDFs are
+ * and 'I()'. Arithmetic expressions which use Spark SQL functions or registered UDFs are
  * also supported. For example, `log2(a)` can be used for taking the base 2 logarithm
  * of column `a`, or `concat(a, ' ', b)` can be used for creating a combined string input column
  * from `a` and `b`. To avoid resolution confusions, 'I()' operator can be used so that inside
@@ -433,8 +433,10 @@ class RFormulaModel private[feature](
       s"Label column already exists and is not of type ${NumericType.simpleString}.")
   }
 
-  private def foldExprs(dataframe: DataFrame)(f: (DataFrame, String) => DataFrame): DataFrame =
-    resolvedFormula.evalExprs.foldLeft(dataframe)(f)
+  private def foldExprs(dataframe: DataFrame)(f: (DataFrame, String) => DataFrame): DataFrame = {
+    val folded = resolvedFormula.evalExprs.foldLeft(dataframe)(f)
+    folded
+  }
 
   private def transformSelectExprs(dataframe: DataFrame): DataFrame = foldExprs(dataframe) {
     case(df, colname) => df.withColumn(colname, expr(colname))
@@ -446,7 +448,7 @@ class RFormulaModel private[feature](
 
   private def transformSelectExprsSchema(schema: StructType): StructType = {
     val spark = SparkSession.builder().getOrCreate()
-    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+    val dummyRDD = spark.sparkContext.emptyRDD[Row]
     val dummyDF = spark.createDataFrame(dummyRDD, schema)
     transformSelectExprs(dummyDF).schema
   }
@@ -495,12 +497,15 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sparkSession.read.parquet(dataPath)
-        .select("label", "terms", "hasIntercept", "evalExprs").head()
+      val df = sparkSession.read.parquet(dataPath)
+      val columns = Seq("label", "terms", "hasIntercept", "evalExprs")
+      val data = df.select(columns.intersect(df.columns).map(df(_)): _*)
+        .head()
       val label = data.getString(0)
       val terms = data.getAs[Seq[Seq[String]]](1)
       val hasIntercept = data.getBoolean(2)
-      val evalExprs = data.getAs[Seq[String]](3)
+      // Check for old saved models which do not have evalExprs.
+      val evalExprs = if (data.size==4) data.getAs[Seq[String]](3) else Seq[String]()
       val resolvedRFormula = ResolvedRFormula(label, terms, hasIntercept, evalExprs)
 
       val pmPath = new Path(path, "pipelineModel").toString

@@ -278,10 +278,10 @@ private[ml] case class Terms(terms: Seq[Term]) extends Term {
 private[ml] object RFormulaParser extends RegexParsers with EvalExprParser {
 
   /**
-   * Whether to skip whitespace in literals and regex is currently only achived with
-   * a global switch, and by default it's skipped. We'd like it to be skipped for most parsers,
-   * except for evaluated expressions as whitespace could be valid part of the expression,
-   * like `I(concat(a, ' ', b))`.
+   * We'd like to skip whitespace for all parsers except for evaluated expressions,
+   * as whitespace could be valid part of the expression, such as `I(concat(a, ' ', b))`.
+   * We do that by disabling whitespace skipping with class-wide skipWhitespace flag,
+   * and let the individual parsers decide whether to skip whitespace using skipSpace function.
    */
   override def skipWhitespace: Boolean = false
 
