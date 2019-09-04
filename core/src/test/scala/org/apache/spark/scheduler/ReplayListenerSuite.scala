@@ -219,11 +219,25 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
     val originalEvents = sc.eventLogger.get.loggedEvents
+      .map(JsonProtocol.sparkEventFromJson(_))
     val replayedEvents = eventMonster.loggedEvents
-    originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
-      // Don't compare the JSON here because accumulators in StageInfo may be out of order
-      JsonProtocolSuite.assertEquals(
-        JsonProtocol.sparkEventFromJson(e1), JsonProtocol.sparkEventFromJson(e2))
+      .map(JsonProtocol.sparkEventFromJson(_))
+    // Executor metrics updates are not logged, so do not get replayed.
+    // Stage executor metrics are logged at stage completion, for any of the executors and
+    // the driver for which we have metrics. We always have metrics for executors, because
+    // they are sent at task end as well as in executor metrics updates. We do not always
+    // have metrics for the driver, because they are only sent in executor metrics updates
+    // (at heartbeat intervals), and when we do, it is only in the original events, never
+    // in the replay, since executor metrics updates are not replayed.
+    // For this reason, exclude stage executor metrics for the driver.
+    val filteredEvents = originalEvents.filter { e =>
+      if (e.isInstanceOf[SparkListenerStageExecutorMetrics] &&
+        e.asInstanceOf[SparkListenerStageExecutorMetrics].execId == "driver") {
+        false
+      } else true
+    }
+    filteredEvents.zip(replayedEvents).foreach { case (e1, e2) =>
+      JsonProtocolSuite.assertEquals(e1, e1)
     }
   }
 
