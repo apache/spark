@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
-import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
-import java.time.temporal.ChronoField.MICRO_OF_DAY
+import java.time.{DateTimeException, Instant, LocalDate, LocalDateTime, ZoneId}
 import java.time.temporal.IsoFields
 import java.util.{Locale, TimeZone}
 
@@ -1892,99 +1891,6 @@ case class MakeTimestamp(
   }
 
   override def prettyName: String = "make_timestamp"
-}
-
-// scalastyle:off line.size.limit
-@ExpressionDescription(
-  usage = "_FUNC_(hour, min, sec) - Create time from hour, min, sec fields.",
-  arguments = """
-    Arguments:
-      * hour - the hour-of-day to represent, from 0 to 23
-      * min - the minute-of-hour to represent, from 0 to 59
-      * sec - the second-of-minute and its micro-fraction to represent, from
-              0 to 60. If the sec argument equals to 60, the seconds field is set
-              to 0 and 1 minute is added to the final timestamp.
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
-       2014-12-28 06:30:45.887
-      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
-       2014-12-28 10:30:45.887
-      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60)
-       2019-07-01 00:00:00
-      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 13);
-       NULL
-      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
-       NULL
-  """,
-  since = "3.0.0")
-// scalastyle:on line.size.limit
-case class MakeTime(hour: Expression, min: Expression, sec: Expression)
-  extends TernaryExpression with ImplicitCastInputTypes {
-
-  override def children: Seq[Expression] = Seq(hour, min, sec)
-  // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
-  // them to the fractional part of `sec`.
-  override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, DecimalType(8, 6))
-  override def dataType: DataType = TimeType
-  override def nullable: Boolean = true
-
-  override def nullSafeEval(hourOfDay: Any, minutes: Any, seconds: Any): Any = {
-    val hour = hourOfDay.asInstanceOf[Int]
-    val min = minutes.asInstanceOf[Int]
-    val secAndNanos = seconds.asInstanceOf[Decimal]
-
-    try {
-      val secFloor = secAndNanos.floor
-      val nanosPerSec = Decimal(NANOS_PER_SECOND, 10, 0)
-      val nanos = ((secAndNanos - secFloor) * nanosPerSec).toInt
-      val seconds = secFloor.toInt
-      val localTime = if (seconds == 60) {
-        if (nanos == 0) {
-          // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
-          LocalTime.of(hour, min, 0, 0).plusMinutes(1)
-        } else {
-          throw new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
-        }
-      } else {
-        LocalTime.of(hour, min, seconds, nanos)
-      }
-      localTime.getLong(MICRO_OF_DAY)
-    } catch {
-      case _: DateTimeException => null
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    val d = Decimal.getClass.getName.stripSuffix("$")
-    nullSafeCodeGen(ctx, ev, (hour, min, secAndNanos) => {
-      s"""
-      try {
-        org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
-        org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
-        int seconds = secFloor.toInt();
-        java.time.LocalTime localTime;
-        if (seconds == 60) {
-          if (nanos == 0) {
-            localTime = java.time.LocalTime.of($hour, $min, 0, 0).plusMinutes(1);
-          } else {
-            throw new java.time.DateTimeException(
-              "The fraction of sec must be zero. Valid range is [0, 60].");
-          }
-        } else {
-          localTime = java.time.LocalTime.of($hour, $min, seconds, nanos);
-        }
-        localTime.getLong(java.time.temporal.ChronoField.MICRO_OF_DAY);
-      } catch (java.time.DateTimeException e) {
-        ${ev.isNull} = true;
-      }"""
-    })
-  }
-
-  override def prettyName: String = "make_time"
 }
 
 case class Millennium(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
