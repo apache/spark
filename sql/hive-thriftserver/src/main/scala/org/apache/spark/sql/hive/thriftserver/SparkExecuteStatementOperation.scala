@@ -313,7 +313,7 @@ object SparkExecuteStatementOperation {
     val schema = structType.map { field =>
       val attrTypeString = field.dataType match {
         case NullType => "void"
-        case CalendarIntervalType => "string"
+        case CalendarIntervalType => StringType.catalogString
         case other => other.catalogString
       }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
