@@ -25,12 +25,35 @@ a property key. If no key is specified then all the proerties are returned.
 
 ### Syntax
 {% highlight sql %}
-SHOW TBLPROPERTIES tableIdentifier [(tablePropertyKey)]
-
-tableIdentifier:= [db_name.]table_name
-tablePropertyKey:= (unquoted_property_key | property_key_as_string_literal)
-unquoted_property_key:= [key_part1][.key_part2][...]
+SHOW TBLPROPERTIES table_identifier 
+   [ ( unquoted_property_key | property_key_as_string_literal ) ]
 {% endhighlight %}
+
+### Parameters
+<dl>
+  <dt><code><em>table_identifier</em></code></dt>
+  <dd>
+    Specifies the table name of an existing table. The table may be optionally qualified
+    with a database name.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [database_name.]table_name
+      </code>
+  </dd>
+  <dt><code><em>unquoted_property_key</em></code></dt>
+  <dd>
+    Specifies the property key in unquoted form. The key may consists of multiple
+    parts separated by dot.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [key_part1][.key_part2][...]
+      </code>
+  </dd>   
+  <dt><code><em>property_key_as_string_literal</em></code></dt>
+  <dd>
+    Specifies a property key value as a string literal.
+  </dd>
+</dl>
 
 **Note**
 - Property value returned by this statement exludes some properties 
@@ -42,17 +65,50 @@ unquoted_property_key:= [key_part1][.key_part2][...]
 
 ### Examples
 {% highlight sql %}
+-- create a table `customer` in database `salesdb`
+USE salesdb;
+CREATE TABLE customer(cust_code INT, name VARCHAR(100), cust_addr STRING)
+  TBLPROPERTIES ('created.by.user' = 'John', 'created.date' = '01-01-2001');
+
 -- show all the user specified properties for table `customer`
 SHOW TBLPROPERTIES customer;
+  +---------------------+----------+
+  |key                  |value     |
+  +---------------------+----------+
+  |created.by.user      |John      |
+  |created.date         |01-01-2001|
+  |transient_lastDdlTime|1567554931|
+  +---------------------+----------+
+
 -- show all the user specified properties for a qualified table `customer`
 -- in database `salesdb`
 SHOW TBLPROPERTIES salesdb.customer;
--- show value for unquoted propery key `show.me.the.value`
-SHOW TBLPROPERTIES customer (show.me.the.value)
--- show value for property `show.me.the.value` specified as string literal
-SHOW TBLPROPERTIES customer ('show.me.the.value')
+  +---------------------+----------+
+  |key                  |value     |
+  +---------------------+----------+
+  |created.by.user      |John      |
+  |created.date         |01-01-2001|
+  |transient_lastDdlTime|1567554931|
+  +---------------------+----------+
+
+-- show value for unquoted property key `created.by.user`
+SHOW TBLPROPERTIES customer (created.by.user);
+  +-----+
+  |value|
+  +-----+
+  |John |
+  +-----+
+
+-- show value for property `created.date`` specified as string literal
+SHOW TBLPROPERTIES customer ('created.date');
+  +----------+
+  |value     |
+  +----------+
+  |01-01-2001|
+  +----------+
 {% endhighlight %}
 
 ### Related Statements
+- [CREATE TABLE](sql-ref-syntax-ddl-create-table.html)
 - [ALTER TABLE SET TBLPROPERTIES](sql-ref-syntax-ddl-alter-table.html)
 - [SHOW TABLE](sql-ref-syntax-aux-show-table.html)
