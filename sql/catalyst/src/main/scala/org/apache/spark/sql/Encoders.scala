@@ -130,7 +130,7 @@ object Encoders {
 
   /**
    * Creates an encoder that serializes instances of the `java.time.LocalTime` class
-   * to the internal representation of nullable Catalyst's DateType.
+   * to the internal representation of nullable Catalyst's TimeType.
    *
    * @since 3.0.0
    */
