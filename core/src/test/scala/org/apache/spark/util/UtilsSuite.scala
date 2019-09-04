@@ -935,6 +935,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         val builderInst = builder.getConstructor(classOf[String]).newInstance("test")
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
+        assert(false)
       } catch {
         case NonFatal(e) =>
           assert(e.toString == "java.lang.ClassCastException: " +
