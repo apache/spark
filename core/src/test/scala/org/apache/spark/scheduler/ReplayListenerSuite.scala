@@ -21,12 +21,14 @@ import java.io._
 import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.{CompressionCodec, LZ4CompressionCodec}
 import org.apache.spark.util.{JsonProtocol, JsonProtocolSuite, Utils}
@@ -62,7 +64,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -108,7 +110,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val replayer = new ReplayListenerBus()
 
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster
     replayer.addListener(eventMonster)
 
     // Verify the replay returns the events given the input maybe truncated.
@@ -145,7 +147,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -207,7 +209,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     // Replay events
     val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -222,19 +224,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
       .map(JsonProtocol.sparkEventFromJson(_))
     val replayedEvents = eventMonster.loggedEvents
       .map(JsonProtocol.sparkEventFromJson(_))
-    // Executor metrics updates are not logged, so do not get replayed.
-    // Stage executor metrics are logged at stage completion, for any of the executors and
-    // the driver for which we have metrics. We always have metrics for executors, because
-    // they are sent at task end as well as in executor metrics updates. We do not always
-    // have metrics for the driver, because they are only sent in executor metrics updates
-    // (at heartbeat intervals), and when we do, it is only in the original events, never
-    // in the replay, since executor metrics updates are not replayed.
-    // For this reason, exclude stage executor metrics for the driver.
-    val filteredEvents = originalEvents.filter {
-      case e: SparkListenerStageExecutorMetrics if e.execId == "driver" => false
-      case _ => true
-    }
-    filteredEvents.zip(replayedEvents).foreach { case (e1, e2) =>
+    originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       JsonProtocolSuite.assertEquals(e1, e1)
     }
   }
@@ -248,20 +238,15 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
   /**
    * A simple listener that buffers all the events it receives.
    *
-   * The event buffering functionality must be implemented within EventLoggingListener itself.
-   * This is because of the following race condition: the event may be mutated between being
-   * processed by one listener and being processed by another. Thus, in order to establish
-   * a fair comparison between the original events and the replayed events, both functionalities
-   * must be implemented within one listener (i.e. the EventLoggingListener).
-   *
-   * This child listener inherits only the event buffering functionality, but does not actually
-   * log the events.
    */
-  private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
+  private class EventMonster extends SparkFirehoseListener {
 
-    override def start() { }
+    private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
+    override def onEvent(event: SparkListenerEvent) {
+      val eventJson = JsonProtocol.sparkEventToJson(event)
+      loggedEvents += eventJson
+    }
   }
 
   /*
