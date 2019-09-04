@@ -185,7 +185,7 @@ class KafkaContinuousPartitionReader(
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ContinuousPartitionReader[InternalRow] {
-  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache = false)
+  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
   private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextKafkaOffset = startOffset
