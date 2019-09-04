@@ -73,7 +73,8 @@ trait PredicateHelper {
    * along the way from plan to origin, and the origin LeafNode plan from which all the exp
    */
   def findExpressionAndTrackLineageDown(
-    exp: Expression, plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
+      exp: Expression,
+      plan: LogicalPlan): Option[(Expression, LogicalPlan)] = {
 
     plan match {
       case Project(projectList, child) =>

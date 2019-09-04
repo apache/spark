@@ -377,8 +377,8 @@ case class FileSourceScanExec(
 
   /** Helper for computing total number and size of files in selected partitions. */
   private def setFilesNumAndSizeMetric(
-    partitions: Seq[PartitionDirectory],
-    static: Boolean): Unit = {
+      partitions: Seq[PartitionDirectory],
+      static: Boolean): Unit = {
     val filesNum = partitions.map(_.files.size.toLong).sum
     val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
     if (!static || partitionFilters.filter(isDynamicPruningFilter).isEmpty) {

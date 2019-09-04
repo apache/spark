@@ -268,7 +268,7 @@ object HashJoin {
    * Extract a given key which was previously packed in a long value using its index to
    * determine the number of bits to shift
    */
-  def writeKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
+  def extractKeyExprAt(keys: Seq[Expression], index: Int): Expression = {
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)

@@ -558,7 +558,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val packedKeys = unsafeProj(row)
 
     (0 to 3).foreach { i =>
-      val key = HashJoin.writeKeyExprAt(keys, i)
+      val key = HashJoin.extractKeyExprAt(keys, i)
       val proj = UnsafeProjection.create(key)
       assert(proj(packedKeys).getShort(0) == i)
     }
@@ -574,7 +574,7 @@ class HashedRelationSuite extends SharedSparkSession {
     val packedKeys = unsafeProj(row)
 
     Seq((0, ByteType), (1, IntegerType), (2, ShortType)).foreach { case (i, dt) =>
-      val key = HashJoin.writeKeyExprAt(keys, i)
+      val key = HashJoin.extractKeyExprAt(keys, i)
       val proj = UnsafeProjection.create(key)
       assert(proj(packedKeys).get(0, dt) == -i - 1)
     }

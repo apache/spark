@@ -65,7 +65,7 @@ case class SubqueryBroadcastExec(
 
         val broadcastRelation = child.executeBroadcast[HashedRelation]().value
         val (iter, expr) = if (broadcastRelation.isInstanceOf[LongHashedRelation]) {
-          (broadcastRelation.keys(), HashJoin.writeKeyExprAt(buildKeys, index))
+          (broadcastRelation.keys(), HashJoin.extractKeyExprAt(buildKeys, index))
         } else {
           (broadcastRelation.keys(),
             BoundReference(index, buildKeys(index).dataType, buildKeys(index).nullable))

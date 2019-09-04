@@ -36,7 +36,6 @@ trait DynamicPruning extends Predicate
  *  broadcast through ReuseExchange; otherwise, it will use the filter only if it
  *  can reuse the results of the broadcast through ReuseExchange
  * @param broadcastKeyIndex the index of the filtering key collected from the broadcast
- * @param broadcastHint whether the child plan has a broadcast join hint.
  */
 case class DynamicPruningSubquery(
     child: Expression,
@@ -44,7 +43,6 @@ case class DynamicPruningSubquery(
     buildKeys: Seq[Expression],
     broadcastKeyIndex: Int,
     onlyInBroadcast: Boolean,
-    broadcastHint: Boolean,
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(buildQuery, Seq(child), exprId)
   with DynamicPruning

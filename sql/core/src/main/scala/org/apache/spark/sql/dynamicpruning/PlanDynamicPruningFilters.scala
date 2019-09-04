@@ -47,14 +47,6 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
     HashedRelationBroadcastMode(packedKeys)
   }
 
-  /**
-   * Verify if a given plan can be broadcasted either because of its size or a user's hint.
-   */
-  private def canBroadcast(plan: LogicalPlan): Boolean = {
-    plan.stats.sizeInBytes >= 0 &&
-      plan.stats.sizeInBytes <= SQLConf.get.autoBroadcastJoinThreshold
-  }
-
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!SQLConf.get.dynamicPartitionPruningEnabled) {
       return plan
@@ -62,13 +54,11 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
 
     plan transformAllExpressions {
       case DynamicPruningSubquery(
-          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, broadcastHint, exprId) =>
+          value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) =>
         val qe = new QueryExecution(sparkSession, buildPlan)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
-        val canReuseExchange = reuseBroadcast &&
-          (broadcastHint || canBroadcast(buildPlan)) &&
-          buildKeys.nonEmpty &&
+        val canReuseExchange = reuseBroadcast && buildKeys.nonEmpty &&
           plan.find {
             case BroadcastHashJoinExec(_, _, _, BuildLeft, _, left, _) =>
               left.sameResult(qe.sparkPlan)
