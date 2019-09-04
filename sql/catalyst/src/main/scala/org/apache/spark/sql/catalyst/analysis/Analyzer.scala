@@ -2029,7 +2029,7 @@ class Analyzer(
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
       case agg @ Aggregate(groupList, aggList, child) if aggList.forall {
-          case AliasedGenerator(generator, _, _) => generator.resolved
+          case AliasedGenerator(_, _, _) => true
           case other => other.resolved
         } && aggList.exists(hasGenerator) =>
         // If generator in the aggregate list was visited, set the boolean flag true.
