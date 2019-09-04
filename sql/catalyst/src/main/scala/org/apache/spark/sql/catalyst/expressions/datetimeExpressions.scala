@@ -1969,7 +1969,7 @@ object DatePart {
   def parseExtractField(
       extractField: String,
       source: Expression,
-      errorHandleFunc: => Unit): Expression = extractField.toUpperCase(Locale.ROOT) match {
+      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
     case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
     case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
     case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
@@ -1991,8 +1991,7 @@ object DatePart {
     case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
       Microseconds(source)
     case "EPOCH" => Epoch(source)
-    case other =>
-      errorHandleFunc.asInstanceOf[Expression]
+    case _ => errorHandleFunc
   }
 }
 
