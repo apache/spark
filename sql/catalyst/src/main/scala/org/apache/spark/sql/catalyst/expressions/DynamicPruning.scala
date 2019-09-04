@@ -28,7 +28,7 @@ trait DynamicPruning extends Predicate
  * join with a filter from the other side of the join. It is inserted in cases where partition
  * pruning can be applied.
  *
- * @param child the underlying plan to be filtered on.
+ * @param pruningKey the filtering key of the plan to be pruned.
  * @param buildQuery the build side of the join.
  * @param buildKeys the join keys corresponding to the build side of the join
  * @param onlyInBroadcast when set to false it indicates that the pruning filter is likely to be
@@ -38,17 +38,17 @@ trait DynamicPruning extends Predicate
  * @param broadcastKeyIndex the index of the filtering key collected from the broadcast
  */
 case class DynamicPruningSubquery(
-    child: Expression,
+    pruningKey: Expression,
     buildQuery: LogicalPlan,
     buildKeys: Seq[Expression],
     broadcastKeyIndex: Int,
     onlyInBroadcast: Boolean,
     exprId: ExprId = NamedExpression.newExprId)
-  extends SubqueryExpression(buildQuery, Seq(child), exprId)
+  extends SubqueryExpression(buildQuery, Seq(pruningKey), exprId)
   with DynamicPruning
   with Unevaluable {
 
-  override def children: Seq[Expression] = Seq(child)
+  override def children: Seq[Expression] = Seq(pruningKey)
 
   override def plan: LogicalPlan = buildQuery
 
@@ -57,21 +57,21 @@ case class DynamicPruningSubquery(
   override def withNewPlan(plan: LogicalPlan): DynamicPruningSubquery = copy(buildQuery = plan)
 
   override lazy val resolved: Boolean = {
-    child.resolved &&
+    pruningKey.resolved &&
       buildQuery.resolved &&
       buildKeys.nonEmpty &&
       buildKeys.forall(_.resolved) &&
       broadcastKeyIndex >= 0 &&
       broadcastKeyIndex < buildKeys.size &&
       buildKeys.forall(_.references.subsetOf(buildQuery.outputSet)) &&
-      child.dataType == buildKeys(broadcastKeyIndex).dataType
+      pruningKey.dataType == buildKeys(broadcastKeyIndex).dataType
   }
 
   override def toString: String = s"dynamicpruning#${exprId.id} $conditionString"
 
   override lazy val canonicalized: DynamicPruning = {
     copy(
-      child = child.canonicalized,
+      pruningKey = pruningKey.canonicalized,
       buildQuery = buildQuery.canonicalized,
       buildKeys = buildKeys.map(_.canonicalized),
       exprId = ExprId(0))
