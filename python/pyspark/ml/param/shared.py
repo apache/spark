@@ -288,6 +288,7 @@ class HasNumFeatures(Params):
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
+        self._setDefault(numFeatures=1 << 18)
 
     def setNumFeatures(self, value):
         """

@@ -120,7 +120,7 @@ if __name__ == "__main__":
         ("inputCols", "input column names.", None, "TypeConverters.toListString"),
         ("outputCol", "output column name.", "self.uid + '__output'", "TypeConverters.toString"),
         ("outputCols", "output column names.", None, "TypeConverters.toListString"),
-        ("numFeatures", "number of features.", None, "TypeConverters.toInt"),
+        ("numFeatures", "number of features.", "1 << 18", "TypeConverters.toInt"),
         ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
          "E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: " +
          "this setting will be ignored if the checkpoint directory is not set in the SparkContext.",
