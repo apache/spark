@@ -176,8 +176,8 @@ case class HashAggregateExec(
     }
   }
 
-  // The variables are used as aggregation buffers and each aggregate function has one more ExprCode
-  // to initialize its buffer slots. Only used for aggregation without keys.
+  // The variables are used as aggregation buffers and each aggregate function has one or more
+  // ExprCode to initialize its buffer slots. Only used for aggregation without keys.
   private var bufVars: Seq[Seq[ExprCode]] = _
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
@@ -263,14 +263,14 @@ case class HashAggregateExec(
 
   private def isValidParamLength(paramLength: Int): Boolean = {
     // This config is only for testing
-    sqlContext.getConf("spark.sql.HashAggregateExec.isValidParamLength", null) match {
+    sqlContext.getConf("spark.sql.HashAggregateExec.validParamLength", null) match {
       case null | "" => CodeGenerator.isValidParamLength(paramLength)
       case validLength => paramLength <= validLength.toInt
     }
   }
 
   // Splits aggregate code into small functions because the most of JVM implementations
-  // can not compile too long functions.
+  // can not compile too long functions. Returns None if we are not able to split the given code.
   //
   // Note: The difference from `CodeGenerator.splitExpressions` is that we define an individual
   // function for each aggregation function (e.g., SUM and AVG). For example, in a query
@@ -391,10 +391,10 @@ case class HashAggregateExec(
 
     if (conf.codegenSplitAggregateFunc &&
         aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
-      val splitAggCode = splitAggregateExpressions(
+      val maybeSplitCode = splitAggregateExpressions(
         ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-      splitAggCode.map { updateAggCode =>
+      maybeSplitCode.map { updateAggCode =>
         s"""
            |// do aggregate
            |// common sub-expressions
@@ -1002,10 +1002,10 @@ case class HashAggregateExec(
 
       if (conf.codegenSplitAggregateFunc &&
           aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
-        val splitAggCode = splitAggregateExpressions(
+        val maybeSplitCode = splitAggregateExpressions(
           ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-        splitAggCode.map { updateAggCode =>
+        maybeSplitCode.map { updateAggCode =>
           s"""
              |// do aggregate
              |// common sub-expressions
@@ -1074,10 +1074,10 @@ case class HashAggregateExec(
 
           if (conf.codegenSplitAggregateFunc &&
               aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
-            val splitAggCode = splitAggregateExpressions(
+            val maybeSplitCode = splitAggregateExpressions(
               ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-            splitAggCode.map { updateAggCode =>
+            maybeSplitCode.map { updateAggCode =>
               // If fast hash map is on, we first generate code to update row in fast hash map, if
               // the previous loop up hit fast hash map. Otherwise, update row in regular hash map.
               s"""
