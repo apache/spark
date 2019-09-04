@@ -1862,7 +1862,7 @@ object SQLConf {
       "(nonnegative and shorter than the maximum size).")
     .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
-  val MAX_UNCOMPRESSED_RESULT_SIZE = buildConf("spark.sql.driver.maxUncompressedResultSize")
+  val MAX_COLLECT_SIZE = buildConf("spark.sql.driver.maxCollectSize")
     .doc("If specified then its value will be used for limiting the total size of " +
       "uncompressed results of all partitions for each Spark action (e.g. collect). " +
       "This is similar to spark.driver.maxResultSize but it enforces the limit on the " +
@@ -2411,7 +2411,7 @@ class SQLConf extends Serializable with Logging {
 
   def maxPlanStringLength: Int = getConf(SQLConf.MAX_PLAN_STRING_LENGTH).toInt
 
-  def maxUncompressedResultSize: Option[Long] = getConf(SQLConf.MAX_UNCOMPRESSED_RESULT_SIZE)
+  def maxCollectSize: Option[Long] = getConf(SQLConf.MAX_COLLECT_SIZE)
 
   def setCommandRejectsSparkCoreConfs: Boolean =
     getConf(SQLConf.SET_COMMAND_REJECTS_SPARK_CORE_CONFS)

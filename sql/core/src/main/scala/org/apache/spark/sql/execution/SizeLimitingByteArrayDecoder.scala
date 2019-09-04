@@ -37,7 +37,7 @@ private[spark] class SizeLimitingByteArrayDecoder(
      nFields: Int,
      sqlConf: SQLConf) extends Logging {
   private var totalUncompressedResultSize = 0L
-  private val maxUncompressedResultSize = sqlConf.maxUncompressedResultSize
+  private val maxCollectSize = sqlConf.maxCollectSize
 
   /**
    * Decodes the byte arrays back to UnsafeRows and puts them into buffer.
@@ -66,7 +66,7 @@ private[spark] class SizeLimitingByteArrayDecoder(
 
   private def ensureCanFetchMoreResults(sizeOfNextRow: Int): Unit = {
     totalUncompressedResultSize += sizeOfNextRow
-    maxUncompressedResultSize match {
+    maxCollectSize match {
       case Some(maxSize) => if (totalUncompressedResultSize > maxSize) {
         val msg = s"Total size of uncompressed results " +
           s"(${Utils.bytesToString(totalUncompressedResultSize)}) " +

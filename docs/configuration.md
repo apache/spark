@@ -164,7 +164,7 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.driver.maxUncompressedResultSize</code></td>
+  <td><code>spark.sql.driver.maxCollectSize</code></td>
   <td>None</td>
   <td>
     Similar to spark.driver.maxResultSize but enforces a limit on the the total size of the 
