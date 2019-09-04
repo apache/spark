@@ -2297,7 +2297,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[ShowDatabasesStatement]] command.
+   * Create a [[ShowNamespacesStatement]] command.
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     ShowNamespacesStatement(
