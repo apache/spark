@@ -27,7 +27,7 @@ except ImportError:
 
 import py4j
 
-from pyspark import HiveContext, Row
+from pyspark.sql import Row, SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.window import Window
 from pyspark.testing.utils import ReusedPySparkTestCase
@@ -41,14 +41,13 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
         try:
-            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
         except py4j.protocol.Py4JError:
             cls.hive_available = False
         except TypeError:
             cls.hive_available = False
         os.unlink(cls.tempdir.name)
         if cls.hive_available:
-            cls.spark = HiveContext._createForTesting(cls.sc)
             cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
             cls.df = cls.sc.parallelize(cls.testData).toDF()
 
@@ -66,7 +65,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
         df.write.saveAsTable("savedJsonTable", "json", "append", path=tmpPath)
-        actual = self.spark.createExternalTable("externalJsonTable", tmpPath, "json")
+        actual = self.spark.createTable("externalJsonTable", tmpPath, "json")
         self.assertEqual(sorted(df.collect()),
                          sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
         self.assertEqual(sorted(df.collect()),
@@ -76,9 +75,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
 
         df.write.saveAsTable("savedJsonTable", "json", "overwrite", path=tmpPath)
         schema = StructType([StructField("value", StringType(), True)])
-        actual = self.spark.createExternalTable("externalJsonTable", source="json",
-                                                schema=schema, path=tmpPath,
-                                                noUse="this options will not be used")
+        actual = self.spark.createTable("externalJsonTable", source="json",
+                                        schema=schema, path=tmpPath,
+                                        noUse="this options will not be used")
         self.assertEqual(sorted(df.collect()),
                          sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
         self.assertEqual(sorted(df.select("value").collect()),
@@ -91,7 +90,7 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
                                                    "org.apache.spark.sql.parquet")
         self.spark.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
         df.write.saveAsTable("savedJsonTable", path=tmpPath, mode="overwrite")
-        actual = self.spark.createExternalTable("externalJsonTable", path=tmpPath)
+        actual = self.spark.createTable("externalJsonTable", path=tmpPath)
         self.assertEqual(sorted(df.collect()),
                          sorted(self.spark.sql("SELECT * FROM savedJsonTable").collect()))
         self.assertEqual(sorted(df.collect()),

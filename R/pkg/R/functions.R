@@ -1695,21 +1695,6 @@ setMethod("tanh",
           })
 
 #' @details
-#' \code{toDegrees}: Converts an angle measured in radians to an approximately equivalent angle
-#' measured in degrees.
-#'
-#' @rdname column_math_functions
-#' @aliases toDegrees toDegrees,Column-method
-#' @note toDegrees since 1.4.0
-setMethod("toDegrees",
-          signature(x = "Column"),
-          function(x) {
-            .Deprecated("degrees")
-            jc <- callJStatic("org.apache.spark.sql.functions", "degrees", x@jc)
-            column(jc)
-          })
-
-#' @details
 #' \code{degrees}: Converts an angle measured in radians to an approximately equivalent angle
 #' measured in degrees.
 #'
@@ -1720,21 +1705,6 @@ setMethod("degrees",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "degrees", x@jc)
-            column(jc)
-          })
-
-#' @details
-#' \code{toRadians}: Converts an angle measured in degrees to an approximately equivalent angle
-#' measured in radians.
-#'
-#' @rdname column_math_functions
-#' @aliases toRadians toRadians,Column-method
-#' @note toRadians since 1.4.0
-setMethod("toRadians",
-          signature(x = "Column"),
-          function(x) {
-            .Deprecated("radians")
-            jc <- callJStatic("org.apache.spark.sql.functions", "radians", x@jc)
             column(jc)
           })
 

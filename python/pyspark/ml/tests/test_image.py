@@ -20,7 +20,7 @@ import py4j
 
 from pyspark.ml.image import ImageSchema
 from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase
-from pyspark.sql import HiveContext, Row
+from pyspark.sql import Row, SparkSession
 from pyspark.testing.utils import QuietTest
 
 
@@ -74,17 +74,14 @@ class ImageFileFormatOnHiveContextTest(PySparkTestCase):
         super(ImageFileFormatOnHiveContextTest, cls).setUpClass()
         cls.hive_available = True
         # Note that here we enable Hive's support.
-        cls.spark = None
         try:
-            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
         except py4j.protocol.Py4JError:
             cls.tearDownClass()
             cls.hive_available = False
         except TypeError:
             cls.tearDownClass()
             cls.hive_available = False
-        if cls.hive_available:
-            cls.spark = HiveContext._createForTesting(cls.sc)
 
     def setUp(self):
         if not self.hive_available:
@@ -94,7 +91,7 @@ class ImageFileFormatOnHiveContextTest(PySparkTestCase):
     def tearDownClass(cls):
         super(ImageFileFormatOnHiveContextTest, cls).tearDownClass()
         if cls.spark is not None:
-            cls.spark.sparkSession.stop()
+            cls.spark.stop()
             cls.spark = None
 
     def test_read_images_multiple_times(self):
