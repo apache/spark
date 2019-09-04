@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.annotation.Stable
+import org.apache.spark.annotation.Unstable
 
 /**
  * The time type represents local time in microsecond precision.
@@ -29,7 +29,7 @@ import org.apache.spark.annotation.Stable
  * Please use the singleton `DataTypes.TimeType` to refer the type.
  * @since 3.0.0
  */
-@Stable
+@Unstable
 class TimeType private () extends AtomicType {
 
   /**
@@ -57,5 +57,5 @@ class TimeType private () extends AtomicType {
  *
  * @since 3.0.0
  */
-@Stable
+@Unstable
 case object TimeType extends TimeType
