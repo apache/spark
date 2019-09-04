@@ -379,35 +379,25 @@ case class HashAggregateExec(
        """.stripMargin
     }
 
-    lazy val nonSplitAggCode = {
-       s"""
-         |// do aggregate
-         |// common sub-expressions
-         |$effectiveCodes
-         |// evaluate aggregate functions and update aggregation buffers
-         |${aggCodeBlocks.fold(EmptyBlock)(_ + _)}
-       """.stripMargin
-    }
-
-    if (conf.codegenSplitAggregateFunc &&
+    val codeToEvalAggFunc = if (conf.codegenSplitAggregateFunc &&
         aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
       val maybeSplitCode = splitAggregateExpressions(
         ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-      maybeSplitCode.map { updateAggCode =>
-        s"""
-           |// do aggregate
-           |// common sub-expressions
-           |$effectiveCodes
-           |// evaluate aggregate functions and update aggregation buffers
-           |$updateAggCode
-         """.stripMargin
-      }.getOrElse {
-        nonSplitAggCode
+      maybeSplitCode.getOrElse {
+        aggCodeBlocks.fold(EmptyBlock)(_ + _).code
       }
     } else {
-      nonSplitAggCode
+      aggCodeBlocks.fold(EmptyBlock)(_ + _).code
     }
+
+    s"""
+       |// do aggregate
+       |// common sub-expressions
+       |$effectiveCodes
+       |// evaluate aggregate functions and update aggregation buffers
+       |$codeToEvalAggFunc
+     """.stripMargin
   }
 
   private val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -991,34 +981,24 @@ case class HashAggregateExec(
          """.stripMargin
       }
 
-      lazy val nonSplitAggCode = {
-        s"""
-           |// common sub-expressions
-           |$effectiveCodes
-           |// evaluate aggregate functions and update aggregation buffers
-           |${aggCodeBlocks.fold(EmptyBlock)(_ + _)}
-         """.stripMargin
-      }
-
-      if (conf.codegenSplitAggregateFunc &&
+      val codeToEvalAggFunc = if (conf.codegenSplitAggregateFunc &&
           aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
         val maybeSplitCode = splitAggregateExpressions(
           ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-        maybeSplitCode.map { updateAggCode =>
-          s"""
-             |// do aggregate
-             |// common sub-expressions
-             |$effectiveCodes
-             |// evaluate aggregate functions and update aggregation buffers
-             |$updateAggCode
-           """.stripMargin
-        }.getOrElse {
-          nonSplitAggCode
+        maybeSplitCode.getOrElse {
+          aggCodeBlocks.fold(EmptyBlock)(_ + _).code
         }
       } else {
-        nonSplitAggCode
+        aggCodeBlocks.fold(EmptyBlock)(_ + _).code
       }
+
+      s"""
+         |// common sub-expressions
+         |$effectiveCodes
+         |// evaluate aggregate functions and update aggregation buffers
+         |$codeToEvalAggFunc
+       """.stripMargin
     }
 
     val updateRowInHashMap: String = {
@@ -1056,46 +1036,32 @@ case class HashAggregateExec(
               """.stripMargin
           }
 
-          lazy val nonSplitAggCode = {
-            // If vectorized fast hash map is on, we first generate code to update row
-            // in vectorized fast hash map, if the previous loop up hit vectorized fast hash map.
-            // Otherwise, update row in regular hash map.
-            s"""
-               |if ($fastRowBuffer != null) {
-               |  // common sub-expressions
-               |  $effectiveCodes
-               |  // evaluate aggregate functions and update aggregation buffers
-               |  ${aggCodeBlocks.fold(EmptyBlock)(_ + _)}
-               |} else {
-               |  $updateRowInRegularHashMap
-               |}
-            """.stripMargin
-          }
 
-          if (conf.codegenSplitAggregateFunc &&
+          val codeToEvalAggFunc = if (conf.codegenSplitAggregateFunc &&
               aggCodeBlocks.map(_.length).sum > conf.methodSplitThreshold) {
             val maybeSplitCode = splitAggregateExpressions(
               ctx, aggNames, boundUpdateExprs, aggCodeBlocks, subExprs.states)
 
-            maybeSplitCode.map { updateAggCode =>
-              // If fast hash map is on, we first generate code to update row in fast hash map, if
-              // the previous loop up hit fast hash map. Otherwise, update row in regular hash map.
-              s"""
-                 |if ($fastRowBuffer != null) {
-                 |  // common sub-expressions
-                 |  $effectiveCodes
-                 |  // evaluate aggregate functions and update aggregation buffers
-                 |  $updateAggCode
-                 |} else {
-                 |  $updateRowInRegularHashMap
-                 |}
-               """.stripMargin
-            }.getOrElse {
-              nonSplitAggCode
+            maybeSplitCode.getOrElse {
+              aggCodeBlocks.fold(EmptyBlock)(_ + _).code
             }
           } else {
-            nonSplitAggCode
+            aggCodeBlocks.fold(EmptyBlock)(_ + _).code
           }
+
+          // If vectorized fast hash map is on, we first generate code to update row
+          // in vectorized fast hash map, if the previous loop up hit vectorized fast hash map.
+          // Otherwise, update row in regular hash map.
+          s"""
+             |if ($fastRowBuffer != null) {
+             |  // common sub-expressions
+             |  $effectiveCodes
+             |  // evaluate aggregate functions and update aggregation buffers
+             |  $codeToEvalAggFunc
+             |} else {
+             |  $updateRowInRegularHashMap
+             |}
+          """.stripMargin
         } else {
           // If row-based hash map is on and the previous loop up hit fast hash map,
           // we reuse regular hash buffer to update row of fast hash map.
