@@ -230,11 +230,9 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // (at heartbeat intervals), and when we do, it is only in the original events, never
     // in the replay, since executor metrics updates are not replayed.
     // For this reason, exclude stage executor metrics for the driver.
-    val filteredEvents = originalEvents.filter { e =>
-      if (e.isInstanceOf[SparkListenerStageExecutorMetrics] &&
-        e.asInstanceOf[SparkListenerStageExecutorMetrics].execId == "driver") {
-        false
-      } else true
+    val filteredEvents = originalEvents.filter {
+      case e: SparkListenerStageExecutorMetrics if e.execId == "driver" => false
+      case _ => true
     }
     filteredEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       JsonProtocolSuite.assertEquals(e1, e1)
