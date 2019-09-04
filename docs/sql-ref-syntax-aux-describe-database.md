@@ -20,44 +20,77 @@ license: |
 ---
 ### Description
 ​
-Return the metadata of an existing database (name, comment and location). If the database does not exist,
-an exception is thrown.
-When `EXTENDED` is specified, it also shows the database's properties.
-You can use the abbreviation `DESC` for the `DESCRIBE` statement.
+`DESCRIBE DATABASE` statement returns the metadata of an existing database. The metadata information includes database
+name, database comment, and database location on the filesystem. If the optional `EXTENDED` option is specified, it
+returns the basic metadata information along with the database properties. The `DATABASE` and `SCHEMA` are
+interchangeable.
 
 ### Syntax
 {% highlight sql %}
-[DESC | DESCRIBE] DATABASE [EXTENDED] db_name 
+{DESC | DESCRIBE} DATABASE [EXTENDED] db_name
 {% endhighlight %}
+
+### Parameters
+<dl>
+  <dt><code><em>db_name</em></code></dt>
+  <dd>
+    Specifies a name of an existing database or an existing schema in the syetem. If the name does not exist, an
+    exception is thrown. The name is case insensitive, it is stored as low case in SPARK<br><br>
+  </dd>
+</dl>
 
 ### Example
 {% highlight sql %}
--- Returns Database Name, Description and location for the tempdb DATABASE
+-- Create employees DATABASE
+CREATE DATABASE EMPLOYEES COMMENT 'For software companies';
 
-DESCRIBE DATABASE tempdb
-+-------------------------+--------------------------+
-|database_description_item|database_description_value|
-+-------------------------+--------------------------+
-|            Database Name|                    tempdb|
-|              Description|                          |
-|                 Location|      file:/Users/Temp/...|
-+-------------------------+--------------------------+
-
+-- Describe employees DATABASE.
+-- Returns Database Name, Description and Root location of the filesystem for the employees DATABASE
+DESCRIBE DATABASE Employees;
++-------------------------+-----------------------------+
+|database_description_item|database_description_value   |
++-------------------------+-----------------------------+
+|Database Name            |employees                    |
+|Description              |For software companies       |
+|Location                 |file:/Users/Temp/employees.db|
++-------------------------+-----------------------------+
 {% endhighlight %}
 
 {% highlight sql %}
--- Returns Database Name, Description, Location for the tempdb DATABASE, the additional information displayed by the EXTENDED keyword is the database properties. 
+-- Create employees DATABASE
+CREATE DATABASE EMPLOYEES COMMENT 'For software companies';
 
-DESCRIBE DATABASE EXTENDED tempdb
-+-------------------------+--------------------------+
-|database_description_item|database_description_value|
-+-------------------------+--------------------------+
-|            Database Name|                    tempdb|
-|              Description|                          |
-|                 Location|      file:/Users/Temp/...|
-|               Properties|                   ((a,a))|
-+-------------------------+--------------------------+
+-- Alter employees database to set DBPROPERTIES
+ALTER DATABASE EMPLOYEES SET DBPROPERTIES ('Create-by' = 'Kevin', 'Create-date' = '09/01/2019');
 
+-- Describe employees DATABASE with EXTENDED option to the database properties
+DESCRIBE DATABASE EXTENDED employees;
++-------------------------+---------------------------------------------+
+|database_description_item|database_description_value                   |
++-------------------------+---------------------------------------------+
+|Database Name            |employees                                    |
+|Description              |For software companies                       |
+|Location                 |file:/Users/Temp/employees.db                |
+|Properties               |((Create-by,kevin), (Create-date,09/01/2019))|
++-------------------------+---------------------------------------------+
 {% endhighlight %}
 
+{% highlight sql %}
+-- Create deployment SCHEMA
+CREATE SCHEMA DEPLOYMENT comment 'Deployment environment';
 
+-- Describe deployment, the DATABASE and SCHEMA are interchangeable, their meaning are the same.
+DESC DATABASE DEPLOYMENT;
++-------------------------+------------------------------+
+|database_description_item|database_description_value    |
++-------------------------+------------------------------+
+|Database Name            |deployment                    |
+|Description              |Deployment environment        |
+|Location                 |file:/Users/Temp/deployment.db|
++-------------------------+------------------------------+
+{% endhighlight %}
+
+### Related Statements
+- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+- [DESCRIBE TABLE](sql-ref-syntax-aux-describe-table.html)
+- [DESCRIBE QUERY](sql-ref-syntax-aux-describe-query.html)
