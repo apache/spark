@@ -453,6 +453,11 @@ The following properties are available to configure the consumer pool:
   <td>5m (5 minutes)</td>
 </tr>
 <tr>
+  <td>spark.kafka.consumer.cache.evictorThreadRunInterval</td>
+  <td>The interval of time between runs of the idle evictor thread for consumer pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>3m (3 minutes)</td>
+</tr>
+<tr>
   <td>spark.kafka.consumer.cache.jmx.enable</td>
   <td>Enable or disable JMX for pools created with this configuration instance. Statistics of the pool are available via JMX instance.
   The prefix of JMX name is set to "kafka010-cached-simple-kafka-consumer-pool".
@@ -464,11 +469,11 @@ The following properties are available to configure the consumer pool:
 The size of the pool is limited by <code>spark.kafka.consumer.cache.capacity</code>,
 but it works as "soft-limit" to not block Spark tasks.
 
-Idle eviction thread periodically removes some consumers which are not used longer than given timeout. 
+Idle eviction thread periodically removes consumers which are not used longer than given timeout.
 If this threshold is reached when borrowing, it tries to remove the least-used entry that is currently not in use.
 
 If it cannot be removed, then the pool will keep growing. In the worst case, the pool will grow to
-the max number of concurrent tasks that can run in the executor (that is, number of tasks slots).
+the max number of concurrent tasks that can run in the executor (that is, number of task slots).
 
 If a task fails for any reason, the new task is executed with a newly created Kafka consumer for safety reasons.
 At the same time, we invalidate all consumers in pool which have same caching key, to remove consumer which was used
@@ -485,13 +490,13 @@ The following properties are available to configure the fetched data pool:
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.timeout</td>
-  <td>The maximum number of fetched data cached. Please note that it's a soft limit.</td>
-  <td>64</td>
+  <td>The minimum amount of time a fetched data may sit idle in the pool before it is eligible for eviction by the evictor.</td>
+  <td>5m (5 minutes)</td>
 </tr>
 <tr>
   <td>spark.kafka.consumer.fetchedData.cache.evictorThreadRunInterval</td>
-  <td>The minimum amount of time a fetched data may sit idle in the pool before it is eligible for eviction by the evictor.</td>
-  <td>5m (5 minutes)</td>
+  <td>The interval of time between runs of the idle evictor thread for fetched data pool. When non-positive, no idle evictor thread will be run.</td>
+  <td>3m (3 minutes)</td>
 </tr>
 </table>
 

@@ -57,10 +57,15 @@ private[kafka010] class FetchedDataPool(
   private val evictorThreadRunIntervalMillis =
     conf.get(FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL)
 
-  private def startEvictorThread(): ScheduledFuture[_] = {
-    executorService.scheduleAtFixedRate(() => {
-      Utils.tryLogNonFatalError(removeIdleFetchedData())
-    }, 0, evictorThreadRunIntervalMillis, TimeUnit.MILLISECONDS)
+  private def startEvictorThread(): Option[ScheduledFuture[_]] = {
+    if (evictorThreadRunIntervalMillis > 0) {
+      val future = executorService.scheduleAtFixedRate(() => {
+        Utils.tryLogNonFatalError(removeIdleFetchedData())
+      }, 0, evictorThreadRunIntervalMillis, TimeUnit.MILLISECONDS)
+      Some(future)
+    } else {
+      None
+    }
   }
 
   private var scheduled = startEvictorThread()
@@ -132,7 +137,7 @@ private[kafka010] class FetchedDataPool(
   }
 
   def reset(): Unit = synchronized {
-    scheduled.cancel(true)
+    scheduled.foreach(_.cancel(true))
 
     cache.clear()
     numTotalElements.reset()
