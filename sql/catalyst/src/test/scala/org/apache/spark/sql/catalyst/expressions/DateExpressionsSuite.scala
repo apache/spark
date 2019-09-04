@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{LocalDateTime, LocalTime, ZoneId, ZoneOffset}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeUnit._
@@ -971,28 +971,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
       Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
     checkEvaluation(makeTimestampExpr, Timestamp.valueOf("2019-08-12 00:00:58.000001"))
-  }
-
-  test("creating values of TimeType via make_time") {
-    var makeTimeExpr = MakeTime(Literal(8), Literal(15), Literal(Decimal(BigDecimal(23.5), 8, 6)))
-    val expected = LocalTime.parse("08:15:23.5")
-    checkEvaluation(makeTimeExpr, expected)
-
-    checkEvaluation(makeTimeExpr.copy(hour = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimeExpr.copy(hour = Literal(25)), null)
-
-    checkEvaluation(makeTimeExpr.copy(min = Literal.create(null, IntegerType)), null)
-    checkEvaluation(makeTimeExpr.copy(min = Literal(65)), null)
-
-    checkEvaluation(makeTimeExpr.copy(sec = Literal.create(null, DecimalType(8, 6))), null)
-    checkEvaluation(makeTimeExpr.copy(sec = Literal(Decimal(BigDecimal(70.0), 8, 6))), null)
-
-    makeTimeExpr = MakeTime(Literal(0), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
-    checkEvaluation(makeTimeExpr, LocalTime.parse("01:00:00"))
-    checkEvaluation(makeTimeExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))), null)
-
-    makeTimeExpr = MakeTime(Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
-    checkEvaluation(makeTimeExpr, LocalTime.parse("00:00:58.000001"))
   }
 
   test("millennium") {
