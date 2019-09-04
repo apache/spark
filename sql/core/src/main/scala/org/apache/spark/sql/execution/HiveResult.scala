@@ -75,6 +75,7 @@ object HiveResult {
     ShortType,
     DateType,
     TimestampType,
+    TimeType,
     BinaryType)
 
   private lazy val dateFormatter = DateFormatter()
