@@ -1841,6 +1841,11 @@ class DatasetSuite extends QueryTest with SharedSparkSession {
     val instant = java.time.Instant.parse("2019-03-30T09:54:00Z")
     assert(spark.range(1).map { _ => instant }.head === instant)
   }
+
+  test("implicit encoder for LocalTime") {
+    val localTime = java.time.LocalTime.of(19, 30, 30)
+    assert(spark.range(1).map { _ => localTime }.head === localTime)
+  }
 }
 
 object AssertExecutionId {

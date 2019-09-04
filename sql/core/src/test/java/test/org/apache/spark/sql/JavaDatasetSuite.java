@@ -23,6 +23,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.*;
 
 import org.apache.spark.sql.streaming.GroupStateTimeout;
@@ -408,6 +409,14 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple2<LocalDate, Instant>> data =
       Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
     Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalTimeEncoder() {
+    Encoder<LocalTime> encoder = Encoders.LOCALTIME();
+    List<LocalTime> data = Arrays.asList(LocalTime.ofNanoOfDay(0));
+    Dataset<LocalTime> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 

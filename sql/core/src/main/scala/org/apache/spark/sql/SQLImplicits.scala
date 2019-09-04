@@ -88,6 +88,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 3.0.0 */
   implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
 
+  /** @since 3.0.0 */
+  implicit def newLocalTimeEncoder: Encoder[java.time.LocalTime] = Encoders.LOCALTIME
+
   // Boxed primitives
 
   /** @since 2.0.0 */

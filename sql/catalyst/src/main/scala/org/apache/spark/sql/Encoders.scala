@@ -129,6 +129,14 @@ object Encoders {
   def INSTANT: Encoder[java.time.Instant] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.LocalTime` class
+   * to the internal representation of nullable Catalyst's DateType.
+   *
+   * @since 3.0.0
+   */
+  def LOCALTIME: Encoder[java.time.LocalTime] = ExpressionEncoder()
+
+  /**
    * An encoder for arrays of bytes.
    *
    * @since 1.6.1
