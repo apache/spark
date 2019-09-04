@@ -37,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -375,7 +375,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     val table = catalog.asTableCatalog.loadTable(ident) match {
-      case _: UnresolvedTable =>
+      case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
         DataSourceV2Relation.create(t)
@@ -523,7 +523,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
 
     val command = (mode, tableOpt) match {
-      case (_, Some(table: UnresolvedTable)) =>
+      case (_, Some(table: V1Table)) =>
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>

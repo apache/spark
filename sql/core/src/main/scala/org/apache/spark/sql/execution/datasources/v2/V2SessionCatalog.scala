@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, Catal
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -78,7 +78,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
         throw new NoSuchTableException(ident)
     }
 
-    UnresolvedTable(catalogTable)
+    V1Table(catalogTable)
   }
 
   override def invalidateTable(ident: Identifier): Unit = {
