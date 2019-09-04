@@ -180,11 +180,8 @@ case class DataSourceResolution(
 
     case ShowNamespacesStatement(None, pattern) =>
       defaultCatalog match {
-        case Some(catalog: SupportsNamespaces) =>
-          ShowNamespaces(catalog, None, pattern)
-        case Some(_) =>
-          throw new AnalysisException(
-            "The default v2 catalog doesn't support showing namespaces.")
+        case Some(catalog) =>
+          ShowNamespaces(catalog.asNamespaceCatalog, None, pattern)
         case None =>
           throw new AnalysisException("No default v2 catalog is set.")
       }
@@ -192,11 +189,11 @@ case class DataSourceResolution(
     case ShowNamespacesStatement(Some(namespace), pattern) =>
       val CatalogNamespace(maybeCatalog, ns) = namespace
       maybeCatalog match {
-        case Some(catalog: SupportsNamespaces) =>
-          ShowNamespaces(catalog, Some(ns), pattern)
-        case _ =>
+        case Some(catalog) =>
+          ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
+        case None =>
           throw new AnalysisException(
-            s"No v2 catalog with showing namespaces is available for ${namespace.quoted}")
+            s"No v2 catalog is available for ${namespace.quoted}")
       }
 
     case ShowTablesStatement(None, pattern) =>

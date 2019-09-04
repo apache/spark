@@ -758,21 +758,26 @@ class DataSourceV2SQLSuite
 
     testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
     testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
-
-    // Try to look up only with catalog name, which should list root namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
   }
 
-  test("ShowNamespaces: show sub-namespaces") {
-    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns.ns2.table (id bigint) USING foo")
+  test("ShowNamespaces: show namespaces with v2 catalog") {
+    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
 
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns", Seq("ns.ns1", "ns.ns2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns LIKE '*2*'", Seq("ns.ns2"))
+    // Look up only with catalog name, which should list root namespaces.
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
 
-    // Try to look up namespace that doesn't exist.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns.ns3", Seq())
+    // Look up sub-namespaces.
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
+
+    // Try to look up namespaces that do not exist.
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
   }
 
   test("ShowNamespaces: default v2 catalog is not set") {
@@ -782,7 +787,7 @@ class DataSourceV2SQLSuite
       sql("SHOW NAMESPACES")
     }
 
-    assert(exception.getMessage.contains("No default v2 catalog is set."))
+    assert(exception.getMessage.contains("No default v2 catalog is set"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -790,13 +795,12 @@ class DataSourceV2SQLSuite
       "spark.sql.catalog.testcat_no_namspace",
       classOf[BasicInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.default.catalog", "testcat_no_namspace")
-
+jj
     val exception = intercept[AnalysisException] {
       sql("SHOW NAMESPACES")
     }
 
-    assert(exception.getMessage.contains(
-      "The default v2 catalog doesn't support showing namespaces."))
+    assert(exception.getMessage.contains("does not support namespaces"))
   }
 
   test("ShowNamespaces: v2 catalog doesn't support namespace") {
@@ -808,8 +812,15 @@ class DataSourceV2SQLSuite
       sql("SHOW NAMESPACES in testcat_no_namspace")
     }
 
-    assert(exception.getMessage.contains(
-      "No v2 catalog with showing namespaces is available"))
+    assert(exception.getMessage.contains("does not support namespaces"))
+  }
+
+  test("ShowNamespaces: no v2 catalog is available") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES in dummy")
+    }
+
+    assert(exception.getMessage.contains("No v2 catalog is available"))
   }
 
   private def testShowNamespaces(

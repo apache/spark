@@ -38,11 +38,10 @@ case class ShowNamespacesExec(
     pattern: Option[String])
     extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
-    val namespaces = namespace.map{ ns =>
+    val namespaces = namespace.map { ns =>
         if (ns.nonEmpty) {
           catalog.listNamespaces(ns.toArray)
-        }
-        else {
+        } else {
           catalog.listNamespaces()
         }
       }
