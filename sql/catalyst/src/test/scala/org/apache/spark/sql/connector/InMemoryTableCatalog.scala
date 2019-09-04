@@ -30,7 +30,7 @@ import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class InMemoryTableCatalogBase extends TableCatalog {
+class BasicInMemoryTableCatalog extends TableCatalog {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   protected val tables: util.Map[Identifier, InMemoryTable] =
@@ -111,7 +111,7 @@ class InMemoryTableCatalogBase extends TableCatalog {
   }
 }
 
-class InMemoryTableCatalog extends InMemoryTableCatalogBase with SupportsNamespaces {
+class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
   protected val namespaces: util.Map[List[String], Map[String, String]] =

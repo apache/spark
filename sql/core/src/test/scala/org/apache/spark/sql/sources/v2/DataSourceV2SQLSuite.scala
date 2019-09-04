@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog, InMemoryTableCatalogBase, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.{BasicInMemoryTableCatalog, InMemoryTable, InMemoryTableCatalog, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
@@ -750,17 +750,17 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: show root namespaces with default v2 catalog") {
     spark.conf.set("spark.sql.default.catalog", "testcat")
 
-    runShowDatabasesSql("SHOW NAMESPACES", Seq())
+    testShowNamespaces("SHOW NAMESPACES", Seq())
 
     spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
     spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
     spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
 
-    runShowDatabasesSql("SHOW NAMESPACES", Seq("ns1", "ns2"))
-    runShowDatabasesSql("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
+    testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
 
     // Try to look up only with catalog name, which should list root namespaces.
-    runShowDatabasesSql("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
   }
 
   test("ShowNamespaces: show sub-namespaces") {
@@ -768,18 +768,18 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.ns.ns1.table (id bigint) USING foo")
     spark.sql("CREATE TABLE testcat.ns.ns2.table (id bigint) USING foo")
 
-    runShowDatabasesSql("SHOW NAMESPACES IN testcat.ns", Seq("ns.ns1", "ns.ns2"))
-    runShowDatabasesSql("SHOW NAMESPACES IN testcat.ns LIKE '*2*'", Seq("ns.ns2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns", Seq("ns.ns1", "ns.ns2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns LIKE '*2*'", Seq("ns.ns2"))
 
     // Try to look up namespace that doesn't exist.
-    runShowDatabasesSql("SHOW NAMESPACES IN testcat.ns.ns3", Seq())
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns.ns3", Seq())
   }
 
   test("ShowNamespaces: default v2 catalog is not set") {
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
     val exception = intercept[AnalysisException] {
-      runShowDatabasesSql("SHOW NAMESPACES", Seq(""))
+      sql("SHOW NAMESPACES")
     }
 
     assert(exception.getMessage.contains("No default v2 catalog is set."))
@@ -788,11 +788,11 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
     spark.conf.set(
       "spark.sql.catalog.testcat_no_namspace",
-      classOf[InMemoryTableCatalogBase].getName)
+      classOf[BasicInMemoryTableCatalog].getName)
     spark.conf.set("spark.sql.default.catalog", "testcat_no_namspace")
 
     val exception = intercept[AnalysisException] {
-      runShowDatabasesSql("SHOW NAMESPACES", Seq(""))
+      sql("SHOW NAMESPACES")
     }
 
     assert(exception.getMessage.contains(
@@ -802,17 +802,17 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: v2 catalog doesn't support namespace") {
     spark.conf.set(
       "spark.sql.catalog.testcat_no_namspace",
-      classOf[InMemoryTableCatalogBase].getName)
+      classOf[BasicInMemoryTableCatalog].getName)
 
     val exception = intercept[AnalysisException] {
-      runShowDatabasesSql("SHOW NAMESPACES in testcat_no_namspace", Seq(""))
+      sql("SHOW NAMESPACES in testcat_no_namspace")
     }
 
     assert(exception.getMessage.contains(
       "No v2 catalog with showing namespaces is available"))
   }
 
-  private def runShowDatabasesSql(
+  private def testShowNamespaces(
       sqlText: String,
       expected: Seq[String]): Unit = {
     val schema = new StructType().add("namespace", StringType, nullable = false)
