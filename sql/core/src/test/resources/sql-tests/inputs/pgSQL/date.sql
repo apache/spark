@@ -350,12 +350,12 @@ SELECT DATE_TRUNC('DECADE', TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G')); -- 0011-0
 select make_date(2013, 7, 15);
 -- [SPARK-28471] Formatting dates with negative years
 select make_date(-44, 3, 15);
-select make_time(8, 20, 0.0);
+-- select make_time(8, 20, 0.0);
 -- should fail
 select make_date(2013, 2, 30);
 select make_date(2013, 13, 1);
 select make_date(2013, 11, -1);
-select make_time(10, 55, 100.1);
-select make_time(24, 0, 2.1);
+-- select make_time(10, 55, 100.1);
+-- select make_time(24, 0, 2.1);
 
 DROP TABLE DATE_TBL;
