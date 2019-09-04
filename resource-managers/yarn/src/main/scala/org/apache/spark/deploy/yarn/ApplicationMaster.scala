@@ -851,7 +851,9 @@ object ApplicationMaster extends Logging {
     master = new ApplicationMaster(amArgs, sparkConf, yarnConf)
 
     val ugi = sparkConf.get(PRINCIPAL) match {
-      case Some(principal) =>
+      // We only need to log in with the keytab in cluster mode. In client mode, the driver
+      // handles the user keytab.
+      case Some(principal) if amArgs.userClass != null =>
         val originalCreds = UserGroupInformation.getCurrentUser().getCredentials()
         SparkHadoopUtil.get.loginUserFromKeytab(principal, sparkConf.get(KEYTAB).orNull)
         val newUGI = UserGroupInformation.getCurrentUser()

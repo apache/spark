@@ -35,12 +35,12 @@ import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 abstract class FileStreamSourceTest
-  extends StreamTest with SharedSQLContext with PrivateMethodTester {
+  extends StreamTest with SharedSparkSession with PrivateMethodTester {
 
   import testImplicits._
 

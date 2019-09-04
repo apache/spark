@@ -63,8 +63,8 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.5</code> and " +
-        "<code>3.0.0</code> through <code>3.1.1</code>.")
+        "<code>0.12.0</code> through <code>2.3.6</code> and " +
+        "<code>3.0.0</code> through <code>3.1.2</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -111,6 +111,15 @@ private[spark] object HiveUtils extends Logging {
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(true)
+
+  val CONVERT_INSERTING_PARTITIONED_TABLE =
+    buildConf("spark.sql.hive.convertInsertingPartitionedTable")
+      .doc("When set to true, and `spark.sql.hive.convertMetastoreParquet` or " +
+        "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
+        "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
+        "syntax.")
+      .booleanConf
+      .createWithDefault(true)
 
   val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
     .doc("When set to true,  Spark will try to use built-in data source writer " +

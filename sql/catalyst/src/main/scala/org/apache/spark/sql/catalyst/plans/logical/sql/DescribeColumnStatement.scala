@@ -17,19 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.types.{MetadataBuilder, StringType}
-
 case class DescribeColumnStatement(
     tableName: Seq[String],
     colNameParts: Seq[String],
-    isExtended: Boolean) extends ParsedStatement {
-  override def output: Seq[Attribute] = {
-    Seq(
-      AttributeReference("info_name", StringType, nullable = false,
-        new MetadataBuilder().putString("comment", "name of the column info").build())(),
-      AttributeReference("info_value", StringType, nullable = false,
-        new MetadataBuilder().putString("comment", "value of the column info").build())()
-    )
-  }
-}
+    isExtended: Boolean) extends ParsedStatement

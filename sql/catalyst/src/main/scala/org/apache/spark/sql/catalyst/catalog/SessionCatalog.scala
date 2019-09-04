@@ -1114,7 +1114,7 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
-      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+      throw new NoSuchPermanentFunctionException(db = db, func = identifier.toString)
     }
   }
 
@@ -1137,7 +1137,7 @@ class SessionCatalog(
       }
       externalCatalog.alterFunction(db, newFuncDefinition)
     } else {
-      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+      throw new NoSuchPermanentFunctionException(db = db, func = identifier.toString)
     }
   }
 

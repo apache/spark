@@ -34,11 +34,11 @@ import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
-class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSQLContext {
+class BucketedReadWithoutHiveSupportSuite extends BucketedReadSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")

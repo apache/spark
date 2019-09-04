@@ -51,15 +51,19 @@ public interface ShuffleMapOutputWriter {
 
   /**
    * Commits the writes done by all partition writers returned by all calls to this object's
-   * {@link #getPartitionWriter(int)}.
+   * {@link #getPartitionWriter(int)}, and returns the number of bytes written for each
+   * partition.
    * <p>
    * This should ensure that the writes conducted by this module's partition writers are
    * available to downstream reduce tasks. If this method throws any exception, this module's
    * {@link #abort(Throwable)} method will be invoked before propagating the exception.
    * <p>
    * This can also close any resources and clean up temporary state if necessary.
+   * <p>
+   * The returned array should contain, for each partition from (0) to (numPartitions - 1), the
+   * number of bytes written by the partition writer for that partition id.
    */
-  void commitAllPartitions() throws IOException;
+  long[] commitAllPartitions() throws IOException;
 
   /**
    * Abort all of the writes done by any writers returned by {@link #getPartitionWriter(int)}.

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -535,7 +536,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
@@ -543,7 +545,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with InputRDDCod
       verbose,
       prefix = "",
       addSuffix = false,
-      maxFields)
+      maxFields,
+      printNodeId)
   }
 
   override def needCopyResult: Boolean = false
@@ -776,15 +779,17 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       verbose: Boolean,
       prefix: String = "",
       addSuffix: Boolean = false,
-      maxFields: Int): Unit = {
+      maxFields: Int,
+      printNodeId: Boolean): Unit = {
     child.generateTreeString(
       depth,
       lastChildren,
       append,
       verbose,
-      s"*($codegenStageId) ",
+      if (printNodeId) "* " else s"*($codegenStageId) ",
       false,
-      maxFields)
+      maxFields,
+      printNodeId)
   }
 
   override def needStopCheck: Boolean = true

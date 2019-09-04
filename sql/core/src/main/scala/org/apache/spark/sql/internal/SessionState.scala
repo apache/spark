@@ -22,9 +22,9 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Experimental, Unstable}
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalog.v2.CatalogManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
@@ -83,6 +83,8 @@ private[sql] class SessionState(
 
   lazy val resourceLoader: SessionResourceLoader = resourceLoaderBuilder()
 
+  def catalogManager: CatalogManager = analyzer.catalogManager
+
   def newHadoopConf(): Configuration = SessionState.newHadoopConf(
     sharedState.sparkContext.hadoopConfiguration,
     conf)
@@ -124,7 +126,6 @@ private[sql] object SessionState {
 /**
  * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
-@Experimental
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,

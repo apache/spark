@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
@@ -81,7 +81,6 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
 }
 
 /**
- * :: Experimental ::
  * Imputation estimator for completing missing values, either using the mean or the median
  * of the columns in which the missing values are located. The input columns should be of
  * numeric type. Currently Imputer does not support categorical features
@@ -95,7 +94,6 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
  * All Null values in the input columns are treated as missing, and so are also imputed. For
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
-@Experimental
 @Since("2.2.0")
 class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
@@ -194,13 +192,11 @@ object Imputer extends DefaultParamsReadable[Imputer] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[Imputer]].
  *
  * @param surrogateDF a DataFrame containing inputCols and their corresponding surrogates,
  *                    which are used to replace the missing values in the input DataFrame.
  */
-@Experimental
 @Since("2.2.0")
 class ImputerModel private[ml] (
     @Since("2.2.0") override val uid: String,

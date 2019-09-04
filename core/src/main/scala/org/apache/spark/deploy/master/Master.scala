@@ -644,7 +644,7 @@ private[deploy] class Master(
         val assignedResources = resourceReqsPerExecutor.map {
           req => req.resourceName -> req.amount * assignedExecutorNum
         }.toMap
-        val resourcesFree = usableWorkers(pos).resourcesFree.map {
+        val resourcesFree = usableWorkers(pos).resourcesAmountFree.map {
           case (rName, free) => rName -> (free - assignedResources.getOrElse(rName, 0))
         }
         val enoughResources = ResourceUtils.resourcesMeetRequirements(
@@ -752,7 +752,7 @@ private[deploy] class Master(
     val enoughMem = worker.memoryFree >= memoryReq
     val enoughCores = worker.coresFree >= coresReq
     val enoughResources = ResourceUtils.resourcesMeetRequirements(
-      worker.resourcesFree, resourceRequirements)
+      worker.resourcesAmountFree, resourceRequirements)
     enoughMem && enoughCores && enoughResources
   }
 

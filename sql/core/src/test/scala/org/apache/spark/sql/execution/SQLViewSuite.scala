@@ -21,9 +21,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.internal.SQLConf.MAX_NESTED_VIEW_DEPTH
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
-class SimpleSQLViewSuite extends SQLViewSuite with SharedSQLContext
+class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
 /**
  * A suite for testing view related functionality.
@@ -707,6 +707,16 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("USE db2")
           checkAnswer(spark.table("default.v1"), Row(1))
         }
+      }
+    }
+  }
+
+  test("SPARK-23519 view should be created even when query output contains duplicate col name") {
+    withTable("t23519") {
+      withView("v23519") {
+        sql("CREATE TABLE t23519 USING parquet AS SELECT 1 AS c1")
+        sql("CREATE VIEW v23519 (c1, c2) AS SELECT c1, c1 FROM t23519")
+        checkAnswer(sql("SELECT * FROM v23519"), Row(1, 1))
       }
     }
   }
