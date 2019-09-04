@@ -126,7 +126,7 @@ SHOW FUNCTIONS LIKE 'yea*|windo*';
 
 -- Use normal regex pattern to list function names that has 4 characters
 -- with `t` as the starting character.
-SHOW FUNCTIONS like 't[a-z][a-z][a-z]';
+SHOW FUNCTIONS LIKE 't[a-z][a-z][a-z]';
   +--------+
   |function|
   +--------+
