@@ -80,18 +80,20 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
       CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers
     )
     testWithTokenSetValues(params, updatedParams => {
-      assert(updatedParams.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG) === SASL_SSL.name)
+      assert(updatedParams.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG) ===
+        KafkaTokenSparkConf.DEFAULT_SECURITY_PROTOCOL_CONFIG)
     })
   }
 
-  test("setAuthenticationConfigIfNeeded with token should set values and override protocol") {
+  test("setAuthenticationConfigIfNeeded with token should set values but override protocol") {
+    val overrideProtocolName = SASL_PLAINTEXT.name
     val params = Map(
       CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG -> bootStrapServers,
-      CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> SASL_PLAINTEXT.name
+      CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> overrideProtocolName
     )
     testWithTokenSetValues(params, updatedParams => {
       assert(updatedParams.get(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG) ===
-        SASL_PLAINTEXT.name)
+        overrideProtocolName)
     })
   }
 
