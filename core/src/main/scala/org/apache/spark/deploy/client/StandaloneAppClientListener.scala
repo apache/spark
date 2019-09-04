@@ -39,5 +39,7 @@ private[spark] trait StandaloneAppClientListener {
   def executorRemoved(
       fullId: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit
 
+  def executorDecommissioned(fullId: String, message: String): Unit
+
   def workerRemoved(workerId: String, host: String, message: String): Unit
 }

@@ -40,7 +40,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{SignalUtils, ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
@@ -57,6 +57,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private[this] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
+  @volatile private var decommissioned = false
   @volatile var driver: Option[RpcEndpointRef] = None
 
   // If this CoarseGrainedExecutorBackend is changed to support multiple threads, then this may need
@@ -71,6 +72,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   private[executor] val taskResources = new mutable.HashMap[Long, Map[String, ResourceInformation]]
 
   override def onStart(): Unit = {
+    logInfo("Registering PWR handler.")
+    SignalUtils.register("PWR")(decommissionSelf)
+
     logInfo("Connecting to driver: " + driverUrl)
     val resources = parseOrFindResources(resourcesFileOpt)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
@@ -137,6 +141,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case LaunchTask(data) =>
       if (executor == null) {
         exitExecutor(1, "Received LaunchTask command but executor was null")
+      } else if (decommissioned) {
+        logWarning("Asked to launch a task while decommissioned. Not launching.")
       } else {
         val taskDesc = TaskDescription.decode(data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
@@ -219,6 +225,29 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
 
     System.exit(code)
+  }
+
+  private def decommissionSelf(): Boolean = {
+    logError("Decommissioning self")
+    try {
+      decommissioned = true
+      // Tell master we are are decommissioned so it stops trying to schedule us
+      if (driver.nonEmpty) {
+        driver.get.send(DecommissionExecutor(executorId))
+      } else {
+        logError("No driver to message decommissioning.")
+      }
+      if (executor != null) {
+        executor.decommission()
+      }
+      logInfo("Done decommissioning self.")
+      // Return true since we are handling a signal
+      true
+    } catch {
+      case e: Exception =>
+        logError(s"Error ${e} during attempt to decommission self")
+        false
+    }
   }
 }
 

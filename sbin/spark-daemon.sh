@@ -215,6 +215,21 @@ case $option in
     fi
     ;;
 
+  (decommission)
+
+    if [ -f $pid ]; then
+      TARGET_ID="$(cat "$pid")"
+      if [[ $(ps -p "$TARGET_ID" -o comm=) =~ "java" ]]; then
+        echo "decommissioning $command"
+        kill -s SIGPWR "$TARGET_ID"
+      else
+        echo "no $command to decommission"
+      fi
+    else
+      echo "no $command to decommission"
+    fi
+    ;;
+
   (status)
 
     if [ -f $pid ]; then

@@ -125,6 +125,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Executors that have been lost, but for which we don't yet know the real exit reason.
     protected val executorsPendingLossReason = new HashSet[String]
+    // Executors which are being decommissioned
+    protected val executorsPendingDecommission = new HashSet[String]
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
@@ -187,6 +189,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case UpdateDelegationTokens(newDelegationTokens) =>
         updateDelegationTokens(newDelegationTokens)
+
+      case DecommissionExecutor(executorId) =>
+        logError(s"Decommissioning executor ${executorId}")
+        decommissionExecutor(executorId)
 
       case RemoveExecutor(executorId, reason) =>
         // We will remove the executor's state and cannot restore it. However, the connection
@@ -329,7 +335,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     private def executorIsAlive(executorId: String): Boolean = synchronized {
       !executorsPendingToRemove.contains(executorId) &&
-        !executorsPendingLossReason.contains(executorId)
+      !executorsPendingLossReason.contains(executorId) &&
+      !executorsPendingDecommission.contains(executorId)
     }
 
     // Launch tasks returned by a set of resource offers
@@ -401,6 +408,27 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       logDebug(s"Asked to remove worker $workerId with reason $message")
       scheduler.workerRemoved(workerId, host, message)
     }
+
+    /**
+     * Mark a given executor as decommissioned and stop making resource offers for it.
+     */
+    private def decommissionExecutor(executorId: String): Boolean = {
+      val shouldDisable = CoarseGrainedSchedulerBackend.this.synchronized {
+        // Only bother decommissioning executors which are alive.
+        if (executorIsAlive(executorId)) {
+          executorsPendingDecommission += executorId
+          true
+        } else {
+          false
+        }
+      }
+
+      if (shouldDisable) {
+        logInfo(s"Decommissioning executor $executorId.")
+        scheduler.executorDecommission(executorId)
+      }
+      shouldDisable
+  }
 
     /**
      * Stop making resource offers for the given executor. The executor is marked as lost with
@@ -527,6 +555,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected def removeWorker(workerId: String, host: String, message: String): Unit = {
     driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).failed.foreach(t =>
       logError(t.getMessage, t))(ThreadUtils.sameThread)
+  }
+
+  /**
+   * Called by subclasses when notified of a decommissioning worker.
+   */
+  private[spark] def decommissionExecutor(executorId: String): Unit = {
+    // Only log the failure since we don't care about the result.
+    driverEndpoint.ask[Boolean](DecommissionExecutor(executorId)).onFailure { case t =>
+      logError(t.getMessage, t)
+    }(ThreadUtils.sameThread)
   }
 
   def sufficientResourcesRegistered(): Boolean = true

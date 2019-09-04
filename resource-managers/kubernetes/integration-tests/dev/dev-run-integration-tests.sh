@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-set -xo errexit
+set -exo errexit
 TEST_ROOT_DIR=$(git rev-parse --show-toplevel)
 
 DEPLOY_MODE="minikube"
@@ -40,6 +40,9 @@ SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/nu
     | grep -v "INFO"\
     | grep -v "WARNING"\
     | tail -n 1)
+
+export SCALA_VERSION
+echo $SCALA_VERSION
 
 # Parse arguments
 while (( "$#" )); do
@@ -105,7 +108,8 @@ while (( "$#" )); do
       shift
       ;;
     *)
-      break
+      echo "Unexpected command line flag $2 $1."
+      exit 1
       ;;
   esac
   shift
