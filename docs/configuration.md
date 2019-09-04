@@ -1357,8 +1357,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory 
     use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
-    <em>Note:</em> If off-heap memory is enabled, may need to raise 
-    <code>spark.driver.memoryOverhead</code> size.
   </td>
 </tr>
 <tr>
