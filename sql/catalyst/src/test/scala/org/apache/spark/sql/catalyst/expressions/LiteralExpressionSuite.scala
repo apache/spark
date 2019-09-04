@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneOffset}
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -81,6 +81,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
     // ExamplePointUDT.sqlType is ArrayType(DoubleType, false).
     checkEvaluation(Literal.default(new ExamplePointUDT), Array())
+    checkEvaluation(Literal.default(TimeType), LocalTime.ofNanoOfDay(0))
   }
 
   test("boolean literals") {
@@ -315,5 +316,25 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val literalStr = Literal.create(date).sql
       assert(literalStr === expected)
     }
+  }
+
+  test("construct literals from java.time.LocalTime") {
+    Seq(
+      LocalTime.of(0, 0, 0),
+      LocalTime.of(0, 0, 0, 1000),
+      LocalTime.of(1, 1, 1),
+      LocalTime.of(23, 59, 59),
+      LocalTime.of(23, 59, 59, 999999000),
+      LocalTime.of(10, 11, 12, 131415000),
+      LocalTime.of(21, 0, 0)).foreach { localTime =>
+      checkEvaluation(Literal(localTime), localTime)
+    }
+  }
+
+  test("construct literals from arrays of java.time.LocalTime") {
+    val localTime0 = LocalTime.of(10, 10, 10)
+    checkEvaluation(Literal(Array(localTime0)), Array(localTime0))
+    val localTime1 = LocalTime.of(21, 21, 21)
+    checkEvaluation(Literal(Array(localTime0, localTime1)), Array(localTime0, localTime1))
   }
 }

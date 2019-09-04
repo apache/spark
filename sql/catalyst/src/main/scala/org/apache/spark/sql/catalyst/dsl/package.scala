@@ -252,6 +252,9 @@ package object dsl {
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
 
+      /** Creates a new AttributeReference of type date */
+      def time: AttributeReference = AttributeReference(s, TimeType, nullable = true)()
+
       /** Creates a new AttributeReference of type binary */
       def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()
 

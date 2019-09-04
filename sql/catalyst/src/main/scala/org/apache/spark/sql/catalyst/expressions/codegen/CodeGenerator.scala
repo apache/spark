@@ -1651,7 +1651,7 @@ object CodeGenerator extends Logging {
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
     case IntegerType | DateType => java.lang.Integer.TYPE
-    case LongType | TimestampType => java.lang.Long.TYPE
+    case LongType | TimestampType | TimeType => java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
