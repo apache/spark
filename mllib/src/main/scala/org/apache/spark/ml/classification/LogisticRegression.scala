@@ -1660,12 +1660,12 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  * Binary logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
- * @param probabilityCol field in "predictions" which gives the probability of
+ * @param probabilityCol field in "probabilityCol" which gives the probability of
  *                       each class as a vector.
- * @param predictionCol field in "predictions" which gives the prediction of
+ * @param predictionCol field in "predictionCol" which gives the prediction of
  *                      each class as a double.
- * @param labelCol field in "predictions" which gives the true label of each instance.
- * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ * @param labelCol field in "labelCol" which gives the true label of each instance.
+ * @param featuresCol field in "featuresCol" which gives the features of each instance as a vector.
  */
 private class BinaryLogisticRegressionSummaryImpl(
     predictions: DataFrame,
