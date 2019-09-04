@@ -21,6 +21,7 @@ package org.apache.spark.examples.sql.streaming
 import java.util.UUID
 
 import org.apache.kafka.common.security.auth.SecurityProtocol
+
 import org.apache.spark.sql.SparkSession
 
 /**
