@@ -824,4 +824,29 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
   }
+
+  test("SPARK-28050: DataFrameWriter support insertInto a specific table partition") {
+    withTable("mc_test_pt_table") {
+      import spark.implicits._
+      spark.sql(
+        s"CREATE TABLE mc_test_pt_table (name STRING, num BIGINT) PARTITIONED BY (pt1 STRING, pt2 STRING)")
+      val result =
+        """+----+----+
+          || pt1| pt2|
+          |+----+----+
+          ||0101|0202|
+          |+----+----+
+          |only showing top 1 row
+          |""".stripMargin
+      val partionDf = spark.sparkContext
+        .parallelize(0 to 9, 2)
+        .map(f => {
+          (s"name-$f", f)
+        })
+        .toDF("name", "num")
+      partionDf.write.insertInto("mc_test_pt_table", "pt1='0101',pt2='0202'")
+      spark.sql(s"select pt1,pt2 from mc_test_pt_table").showString(1)
+      assert(spark.sql(s"select pt1,pt2 from mc_test_pt_table").showString(1) === result)
+    }
+  }
 }
