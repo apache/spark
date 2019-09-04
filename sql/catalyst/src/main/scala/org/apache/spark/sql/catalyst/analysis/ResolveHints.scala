@@ -141,7 +141,7 @@ object ResolveHints {
    * Its parameter includes a partition number and columns.
    */
   object ResolveCoalesceHints extends Rule[LogicalPlan] {
-    private val COALESCE_HINT_NAMES = Set("COALESCE", "REPARTITION", "REPARTITIONBYRANGE")
+    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITIONBYRANGE")
 
     /**
      * same with repartition api
@@ -152,7 +152,7 @@ object ResolveHints {
            numPartitions: Int, exprs: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
         val errExprs = exprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (errExprs.nonEmpty) throw new AnalysisException(
-          "Repartition hint parameter should be columns but was $errExprs")
+          s"Repartition hint parameter should be columns but was $errExprs")
         RepartitionByExpression(
           exprs.map(_.asInstanceOf[UnresolvedAttribute]), h.child, numPartitions)
       }
@@ -185,7 +185,7 @@ object ResolveHints {
           case expr: SortOrder => expr
           case expr: Expression => SortOrder(expr, Ascending)
           case _ => throw new AnalysisException(
-            "RepartitionByRange hint parameter should be columns but was $exprs")
+            s"RepartitionByRange hint parameter should be columns but was $exprs")
         }
         RepartitionByExpression(sortOrder, h.child, numPartitions)
       }
