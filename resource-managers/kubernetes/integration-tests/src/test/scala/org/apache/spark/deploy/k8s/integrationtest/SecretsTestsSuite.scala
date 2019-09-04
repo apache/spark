@@ -57,11 +57,17 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     createTestSecret()
     sparkAppConf
       .set(s"spark.kubernetes.driver.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.driver.secretKeyRef.USERNAME", s"$ENV_SECRET_NAME:username")
-      .set(s"spark.kubernetes.driver.secretKeyRef.PASSWORD", s"$ENV_SECRET_NAME:password")
+      .set(
+        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_1.toUpperCase}",
+        s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_1}")
+      .set(
+        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_2.toUpperCase}",
+        s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_2}")
       .set(s"spark.kubernetes.executor.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.secretKeyRef.USERNAME", s"$ENV_SECRET_NAME:username")
-      .set(s"spark.kubernetes.executor.secretKeyRef.PASSWORD", s"$ENV_SECRET_NAME:password")
+      .set(s"spark.kubernetes.executor.secretKeyRef.USERNAME",
+        s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_1")
+      .set(s"spark.kubernetes.executor.secretKeyRef.PASSWORD",
+        s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_2")
     try {
       runSparkPiAndVerifyCompletion(
         driverPodChecker = (driverPod: Pod) => {
@@ -91,8 +97,8 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       assert(!env.isEmpty)
       env
     }
-    env.toString should include (ENV_SECRET_VALUE_1)
-    env.toString should include (ENV_SECRET_VALUE_2)
+    env.toString should include (s"${ENV_SECRET_KEY_1.toUpperCase}=$ENV_SECRET_VALUE_1")
+    env.toString should include (s"${ENV_SECRET_KEY_2.toUpperCase}=$ENV_SECRET_VALUE_2")
 
     // Make sure our secret files are mounted correctly
     val files = Utils.executeCommand("ls", s"$SECRET_MOUNT_PATH")
