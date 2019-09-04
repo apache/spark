@@ -38,7 +38,8 @@ case class TestData(key: Int, value: String)
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils  with PrivateMethodTester  {
+  with SQLTestUtils with PrivateMethodTester {
+
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -155,6 +156,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         |partition (p1='a',p2='b',p3='c',p4='c',p5='4')
         |SELECT 'blarr' FROM tmp_table
       """.stripMargin)
+
     def listFolders(path: File, acc: List[String]): List[List[String]] = {
       val dir = path.listFiles()
       val folders = dir.filter { e => e.isDirectory && !e.getName().startsWith(stagingDir) }.toList
@@ -164,11 +166,12 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         folders.flatMap(x => listFolders(x, x.getName :: acc))
       }
     }
+
     val expected = List(
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=2"::Nil,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
+      "p1=a" :: "p2=b" :: "p3=c" :: "p4=c" :: "p5=2" :: Nil,
+      "p1=a" :: "p2=b" :: "p3=c" :: "p4=c" :: "p5=3" :: Nil,
+      "p1=a" :: "p2=b" :: "p3=c" :: "p4=c" :: "p5=1" :: Nil,
+      "p1=a" :: "p2=b" :: "p3=c" :: "p4=c" :: "p5=4" :: Nil
     )
     assert(listFolders(tmpDir, List()).sortBy(_.toString()) === expected.sortBy(_.toString))
     sql("DROP TABLE table_with_partition")
@@ -314,8 +317,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
           sql(
             s"""
-              |CREATE TABLE $hiveTable (a INT, d INT)
-              |PARTITIONED BY (b INT, c INT) STORED AS TEXTFILE
+               |CREATE TABLE $hiveTable (a INT, d INT)
+               |PARTITIONED BY (b INT, c INT) STORED AS TEXTFILE
             """.stripMargin)
           f(hiveTable)
         }
@@ -822,6 +825,28 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           }
         }
       }
+    }
+  }
+
+  test("SPARK-28050: DataFrameWriter support insertInto a specific table partition") {
+    withTable("mc_test_pt_table") {
+      import spark.implicits._
+      spark.sql(s"CREATE TABLE mc_test_pt_table (name STRING, num BIGINT) PARTITIONED BY (pt1 STRING, pt2 STRING)")
+      val result =
+        """+----+----+
+          || pt1| pt2|
+          |+----+----+
+          ||0101|0202|
+          |+----+----+
+          |only showing top 1 row
+          |""".stripMargin
+      val partionDf = spark.sparkContext.parallelize(0 to 9, 2)
+        .map(f => {
+          (s"name-$f", f)
+        }).toDF("name", "num")
+      partionDf.write.insertInto("mc_test_pt_table", "pt1='0101',pt2='0202'")
+      spark.sql(s"select pt1,pt2 from mc_test_pt_table").showString(1)
+      assert(spark.sql(s"select pt1,pt2 from mc_test_pt_table").showString(1) === result)
     }
   }
 }
