@@ -182,7 +182,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    *   (1) it can not be a stream
    *   (2) it needs to contain a selective predicate used for filtering
    */
-  private def hasPartitionPruningFilter(key: Expression, plan: LogicalPlan): Boolean = {
+  private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
     !plan.isStreaming && hasSelectivePredicate(plan)
   }
 
@@ -233,13 +233,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
             // otherwise the pruning will not trigger
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
-                hasPartitionPruningFilter(r, right)) {
+                hasPartitionPruningFilter(right)) {
               val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
               newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit)
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
-                  hasPartitionPruningFilter(l, left) ) {
+                  hasPartitionPruningFilter(left) ) {
                 val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
                 newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit)
               }
