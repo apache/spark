@@ -417,7 +417,7 @@ private[spark] object SparkHadoopUtil {
     hadoopConf
   }
 
-  private[spark] def appendS3AndSparkHadoopConfigurations(
+  private def appendS3AndSparkHadoopConfigurations(
       conf: SparkConf,
       hadoopConf: Configuration): Unit = {
     // Note: this null check is around more than just access to the "conf" object to maintain

@@ -16,25 +16,21 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.io.{ByteArrayInputStream, File, IOException}
+import java.io.{File, IOException}
 import java.net.URI
 import java.security.SecureRandom
 import java.util.UUID
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model._
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, PodBuilder, Quantity, QuantityBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.commons.codec.binary.Hex
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
-import org.apache.spark.{SparkConf, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.k8s.Config.{KUBERNETES_FILE_UPLOAD_PATH, KUBERNETES_HADOOP_CONF_CONFIG_MAP}
-import org.apache.spark.internal.config._
+import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -244,10 +240,10 @@ private[spark] object KubernetesUtils extends Logging {
   /**
    * Upload files and modify their uris
    */
-  def uploadAndTransformFileUris(fileUris: Iterable[String], uploadPath: String, fs: FileSystem)
+  def uploadAndTransformFileUris(fileUris: Iterable[String], conf: Option[SparkConf] = None)
     : Iterable[String] = {
     fileUris.map { uri =>
-      uploadFileUri(uri, uploadPath, fs)
+      uploadFileUri(uri, conf)
     }
   }
 
@@ -271,51 +267,30 @@ private[spark] object KubernetesUtils extends Logging {
    }
   }
 
-  def getUploadPath(conf: SparkConf, client: KubernetesClient): (FileSystem, String) = {
-    conf.get(KUBERNETES_FILE_UPLOAD_PATH) match {
-      case Some(path) =>
-        val hadoopConf = new Configuration()
-        // Add
-        conf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP).foreach { cm =>
-          val hadoopConfFiles = client.configMaps().withName(cm).get().getData.asScala
-          for ((name, content) <- hadoopConfFiles if name.endsWith(".xml")) {
-            hadoopConf.addResource(new ByteArrayInputStream(content.getBytes), name)
+  def uploadFileUri(uri: String, conf: Option[SparkConf] = None): String = {
+    conf match {
+      case Some(sConf) =>
+        if (sConf.get(KUBERNETES_FILE_UPLOAD_PATH).isDefined) {
+          val fileUri = Utils.resolveURI(uri)
+          try {
+            val hadoopConf = SparkHadoopUtil.get.newConfiguration(sConf)
+            val uploadPath = sConf.get(KUBERNETES_FILE_UPLOAD_PATH).get
+            val fs = getHadoopFileSystem(Utils.resolveURI(uploadPath), hadoopConf)
+            val randomDirName = s"spark-upload-${UUID.randomUUID()}"
+            fs.mkdirs(new Path(s"${uploadPath}/${randomDirName}"))
+            val targetUri = s"${uploadPath}/${randomDirName}/${fileUri.getPath.split("/").last}"
+            log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
+            uploadFileToHadoopCompatibleFS(new Path(fileUri.getPath), new Path(targetUri), fs)
+            targetUri
+          } catch {
+            case e: Exception =>
+              throw new SparkException(s"Uploading file ${fileUri.getPath} failed...", e)
           }
+        } else {
+          throw new SparkException("Please specify " +
+            "spark.kubernetes.file.upload.path property.")
         }
-        SparkHadoopUtil.appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
-        UserGroupInformation.setConfiguration(hadoopConf)
-        if (UserGroupInformation.isSecurityEnabled &&
-          UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
-            AuthenticationMethod.SIMPLE) {
-          conf.get(PRINCIPAL) match {
-            case Some(principal) =>
-              val keytab = conf.get(KEYTAB).get
-              require(new File(keytab).exists(), s"Keytab file: $keytab does not exist")
-              UserGroupInformation.loginUserFromKeytab(principal, keytab)
-            case _ =>
-              logWarning(s"No ${PRINCIPAL.key} found, using original user and group information" +
-                s" for Hadoop")
-          }
-        }
-        val fs = getHadoopFileSystem(Utils.resolveURI(path), hadoopConf)
-        (fs, path)
-      case None =>
-        throw new SparkException(s"Please specify ${KUBERNETES_FILE_UPLOAD_PATH.key} property.")
-    }
-  }
-
-  def uploadFileUri(uri: String, uploadPath: String, fs: FileSystem): String = {
-    val fileUri = Utils.resolveURI(uri)
-    try {
-      val randomDirName = s"spark-upload-${UUID.randomUUID()}"
-      fs.mkdirs(new Path(s"$uploadPath/$randomDirName"))
-      val targetUri = s"$uploadPath/$randomDirName/${fileUri.getPath.split("/").last}"
-      log.info(s"Uploading file: ${fileUri.getPath} to dest: $targetUri...")
-      uploadFileToHadoopCompatibleFS(new Path(fileUri.getPath), new Path(targetUri), fs)
-      targetUri
-    } catch {
-      case e: Exception =>
-        throw new SparkException(s"Uploading file ${fileUri.getPath} failed...", e)
+      case _ => throw new SparkException("Spark configuration is missing...")
     }
   }
 

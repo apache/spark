@@ -20,7 +20,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s._
@@ -31,7 +30,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
-private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf, client: KubernetesClient)
+private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf)
   extends KubernetesFeatureConfigStep {
 
   private val driverPodName = conf
@@ -161,10 +160,9 @@ private[spark] class BasicDriverFeatureStep(conf: KubernetesDriverConf, client: 
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true",
       MEMORY_OVERHEAD_FACTOR.key -> overheadFactor.toString)
     // try upload local, resolvable files to a hadoop compatible file system
-    lazy val (fs, uploadPath) = KubernetesUtils.getUploadPath(conf.sparkConf, client)
     Seq(JARS, FILES).foreach { key =>
       val value = conf.get(key).filter(uri => KubernetesUtils.isLocalAndResolvable(uri))
-      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, uploadPath, fs)
+      val resolved = KubernetesUtils.uploadAndTransformFileUris(value, Some(conf.sparkConf))
       if (resolved.nonEmpty) {
         additionalProps.put(key.key, resolved.mkString(","))
       }

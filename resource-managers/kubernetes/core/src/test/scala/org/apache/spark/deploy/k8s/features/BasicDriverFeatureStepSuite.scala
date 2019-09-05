@@ -19,8 +19,6 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerPort, ContainerPortBuilder, LocalObjectReferenceBuilder}
-import io.fabric8.kubernetes.client.KubernetesClient
-import org.mockito.Mockito.mock
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
@@ -70,7 +68,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       environment = DRIVER_ENVS,
       annotations = DRIVER_ANNOTATIONS)
 
-    val featureStep = new BasicDriverFeatureStep(kubernetesConf, mock(classOf[KubernetesClient]))
+    val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
     val configuredPod = featureStep.configurePod(basePod)
 
@@ -138,8 +136,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     val basePod = SparkPod.initialPod()
     // if spark.driver.cores is not set default is 1
-    val requests1 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf),
-      mock(classOf[KubernetesClient]))
+    val requests1 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
       .configurePod(basePod)
       .container.getResources
       .getRequests.asScala
@@ -147,8 +144,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
 
     // if spark.driver.cores is set it should be used
     sparkConf.set(DRIVER_CORES, 10)
-    val requests2 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf),
-      mock(classOf[KubernetesClient]))
+    val requests2 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
       .configurePod(basePod)
       .container.getResources
       .getRequests.asScala
@@ -157,8 +153,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     // spark.kubernetes.driver.request.cores should be preferred over spark.driver.cores
     Seq("0.1", "100m").foreach { value =>
       sparkConf.set(KUBERNETES_DRIVER_REQUEST_CORES, value)
-      val requests3 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf),
-        mock(classOf[KubernetesClient]))
+      val requests3 = new BasicDriverFeatureStep(KubernetesTestConf.createDriverConf(sparkConf))
         .configurePod(basePod)
         .container.getResources
         .getRequests.asScala
@@ -177,10 +172,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
     val pythonKubernetesConf = KubernetesTestConf.createDriverConf(
       sparkConf = pythonSparkConf,
       mainAppResource = PythonMainAppResource(""))
-    val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf,
-      mock(classOf[KubernetesClient]))
-    val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf,
-      mock(classOf[KubernetesClient]))
+    val javaFeatureStep = new BasicDriverFeatureStep(javaKubernetesConf)
+    val pythonFeatureStep = new BasicDriverFeatureStep(pythonKubernetesConf)
     val basePod = SparkPod.initialPod()
     val configuredJavaPod = javaFeatureStep.configurePod(basePod)
     val configuredPythonPod = pythonFeatureStep.configurePod(basePod)
@@ -208,7 +201,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       val conf = KubernetesTestConf.createDriverConf(
         sparkConf = sparkConf,
         mainAppResource = resource)
-      val step = new BasicDriverFeatureStep(conf, mock(classOf[KubernetesClient]))
+      val step = new BasicDriverFeatureStep(conf)
       val pod = step.configurePod(SparkPod.initialPod())
       val mem = pod.container.getResources.getRequests.get("memory").getAmount()
       val expected = (driverMem + driverMem * expectedFactor).toInt
