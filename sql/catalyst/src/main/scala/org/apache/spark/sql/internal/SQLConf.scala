@@ -1054,7 +1054,7 @@ object SQLConf {
         "instead of a single big method. This can be used to avoid oversized function that " +
         "can miss the opportunity of JIT optimization.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
