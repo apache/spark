@@ -40,7 +40,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 
 class KubernetesSuite extends SparkFunSuite
-  with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SecretsTestsSuite
+  with BeforeAndAfterAll with BeforeAndAfter  with BasicTestsSuite with SecretsTestsSuite
   with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite with PVTestsSuite
   with DepsTestsSuite with DecommissionSuite with RTestsSuite with Logging with Eventually with Matchers {
 
@@ -318,18 +318,18 @@ class KubernetesSuite extends SparkFunSuite
               // decommissioning.
               if (decommissioningTest && execPods.size == 1) {
                 // Wait for all the containers in the pod to be running
-                logInfo("Waiting for first pod to become OK prior to deletion")
+                logDebug("Waiting for first pod to become OK prior to deletion")
                 Eventually.eventually(patienceTimeout, patienceInterval) {
                   val result = checkPodReady(namespace, name)
                   result shouldBe (true)
                 }
                 // Sleep a small interval to allow execution of job
-                logInfo("Sleeping before killing pod.")
-                Thread.sleep(30000)
+                logDebug("Sleeping before killing pod.")
+                Thread.sleep(5000)
                 // Delete the pod to simulate cluster scale down/migration.
                 val pod = kubernetesTestComponents.kubernetesClient.pods().withName(name)
                 pod.delete()
-                logInfo(s"Pod: $name deleted")
+                logDebug(s"Pod: $name deleted")
               } else {
               }
             case Action.DELETED | Action.ERROR =>
