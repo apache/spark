@@ -63,12 +63,12 @@ private[spark] class SortShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val mapId = context.taskAttemptId()
+    val mapTaskId = context.taskAttemptId()
     val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
-      dep.shuffleId, mapId, dep.partitioner.numPartitions)
-    sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter)
+      dep.shuffleId, mapTaskId, dep.partitioner.numPartitions)
+    sorter.writePartitionedMapOutput(dep.shuffleId, mapTaskId, mapOutputWriter)
     val partitionLengths = mapOutputWriter.commitAllPartitions()
-    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
+    mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapTaskId)
   }
 
   /** Close this writer, passing along whether the map completed */

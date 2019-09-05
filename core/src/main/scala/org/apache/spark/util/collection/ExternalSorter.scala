@@ -727,7 +727,7 @@ private[spark] class ExternalSorter[K, V, C](
    */
   def writePartitionedMapOutput(
       shuffleId: Int,
-      mapId: Long,
+      mapTaskId: Long,
       mapOutputWriter: ShuffleMapOutputWriter): Unit = {
     var nextPartitionId = 0
     if (spills.isEmpty) {
@@ -740,7 +740,7 @@ private[spark] class ExternalSorter[K, V, C](
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
         TryUtils.tryWithSafeFinally {
           partitionWriter = mapOutputWriter.getPartitionWriter(partitionId)
-          val blockId = ShuffleBlockId(shuffleId, mapId, partitionId)
+          val blockId = ShuffleBlockId(shuffleId, mapTaskId, partitionId)
           partitionPairsWriter = new ShufflePartitionPairsWriter(
             partitionWriter,
             serializerManager,
@@ -760,7 +760,7 @@ private[spark] class ExternalSorter[K, V, C](
     } else {
       // We must perform merge-sort; get an iterator by partition and write everything directly.
       for ((id, elements) <- this.partitionedIterator) {
-        val blockId = ShuffleBlockId(shuffleId, mapId, id)
+        val blockId = ShuffleBlockId(shuffleId, mapTaskId, id)
         var partitionWriter: ShufflePartitionWriter = null
         var partitionPairsWriter: ShufflePartitionPairsWriter = null
         TryUtils.tryWithSafeFinally {

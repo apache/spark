@@ -117,7 +117,7 @@ private[scheduler] abstract class Stage(
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
 
-  def isIndeterminate(): Boolean = {
+  def isIndeterminate: Boolean = {
     rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
   }
 }

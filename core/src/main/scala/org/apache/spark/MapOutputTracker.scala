@@ -41,7 +41,7 @@ import org.apache.spark.util._
  * Helper class used by the [[MapOutputTrackerMaster]] to perform bookkeeping for a single
  * ShuffleMapStage.
  *
- * This class maintains a mapping from mapIds to `MapStatus`. It also maintains a cache of
+ * This class maintains a mapping from map index to `MapStatus`. It also maintains a cache of
  * serialized map statuses in order to speed up tasks' requests for map output statuses.
  *
  * All public methods of this class are thread-safe.
@@ -88,12 +88,12 @@ private class ShuffleStatus(numPartitions: Int) {
    * Register a map output. If there is already a registered location for the map output then it
    * will be replaced by the new location.
    */
-  def addMapOutput(mapId: Int, status: MapStatus): Unit = synchronized {
-    if (mapStatuses(mapId) == null) {
+  def addMapOutput(mapIndex: Int, status: MapStatus): Unit = synchronized {
+    if (mapStatuses(mapIndex) == null) {
       _numAvailableOutputs += 1
       invalidateSerializedMapOutputStatusCache()
     }
-    mapStatuses(mapId) = status
+    mapStatuses(mapIndex) = status
   }
 
   /**
@@ -101,10 +101,10 @@ private class ShuffleStatus(numPartitions: Int) {
    * This is a no-op if there is no registered map output or if the registered output is from a
    * different block manager.
    */
-  def removeMapOutput(mapId: Int, bmAddress: BlockManagerId): Unit = synchronized {
-    if (mapStatuses(mapId) != null && mapStatuses(mapId).location == bmAddress) {
+  def removeMapOutput(mapIndex: Int, bmAddress: BlockManagerId): Unit = synchronized {
+    if (mapStatuses(mapIndex) != null && mapStatuses(mapIndex).location == bmAddress) {
       _numAvailableOutputs -= 1
-      mapStatuses(mapId) = null
+      mapStatuses(mapIndex) = null
       invalidateSerializedMapOutputStatusCache()
     }
   }
@@ -131,10 +131,10 @@ private class ShuffleStatus(numPartitions: Int) {
    * remove outputs which are served by an external shuffle server (if one exists).
    */
   def removeOutputsByFilter(f: (BlockManagerId) => Boolean): Unit = synchronized {
-    for (mapId <- 0 until mapStatuses.length) {
-      if (mapStatuses(mapId) != null && f(mapStatuses(mapId).location)) {
+    for (mapIndex <- 0 until mapStatuses.length) {
+      if (mapStatuses(mapIndex) != null && f(mapStatuses(mapIndex).location)) {
         _numAvailableOutputs -= 1
-        mapStatuses(mapId) = null
+        mapStatuses(mapIndex) = null
         invalidateSerializedMapOutputStatusCache()
       }
     }
@@ -300,7 +300,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       startPartition: Int,
       endPartition: Int,
       useOldFetchProtocol: Boolean)
-    : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
+  : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -422,15 +422,15 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def registerMapOutput(shuffleId: Int, mapId: Int, status: MapStatus) {
-    shuffleStatuses(shuffleId).addMapOutput(mapId, status)
+  def registerMapOutput(shuffleId: Int, mapIndex: Int, status: MapStatus) {
+    shuffleStatuses(shuffleId).addMapOutput(mapIndex, status)
   }
 
   /** Unregister map output information of the given shuffle, mapper and block manager */
-  def unregisterMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
+  def unregisterMapOutput(shuffleId: Int, mapIndex: Int, bmAddress: BlockManagerId) {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
-        shuffleStatus.removeMapOutput(mapId, bmAddress)
+        shuffleStatus.removeMapOutput(mapIndex, bmAddress)
         incrementEpoch()
       case None =>
         throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
@@ -654,7 +654,7 @@ private[spark] class MapOutputTrackerMaster(
       startPartition: Int,
       endPartition: Int,
       useOldFetchProtocol: Boolean)
-    : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
+  : Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
@@ -870,13 +870,13 @@ private[spark] object MapOutputTracker extends Logging {
           val size = status.getSizeForBlock(part)
           if (size != 0) {
             if (useOldFetchProtocol) {
-              // While we use the old shuffle fetch protocol, we use mapIndex as mapId in the
+              // While we use the old shuffle fetch protocol, we use mapIndex as mapTaskId in the
               // ShuffleBlockId, so here set mapIndex with a invalid value -1.
               splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
                 ((ShuffleBlockId(shuffleId, mapIndex, part), size, -1))
             } else {
               splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, status.mapId, part), size, mapIndex))
+                ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))
             }
           }
         }

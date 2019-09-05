@@ -60,8 +60,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   test("commit shuffle files multiple times") {
     val shuffleId = 1
-    val mapId = 2
-    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
+    val mapTaskId = 2
+    val idxName = s"shuffle_${shuffleId}_${mapTaskId}_0.index"
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val lengths = Array[Long](10, 0, 20)
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
@@ -71,10 +71,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+    resolver.writeIndexFileAndCommit(shuffleId, mapTaskId, lengths, dataTmp)
 
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
-    val dataFile = resolver.getDataFile(shuffleId, mapId)
+    val dataFile = resolver.getDataFile(shuffleId, mapTaskId)
 
     assert(indexFile.exists())
     assert(indexFile.length() === (lengths.length + 1) * 8)
@@ -91,7 +91,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    resolver.writeIndexFileAndCommit(shuffleId, mapTaskId, lengths2, dataTmp2)
 
     assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
@@ -130,7 +130,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    resolver.writeIndexFileAndCommit(shuffleId, mapTaskId, lengths3, dataTmp3)
     assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())

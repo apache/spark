@@ -321,31 +321,32 @@ public class ExternalBlockHandler extends RpcHandler {
     private final String appId;
     private final String execId;
     private final int shuffleId;
-    private final long[] mapIds;
+    private final long[] mapTaskIds;
     private final int[][] reduceIds;
 
     ShuffleManagedBufferIterator(FetchShuffleBlocks msg) {
       appId = msg.appId;
       execId = msg.execId;
       shuffleId = msg.shuffleId;
-      mapIds = msg.mapIds;
+      mapTaskIds = msg.mapTaskIds;
       reduceIds = msg.reduceIds;
     }
 
     @Override
     public boolean hasNext() {
-      // mapIds.length must equal to reduceIds.length, and the passed in FetchShuffleBlocks
-      // must have non-empty mapIds and reduceIds, see the checking logic in OneForOneBlockFetcher.
-      return mapIdx < mapIds.length && reduceIdx < reduceIds[mapIdx].length;
+      // mapTaskIds.length must equal to reduceIds.length, and the passed in FetchShuffleBlocks
+      // must have non-empty mapTaskIds and reduceIds, see the checking logic in
+      // OneForOneBlockFetcher.
+      return mapIdx < mapTaskIds.length && reduceIdx < reduceIds[mapIdx].length;
     }
 
     @Override
     public ManagedBuffer next() {
       final ManagedBuffer block = blockManager.getBlockData(
-        appId, execId, shuffleId, mapIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
-      reduceIdx += 1;
-      if (reduceIdx == reduceIds[mapIdx].length) {
-        // Reach the end of current mapId, move to next mapId and its reduceIds.
+        appId, execId, shuffleId, mapTaskIds[mapIdx], reduceIds[mapIdx][reduceIdx]);
+      if (reduceIdx < reduceIds[mapIdx].length - 1) {
+        reduceIdx += 1;
+      } else {
         reduceIdx = 0;
         mapIdx += 1;
       }

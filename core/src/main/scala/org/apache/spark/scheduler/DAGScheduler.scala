@@ -1107,7 +1107,7 @@ private[spark] class DAGScheduler(
     // The operation here can make sure for the intermediate stage, `findMissingPartitions()`
     // returns all partitions every time.
     stage match {
-      case sms: ShuffleMapStage if stage.isIndeterminate() =>
+      case sms: ShuffleMapStage if stage.isIndeterminate =>
         mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
       case _ =>
     }
@@ -1507,7 +1507,7 @@ private[spark] class DAGScheduler(
             }
         }
 
-      case FetchFailed(bmAddress, shuffleId, mapId, _, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, mapIndex, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 
@@ -1538,9 +1538,9 @@ private[spark] class DAGScheduler(
             // Mark all the map as broken in the map stage, to ensure retry all the tasks on
             // resubmitted stage attempt.
             mapOutputTracker.unregisterAllMapOutput(shuffleId)
-          } else if (mapId != -1) {
+          } else if (mapIndex != -1) {
             // Mark the map whose fetch failed as broken in the map stage
-            mapOutputTracker.unregisterMapOutput(shuffleId, mapId, bmAddress)
+            mapOutputTracker.unregisterMapOutput(shuffleId, mapIndex, bmAddress)
           }
 
           if (failedStage.rdd.isBarrier()) {
@@ -1582,7 +1582,7 @@ private[spark] class DAGScheduler(
               // Note that, if map stage is UNORDERED, we are fine. The shuffle partitioner is
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
-              if (mapStage.isIndeterminate()) {
+              if (mapStage.isIndeterminate) {
                 // It's a little tricky to find all the succeeding stages of `mapStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages

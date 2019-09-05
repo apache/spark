@@ -19,13 +19,12 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * In sort-based shuffle, incoming records are sorted according to their target partition ids, then
@@ -83,7 +82,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   /**
    * A mapping from shuffle ids to the task ids of mappers producing output for those shuffles.
    */
-  private[this] val taskIdMapsForShuffle = new ConcurrentHashMap[Int, ArrayBuffer[Long]]()
+  private[this] val taskIdMapsForShuffle = new ConcurrentHashMap[Int, OpenHashSet[Long]]()
 
   private lazy val shuffleExecutorComponents = loadShuffleExecutorComponents(conf)
 
@@ -134,8 +133,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
     val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
-      handle.shuffleId, _ => ArrayBuffer.empty[Long])
-    mapTaskIds.synchronized { mapTaskIds.append(context.taskAttemptId()) }
+      handle.shuffleId, _ => new OpenHashSet[Long](16))
+    mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -163,9 +162,9 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    Option(taskIdMapsForShuffle.remove(shuffleId)).foreach { mapIds =>
-      mapIds.foreach { mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+    Option(taskIdMapsForShuffle.remove(shuffleId)).foreach { mapTaskIds =>
+      mapTaskIds.iterator.foreach { mapTaskId =>
+        shuffleBlockResolver.removeDataByMap(shuffleId, mapTaskId)
       }
     }
     true

@@ -108,7 +108,7 @@ public class OneForOneBlockFetcher {
 
   /**
    * Analyze the pass in blockIds and create FetchShuffleBlocks message.
-   * The blockIds has been sorted by mapId and reduceId. It's produced in
+   * The blockIds has been sorted by mapTaskId and reduceId. It's produced in
    * org.apache.spark.MapOutputTracker.convertMapStatuses.
    */
   private FetchShuffleBlocks createFetchShuffleBlocksMsg(
@@ -121,21 +121,21 @@ public class OneForOneBlockFetcher {
         throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
           ", got:" + blockId);
       }
-      long mapId = blockIdParts.middle;
-      if (!mapIdToReduceIds.containsKey(mapId)) {
-        mapIdToReduceIds.put(mapId, new ArrayList<>());
+      long mapTaskId = blockIdParts.middle;
+      if (!mapIdToReduceIds.containsKey(mapTaskId)) {
+        mapIdToReduceIds.put(mapTaskId, new ArrayList<>());
       }
-      mapIdToReduceIds.get(mapId).add(blockIdParts.right);
+      mapIdToReduceIds.get(mapTaskId).add(blockIdParts.right);
     }
-    long[] mapIds = Longs.toArray(mapIdToReduceIds.keySet());
-    int[][] reduceIdArr = new int[mapIds.length][];
-    for (int i = 0; i < mapIds.length; i++) {
-      reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
+    long[] mapTaskIds = Longs.toArray(mapIdToReduceIds.keySet());
+    int[][] reduceIdArr = new int[mapTaskIds.length][];
+    for (int i = 0; i < mapTaskIds.length; i++) {
+      reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapTaskIds[i]));
     }
-    return new FetchShuffleBlocks(appId, execId, shuffleId, mapIds, reduceIdArr);
+    return new FetchShuffleBlocks(appId, execId, shuffleId, mapTaskIds, reduceIdArr);
   }
 
-  /** Split the shuffleBlockId and return shuffleId, mapId and reduceId. */
+  /** Split the shuffleBlockId and return shuffleId, mapTaskId and reduceId. */
   private ImmutableTriple<Integer, Long, Integer> splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
     if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {

@@ -227,7 +227,7 @@ final class ShuffleBlockFetcherIterator(
 
     // so we can look up the block info of each blockID
     val infoMap = req.blocks.map {
-      case (blockId, size, mapId) => (blockId.toString, (size, mapId))
+      case (blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
     val blockIds = req.blocks.map(_._1.toString)
@@ -300,14 +300,14 @@ final class ShuffleBlockFetcherIterator(
         var curRequestSize = 0L
         var curBlocks = new ArrayBuffer[(BlockId, Long, Int)]
         while (iterator.hasNext) {
-          val (blockId, size, mapId) = iterator.next()
+          val (blockId, size, mapIndex) = iterator.next()
           remoteBlockBytes += size
           if (size < 0) {
             throw new BlockException(blockId, "Negative block size " + size)
           } else if (size == 0) {
             throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
           } else {
-            curBlocks += ((blockId, size, mapId))
+            curBlocks += ((blockId, size, mapIndex))
             remoteBlocks += blockId
             numBlocksToFetch += 1
             curRequestSize += size
@@ -592,7 +592,7 @@ final class ShuffleBlockFetcherIterator(
       e: Throwable) = {
     blockId match {
       case ShuffleBlockId(shufId, _, reduceId) =>
-        throw new FetchFailedException(address, shufId.toInt, mapIndex.toInt, reduceId, e)
+        throw new FetchFailedException(address, shufId, mapIndex, reduceId, e)
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
@@ -701,7 +701,7 @@ object ShuffleBlockFetcherIterator {
    * @param address remote BlockManager to fetch from.
    * @param blocks Sequence of tuple, where the first element is the block id,
    *               and the second element is the estimated size, used to calculate bytesInFlight,
-   *               the third element is the mapId.
+   *               the third element is the mapIndex.
    */
   case class FetchRequest(address: BlockManagerId, blocks: Seq[(BlockId, Long, Int)]) {
     val size = blocks.map(_._2).sum
