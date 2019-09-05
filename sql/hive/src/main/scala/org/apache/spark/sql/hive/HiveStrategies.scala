@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.IOException
 import java.util.Locale
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import scala.collection.{immutable, mutable}
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CommandUtils, CreateTableCommand, DDLUtils}
@@ -234,16 +234,76 @@ private[hive] trait HiveStrategies {
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionCols)
-        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
-          !predicate.references.isEmpty &&
-          predicate.references.subsetOf(partitionKeyIds)
+
+        case class PruningResult(pruning: Option[Expression], allChildrenCanPruning: Boolean)
+
+        // Add Or(And(_, _) And(_, _)) predicate to prunning partitions if And contains
+        // partition column and non-partition column. Assume p1/p2 is partition column and c1
+        // is non-partition column, the predicate "(p1 = 'a' and c1 = 1) or (p2 = 'b' and c1 = 3)"
+        // can extract predicate "(p1 = 'a') or (p2 = 'b')" to prunning partitions, in order to get
+        // the correct result, we must add the original predicate to outer filter. this can be
+        // exactly correct because the inner predicate contains outer predicate and outer predicate
+        // is original predicate
+        def canPruning(predicate: Expression): PruningResult = {
+          predicate match {
+            case And(left, right) =>
+              val leftResult = canPruning(left)
+              val rightResult = canPruning(right)
+
+              if (leftResult.pruning.isDefined && rightResult.pruning.isDefined) {
+                val pruning = Option(And(leftResult.pruning.get, rightResult.pruning.get))
+                val allChildrenCanPruning =
+                  leftResult.allChildrenCanPruning && rightResult.allChildrenCanPruning
+                PruningResult(pruning, allChildrenCanPruning)
+              } else if (leftResult.pruning.isDefined) {
+                val pruning = Option(leftResult.pruning.get)
+                PruningResult(pruning, false)
+              } else if (rightResult.pruning.isDefined) {
+                val pruning = Option(rightResult.pruning.get)
+                PruningResult(pruning, false)
+              } else PruningResult(Option.empty, false)
+
+            case Or(left, right) =>
+              val leftResult = canPruning(left)
+              val rightResult = canPruning(right)
+
+              val pruning: Option[Expression] =
+                if (leftResult.pruning.isDefined && rightResult.pruning.isDefined) {
+                  Option(Or(leftResult.pruning.get, rightResult.pruning.get))
+                } else Option.empty
+
+              val allChildrenCanPruning =
+                leftResult.allChildrenCanPruning && rightResult.allChildrenCanPruning
+
+              PruningResult(pruning, allChildrenCanPruning)
+
+            case _ => if (!predicate.references.isEmpty &&
+              predicate.references.subsetOf(partitionKeyIds)) {
+              PruningResult(Option(predicate), true)
+            } else PruningResult(Option.empty, false)
+          }
+        }
+
+        val pruningPredicates = mutable.ListBuffer[Expression]()
+        val otherPredicates = mutable.ListBuffer[Expression]()
+        predicates.foreach { predicate =>
+          // Find partition predicate that can pruning
+          val result = canPruning(predicate)
+          if (result.pruning.isDefined) {
+            pruningPredicates += result.pruning.get
+          }
+
+          // If any child can not pruning, add original predicate to outer filter
+          if (!result.allChildrenCanPruning) {
+            otherPredicates += predicate
+          }
         }
 
         pruneFilterProject(
           projectList,
-          otherPredicates,
+          otherPredicates.to[immutable.Seq],
           identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
+          HiveTableScanExec(_, relation, pruningPredicates.to[immutable.Seq])(sparkSession)) :: Nil
       case _ =>
         Nil
     }
