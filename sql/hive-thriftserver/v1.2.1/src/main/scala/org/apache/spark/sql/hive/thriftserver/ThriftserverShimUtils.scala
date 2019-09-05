@@ -49,6 +49,8 @@ private[thriftserver] object ThriftserverShimUtils {
     RowSetFactory.create(getResultSetSchema, getProtocolVersion)
   }
 
+  private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
+
   private[thriftserver] def addToClassPath(
       loader: ClassLoader,
       auxJars: Array[String]): ClassLoader = {
