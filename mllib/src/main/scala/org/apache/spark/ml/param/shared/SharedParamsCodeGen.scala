@@ -63,8 +63,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
       ParamDesc[Array[String]]("outputCols", "output column names"),
-      ParamDesc[Int]("numFeatures", "number of features.", Some("1 << 18"),
-        isValid = "ParamValidators.gt(0)"),
+      ParamDesc[Int]("numFeatures", "Number of features. Should be greater than 0",
+        Some("262144"), isValid = "ParamValidators.gt(0)"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
         "every 10 iterations. Note: this setting will be ignored if the checkpoint directory " +

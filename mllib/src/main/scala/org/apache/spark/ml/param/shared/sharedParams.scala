@@ -275,19 +275,19 @@ trait HasOutputCols extends Params {
 }
 
 /**
- * Trait for shared param numFeatures (default: 1 << 18). This trait may be changed or
+ * Trait for shared param numFeatures (default: 262144). This trait may be changed or
  * removed between minor versions.
  */
 @DeveloperApi
 trait HasNumFeatures extends Params {
 
   /**
-   * Param for number of features..
+   * Param for Number of features. Should be greater than 0.
    * @group param
    */
-  final val numFeatures: IntParam = new IntParam(this, "numFeatures", "number of features.", ParamValidators.gt(0))
+  final val numFeatures: IntParam = new IntParam(this, "numFeatures", "Number of features. Should be greater than 0", ParamValidators.gt(0))
 
-  setDefault(numFeatures, 1 << 18)
+  setDefault(numFeatures, 262144)
 
   /** @group getParam */
   final def getNumFeatures: Int = $(numFeatures)
