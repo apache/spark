@@ -343,14 +343,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-    * Inserts the content of the `DataFrame` to the specific table partition.
-    *
-    * {{{
-    *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto(ptTableName,"pt1='0101',pt2='0202'")
-    * }}}
-    *
-    * @since 3.0
-    */
+   * Inserts the content of the `DataFrame` to the specific table partition.
+   *
+   * {{{
+   *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto(ptTableName,"pt1='0101',pt2='0202'")
+   * }}}
+   *
+   * @since 3.0
+   */
   def insertInto(tableName: String, partionInfo: String): Unit = {
     insertInto(tableName, Some(partionInfo))
   }
@@ -405,7 +405,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val table = catalog.asTableCatalog.loadTable(ident) match {
       case _: V1Table =>
-        return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption), Map.empty[String, Option[String]])
+        return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption),
+          Map.empty[String, Option[String]])
       case t =>
         DataSourceV2Relation.create(t)
     }
@@ -435,7 +436,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def insertInto(tableIdent: TableIdentifier, partionInfo: Map[String, Option[String]]): Unit = {
+  private def insertInto(tableIdent: TableIdentifier,
+                         partionInfo: Map[String, Option[String]]): Unit = {
     runCommand(df.sparkSession, "insertInto") {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
