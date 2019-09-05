@@ -25,8 +25,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2._
-import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -40,11 +38,11 @@ import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
-import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -925,7 +923,7 @@ class Analyzer(
    * the table identifier does not include a catalog.
    */
   object ResolveAlterTable extends Rule[LogicalPlan] {
-    import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case alter @ AlterTableAddColumnsStatement(tableName, cols) =>
         val changes = cols.map { col =>
@@ -2855,7 +2853,7 @@ class Analyzer(
   private def lookupV2Relation(
       identifier: Seq[String]
       ): Either[(CatalogPlugin, Identifier, Option[Table]), Option[Table]] = {
-    import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util._
+    import org.apache.spark.sql.connector.catalog.CatalogV2Util._
 
     identifier match {
       case AsTemporaryViewIdentifier(ti) if catalog.isTemporaryTable(ti) =>

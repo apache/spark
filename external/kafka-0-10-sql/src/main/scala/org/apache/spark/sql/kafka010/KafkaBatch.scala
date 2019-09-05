@@ -23,8 +23,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReaderFactory}
-
+import org.apache.spark.sql.connector.read.{Batch, InputPartition, PartitionReaderFactory}
 
 private[kafka010] class KafkaBatch(
     strategy: ConsumerStrategy,

@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.SupportsDelete
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.SupportsDelete
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class DeleteFromTableExec(

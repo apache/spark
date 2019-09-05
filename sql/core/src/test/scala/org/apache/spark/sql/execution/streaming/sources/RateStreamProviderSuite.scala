@@ -24,12 +24,13 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.read.streaming
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.sources.v2.reader.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ManualClock
@@ -39,7 +40,7 @@ class RateStreamProviderSuite extends StreamTest {
   import testImplicits._
 
   case class AdvanceRateManualClock(seconds: Long) extends AddData {
-    override def addData(query: Option[StreamExecution]): (SparkDataStream, Offset) = {
+    override def addData(query: Option[StreamExecution]): (SparkDataStream, streaming.Offset) = {
       assert(query.nonEmpty)
       val rateSource = query.get.logicalPlan.collect {
         case r: StreamingDataSourceV2Relation

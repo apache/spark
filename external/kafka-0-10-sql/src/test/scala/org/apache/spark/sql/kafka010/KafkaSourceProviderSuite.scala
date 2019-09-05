@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite}
-import org.apache.spark.sql.sources.v2.reader.Scan
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaSourceProviderSuite extends SparkFunSuite {
