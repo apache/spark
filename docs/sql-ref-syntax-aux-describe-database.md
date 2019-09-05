@@ -74,7 +74,7 @@ DESCRIBE DATABASE EXTENDED employees;
   +-------------------------+---------------------------------------------+
 
 -- Create deployment SCHEMA
-CREATE SCHEMA deployment comment 'Deployment environment';
+CREATE SCHEMA deployment COMMENT 'Deployment environment';
 
 -- Describe deployment, the DATABASE and SCHEMA are interchangeable, their meaning are the same.
 DESC DATABASE deployment;
