@@ -35,59 +35,57 @@ interchangeable.
   <dt><code><em>db_name</em></code></dt>
   <dd>
     Specifies a name of an existing database or an existing schema in the syetem. If the name does not exist, an
-    exception is thrown. The name is case insensitive, it is stored as low case in SPARK<br><br>
+    exception is thrown.<br><br>
   </dd>
 </dl>
 
 ### Example
 {% highlight sql %}
 -- Create employees DATABASE
-CREATE DATABASE EMPLOYEES COMMENT 'For software companies';
+CREATE DATABASE employees COMMENT 'For software companies';
 
 -- Describe employees DATABASE.
--- Returns Database Name, Description and Root location of the filesystem for the employees DATABASE
-DESCRIBE DATABASE Employees;
-+-------------------------+-----------------------------+
-|database_description_item|database_description_value   |
-+-------------------------+-----------------------------+
-|Database Name            |employees                    |
-|Description              |For software companies       |
-|Location                 |file:/Users/Temp/employees.db|
-+-------------------------+-----------------------------+
-{% endhighlight %}
+-- Returns Database Name, Description and Root location of the filesystem
+-- for the employees DATABASE.
+DESCRIBE DATABASE employees;
+  +-------------------------+-----------------------------+
+  |database_description_item|database_description_value   |
+  +-------------------------+-----------------------------+
+  |Database Name            |employees                    |
+  |Description              |For software companies       |
+  |Location                 |file:/Users/Temp/employees.db|
+  +-------------------------+-----------------------------+
 
-{% highlight sql %}
 -- Create employees DATABASE
-CREATE DATABASE EMPLOYEES COMMENT 'For software companies';
+CREATE DATABASE employees COMMENT 'For software companies';
 
 -- Alter employees database to set DBPROPERTIES
-ALTER DATABASE EMPLOYEES SET DBPROPERTIES ('Create-by' = 'Kevin', 'Create-date' = '09/01/2019');
+ALTER DATABASE employees SET DBPROPERTIES ('Create-by' = 'Kevin', 'Create-date' = '09/01/2019');
 
--- Describe employees DATABASE with EXTENDED option to the database properties
+-- Describe employees DATABASE with EXTENDED option to return additional database properties
 DESCRIBE DATABASE EXTENDED employees;
-+-------------------------+---------------------------------------------+
-|database_description_item|database_description_value                   |
-+-------------------------+---------------------------------------------+
-|Database Name            |employees                                    |
-|Description              |For software companies                       |
-|Location                 |file:/Users/Temp/employees.db                |
-|Properties               |((Create-by,kevin), (Create-date,09/01/2019))|
-+-------------------------+---------------------------------------------+
-{% endhighlight %}
+  +-------------------------+---------------------------------------------+
+  |database_description_item|database_description_value                   |
+  +-------------------------+---------------------------------------------+
+  |Database Name            |employees                                    |
+  |Description              |For software companies                       |
+  |Location                 |file:/Users/Temp/employees.db                |
+  |Properties               |((Create-by,kevin), (Create-date,09/01/2019))|
+  +-------------------------+---------------------------------------------+
 
-{% highlight sql %}
 -- Create deployment SCHEMA
-CREATE SCHEMA DEPLOYMENT comment 'Deployment environment';
+CREATE SCHEMA deployment comment 'Deployment environment';
 
 -- Describe deployment, the DATABASE and SCHEMA are interchangeable, their meaning are the same.
-DESC DATABASE DEPLOYMENT;
-+-------------------------+------------------------------+
-|database_description_item|database_description_value    |
-+-------------------------+------------------------------+
-|Database Name            |deployment                    |
-|Description              |Deployment environment        |
-|Location                 |file:/Users/Temp/deployment.db|
-+-------------------------+------------------------------+
+DESC DATABASE deployment;
+  +-------------------------+------------------------------+
+  |database_description_item|database_description_value    |
+  +-------------------------+------------------------------+
+  |Database Name            |deployment                    |
+  |Description              |Deployment environment        |
+  |Location                 |file:/Users/Temp/deployment.db|
+  +-------------------------+------------------------------+
+
 {% endhighlight %}
 
 ### Related Statements
