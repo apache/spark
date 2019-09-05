@@ -1021,19 +1021,19 @@ case class HashAggregateExec(
             val bufferOffset = bufferStartOffsets(i)
             // All the update code for aggregation buffers should be placed in the end
             // of each aggregation function code.
-             val updateRowBuffer = fastRowEvalsForOneFunc.zipWithIndex.map { case (ev, j) =>
-               val updateExpr = boundUpdateExprsForOneFunc(j)
-               val dt = updateExpr.dataType
-               val nullable = updateExpr.nullable
-               CodeGenerator.updateColumn(fastRowBuffer, dt, bufferOffset + j, ev, nullable,
-                 isVectorized = true)
-             }
-             code"""
-                |// evaluate aggregate function for ${aggNames(i)}
-                |${evaluateVariables(fastRowEvalsForOneFunc)}
-                |// update fast row
-                |${updateRowBuffer.mkString("\n").trim}
-              """.stripMargin
+            val updateRowBuffer = fastRowEvalsForOneFunc.zipWithIndex.map { case (ev, j) =>
+              val updateExpr = boundUpdateExprsForOneFunc(j)
+              val dt = updateExpr.dataType
+              val nullable = updateExpr.nullable
+              CodeGenerator.updateColumn(fastRowBuffer, dt, bufferOffset + j, ev, nullable,
+                isVectorized = true)
+            }
+            code"""
+               |// evaluate aggregate function for ${aggNames(i)}
+               |${evaluateVariables(fastRowEvalsForOneFunc)}
+               |// update fast row
+               |${updateRowBuffer.mkString("\n").trim}
+             """.stripMargin
           }
 
 
