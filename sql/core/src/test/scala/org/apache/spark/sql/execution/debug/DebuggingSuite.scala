@@ -19,12 +19,11 @@ package org.apache.spark.sql.execution.debug
 
 import java.io.ByteArrayOutputStream
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 
-class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
+class DebuggingSuite extends SharedSparkSession {
 
   test("DataFrame.debug()") {
     testData.debug()
@@ -62,8 +61,8 @@ class DebuggingSuite extends SparkFunSuite with SharedSQLContext {
     }
 
     val output = captured.toString()
-    assert(output.contains(
-      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])) ==
+    assert(output.replaceAll("\\[id=#\\d+\\]", "[id=#x]").contains(
+      """== BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false])), [id=#x] ==
         |Tuples output: 0
         | id LongType: {}
         |== WholeStageCodegen ==

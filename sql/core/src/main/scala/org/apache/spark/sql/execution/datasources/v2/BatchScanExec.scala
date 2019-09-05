@@ -49,6 +49,6 @@ case class BatchScanExec(
   }
 
   override def doCanonicalize(): BatchScanExec = {
-    this.copy(output = output.map(QueryPlan.normalizeExprId(_, output)))
+    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)))
   }
 }

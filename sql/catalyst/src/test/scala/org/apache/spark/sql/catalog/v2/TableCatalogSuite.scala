@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,13 +39,14 @@ class TableCatalogSuite extends SparkFunSuite {
       .add("data", StringType)
 
   private def newCatalog(): TableCatalog with SupportsNamespaces = {
-    val newCatalog = new TestTableCatalog
+    val newCatalog = new InMemoryTableCatalog
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
 
   private val testNs = Array("`", ".")
   private val testIdent = Identifier.of(testNs, "test_table")
+  private val testIdentNew = Identifier.of(testNs, "test_table_new")
 
   test("Catalogs can load the catalog") {
     val catalog = newCatalog()
@@ -93,7 +95,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
-    assert(parsed == Seq("`", ".", "test_table"))
+    assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.schema == schema)
     assert(table.properties.asScala == Map())
 
@@ -111,7 +113,7 @@ class TableCatalogSuite extends SparkFunSuite {
     val table = catalog.createTable(testIdent, schema, Array.empty, properties)
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
-    assert(parsed == Seq("`", ".", "test_table"))
+    assert(parsed == Seq("test", "`", ".", "test_table"))
     assert(table.schema == schema)
     assert(table.properties == properties)
 
@@ -129,7 +131,7 @@ class TableCatalogSuite extends SparkFunSuite {
       catalog.createTable(testIdent, schema, Array.empty, emptyProps)
     }
 
-    assert(exc.message.contains(table.name()))
+    assert(exc.message.contains(testIdent.quoted))
     assert(exc.message.contains("already exists"))
 
     assert(catalog.tableExists(testIdent))
@@ -654,6 +656,52 @@ class TableCatalogSuite extends SparkFunSuite {
 
     assert(!wasDropped)
     assert(!catalog.tableExists(testIdent))
+  }
+
+  test("renameTable") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNew))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+    catalog.renameTable(testIdent, testIdentNew)
+
+    assert(!catalog.tableExists(testIdent))
+    assert(catalog.tableExists(testIdentNew))
+  }
+
+  test("renameTable: fail if table does not exist") {
+    val catalog = newCatalog()
+
+    val exc = intercept[NoSuchTableException] {
+      catalog.renameTable(testIdent, testIdentNew)
+    }
+
+    assert(exc.message.contains(testIdent.quoted))
+    assert(exc.message.contains("not found"))
+  }
+
+  test("renameTable: fail if new table name already exists") {
+    val catalog = newCatalog()
+
+    assert(!catalog.tableExists(testIdent))
+    assert(!catalog.tableExists(testIdentNew))
+
+    catalog.createTable(testIdent, schema, Array.empty, emptyProps)
+    catalog.createTable(testIdentNew, schema, Array.empty, emptyProps)
+
+    assert(catalog.tableExists(testIdent))
+    assert(catalog.tableExists(testIdentNew))
+
+    val exc = intercept[TableAlreadyExistsException] {
+      catalog.renameTable(testIdent, testIdentNew)
+    }
+
+    assert(exc.message.contains(testIdentNew.quoted))
+    assert(exc.message.contains("already exists"))
   }
 
   test("listNamespaces: list namespaces from metadata") {

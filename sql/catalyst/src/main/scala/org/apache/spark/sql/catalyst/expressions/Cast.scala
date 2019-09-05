@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.time.ZoneId
+import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.SparkException
@@ -134,6 +135,7 @@ object Cast {
     case (DateType, TimestampType) => true
     case (_: AtomicType, StringType) => true
     case (_: CalendarIntervalType, StringType) => true
+    case (NullType, _) => true
 
     // Spark supports casting between long and timestamp, please see `longToTimestamp` and
     // `timestampToLong` for details.
@@ -151,6 +153,37 @@ object Cast {
         fromFields.zip(toFields).forall {
           case (f1, f2) =>
             resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
+        }
+
+    case _ => false
+  }
+
+  /**
+   * Returns true iff we can cast the `from` type to `to` type as per the ANSI SQL.
+   * In practice, the behavior is mostly the same as PostgreSQL. It disallows certain unreasonable
+   * type conversions such as converting `string` to `int` or `double` to `boolean`.
+   */
+  def canANSIStoreAssign(from: DataType, to: DataType): Boolean = (from, to) match {
+    case _ if from == to => true
+    case (_: NumericType, _: NumericType) => true
+    case (_: AtomicType, StringType) => true
+    case (_: CalendarIntervalType, StringType) => true
+    case (DateType, TimestampType) => true
+    case (TimestampType, DateType) => true
+
+    case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
+      resolvableNullability(fn, tn) && canANSIStoreAssign(fromType, toType)
+
+    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      resolvableNullability(fn, tn) && canANSIStoreAssign(fromKey, toKey) &&
+        canANSIStoreAssign(fromValue, toValue)
+
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).forall {
+          case (f1, f2) =>
+            resolvableNullability(f1.nullable, f2.nullable) &&
+              canANSIStoreAssign(f1.dataType, f2.dataType)
         }
 
     case _ => false
@@ -192,6 +225,22 @@ object Cast {
   }
 
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
+
+  /**
+   * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
+   * insensitive manner to be compatible with other database systems such as PostgreSQL and DB2.
+   */
+  def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
+    v.trim.toLowerCase(Locale.ROOT) match {
+      case "inf" | "+inf" | "infinity" | "+infinity" =>
+        if (isFloat) Float.PositiveInfinity else Double.PositiveInfinity
+      case "-inf" | "-infinity" =>
+        if (isFloat) Float.NegativeInfinity else Double.NegativeInfinity
+      case "nan" =>
+        if (isFloat) Float.NaN else Double.NaN
+      case _ => null
+    }
+  }
 }
 
 /**
@@ -240,6 +289,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  private val failOnIntegralTypeOverflow = SQLConf.get.failOnIntegralTypeOverflow
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -443,6 +493,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Int](_, d => null)
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t))
+    case x: NumericType if failOnIntegralTypeOverflow =>
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toLong(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toLong(b)
   }
@@ -456,8 +508,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Boolean](_, b => if (b) 1 else 0)
     case DateType =>
       buildCast[Int](_, d => null)
+    case TimestampType if failOnIntegralTypeOverflow =>
+      buildCast[Long](_, t => LongExactNumeric.toInt(timestampToLong(t)))
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toInt)
+    case x: NumericType if failOnIntegralTypeOverflow =>
+      b => x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b)
   }
@@ -475,8 +531,30 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Boolean](_, b => if (b) 1.toShort else 0.toShort)
     case DateType =>
       buildCast[Int](_, d => null)
+    case TimestampType if failOnIntegralTypeOverflow =>
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toShort) {
+          longValue.toShort
+        } else {
+          throw new ArithmeticException(s"Casting $t to short causes overflow.")
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toShort)
+    case x: NumericType if failOnIntegralTypeOverflow =>
+      b =>
+        val intValue = try {
+          x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+        } catch {
+          case _: ArithmeticException =>
+            throw new ArithmeticException(s"Casting $b to short causes overflow.")
+        }
+        if (intValue == intValue.toShort) {
+          intValue.toShort
+        } else {
+          throw new ArithmeticException(s"Casting $b to short causes overflow.")
+        }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
   }
@@ -494,8 +572,30 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       buildCast[Boolean](_, b => if (b) 1.toByte else 0.toByte)
     case DateType =>
       buildCast[Int](_, d => null)
+    case TimestampType if failOnIntegralTypeOverflow =>
+      buildCast[Long](_, t => {
+        val longValue = timestampToLong(t)
+        if (longValue == longValue.toByte) {
+          longValue.toByte
+        } else {
+          throw new ArithmeticException(s"Casting $t to byte causes overflow.")
+        }
+      })
     case TimestampType =>
       buildCast[Long](_, t => timestampToLong(t).toByte)
+    case x: NumericType if failOnIntegralTypeOverflow =>
+      b =>
+        val intValue = try {
+          x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
+        } catch {
+          case _: ArithmeticException =>
+            throw new ArithmeticException(s"Casting $b to byte causes overflow.")
+        }
+        if (intValue == intValue.toByte) {
+          intValue.toByte
+        } else {
+          throw new ArithmeticException(s"Casting $b to byte causes overflow.")
+        }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
@@ -562,8 +662,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // DoubleConverter
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toDouble catch {
-        case _: NumberFormatException => null
+      buildCast[UTF8String](_, s => {
+        val doubleStr = s.toString
+        try doubleStr.toDouble catch {
+          case _: NumberFormatException =>
+            Cast.processFloatingPointSpecialLiterals(doubleStr, false)
+        }
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1d else 0d)
@@ -578,8 +682,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // FloatConverter
   private[this] def castToFloat(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => try s.toString.toFloat catch {
-        case _: NumberFormatException => null
+      buildCast[UTF8String](_, s => {
+        val floatStr = s.toString
+        try floatStr.toFloat catch {
+          case _: NumberFormatException =>
+            Cast.processFloatingPointSpecialLiterals(floatStr, true)
+        }
       })
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1f else 0f)
@@ -717,9 +825,9 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
     case IntegerType => castToIntCode(from, ctx)
-    case FloatType => castToFloatCode(from)
+    case FloatType => castToFloatCode(from, ctx)
     case LongType => castToLongCode(from, ctx)
-    case DoubleType => castToDoubleCode(from)
+    case DoubleType => castToDoubleCode(from, ctx)
 
     case array: ArrayType =>
       castArrayCode(from.asInstanceOf[ArrayType].elementType, array.elementType, ctx)
@@ -1127,7 +1235,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     code"($d.toBigDecimal().bigDecimal().multiply($block)).longValue()"
   }
   private[this] def longToTimeStampCode(l: ExprValue): Block = code"$l * (long)$MICROS_PER_SECOND"
-  private[this] def timestampToIntegerCode(ts: ExprValue): Block =
+  private[this] def timestampToLongCode(ts: ExprValue): Block =
     code"java.lang.Math.floorDiv($ts, $MICROS_PER_SECOND)"
   private[this] def timestampToDoubleCode(ts: ExprValue): Block =
     code"$ts / (double)$MICROS_PER_SECOND"
@@ -1156,6 +1264,82 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c != 0;"
   }
 
+  private[this] def castTimestampToIntegralTypeCode(
+      ctx: CodegenContext,
+      integralType: String): CastFunction = {
+    if (failOnIntegralTypeOverflow) {
+      val longValue = ctx.freshName("longValue")
+      (c, evPrim, evNull) =>
+        code"""
+          long $longValue = ${timestampToLongCode(c)};
+          if ($longValue == ($integralType) $longValue) {
+            $evPrim = ($integralType) $longValue;
+          } else {
+            throw new ArithmeticException("Casting $c to $integralType causes overflow");
+          }
+        """
+    } else {
+      (c, evPrim, evNull) => code"$evPrim = ($integralType) ${timestampToLongCode(c)};"
+    }
+  }
+
+  private[this] def castDecimalToIntegralTypeCode(
+      ctx: CodegenContext,
+      integralType: String): CastFunction = {
+    if (failOnIntegralTypeOverflow) {
+      (c, evPrim, evNull) => code"$evPrim = $c.roundTo${integralType.capitalize}();"
+    } else {
+      (c, evPrim, evNull) => code"$evPrim = $c.to${integralType.capitalize}();"
+    }
+  }
+
+  private[this] def castIntegralTypeToIntegralTypeExactCode(integralType: String): CastFunction = {
+    assert(failOnIntegralTypeOverflow)
+    (c, evPrim, evNull) =>
+      code"""
+        if ($c == ($integralType) $c) {
+          $evPrim = ($integralType) $c;
+        } else {
+          throw new ArithmeticException("Casting $c to $integralType causes overflow");
+        }
+      """
+  }
+
+  private[this] def lowerAndUpperBound(
+      fractionType: String,
+      integralType: String): (String, String) = {
+    assert(fractionType == "float" || fractionType == "double")
+    val typeIndicator = fractionType.charAt(0)
+    val (min, max) = integralType.toLowerCase(Locale.ROOT) match {
+      case "long" => (Long.MinValue, Long.MaxValue)
+      case "int" => (Int.MinValue, Int.MaxValue)
+      case "short" => (Short.MinValue, Short.MaxValue)
+      case "byte" => (Byte.MinValue, Byte.MaxValue)
+    }
+    (min.toString + typeIndicator, max.toString + typeIndicator)
+  }
+
+  private[this] def castFractionToIntegralTypeCode(
+      fractionType: String,
+      integralType: String): CastFunction = {
+    assert(failOnIntegralTypeOverflow)
+    val (min, max) = lowerAndUpperBound(fractionType, integralType)
+    val mathClass = classOf[Math].getName
+    // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
+    // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
+    // for negative floating values, it is equivalent to `Math.ceil`.
+    // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
+    // to check if the floating value x is in the range of an integral type after rounding.
+    (c, evPrim, evNull) =>
+      code"""
+        if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
+          $evPrim = ($integralType) $c;
+        } else {
+          throw new ArithmeticException("Casting $c to $integralType causes overflow");
+        }
+      """
+  }
+
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshVariable("intWrapper", classOf[UTF8String.IntWrapper])
@@ -1173,10 +1357,14 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (byte) 1 : (byte) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (byte) ${timestampToIntegerCode(c)};"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toByte();"
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "byte")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "byte")
+    case _: ShortType | _: IntegerType | _: LongType if failOnIntegralTypeOverflow =>
+      castIntegralTypeToIntegralTypeExactCode("byte")
+    case _: FloatType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("float", "byte")
+    case _: DoubleType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("double", "byte")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (byte) $c;"
   }
@@ -1200,10 +1388,14 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? (short) 1 : (short) 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (short) ${timestampToIntegerCode(c)};"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toShort();"
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "short")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "short")
+    case _: IntegerType | _: LongType if failOnIntegralTypeOverflow =>
+      castIntegralTypeToIntegralTypeExactCode("short")
+    case _: FloatType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("float", "short")
+    case _: DoubleType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("double", "short")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (short) $c;"
   }
@@ -1225,10 +1417,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) => code"$evPrim = $c ? 1 : 0;"
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (int) ${timestampToIntegerCode(c)};"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toInt();"
+    case TimestampType => castTimestampToIntegralTypeCode(ctx, "int")
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "int")
+    case _: LongType if failOnIntegralTypeOverflow => castIntegralTypeToIntegralTypeExactCode("int")
+    case _: FloatType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("float", "int")
+    case _: DoubleType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("double", "int")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (int) $c;"
   }
@@ -1252,55 +1447,76 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     case DateType =>
       (c, evPrim, evNull) => code"$evNull = true;"
     case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToIntegerCode(c)};"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toLong();"
+      (c, evPrim, evNull) => code"$evPrim = (long) ${timestampToLongCode(c)};"
+    case DecimalType() => castDecimalToIntegralTypeCode(ctx, "long")
+    case _: FloatType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("float", "long")
+    case _: DoubleType if failOnIntegralTypeOverflow =>
+      castFractionToIntegralTypeCode("double", "long")
     case x: NumericType =>
       (c, evPrim, evNull) => code"$evPrim = (long) $c;"
   }
 
-  private[this] def castToFloatCode(from: DataType): CastFunction = from match {
-    case StringType =>
-      (c, evPrim, evNull) =>
-        code"""
+  private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case StringType =>
+        val floatStr = ctx.freshVariable("floatStr", StringType)
+        (c, evPrim, evNull) =>
+          code"""
+          final String $floatStr = $c.toString();
           try {
-            $evPrim = Float.valueOf($c.toString());
+            $evPrim = Float.valueOf($floatStr);
           } catch (java.lang.NumberFormatException e) {
-            $evNull = true;
+            final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
+            if (f == null) {
+              $evNull = true;
+            } else {
+              $evPrim = f.floatValue();
+            }
           }
         """
-    case BooleanType =>
-      (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = (float) (${timestampToDoubleCode(c)});"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toFloat();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (float) $c;"
+      case BooleanType =>
+        (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
+      case DateType =>
+        (c, evPrim, evNull) => code"$evNull = true;"
+      case TimestampType =>
+        (c, evPrim, evNull) => code"$evPrim = (float) (${timestampToDoubleCode(c)});"
+      case DecimalType() =>
+        (c, evPrim, evNull) => code"$evPrim = $c.toFloat();"
+      case x: NumericType =>
+        (c, evPrim, evNull) => code"$evPrim = (float) $c;"
+    }
   }
 
-  private[this] def castToDoubleCode(from: DataType): CastFunction = from match {
-    case StringType =>
-      (c, evPrim, evNull) =>
-        code"""
+  private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case StringType =>
+        val doubleStr = ctx.freshVariable("doubleStr", StringType)
+        (c, evPrim, evNull) =>
+          code"""
+          final String $doubleStr = $c.toString();
           try {
-            $evPrim = Double.valueOf($c.toString());
+            $evPrim = Double.valueOf($doubleStr);
           } catch (java.lang.NumberFormatException e) {
-            $evNull = true;
+            final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
+            if (d == null) {
+              $evNull = true;
+            } else {
+              $evPrim = d.doubleValue();
+            }
           }
         """
-    case BooleanType =>
-      (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
-    case DateType =>
-      (c, evPrim, evNull) => code"$evNull = true;"
-    case TimestampType =>
-      (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
-    case DecimalType() =>
-      (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
-    case x: NumericType =>
-      (c, evPrim, evNull) => code"$evPrim = (double) $c;"
+      case BooleanType =>
+        (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
+      case DateType =>
+        (c, evPrim, evNull) => code"$evNull = true;"
+      case TimestampType =>
+        (c, evPrim, evNull) => code"$evPrim = ${timestampToDoubleCode(c)};"
+      case DecimalType() =>
+        (c, evPrim, evNull) => code"$evPrim = $c.toDouble();"
+      case x: NumericType =>
+        (c, evPrim, evNull) => code"$evPrim = (double) $c;"
+    }
   }
 
   private[this] def castArrayCode(
