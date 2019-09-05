@@ -1016,7 +1016,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Specify the name of the ConfigMap, containing the HADOOP_CONF_DIR files, to be mounted on the driver
     and executors for custom Hadoop configuration. When HADOOP_CONF_DIR and this property are both configured, Spark will
-    give preference to this one to be mounted on the driver pods. Then, HADOOP_CONF_DIR will only affects the 
+    give preference to this one to be mounted on the driver pod. Then, HADOOP_CONF_DIR will affect the 
     client process on the launcher machince only.
   </td>
 </tr>
