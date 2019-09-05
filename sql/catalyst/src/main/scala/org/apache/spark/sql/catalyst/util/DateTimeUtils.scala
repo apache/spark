@@ -848,4 +848,15 @@ object DateTimeUtils {
     val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
     new Decimal().set(sinceEpoch, 20, 6)
   }
+
+  def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
+
+  /** Notational shorthands that are converted to ordinary dates. */
+  val specialDates: Map[String, ZoneId => SQLDate] = Map(
+    ("epoch", (_: ZoneId) => 0),
+    ("now", currentDate),
+    ("today", currentDate),
+    ("tomorrow", (z: ZoneId) => Math.addExact(currentDate(z), 1)),
+    ("yesterday", (z: ZoneId) => Math.subtractExact(currentDate(z), 1)))
+  val specialDateKeys: Set[String] = specialDates.keySet
 }

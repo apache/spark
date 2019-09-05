@@ -197,7 +197,9 @@ private[sql] object JDBCRelation extends Logging {
       timeZoneId: String): String = {
     def dateTimeToString(): String = {
       val dateTimeStr = columnType match {
-        case DateType => DateFormatter().format(value.toInt)
+        case DateType =>
+          val dateFormatter = DateFormatter(DateTimeUtils.getZoneId(timeZoneId))
+          dateFormatter.format(value.toInt)
         case TimestampType =>
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))

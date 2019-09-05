@@ -287,7 +287,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
-  private lazy val dateFormatter = DateFormatter()
+  private lazy val dateFormatter = DateFormatter(zoneId)
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
   private val failOnIntegralTypeOverflow = SQLConf.get.failOnIntegralTypeOverflow
 
