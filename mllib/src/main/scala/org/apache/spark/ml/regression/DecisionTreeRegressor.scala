@@ -132,15 +132,14 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(
-      data: RDD[LabeledPoint],
+      data: RDD[Instance],
       oldStrategy: OldStrategy,
       featureSubsetStrategy: String): DecisionTreeRegressionModel = instrumented { instr =>
     instr.logPipelineStage(this)
     instr.logDataset(data)
     instr.logParams(this, params: _*)
 
-    val instances = data.map(_.toInstance)
-    val trees = RandomForest.run(instances, oldStrategy, numTrees = 1,
+    val trees = RandomForest.run(data, oldStrategy, numTrees = 1,
       featureSubsetStrategy, seed = $(seed), instr = Some(instr), parentUID = Some(uid))
 
     trees.head.asInstanceOf[DecisionTreeRegressionModel]

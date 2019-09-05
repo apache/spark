@@ -23,7 +23,7 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -152,6 +152,16 @@ class GBTClassifier @Since("1.4.0") (
     set(validationIndicatorCol, value)
   }
 
+  /**
+   * Sets the value of param [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
+   * Default is not set, so all instances have weight one.
+   *
+   * @group setParam
+   */
+  @Since("3.0.0")
+  def setWeightCol(value: String): this.type = set(weightCol, value)
+
   override protected def train(
       dataset: Dataset[_]): GBTClassificationModel = instrumented { instr =>
     val categoricalFeatures: Map[Int, Int] =
@@ -159,25 +169,25 @@ class GBTClassifier @Since("1.4.0") (
 
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
-    // We copy and modify this from Classifier.extractLabeledPoints since GBT only supports
-    // 2 classes now.  This lets us provide a more precise error message.
-    val convert2LabeledPoint = (dataset: Dataset[_]) => {
-      dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-        case Row(label: Double, features: Vector) =>
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+
+    val convert2Instance = (dataset: Dataset[_]) => {
+      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+        case Row(label: Double, weight: Double, features: Vector) =>
           require(label == 0 || label == 1, s"GBTClassifier was given" +
             s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
             s" GBTClassifier currently only supports binary classification.")
-          LabeledPoint(label, features)
+          Instance(label, weight, features)
       }
     }
 
     val (trainDataset, validationDataset) = if (withValidation) {
       (
-        convert2LabeledPoint(dataset.filter(not(col($(validationIndicatorCol))))),
-        convert2LabeledPoint(dataset.filter(col($(validationIndicatorCol))))
+        convert2Instance(dataset.filter(not(col($(validationIndicatorCol))))),
+        convert2Instance(dataset.filter(col($(validationIndicatorCol))))
       )
     } else {
-      (convert2LabeledPoint(dataset), null)
+      (convert2Instance(dataset), null)
     }
 
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
@@ -191,10 +201,10 @@ class GBTClassifier @Since("1.4.0") (
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
-    instr.logParams(this, labelCol, featuresCol, predictionCol, leafCol, impurity,
-      lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
-      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy,
-      validationIndicatorCol, validationTol)
+    instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
+      impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
+      minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol)
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = if (withValidation) {
@@ -374,8 +384,10 @@ class GBTClassificationModel private[ml](
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
-    val data = dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
-      case Row(label: Double, features: Vector) => LabeledPoint(label, features)
+    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
+    val data = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+      case Row(label: Double, weight: Double, features: Vector) =>
+        Instance(label, weight, features)
     }
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, loss,
       OldAlgo.Classification
@@ -423,10 +435,9 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
       val numFeatures = (metadata.metadata \ numFeaturesKey).extract[Int]
       val numTrees = (metadata.metadata \ numTreesKey).extract[Int]
 
-      val trees: Array[DecisionTreeRegressionModel] = treesData.map {
+      val trees = treesData.map {
         case (treeMetadata, root) =>
-          val tree =
-            new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
+          val tree = new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
           treeMetadata.getAndSetParams(tree)
           tree
       }
