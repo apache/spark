@@ -150,18 +150,6 @@ case class DataSourceResolution(
     case DropViewStatement(AsTableIdentifier(tableName), ifExists) =>
       DropTableCommand(tableName, ifExists, isView = true, purge = false)
 
-    case i @ InsertIntoStatement(UnresolvedRelation(
-        CatalogObjectIdentifier(None, ident)), _, _, _, _) if i.query.resolved =>
-      loadTable(v2SessionCatalog, ident) match {
-        case Some(v1: V1Table) =>
-          InsertIntoTable(UnresolvedCatalogRelation(v1.v1Table),
-            i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
-        case tableOpt =>
-          tableOpt.map(DataSourceV2Helpers.resolveInsertInto(i, _, conf))
-            .getOrElse(InsertIntoTable(
-              i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists))
-      }
-
     case AlterTableAddColumnsStatement(CatalogObjectIdentifier(None, ident), cols) =>
       loadTable(v2SessionCatalog, ident) match {
         case Some(v1: V1Table) if cols.forall(_.name.size == 1) =>
@@ -171,43 +159,15 @@ case class DataSourceResolution(
         case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
             .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
-          val changes = DataSourceV2Helpers.addColumnChanges(cols)
+
+          val changes = cols.map { col =>
+            TableChange.addColumn(col.name.toArray, col.dataType, true, col.comment.orNull)
+          }
           AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterTableAlterColumnStatement(
-        CatalogObjectIdentifier(None, ident), colName, dataType, comment) =>
-      loadTable(v2SessionCatalog, ident) match {
-        case Some(_: V1Table) =>
-          throw new AnalysisException("ALTER COLUMN is not supported for V1 tables.")
-        case tableOpt =>
-          val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
-          val changes = DataSourceV2Helpers.alterColumnChanges(colName, dataType, comment)
-          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
-      }
-
-    case AlterTableRenameColumnStatement(CatalogObjectIdentifier(None, ident), col, newName) =>
-      loadTable(v2SessionCatalog, ident) match {
-        case Some(_: V1Table) =>
-          throw new AnalysisException("RENAME COLUMN is not supported for V1 tables.")
-        case tableOpt =>
-          val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
-          val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
-      }
-
-    case AlterTableDropColumnsStatement(CatalogObjectIdentifier(None, ident), cols) =>
-      loadTable(v2SessionCatalog, ident) match {
-        case Some(_: V1Table) =>
-          throw new AnalysisException("RENAME COLUMN is not supported for V1 tables.")
-        case tableOpt =>
-          val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
-          val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
-      }
+    case AlterViewSetPropertiesStatement(AsTableIdentifier(table), properties) =>
+      AlterTableSetPropertiesCommand(table, properties, isView = true)
 
     case AlterTableSetPropertiesStatement(CatalogObjectIdentifier(None, ident), props) =>
       loadTable(v2SessionCatalog, ident) match {
@@ -216,18 +176,8 @@ case class DataSourceResolution(
         case tableOpt =>
           val relation = tableOpt.map(DataSourceV2Relation.create)
             .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
-          val changes = props.map { case (key, value) => TableChange.setProperty(key, value) }.toSeq
-          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
-      }
-
-    case AlterTableUnsetPropertiesStatement(CatalogObjectIdentifier(None, ident), keys, ifExists) =>
-      loadTable(v2SessionCatalog, ident) match {
-        case Some(v1: V1Table) =>
-          AlterTableUnsetPropertiesCommand(v1.v1Table.identifier, keys, ifExists, isView = false)
-        case tableOpt =>
-          val relation = tableOpt.map(DataSourceV2Relation.create)
-            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
-          val changes = keys.map(key => TableChange.removeProperty(key))
+          val changes =
+            props.map { case (key, value) => TableChange.setProperty(key, value) }.toSeq
           AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
@@ -242,11 +192,19 @@ case class DataSourceResolution(
           AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
       }
 
-    case AlterViewSetPropertiesStatement(AsTableIdentifier(table), properties) =>
-      AlterTableSetPropertiesCommand(table, properties, isView = true)
-
     case AlterViewUnsetPropertiesStatement(AsTableIdentifier(table), propertyKeys, ifExists) =>
       AlterTableUnsetPropertiesCommand(table, propertyKeys, ifExists, isView = true)
+
+    case AlterTableUnsetPropertiesStatement(CatalogObjectIdentifier(None, ident), keys, ifExists) =>
+      loadTable(v2SessionCatalog, ident) match {
+        case Some(v1: V1Table) =>
+          AlterTableUnsetPropertiesCommand(v1.v1Table.identifier, keys, ifExists, isView = false)
+        case tableOpt =>
+          val relation = tableOpt.map(DataSourceV2Relation.create)
+            .getOrElse(UnresolvedRelation(ident.namespace() :+ ident.name()))
+          val changes = keys.map(key => TableChange.removeProperty(key))
+          AlterTable(v2SessionCatalog.asTableCatalog, ident, relation, changes)
+      }
 
     case DeleteFromStatement(AsTableIdentifier(table), tableAlias, condition) =>
       throw new AnalysisException(
