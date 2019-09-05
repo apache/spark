@@ -287,8 +287,7 @@ private[spark] object KubernetesUtils extends Logging {
               throw new SparkException(s"Uploading file ${fileUri.getPath} failed...", e)
           }
         } else {
-          throw new SparkException("Please specify " +
-            "spark.kubernetes.file.upload.path property.")
+          throw new SparkException(s"Please specify ${KUBERNETES_FILE_UPLOAD_PATH.key} property.")
         }
       case _ => throw new SparkException("Spark configuration is missing...")
     }

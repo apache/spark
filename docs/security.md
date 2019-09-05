@@ -845,8 +845,13 @@ When talking to Hadoop-based services behind Kerberos, it was noted that Spark n
 so that non-local processes can authenticate. These delegation tokens in Kubernetes are stored in Secrets that are
 shared by the Driver and its Executors. As such, there are three ways of submitting a Kerberos job:
 
-In all cases you must define the environment variable: `HADOOP_CONF_DIR` or
-`spark.kubernetes.hadoop.configMapName.`
+In all cases you must define the environment variable: `HADOOP_CONF_DIR` or/and
+`spark.kubernetes.hadoop.configMapName`. When only `HADOOP_CONF_DIR` is configured, the hadoop configurations in there
+will be used by the client process, the Driver and its Executors. When only `spark.kubernetes.hadoop.configMapName`
+is configured, the hadoop configurations will only be used by the Driver and its Executors. If your client process has
+extra dependencies to upload to `spark.kubernetes.file.upload.path`, you may need to configure `HADOOP_CONF_DIR` too.
+When these two variables are both set, Spark will prefer `spark.kubernetes.hadoop.configMapName` to be mounted on the
+Driver/Executor pods.
 
 It also important to note that the KDC needs to be visible from inside the containers.
 

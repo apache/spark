@@ -24,25 +24,20 @@ import scala.collection.JavaConverters._
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.Logging
 
 /**
  * Mounts the Hadoop configuration - either a pre-defined config map, or a local configuration
  * directory - on the driver pod.
  */
 private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
-  extends KubernetesFeatureConfigStep {
+  extends KubernetesFeatureConfigStep with Logging {
 
   private val confDir = Option(conf.sparkConf.getenv(ENV_HADOOP_CONF_DIR))
   private val existingConfMap = conf.get(KUBERNETES_HADOOP_CONF_CONFIG_MAP)
-
-  KubernetesUtils.requireNandDefined(
-    confDir,
-    existingConfMap,
-    "Do not specify both the `HADOOP_CONF_DIR` in your ENV and the ConfigMap " +
-    "as the creation of an additional ConfigMap, when one is already specified is extraneous")
 
   private lazy val confFiles: Seq[File] = {
     val dir = new File(confDir.get)
@@ -55,59 +50,64 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
 
   private def newConfigMapName: String = s"${conf.resourceNamePrefix}-hadoop-config"
 
-  private def hasHadoopConf: Boolean = confDir.isDefined || existingConfMap.isDefined
+  private def newPodWithConf: (SparkPod, Volume) => SparkPod = { (pod, volume) =>
+    val podWithConf = new PodBuilder(pod.pod)
+      .editSpec()
+        .addNewVolumeLike(volume)
+        .endVolume()
+      .endSpec()
+      .build()
+
+    val containerWithMount = new ContainerBuilder(pod.container)
+      .addNewVolumeMount()
+        .withName(HADOOP_CONF_VOLUME)
+        .withMountPath(HADOOP_CONF_DIR_PATH)
+        .endVolumeMount()
+      .addNewEnv()
+        .withName(ENV_HADOOP_CONF_DIR)
+        .withValue(HADOOP_CONF_DIR_PATH)
+        .endEnv()
+      .build()
+    SparkPod(podWithConf, containerWithMount)
+  }
 
   override def configurePod(original: SparkPod): SparkPod = {
-    original.transform { case pod if hasHadoopConf =>
-      val confVolume = if (confDir.isDefined) {
+    original.transform {
+      case pod if existingConfMap.isDefined =>
+        val configMapName = existingConfMap.get
+        logInfo(s"Property ${KUBERNETES_HADOOP_CONF_CONFIG_MAP.key} -> $configMapName is" +
+          s" detected and will be mounted on the driver pod.")
+        val confVolume = new VolumeBuilder()
+          .withName(HADOOP_CONF_VOLUME)
+          .withNewConfigMap()
+            .withName(configMapName)
+            .endConfigMap()
+          .build()
+        newPodWithConf(pod, confVolume)
+      case pod if confDir.isDefined =>
         val keyPaths = confFiles.map { file =>
+          logDebug(s"Local hadoop config file ${file.getAbsolutePath} will be mounted on driver" +
+            s" pod in $HADOOP_CONF_DIR_PATH")
           new KeyToPathBuilder()
-            .withKey(file.getName())
-            .withPath(file.getName())
+            .withKey(file.getName)
+            .withPath(file.getName)
             .build()
         }
-        new VolumeBuilder()
+        val confVolume = new VolumeBuilder()
           .withName(HADOOP_CONF_VOLUME)
           .withNewConfigMap()
             .withName(newConfigMapName)
             .withItems(keyPaths.asJava)
             .endConfigMap()
           .build()
-      } else {
-        new VolumeBuilder()
-          .withName(HADOOP_CONF_VOLUME)
-          .withNewConfigMap()
-            .withName(existingConfMap.get)
-            .endConfigMap()
-          .build()
-      }
-
-      val podWithConf = new PodBuilder(pod.pod)
-        .editSpec()
-          .addNewVolumeLike(confVolume)
-            .endVolume()
-          .endSpec()
-          .build()
-
-      val containerWithMount = new ContainerBuilder(pod.container)
-        .addNewVolumeMount()
-          .withName(HADOOP_CONF_VOLUME)
-          .withMountPath(HADOOP_CONF_DIR_PATH)
-          .endVolumeMount()
-        .addNewEnv()
-          .withName(ENV_HADOOP_CONF_DIR)
-          .withValue(HADOOP_CONF_DIR_PATH)
-          .endEnv()
-        .build()
-
-      SparkPod(podWithConf, containerWithMount)
+        newPodWithConf(pod, confVolume)
     }
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
-    if (confDir.isDefined) {
+    if (existingConfMap.isEmpty && confDir.isDefined) {
       val fileMap = confFiles.map { file =>
-        (file.getName(), Files.toString(file, StandardCharsets.UTF_8))
+        (file.getName, Files.toString(file, StandardCharsets.UTF_8))
       }.toMap.asJava
 
       Seq(new ConfigMapBuilder()
@@ -120,5 +120,4 @@ private[spark] class HadoopConfDriverFeatureStep(conf: KubernetesConf)
       Nil
     }
   }
-
 }

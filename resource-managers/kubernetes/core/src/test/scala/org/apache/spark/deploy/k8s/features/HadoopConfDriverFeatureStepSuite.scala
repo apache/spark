@@ -35,6 +35,16 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
   import KubernetesFeaturesTestUtils._
   import SecretVolumeUtils._
 
+  private val confDir: File = Utils.createTempDir()
+
+  val confFiles = Set("core-site.xml", "hdfs-site.xml")
+
+  override def beforeAll(): Unit = {
+    confFiles.foreach { f =>
+      Files.write("some data", new File(confDir, f), UTF_8)
+    }
+  }
+
   test("mount hadoop config map if defined") {
     val sparkConf = new SparkConf(false)
       .set(Config.KUBERNETES_HADOOP_CONF_CONFIG_MAP, "testConfigMap")
@@ -45,13 +55,6 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
   }
 
   test("create hadoop config map if config dir is defined") {
-    val confDir = Utils.createTempDir()
-    val confFiles = Set("core-site.xml", "hdfs-site.xml")
-
-    confFiles.foreach { f =>
-      Files.write("some data", new File(confDir, f), UTF_8)
-    }
-
     val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
     val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
 
@@ -60,6 +63,17 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
     val hadoopConfMap = filter[ConfigMap](step.getAdditionalKubernetesResources()).head
     assert(hadoopConfMap.getData().keySet().asScala === confFiles)
+  }
+
+  test("using hadoop config map ahead of conf dir if both defined") {
+    val sparkConf = new SparkConfWithEnv(Map(ENV_HADOOP_CONF_DIR -> confDir.getAbsolutePath()))
+      .set(Config.KUBERNETES_HADOOP_CONF_CONFIG_MAP, "testConfigMap")
+
+    val conf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf)
+
+    val step = new HadoopConfDriverFeatureStep(conf)
+    checkPod(step.configurePod(SparkPod.initialPod()))
+    assert(step.getAdditionalKubernetesResources().isEmpty)
   }
 
   private def checkPod(pod: SparkPod): Unit = {
