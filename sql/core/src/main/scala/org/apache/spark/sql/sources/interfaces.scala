@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark.annotation._
+import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.streaming.OutputMode
@@ -116,7 +115,6 @@ trait SchemaRelationProvider {
  *
  * @since 2.0.0
  */
-@Experimental
 @Unstable
 trait StreamSourceProvider {
 
@@ -147,7 +145,6 @@ trait StreamSourceProvider {
  *
  * @since 2.0.0
  */
-@Experimental
 @Unstable
 trait StreamSinkProvider {
   def createSink(
@@ -308,7 +305,6 @@ trait InsertableRelation {
  *
  * @since 1.3.0
  */
-@Experimental
 @Unstable
 trait CatalystScan {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]

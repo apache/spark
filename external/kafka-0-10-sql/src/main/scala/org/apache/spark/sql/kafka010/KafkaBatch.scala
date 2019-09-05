@@ -91,7 +91,7 @@ private[kafka010] class KafkaBatch(
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
     offsetRanges.map { range =>
       new KafkaBatchInputPartition(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, false)
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
     }.toArray
   }
 

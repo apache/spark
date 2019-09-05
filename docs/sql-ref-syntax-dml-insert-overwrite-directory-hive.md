@@ -81,7 +81,7 @@ INSERT OVERWRITE [ LOCAL ] DIRECTORY directory_path
      SELECT * FROM test_table;
 {% endhighlight %}
 
-Related Statements:
+### Related Statements
   * [INSERT INTO statement](sql-ref-syntax-dml-insert-into.html)
   * [INSERT OVERWRITE statement](sql-ref-syntax-dml-insert-overwrite-table.html)
   * [INSERT OVERWRITE DIRECTORY statement](sql-ref-syntax-dml-insert-overwrite-directory.html)

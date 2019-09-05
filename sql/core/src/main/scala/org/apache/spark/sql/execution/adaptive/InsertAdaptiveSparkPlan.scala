@@ -22,12 +22,12 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{execution, SparkSession}
 import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.expressions.DynamicPruningSubquery
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 
 /**
  * This rule wraps the query plan with an [[AdaptiveSparkPlanExec]], which executes the query plan
@@ -78,9 +78,11 @@ case class InsertAdaptiveSparkPlan(
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
+    // TODO migrate dynamic-partition-pruning onto adaptive execution.
     sanityCheck(plan) &&
       !plan.logicalLink.exists(_.isStreaming) &&
-      plan.children.forall(supportAdaptive)
+      !plan.expressions.exists(_.find(_.isInstanceOf[DynamicPruningSubquery]).isDefined) &&
+    plan.children.forall(supportAdaptive)
   }
 
   private def sanityCheck(plan: SparkPlan): Boolean =

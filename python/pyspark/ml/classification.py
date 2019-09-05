@@ -69,8 +69,6 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
                 HasWeightCol, HasAggregationDepth, HasThreshold, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
@@ -160,8 +158,6 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
 
 class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by LinearSVC.
 
     .. versionadded:: 2.2.0
@@ -565,8 +561,6 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
 
 class LogisticRegressionSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Abstraction for Logistic Regression Results for a given model.
 
     .. versionadded:: 2.0.0
@@ -723,8 +717,6 @@ class LogisticRegressionSummary(JavaWrapper):
 @inherit_doc
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     """
-    .. note:: Experimental
-
     Abstraction for multinomial Logistic Regression Training results.
     Currently, the training summary ignores the training weights except
     for the objective trace.
@@ -753,8 +745,6 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
 @inherit_doc
 class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     """
-    .. note:: Experimental
-
     Binary Logistic regression results for a given model.
 
     .. versionadded:: 2.0.0
@@ -850,8 +840,6 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
 class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
                                               LogisticRegressionTrainingSummary):
     """
-    .. note:: Experimental
-
     Binary Logistic regression training results for a given model.
 
     .. versionadded:: 2.0.0
@@ -1904,8 +1892,6 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCo
 @inherit_doc
 class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
     For a multiclass classification with k classes, train k models (one per class).
@@ -2118,8 +2104,6 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
 
 class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
     Each example is scored against all k models, and the model with the highest score

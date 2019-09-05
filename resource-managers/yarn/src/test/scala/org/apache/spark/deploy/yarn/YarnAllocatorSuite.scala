@@ -514,4 +514,25 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     verify(rmClientSpy)
       .updateBlacklist(hosts.slice(10, 11).asJava, Collections.emptyList())
   }
+
+  test("SPARK-28577#YarnAllocator.resource.memory should include offHeapSize " +
+    "when offHeapEnabled is true.") {
+    val originalOffHeapEnabled = sparkConf.get(MEMORY_OFFHEAP_ENABLED)
+    val originalOffHeapSize = sparkConf.get(MEMORY_OFFHEAP_SIZE)
+    val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
+    val offHeapMemoryInMB = 1024L
+    val offHeapMemoryInByte = offHeapMemoryInMB * 1024 * 1024
+    try {
+      sparkConf.set(MEMORY_OFFHEAP_ENABLED, true)
+      sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
+      val allocator = createAllocator(maxExecutors = 1,
+        additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
+      val memory = allocator.resource.getMemory
+      assert(memory ==
+        executorMemory + offHeapMemoryInMB + YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN)
+    } finally {
+      sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
+      sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)
+    }
+  }
 }

@@ -33,6 +33,7 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
 import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
@@ -495,7 +496,15 @@ private[spark] object JsonProtocol {
     ("Host" -> executorInfo.executorHost) ~
     ("Total Cores" -> executorInfo.totalCores) ~
     ("Log Urls" -> mapToJson(executorInfo.logUrlMap)) ~
-    ("Attributes" -> mapToJson(executorInfo.attributes))
+    ("Attributes" -> mapToJson(executorInfo.attributes)) ~
+    ("Resources" -> resourcesMapToJson(executorInfo.resourcesInfo))
+  }
+
+  def resourcesMapToJson(m: Map[String, ResourceInformation]): JValue = {
+    val jsonFields = m.map {
+      case (k, v) => JField(k, v.toJson)
+    }
+    JObject(jsonFields.toList)
   }
 
   def blockUpdatedInfoToJson(blockUpdatedInfo: BlockUpdatedInfo): JValue = {
@@ -1086,7 +1095,11 @@ private[spark] object JsonProtocol {
       case Some(attr) => mapFromJson(attr).toMap
       case None => Map.empty[String, String]
     }
-    new ExecutorInfo(executorHost, totalCores, logUrls, attributes)
+    val resources = jsonOption(json \ "Resources") match {
+      case Some(resources) => resourcesMapFromJson(resources).toMap
+      case None => Map.empty[String, ResourceInformation]
+    }
+    new ExecutorInfo(executorHost, totalCores, logUrls, attributes, resources)
   }
 
   def blockUpdatedInfoFromJson(json: JValue): BlockUpdatedInfo = {
@@ -1096,6 +1109,14 @@ private[spark] object JsonProtocol {
     val memorySize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
     BlockUpdatedInfo(blockManagerId, blockId, storageLevel, memorySize, diskSize)
+  }
+
+  def resourcesMapFromJson(json: JValue): Map[String, ResourceInformation] = {
+    val jsonFields = json.asInstanceOf[JObject].obj
+    jsonFields.map { case JField(k, v) =>
+      val resourceInfo = ResourceInformation.parseJson(v)
+      (k, resourceInfo)
+    }.toMap
   }
 
   /** -------------------------------- *

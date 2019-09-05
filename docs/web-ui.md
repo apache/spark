@@ -94,9 +94,76 @@ This page displays the details of a specific job identified by its job ID.
 </p>
 
 ## Stages Tab
+
 The Stages tab displays a summary page that shows the current state of all stages of all jobs in
-the Spark application, and, when you click on a stage, a details page for that stage. The details
-page shows the event timeline, DAG visualization, and all tasks for the stage.
+the Spark application.
+
+At the beginning of the page is the summary with the count of all stages by status (active, pending, completed, sikipped, and failed)
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail1.png" title="Stages header" alt="Stages header" width="30%">
+</p>
+
+In [Fair scheduling mode](job-scheduling.html#scheduling-within-an-application) there is a table that displays [pools properties](job-scheduling.html#configuring-pool-properties)
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail2.png" title="Pool properties" alt="Pool properties">
+</p>
+
+After that are the details of stages per status (active, pending, completed, skipped, failed). In active stages, it's possible to kill the stage with the kill link. Only in failed stages, failure reason is shown. Task detail can be accessed by clicking on the description.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail3.png" title="Stages detail" alt="Stages detail">
+</p>
+
+### Stage detail
+The stage detail page begins with information like total time across all tasks, [Locality level summary](tuning.html#data-locality), [Shuffle Read Size / Records](rdd-programming-guide.html#shuffle-operations) and Associated Job IDs.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail4.png" title="Stage header" alt="Stage header" width="30%">
+</p>
+
+There is also a visual representation of the directed acyclic graph (DAG) of this stage, where vertices represent the RDDs or DataFrames and the edges represent an operation to be applied.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail5.png" title="Stage DAG" alt="Stage DAG" width="50%">
+</p>
+
+Summary metrics for all task are represented in a table and in a timeline.
+* **[Tasks deserialization time](configuration.html#compression-and-serialization)**
+* **Duration of tasks**.
+* **GC time** is the total JVM garbage collection time.
+* **Result serialization time** is the time spent serializing the task result on a executor before sending it back to the driver.
+* **Getting result time** is the time that the driver spends fetching task results from workers.
+* **Scheduler delay** is the time the task waits to be scheduled for execution.
+* **Peak execution memory** is the maximum memory used by the internal data structures created during shuffles, aggregations and joins.
+* **Shuffle Read Size / Records**. Total shuffle bytes read, includes both data read locally and data read from remote executors.
+* **Shuffle Read Blocked Time** is the time that tasks spent blocked waiting for shuffle data to be read from remote machines.
+* **Shuffle Remote Reads** is the total shuffle bytes read from remote executors.
+* **Shuffle spill (memory)** is the size of the deserialized form of the shuffled data in memory.
+* **Shuffle spill (disk)** is the size of the serialized form of the data on disk.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail6.png" title="Stages metrics" alt="Stages metrics">
+</p>
+
+Aggregated metrics by executor show the same information aggregated by executor.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail7.png" title="Stages metrics per executor" alt="Stages metrics per executors">
+</p>
+
+**[Accumulators](rdd-programming-guide.html#accumulators)** are a type of shared variables. It provides a mutable variable that can be updated inside of a variety of transformations. It is possible to create accumulators with and without name, but only named accumulators are displayed.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail8.png" title="Stage accumulator" alt="Stage accumulator">
+</p>
+
+Tasks details basically includes the same information as in the summary section but detailed by task. It also includes links to review the logs and the task attempt number if it fails for any reason. If there are named accumulators, here it is possible to see the accumulator value at the end of each task.
+
+<p style="text-align: center;">
+  <img src="img/AllStagesPageDetail9.png" title="Tasks" alt="Tasks">
+</p>
 
 ## Storage Tab
 The Storage tab displays the persisted RDDs and DataFrames, if any, in the application. The summary

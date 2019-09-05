@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchT
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
@@ -522,6 +523,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case _: NoSuchTableException => None
     }
 
+    def getLocationIfExists: Option[(String, String)] = {
+      val opts = CaseInsensitiveMap(extraOptions.toMap)
+      opts.get("path").map("location" -> _)
+    }
+
     val command = (mode, tableOpt) match {
       case (_, Some(table: V1Table)) =>
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
@@ -535,7 +541,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map.empty,            // properties can't be specified through this API
+          Map("provider" -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -548,7 +554,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map.empty,
+          Map("provider" -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           ignoreIfExists = other == SaveMode.Ignore)
     }

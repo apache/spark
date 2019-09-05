@@ -2370,8 +2370,6 @@ class RDD(object):
 
     def countApprox(self, timeout, confidence=0.95):
         """
-        .. note:: Experimental
-
         Approximate version of count() that returns a potentially incomplete
         result within a timeout, even if not all tasks have finished.
 
@@ -2384,8 +2382,6 @@ class RDD(object):
 
     def sumApprox(self, timeout, confidence=0.95):
         """
-        .. note:: Experimental
-
         Approximate operation to return the sum within a timeout
         or meet the confidence.
 
@@ -2401,8 +2397,6 @@ class RDD(object):
 
     def meanApprox(self, timeout, confidence=0.95):
         """
-        .. note:: Experimental
-
         Approximate operation to return the mean within a timeout
         or meet the confidence.
 
@@ -2418,8 +2412,6 @@ class RDD(object):
 
     def countApproxDistinct(self, relativeSD=0.05):
         """
-        .. note:: Experimental
-
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of
