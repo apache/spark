@@ -195,7 +195,8 @@ case class PlanSubqueries(
             }
           )
         }
-        val executedPlan = new QueryExecution(sparkSession, query).executedPlan
+        val executedPlan =
+          new QueryExecution(sparkSession, query, subqueryCache = subqueryCache).executedPlan
         InSubqueryExec(expr, SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
     }
   }
