@@ -208,7 +208,7 @@ object Type {
   }
 
   case object INTEGER extends Type {
-    override def getName: String = "INT"
+    override def getName: String = "INTEGER"
 
     override def isComplex: Boolean = false
 
