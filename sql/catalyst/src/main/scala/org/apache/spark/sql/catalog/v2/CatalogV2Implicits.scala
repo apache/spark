@@ -86,8 +86,6 @@ object CatalogV2Implicits {
 
   implicit class MultipartIdentifierHelper(namespace: Seq[String]) {
     def quoted: String = namespace.map(quote).mkString(".")
-
-    def asIdentifier: Identifier = Identifier.of(namespace.init.toArray, namespace.last)
   }
 
   private def quote(part: String): String = {
