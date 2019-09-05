@@ -149,8 +149,8 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
       val containerWithMount = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
           .withName(KRB_FILE_VOLUME)
-          .withMountPath(KRB_FILE_DIR_PATH + "/krb5.conf")
-          .withSubPath("krb5.conf")
+          .withMountPath(s"$KRB_FILE_DIR_PATH/$KRB_FILE_NAME")
+          .withSubPath(KRB_FILE_NAME)
           .endVolumeMount()
         .build()
 
