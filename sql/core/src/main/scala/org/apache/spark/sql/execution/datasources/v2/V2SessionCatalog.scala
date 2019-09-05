@@ -46,10 +46,6 @@ class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
   import V2SessionCatalog._
 
-  def this(sessionState: SessionState) = this(sessionState.catalog, sessionState.conf)
-
-  def this() = this(SparkSession.active.sessionState)
-
   override val defaultNamespace: Array[String] = Array("default")
 
   override def name: String = CatalogManager.SESSION_CATALOG_NAME

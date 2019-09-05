@@ -37,9 +37,6 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   private TableCatalog delegate;
 
-  /**
-   * This will be called only once by Spark to pass in the Spark built-in session catalog.
-   */
   public final void setDelegateCatalog(TableCatalog delegate) {
     this.delegate = delegate;
   }

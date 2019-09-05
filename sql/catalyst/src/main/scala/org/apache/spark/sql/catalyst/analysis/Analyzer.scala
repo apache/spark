@@ -978,7 +978,7 @@ class Analyzer(
         case scala.Right(tableOpt) =>
           tableOpt.map { table =>
             AlterTable(
-              sessionCatalog.get.asTableCatalog, // table being resolved means this exists
+              sessionCatalog.asTableCatalog,
               Identifier.of(tableName.init.toArray, tableName.last),
               DataSourceV2Relation.create(table),
               changes
@@ -2809,7 +2809,7 @@ class Analyzer(
       case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
         scala.Left((v2Catalog, ident, loadTable(v2Catalog, ident)))
       case CatalogObjectIdentifier(None, ident) =>
-        catalogManager.v2SessionCatalog.flatMap(loadTable(_, ident)) match {
+        loadTable(catalogManager.v2SessionCatalog, ident) match {
           case Some(_: V1Table) => scala.Right(None)
           case other => scala.Right(other)
         }

@@ -66,7 +66,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.defaultCatalog).thenReturn(Some(testCat))
-    when(manager.v2SessionCatalog).thenReturn(Some(v2SessionCatalog))
+    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
     manager
   }
 
@@ -81,7 +81,7 @@ class PlanResolutionSuite extends AnalysisTest {
       }
     })
     when(manager.defaultCatalog).thenReturn(None)
-    when(manager.v2SessionCatalog).thenReturn(Some(v2SessionCatalog))
+    when(manager.v2SessionCatalog).thenReturn(v2SessionCatalog)
     manager
   }
 

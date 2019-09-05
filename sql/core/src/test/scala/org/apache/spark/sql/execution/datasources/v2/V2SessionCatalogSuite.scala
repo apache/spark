@@ -46,7 +46,7 @@ class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession wi
   val testIdent: Identifier = Identifier.of(testNs, "test_table")
 
   def newCatalog(): V2SessionCatalog = {
-    val newCatalog = new V2SessionCatalog(spark.sessionState)
+    val newCatalog = new V2SessionCatalog(spark.sessionState.catalog, spark.sessionState.conf)
     newCatalog.initialize("test", CaseInsensitiveStringMap.empty())
     newCatalog
   }
@@ -58,7 +58,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    // TODO: when there is a public API for v2 catalogs, use that instead
     val catalog = newCatalog()
     catalog.createNamespace(Array("db"), emptyProps)
     catalog.createNamespace(Array("db2"), emptyProps)
