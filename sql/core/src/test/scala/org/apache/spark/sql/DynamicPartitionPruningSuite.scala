@@ -1238,7 +1238,10 @@ class DynamicPartitionPruningSuite
 
       val plan = df.queryExecution.executedPlan
       val countSubqueryBroadcasts =
-        plan.collectInPlanAndSubqueries({ case _: SubqueryBroadcastExec => 1 }).sum
+        plan.collectInPlanAndSubqueries({
+          case _: SubqueryBroadcastExec => 1
+          case ReusedSubqueryExec(_: SubqueryBroadcastExec) => 1
+        }).sum
 
       assert(countSubqueryBroadcasts == 2)
     }
