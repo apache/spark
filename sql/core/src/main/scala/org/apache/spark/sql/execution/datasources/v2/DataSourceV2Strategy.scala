@@ -238,7 +238,8 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case DeleteFromTable(r: DataSourceV2Relation, condition) =>
       if (SubqueryExpression.hasSubquery(condition)) {
-        throw new AnalysisException(s"subquery is not supported in DELETE WHERE: $condition")
+        throw new AnalysisException(
+          s"Delete by condition with subquery is not supported: $condition")
       }
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(condition).map {
