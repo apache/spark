@@ -43,7 +43,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types._
 
 /**
@@ -2786,7 +2786,7 @@ class Analyzer(
         scala.Left((v2Catalog, ident, loadTable(v2Catalog, ident)))
       case CatalogObjectIdentifier(None, ident) =>
         catalogManager.v2SessionCatalog.flatMap(loadTable(_, ident)) match {
-          case Some(_: UnresolvedTable) => scala.Right(None)
+          case Some(_: V1Table) => scala.Right(None)
           case other => scala.Right(other)
         }
       case _ => scala.Right(None)
