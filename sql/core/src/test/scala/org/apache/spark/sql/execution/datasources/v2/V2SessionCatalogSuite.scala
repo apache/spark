@@ -81,16 +81,6 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
   private val testIdentNew = Identifier.of(testNs, "test_table_new")
 
-  test("Catalogs can load the catalog") {
-    val catalog = newCatalog()
-
-    val conf = new SQLConf
-    conf.setConfString("spark.sql.catalog.test", catalog.getClass.getName)
-
-    val loaded = Catalogs.load("test", conf)
-    assert(loaded.getClass == catalog.getClass)
-  }
-
   test("listTables") {
     val catalog = newCatalog()
     val ident1 = Identifier.of(Array("ns"), "test_table_1")
