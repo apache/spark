@@ -16,6 +16,10 @@
  */
 package org.apache.spark.sql.execution
 
+import java.util.Properties
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -33,8 +37,13 @@ import org.apache.spark.sql.internal.SQLConf
 class SQLExecutionRDD(
     var sqlRDD: RDD[InternalRow], @transient conf: SQLConf) extends RDD[InternalRow](sqlRDD) {
   private val sqlConfigs = conf.getAllConfs
-  @transient private var tasksRunning = 0
-  @transient private var originalLocalProps: Map[String, String] = _
+  private lazy val sqlConfExecutorSide = {
+    val props = new Properties()
+    props.putAll(sqlConfigs.asJava)
+    val newConf = new SQLConf()
+    newConf.setConf(props)
+    newConf
+  }
 
   override val partitioner = firstParent[InternalRow].partitioner
 
@@ -45,33 +54,8 @@ class SQLExecutionRDD(
     // and we have nothing to do here. Otherwise, we use the `SQLConf` captured at the creation of
     // this RDD.
     if (context.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
-      synchronized {
-        if (tasksRunning == 0) {
-          originalLocalProps = sqlConfigs.collect {
-            case (key, value) if key.startsWith("spark") =>
-              val originalValue = context.getLocalProperty(key)
-              context.getLocalProperties.setProperty(key, value)
-              (key, originalValue)
-          }
-        }
-        tasksRunning += 1
-      }
-
-      try {
+      SQLConf.withExistingConf(sqlConfExecutorSide) {
         firstParent[InternalRow].iterator(split, context)
-      } finally {
-        synchronized {
-          tasksRunning -= 1
-          if (tasksRunning == 0) {
-            for ((key, value) <- originalLocalProps) {
-              if (value == null) {
-                context.getLocalProperties.remove(key)
-              } else {
-                context.getLocalProperties.setProperty(key, value)
-              }
-            }
-          }
-        }
       }
     } else {
       firstParent[InternalRow].iterator(split, context)
