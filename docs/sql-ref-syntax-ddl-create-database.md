@@ -20,38 +20,57 @@ license: |
 ---
 
 ### Description
-Creates a database with the given name. If database with the same name exists an exception will be thrown.
+Creates a database with the specified name. If database with the same name already exists, an exception will be thrown.
 
 ### Syntax
 {% highlight sql %}
-CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
-  [COMMENT database_comment]
-  [LOCATION database_directory]
-  [WITH DBPROPERTIES (property_name=property_value, ...)]
-
+CREATE {DATABASE | SCHEMA} [ IF NOT EXISTS ] database_name
+  [ COMMENT database_comment ]
+  [ LOCATION database_directory ]
+  [ WITH DBPROPERTIES (property_name=property_value [ , ...]) ]
 {% endhighlight %}
 
 ### Parameters
-- ##### ***IF NOT EXISTS***:
-Creates a database with the given name if it doesn't exists. If a database with the same name already exists, nothing will happen.
-- ##### ***LOCATION***:
-Path of the file system in which database to be created. If the specified path does not exist in the underlying file system, this command creates a directory with the path.
-- ##### ***COMMENT***:
-Description for the Database.
-- ##### ***WITH DBPROPERTIES***:
-Properties for the database in key-value pair.
+<dl>
+    <dt><code><em>database_name</em></code></dt>
+    <dd>Specifies the name of the database to be created.</dd>
+
+    <dt><code><em>IF NOT EXISTS</em></code></dt>
+    <dd>Creates a database with the given name if it doesn't exists. If a database with the same name already exists, nothing will happen.</dd>
+
+    <dt><code><em>database_directory</em></code></dt>
+    <dd>Path of the file system in which database to be created. If the specified path does not exist in the underlying file system, this command creates a directory with the path. If location is not specified, database will be created in default warehouse directory.</dd>
+
+    <dt><code><em>database_comment</em></code></dt>
+    <dd>Description for the database.</dd>
+
+    <dt><code><em>WITH DBPROPERTIES (property_name=property_value [ , ...])</em></code></dt>
+    <dd>Properties for the database in key-value pair.</dd>
+</dl>
 
 ### Examples
 {% highlight sql %}
 -- Create database `customer_db`. This throws exception if database with name customer_db already exists.
 CREATE DATABASE customer_db;
+
 -- Create database `customer_db` only if database with same name doesn't exist.
 CREATE DATABASE IF NOT EXISTS customer_db;
--- Create database `customer_db` only if database with same name doesn't exist with `Comments`, `Specific Location` and `Database properties`.
+
+-- Create database `customer_db` only if database with same name doesn't exist with `Comments`,`Specific Location` and `Database properties`.
 CREATE DATABASE IF NOT EXISTS customer_db COMMENT 'This is customer database' LOCATION '/user' WITH DBPROPERTIES (ID=001, Name='John');
+
+-- Verify that properties are set.
+DESCRIBE DATABASE EXTENDED customer_db;
+   +----------------------------+-----------------------------+
+   | database_description_item  | database_description_value  |
+   +----------------------------+-----------------------------+
+   | Database Name              | customer_db                 |
+   | Description                | This is customer database   |
+   | Location                   | hdfs://hacluster/user       |
+   | Properties                 | ((ID,001), (Name,John))     |
+   +----------------------------+-----------------------------+
 {% endhighlight %}
 
-
-### Related statements.
+### Related Statements
 - [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
 
