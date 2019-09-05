@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalog.v2;
 
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -26,6 +27,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * implement {@code createTable}, do something else before calling {@code createTable} of the
  * built-in session catalog.
  */
+@Experimental
 public interface CatalogExtension extends TableCatalog {
 
   /**

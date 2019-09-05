@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalog.v2;
 
 import java.util.Map;
 
+import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalog.v2.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -33,6 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * only need to override some methods where they want to apply custom logic. For example, they can
  * override {@code createTable}, do something else before calling {@code super.createTable}.
  */
+@Experimental
 public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   private TableCatalog delegate;
