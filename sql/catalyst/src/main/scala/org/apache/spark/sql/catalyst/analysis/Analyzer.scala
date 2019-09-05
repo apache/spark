@@ -65,7 +65,9 @@ object SimpleAnalyzer extends Analyzer(
 object FakeV2SessionCatalog extends TableCatalog {
   private def fail() = throw new UnsupportedOperationException
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
-  override def loadTable(ident: Identifier): Table = fail()
+  override def loadTable(ident: Identifier): Table = {
+    throw new NoSuchTableException(ident.toString)
+  }
   override def createTable(
       ident: Identifier,
       schema: StructType,
