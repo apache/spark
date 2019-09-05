@@ -165,7 +165,7 @@ object Type {
   def types: Seq[Type] =
     Seq(NULL,
       STRING,
-      INT,
+      INTEGER,
       BOOLEAN,
       DOUBLE,
       FLOAT,
@@ -207,7 +207,7 @@ object Type {
     override def isCaseSensitive: Boolean = true
   }
 
-  case object INT extends Type {
+  case object INTEGER extends Type {
     override def getName: String = "INT"
 
     override def isComplex: Boolean = false
