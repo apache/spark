@@ -164,6 +164,7 @@ private class AsyncEventQueue(
       logError(s"Dropping event from queue $name. " +
         "This likely means one of the listeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
+      logError("Current stack trace: \n" + dispatchThread.getStackTrace.mkString("\n"))
     }
     logTrace(s"Dropping event $event")
 
@@ -181,6 +182,7 @@ private class AsyncEventQueue(
           val previous = new java.util.Date(prevLastReportTimestamp)
           logWarning(s"Dropped $droppedCount events from $name since " +
             s"${if (prevLastReportTimestamp == 0) "the application started" else s"$previous"}.")
+          logWarning("Current stack trace: \n" + dispatchThread.getStackTrace.mkString("\n"))
         }
       }
     }
