@@ -248,7 +248,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
    * @param table Name of the table in the external database.
-   * @param columnName the name of a column of integral type that will be used for partitioning.
+   * @param columnName the name of a column of numeric, date, or timestamp type
+   *                   that will be used for partitioning.
    * @param lowerBound the minimum value of `columnName` used to decide partition stride.
    * @param upperBound the maximum value of `columnName` used to decide partition stride.
    * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),
