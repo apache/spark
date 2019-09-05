@@ -23,17 +23,17 @@ import org.apache.spark.sql.types.DecimalType
 
 trait Type {
 
-  def name: String
+  def getName: String
 
   def isComplex: Boolean
-
-  def isPrimitiveType: Boolean = !isComplex
-
-  def isComplexType: Boolean = isComplex
 
   def isQualifiedType: Boolean
 
   def isCollectionType: Boolean
+
+  def isPrimitiveType: Boolean = !isComplex
+
+  def isComplexType: Boolean = isComplex
 
   /**
    * Radix for this type (typically either 2 or 10)
@@ -114,9 +114,10 @@ trait Type {
    */
   def isUnsignedAttribute: Boolean = {
     if (isNumericType) {
-      return false
+      false
+    } else {
+      true
     }
-    true
   }
 
   /**
@@ -157,8 +158,6 @@ trait Type {
   def javaSQLType: Int
 
   def toJavaSQLType: Int = javaSQLType
-
-  def getName: String = name
 }
 
 object Type {
@@ -179,7 +178,7 @@ object Type {
       BINARY)
 
   case object NULL extends Type() {
-    override def name: String = "NULL"
+    override def getName: String = "NULL"
 
     override def isComplex: Boolean = false
 
@@ -193,7 +192,7 @@ object Type {
   }
 
   case object STRING extends Type {
-    override def name: String = "STRING"
+    override def getName: String = "STRING"
 
     override def isComplex: Boolean = false
 
@@ -209,7 +208,7 @@ object Type {
   }
 
   case object INT extends Type {
-    override def name: String = "INT"
+    override def getName: String = "INT"
 
     override def isComplex: Boolean = false
 
@@ -225,7 +224,7 @@ object Type {
   }
 
   case object BOOLEAN extends Type {
-    override def name: String = "BOOLEAN"
+    override def getName: String = "BOOLEAN"
 
     override def isComplex: Boolean = false
 
@@ -239,7 +238,7 @@ object Type {
   }
 
   case object DOUBLE extends Type {
-    override def name: String = "DOUBLE"
+    override def getName: String = "DOUBLE"
 
     override def isComplex: Boolean = false
 
@@ -255,7 +254,7 @@ object Type {
   }
 
   case object FLOAT extends Type {
-    override def name: String = "FLOAT"
+    override def getName: String = "FLOAT"
 
     override def isComplex: Boolean = false
 
@@ -271,7 +270,7 @@ object Type {
   }
 
   case object DECIMAL extends Type {
-    override def name: String = "DECIMAL"
+    override def getName: String = "DECIMAL"
 
     override def isComplex: Boolean = false
 
@@ -287,7 +286,7 @@ object Type {
   }
 
   case object LONG extends Type {
-    override def name: String = "LONG"
+    override def getName: String = "LONG"
 
     override def isComplex: Boolean = false
 
@@ -303,7 +302,7 @@ object Type {
   }
 
   case object BYTE extends Type {
-    override def name: String = "BYTE"
+    override def getName: String = "BYTE"
 
     override def isComplex: Boolean = false
 
@@ -317,7 +316,7 @@ object Type {
   }
 
   case object SHORT extends Type {
-    override def name: String = "SHORT"
+    override def getName: String = "SHORT"
 
     override def isComplex: Boolean = false
 
@@ -333,7 +332,7 @@ object Type {
   }
 
   case object DATE extends Type {
-    override def name: String = "DATE"
+    override def getName: String = "DATE"
 
     override def isComplex: Boolean = false
 
@@ -347,7 +346,7 @@ object Type {
   }
 
   case object TIMESTAMP extends Type {
-    override def name: String = "TIMESTAMP"
+    override def getName: String = "TIMESTAMP"
 
     override def isComplex: Boolean = false
 
@@ -361,7 +360,7 @@ object Type {
   }
 
   case object BINARY extends Type {
-    override def name: String = "BINARY"
+    override def getName: String = "BINARY"
 
     override def isComplex: Boolean = false
 
