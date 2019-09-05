@@ -23,6 +23,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.analysis.DecimalPrecision.isFloat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -862,17 +863,33 @@ object TypeCoercion {
       case e if !e.childrenResolved => e
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-        findTightestCommonType(left.dataType, right.dataType).map { commonType =>
-          if (b.inputType.acceptsType(commonType)) {
-            // If the expression accepts the tightest common type, cast to that.
-            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-            b.withNewChildren(Seq(newLeft, newRight))
-          } else {
-            // Otherwise, don't do anything with the expression.
-            b
-          }
-        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
+        (left, right) match {
+          // this process logic is a copy of nondecimalAndDecimal method of DecimalPrecision class
+          case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
+            && l.dataType.isInstanceOf[IntegralType] =>
+            b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
+          case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
+            && r.dataType.isInstanceOf[IntegralType] =>
+            b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
+          // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+          // and fixed-precision decimals in an expression with floats / doubles to doubles
+          case (l @ IntegralType(), r @ DecimalType.Expression(_, _)) =>
+            b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
+          case (l @ DecimalType.Expression(_, _), r @ IntegralType()) =>
+            b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
+          case _ =>
+            findTightestCommonType(left.dataType, right.dataType).map { commonType =>
+              if (b.inputType.acceptsType(commonType)) {
+                // If the expression accepts the tightest common type, cast to that.
+                val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+                val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+                b.withNewChildren(Seq(newLeft, newRight))
+              } else {
+                // Otherwise, don't do anything with the expression.
+                b
+              }
+            }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
+        }
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>

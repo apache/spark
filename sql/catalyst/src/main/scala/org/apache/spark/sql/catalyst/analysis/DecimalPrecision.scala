@@ -65,7 +65,7 @@ import org.apache.spark.sql.types._
 object DecimalPrecision extends TypeCoercionRule {
   import scala.math.{max, min}
 
-  private def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
+  private[analysis] def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
   // Returns the wider decimal type that's wider than both of them
   def widerDecimalType(d1: DecimalType, d2: DecimalType): DecimalType = {
