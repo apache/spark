@@ -186,6 +186,7 @@ object HiveThriftServer2 extends Logging {
     def isExecutionActive(execInfo: ExecutionInfo): Boolean = {
       !(execInfo.state == ExecutionState.FAILED ||
         execInfo.state == ExecutionState.CANCELED ||
+        execInfo.state == ExecutionState.FINISHED ||
         execInfo.state == ExecutionState.CLOSED)
     }
 
