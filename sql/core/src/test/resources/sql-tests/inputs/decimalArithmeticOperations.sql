@@ -84,7 +84,7 @@ select 123456789123456789.1234567890 * 1.123456789123456789;
 select 12345678912345.123456789123 / 0.000000012345678;
 
 -- throw an exception instead of returning NULL, according to SQL ANSI 2011
-set spark.sql.decimalOperations.nullOnOverflow=false;
+set spark.sql.parser.ansi.enabled=true;
 
 -- test operations between decimals and constants
 select id, a*10, b/10 from decimals_test order by id;
@@ -108,3 +108,6 @@ select 123456789123456789.1234567890 * 1.123456789123456789;
 select 12345678912345.123456789123 / 0.000000012345678;
 
 drop table decimals_test;
+
+-- Turns off ANSI mode
+set spark.sql.parser.ansi.enabled=false;
