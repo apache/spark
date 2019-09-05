@@ -118,7 +118,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   /** Produces a unique block id and File suitable for storing local intermediate results. */
   def createTempLocalBlock(): (TempLocalBlockId, File) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
+    while (isSkipBlockId(blockId)) {
       blockId = new TempLocalBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
@@ -127,10 +127,15 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
     var blockId = new TempShuffleBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
+    while (isSkipBlockId(blockId)) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
+  }
+
+  private def isSkipBlockId(blockId: BlockId): Boolean = {
+    val file = getFile(blockId)
+    file.exists() || !file.getParentFile.canWrite
   }
 
   /**
