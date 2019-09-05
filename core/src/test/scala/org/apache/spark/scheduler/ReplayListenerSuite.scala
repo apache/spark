@@ -64,7 +64,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster
+    val eventMonster = new EventBufferingListener
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -110,7 +110,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val replayer = new ReplayListenerBus()
 
-    val eventMonster = new EventMonster
+    val eventMonster = new EventBufferingListener
     replayer.addListener(eventMonster)
 
     // Verify the replay returns the events given the input maybe truncated.
@@ -147,7 +147,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster
+    val eventMonster = new EventBufferingListener
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -209,7 +209,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     // Replay events
     val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
-    val eventMonster = new EventMonster
+    val eventMonster = new EventBufferingListener
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -237,9 +237,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
   /**
    * A simple listener that buffers all the events it receives.
-   *
    */
-  private class EventMonster extends SparkFirehoseListener {
+  private class EventBufferingListener extends SparkFirehoseListener {
 
     private[scheduler] val loggedEvents = new ArrayBuffer[JValue]
 
