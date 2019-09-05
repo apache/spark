@@ -24,7 +24,7 @@ import scala.collection.JavaConverters.seqAsJavaListConverter
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
-import org.apache.hive.service.cli._
+import org.apache.hive.service.cli.{CLIServiceUtils, HiveSQLException, OperationState}
 import org.apache.hive.service.cli.operation.GetColumnsOperation
 import org.apache.hive.service.cli.session.HiveSession
 
@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
-import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
+import org.apache.spark.sql.hive.thriftserver.cli.Type
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Utils => SparkUtils}
 
@@ -151,7 +151,7 @@ private[hive] class SparkGetColumnsOperation(
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
           column.name, // COLUMN_NAME
-          toJavaSQLType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
+          Type.getType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
           null, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused

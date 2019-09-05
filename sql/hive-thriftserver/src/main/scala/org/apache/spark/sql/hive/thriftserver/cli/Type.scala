@@ -165,7 +165,7 @@ object Type {
   def types: Seq[Type] =
     Seq(NULL,
       STRING,
-      INT,
+      INTEGER,
       BOOLEAN,
       DOUBLE,
       FLOAT,
@@ -176,6 +176,19 @@ object Type {
       DATE,
       TIMESTAMP,
       BINARY)
+
+  def getType(name: String): Type = {
+    val typeForName: Option[Type] = types.find(_.getName == name)
+    if (typeForName.isDefined) {
+      typeForName.get
+    } else {
+      if (Array("ARRAY", "STRUCT", "MAP", "USERDEFINED").contains(name)) {
+        STRING
+      } else {
+        throw new IllegalArgumentException("Unrecognized type name: " + name)
+      }
+    }
+  }
 
   case object NULL extends Type() {
     override def getName: String = "NULL"
@@ -207,7 +220,7 @@ object Type {
     override def isCaseSensitive: Boolean = true
   }
 
-  case object INT extends Type {
+  case object INTEGER extends Type {
     override def getName: String = "INT"
 
     override def isComplex: Boolean = false
