@@ -280,7 +280,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Create a [[HiveClient]] used for execution.
    *
-   * Currently this must always be Hive 1.2.1 as this is the version of Hive that is packaged
+   * Currently this must always be the Hive built-in version that packaged
    * with Spark SQL. This copy of the client is used for execution related tasks like
    * registering temporary functions or ensuring that the ThreadLocal SessionState is
    * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,
@@ -441,6 +441,13 @@ private[spark] object HiveUtils extends Logging {
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
+
+    // Disable schema verification and allow schema auto-creation in the
+    // Derby database, in case the config for the metastore is set otherwise.
+    // Without these settings, starting the client fails with
+    // MetaException(message:Version information not found in metastore.)
+    propMap.put("hive.metastore.schema.verification", "false")
+    propMap.put("datanucleus.schema.autoCreateAll", "true")
 
     // SPARK-11783: When "hive.metastore.uris" is set, the metastore connection mode will be
     // remote (https://cwiki.apache.org/confluence/display/Hive/AdminManual+MetastoreAdmin
