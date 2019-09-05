@@ -308,7 +308,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.udf.register("vol", (s: String) => s)
         // PostgreSQL enabled cartesian product by default.
         localSparkSession.conf.set(SQLConf.CROSS_JOINS_ENABLED.key, true)
-        localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
+        localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
         localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
         localSparkSession.conf.set(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key, true)
         // Propagate the SQL conf FAIL_ON_INTEGRAL_TYPE_OVERFLOW to executor.

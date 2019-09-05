@@ -289,7 +289,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private val failOnIntegralTypeOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  private val failOnIntegralTypeOverflow = SQLConf.get.ansiEnabled
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -600,7 +600,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
   }
 
-  private val nullOnOverflow = SQLConf.get.decimalOperationsNullOnOverflow
+  private val nullOnOverflow = !SQLConf.get.ansiEnabled
 
   /**
    * Change the precision / scale in a given decimal to those set in `decimalType` (if any),
