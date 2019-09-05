@@ -1693,6 +1693,58 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(locs(blockIds(0)) == expectedLocs)
   }
 
+  test("caching of local disk directories for host local executors") {
+    val testExecutors = (0 to 2).map { index =>
+      s"hostLocal$index" -> Array(s"hostLocal${index}_dir1", s"hostLocal${index}_dir2")
+    }.toArray
+    val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
+    val confWithLimitedLocalDiskCache = conf.clone
+    confWithLimitedLocalDiskCache.set(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE, 1)
+    val store = makeBlockManager(
+      8000,
+      "executor1",
+      mockBlockManagerMaster,
+      testConf = Some(confWithLimitedLocalDiskCache))
+
+    def prepareHostLocalMockCall(indices: Int*): Unit = {
+      when(mockBlockManagerMaster.getHostLocalDirs(indices.map(testExecutors(_)._1).toArray))
+      .thenReturn(indices.map(testExecutors(_)).toMap)
+    }
+
+    def assertSameContents(
+        expected: scala.collection.Map[String, Array[String]],
+        actual: scala.collection.Map[String, Array[String]]): Unit = {
+      (expected.keys ++ actual.keys).foreach { key =>
+        val expectedValue = expected.get(key)
+        val actualValue = actual.get(key)
+        if (expectedValue.isDefined && actualValue.isDefined) {
+          assert(expectedValue.get.sameElements(actualValue.get),
+            s"actual is different from expected for '$key' key")
+        } else {
+          fail(s"actual is different from expected for '$key' key: $expectedValue != $actualValue")
+        }
+      }
+    }
+
+    def assertAnswer(indices: Int*): Unit =
+      assertSameContents(
+        store.getHostLocalDirs(indices.map(testExecutors(_)._1).toArray),
+        indices.map(testExecutors(_)).toMap)
+
+    prepareHostLocalMockCall(0)
+    assertAnswer(0)
+
+    // getHostLocalDirs call is expected to be called with only hostLocal1 as a parameter as
+    // hostLocal0 is already cached
+    prepareHostLocalMockCall(1)
+    assertAnswer(0, 1)
+
+    // getHostLocalDirs is expected to be called with the hostLocal0 and hostLocal2 as parameters
+    // as the cache size is 1 and hostLocal0 was removed when hostLocal2 was cached
+    prepareHostLocalMockCall(0, 2)
+    assertAnswer(0, 1, 2)
+  }
+
   class MockBlockTransferService(val maxFailures: Int) extends BlockTransferService {
     var numCalls = 0
     var tempFileManager: DownloadFileManager = null

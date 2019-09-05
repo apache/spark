@@ -2884,7 +2884,12 @@ object SparkContext extends Logging {
               memoryPerSlaveInt, sc.executorMemory))
         }
 
-        // for local cluster mode the SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED defaults to false
+        // For host local mode setting the default of SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED
+        // to false because this mode is intended to be used for testing and in this case all the
+        // executors are running on the same host. So if host local reading was enabled here then
+        // testing of the remote fetching would be secondary as setting this config explicitly to
+        // false would be required in most of the unit test (despite the fact that remote fetching
+        // is much more frequent in production).
         sc.conf.setIfMissing(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED, false)
 
         val scheduler = new TaskSchedulerImpl(sc)

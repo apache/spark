@@ -90,13 +90,11 @@ final class ShuffleBlockFetcherIterator(
   // Make remote requests at most maxBytesInFlight / 5 in length; the reason to keep them
   // smaller than maxBytesInFlight is to allow multiple, parallel fetches from up to 5
   // nodes, rather than blocking on reading output from one node.
-  val targetRemoteRequestSize = math.max(maxBytesInFlight / 5, 1L)
+  private val targetRemoteRequestSize = math.max(maxBytesInFlight / 5, 1L)
 
   /**
    * Total number of blocks to fetch. This should be equal to the total number of blocks
    * in [[blocksByAddress]] because we already filter out zero-sized blocks in [[blocksByAddress]].
-   *
-   * This should equal localBlocks.size + remoteBlocks.size + hostLocalBlocks.size
    */
   private[this] var numBlocksToFetch = 0
 
@@ -305,6 +303,8 @@ final class ShuffleBlockFetcherIterator(
         localBlockBytes += mergedBlockInfos.map(_.size).sum
         numBlocksToFetch += localBlocks.size
       } else if (enableHostLocalDiskReading && address.host == blockManager.blockManagerId.host) {
+        // because of STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE it can happen there is no
+        // local dir found for some of the blocks then those blocks will be fetched remotely
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)).to[ArrayBuffer])
@@ -321,9 +321,9 @@ final class ShuffleBlockFetcherIterator(
     }
     val totalBytes = localBlockBytes + remoteBlockBytes
     logInfo(s"Getting $numBlocksToFetch (${Utils.bytesToString(totalBytes)}) non-empty blocks " +
-      s"including ${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local blocks and " +
-      s"${hostLocalBlocks.size} (${Utils.bytesToString(hostLocalBlockBytes)}) host-local blocks " +
-      s"and $numRemoteBlocks (${Utils.bytesToString(remoteBlockBytes)}) remote blocks")
+      s"including ${localBlocks.size} (${Utils.bytesToString(localBlockBytes)}) local and " +
+      s"${hostLocalBlocks.size} (${Utils.bytesToString(hostLocalBlockBytes)}) potentially " +
+      s"host-local and $numRemoteBlocks (${Utils.bytesToString(remoteBlockBytes)}) remote blocks")
     collectedRemoteRequests
   }
 
@@ -455,7 +455,7 @@ final class ShuffleBlockFetcherIterator(
    * `ManagedBuffer`'s memory is allocated lazily when we create the input stream, so all we
    * track in-memory are the ManagedBuffer references themselves.
    */
-  private[this] def fetchHostLocalBlocks() {
+  private[this] def fetchHostLocalBlocks(): Unit = {
     logDebug(s"Start fetching host-local blocks: ${hostLocalBlocks.mkString(", ")}")
     val hostLocalExecutorIds = hostLocalBlocksByExecutor.keySet.map(_.executorId)
     val readsWithoutLocalDir = LinkedHashMap[BlockManagerId, Seq[(BlockId, Long, Int)]]()
@@ -487,10 +487,10 @@ final class ShuffleBlockFetcherIterator(
 
     if (readsWithoutLocalDir.nonEmpty) {
       val collectedRemoteRequests = new ArrayBuffer[FetchRequest]
-      readsWithoutLocalDir.foreach( { case (bmId, blockInfos) =>
+      readsWithoutLocalDir.foreach { case (bmId, blockInfos) =>
         hostLocalBlocks --= blockInfos.map(_._1)
         collectFetchRequests(bmId, blockInfos, collectedRemoteRequests)
-      })
+      }
       logInfo(s"Add ${collectedRemoteRequests.size} new remote fetches as local dirs " +
         "have not been cached for some executor")
       fetchRequests ++= Utils.randomize(collectedRemoteRequests)
@@ -524,7 +524,6 @@ final class ShuffleBlockFetcherIterator(
     fetchLocalBlocks()
     logDebug(s"Got local blocks in ${Utils.getUsedTimeNs(startTimeNs)}")
 
-    // Get Host-local Blocks
     if (hostLocalBlocks.nonEmpty) {
       val hostLocalStartTimeNs = System.nanoTime()
       fetchHostLocalBlocks()

@@ -1085,9 +1085,11 @@ package object config {
 
   private[spark] val STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE =
     ConfigBuilder("spark.storage.localDiskByExecutors.cacheSize")
-      .doc("The maximum size of the cache of the local dirs for the executors. This cache will " +
-        "be used to avoid the network in case of fetching disk persisted RDD blocks or shuffle " +
-        "blocks (when `spark.shuffle.readHostLocalDisk.enabled` is set) from the same host.")
+      .doc("The max number of executors for which the local dirs are stored. This size is " +
+        "both applied for the driver and both for the executors side to avoid having an " +
+        "unbounded store. This cache will be used to avoid the network in case of fetching disk " +
+        "persisted RDD blocks or shuffle blocks (when `spark.shuffle.readHostLocalDisk.enabled` " +
+        "is set) from the same host.")
       .intConf
       .createWithDefault(1000)
 

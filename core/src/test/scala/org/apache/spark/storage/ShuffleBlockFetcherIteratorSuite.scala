@@ -158,7 +158,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
-      false)
+      false,
+      true)
 
     // 3 local blocks fetched in initialization
     verify(blockManager, times(3)).getLocalBlockData(any())
@@ -195,7 +196,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val mergedLocalBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockBatchId(0, 0, 0, 3) -> createMockManagedBuffer())
     mergedLocalBlocks.foreach { case (blockId, buf) =>
-      doReturn(buf).when(blockManager).getBlockData(meq(blockId))
+      doReturn(buf).when(blockManager).getLocalBlockData(meq(blockId))
     }
 
     // Make sure remote blocks would return the merged block
@@ -227,35 +228,20 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       true,
       false,
       metrics,
+      true,
       true)
 
     // 3 local blocks batch fetched in initialization
-    verify(blockManager, times(1)).getBlockData(any())
+    verify(blockManager, times(1)).getLocalBlockData(any())
 
     for (i <- 0 until 2) {
       assert(iterator.hasNext, s"iterator should have 2 elements but actually has $i elements")
       val (blockId, inputStream) = iterator.next()
-
+      verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
       // Make sure we release buffers when a wrapped input stream is closed.
       val mockBuf = mergedLocalBlocks.getOrElse(blockId, mergedRemoteBlocks(blockId))
-      // Note: ShuffleBlockFetcherIterator wraps input streams in a BufferReleasingInputStream
-      val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
-      verify(mockBuf, times(0)).release()
-      val delegateAccess = PrivateMethod[InputStream]('delegate)
-
-      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
-      wrappedInputStream.close()
-      verify(mockBuf, times(1)).release()
-      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
-      wrappedInputStream.close() // close should be idempotent
-      verify(mockBuf, times(1)).release()
-      verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+      verifyBufferRelease(mockBuf, inputStream)
     }
-
-    // 2 remote blocks batch fetched
-    // (but from the same block manager so one call to fetchBlocks)
-    verify(blockManager, times(1)).getBlockData(any())
-    verify(transfer, times(1)).fetchBlocks(any(), any(), any(), any(), any(), any())
   }
 
   test("release current unexhausted buffer in case the task completes early") {

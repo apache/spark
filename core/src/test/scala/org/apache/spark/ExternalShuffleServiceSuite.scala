@@ -105,7 +105,6 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     sc = new SparkContext("local-cluster[2,1,1024]", "test", confWithHostLocalRead)
     sc.getConf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) should equal(true)
     sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
-    sc.env.blockManager.externalShuffleServiceEnabled should equal(true)
     sc.env.blockManager.blockStoreClient.getClass should equal(classOf[ExternalBlockStoreClient])
 
     // In a slow machine, one slave may register hundreds of milliseconds ahead of the other one.

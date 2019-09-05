@@ -33,6 +33,7 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
+import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -206,7 +207,11 @@ private[spark] class BlockManager(
     new BlockManager.RemoteBlockDownloadFileManager(this)
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
-  private val executorIdToLocalDirsCache = new mutable.HashMap[String, Array[String]]()
+  private val executorIdToLocalDirsCache =
+    CacheBuilder
+      .newBuilder()
+      .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
+      .build[String, Array[String]]()
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -1003,15 +1008,16 @@ private[spark] class BlockManager(
   }
 
   private[spark] def getHostLocalDirs(executorIds: Array[String])
-      : scala.collection.Map[String, Array[String]] = {
-    val cachedItems = executorIdToLocalDirsCache.filterKeys(executorIds.contains(_))
+      : scala.collection.Map[String, Array[String]] = synchronized {
+    import scala.collection.JavaConverters._
+    val cachedItems = executorIdToLocalDirsCache.getAllPresent(executorIds.toIterable.asJava)
     if (cachedItems.size < executorIds.length) {
       val notCachedItems = master
-        .getHostLocalDirs(executorIds.filterNot(executorIdToLocalDirsCache.contains))
-      executorIdToLocalDirsCache ++= notCachedItems
-      cachedItems ++ notCachedItems
+        .getHostLocalDirs(executorIds.filterNot(cachedItems.containsKey))
+      executorIdToLocalDirsCache.putAll(notCachedItems.asJava)
+      notCachedItems ++ cachedItems.asScala
     } else {
-      cachedItems
+      cachedItems.asScala
     }
   }
 
