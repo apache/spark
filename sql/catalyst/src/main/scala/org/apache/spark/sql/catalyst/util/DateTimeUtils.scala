@@ -212,6 +212,8 @@ object DateTimeUtils {
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
     if (s == null) {
       return None
+    } else if (specialUTF8TimestampKeys.contains(s)) {
+      return Some(specialUTF8Timestamps(s)(timeZoneId))
     }
     var tz: Option[Byte] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
