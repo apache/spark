@@ -568,9 +568,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("special date values") {
-    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
-      val zoneId = getZoneId(timeZone)
-
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       assert(toDate("epoch", zoneId).get === 0)
       val today = localDateToDays(LocalDate.now(zoneId))
       assert(toDate("yesterday", zoneId).get === today - 1)
