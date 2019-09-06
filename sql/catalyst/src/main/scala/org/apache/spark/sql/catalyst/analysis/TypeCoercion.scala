@@ -861,6 +861,7 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      // For DecimalType, it will be handled by another rule DecimalPrecision.
       case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
           !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
         findTightestCommonType(left.dataType, right.dataType).map { commonType =>
