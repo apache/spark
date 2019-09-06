@@ -492,7 +492,7 @@ object PartitioningUtils {
       // We need to check that we can cast the raw string since we later can use Cast to get
       // the partition values with the right DataType (see
       // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
-      val dateValue = Cast(Literal(raw), DateType).eval()
+      val dateValue = Cast(Literal(raw), DateType, Some(zoneId.getId)).eval()
       // Disallow DateType if the cast returned null
       require(dateValue != null)
       Literal.create(dateValue, DateType)
