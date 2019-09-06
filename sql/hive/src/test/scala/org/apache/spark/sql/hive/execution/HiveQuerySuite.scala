@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -827,9 +827,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
     assert(sql("list jars").
-      filter(_.getString(0).contains(TestHive.HIVE_HCATALOG_CORE_JAR)).count() > 0)
+      filter(_.getString(0).contains(HiveTestJars.HIVE_HCATALOG_CORE_JAR)).count() > 0)
     assert(sql("list jar").
-      filter(_.getString(0).contains(TestHive.HIVE_HCATALOG_CORE_JAR)).count() > 0)
+      filter(_.getString(0).contains(HiveTestJars.HIVE_HCATALOG_CORE_JAR)).count() > 0)
     val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
     sql(s"ADD JAR $testJar2")
     assert(sql(s"list jar $testJar").count() == 1)
