@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayInputStream, DataInputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.{config, Logging}
@@ -40,6 +40,37 @@ private[spark] class SizeLimitingByteArrayDecoder(
   private val maxCollectSize = sqlConf.maxCollectSize
 
   /**
+   * Packing the UnsafeRows into byte array for faster serialization.
+   * The byte arrays are in the following format:
+   * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+   *
+   * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
+   * compressed.
+   */
+  def encodeUnsafeRows(
+      n: Int = -1,
+      unsafeRows: Iterator[InternalRow]): Iterator[(Long, Array[Byte])] = {
+    var count = 0
+    val buffer = new Array[Byte](4 << 10) // 4K
+    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+    val bos = new ByteArrayOutputStream()
+    val out = new DataOutputStream(codec.compressedOutputStream(bos))
+    // `unsafeRows.hasNext` may produce one row and buffer it, we should only call it
+    // when the limit is not hit.
+    while ((n < 0 || count < n) && unsafeRows.hasNext) {
+      val row = unsafeRows.next().asInstanceOf[UnsafeRow]
+      ensureTotalSizeIsBelowLimit(row.getSizeInBytes)
+      out.writeInt(row.getSizeInBytes)
+      row.writeToStream(out, buffer)
+      count += 1
+    }
+    out.writeInt(-1)
+    out.flush()
+    out.close()
+    Iterator((count, bos.toByteArray))
+  }
+
+  /**
    * Decodes the byte arrays back to UnsafeRows and puts them into buffer.
    */
   def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
@@ -53,7 +84,7 @@ private[spark] class SizeLimitingByteArrayDecoder(
       override def hasNext: Boolean = sizeOfNextRow >= 0
 
       override def next(): InternalRow = {
-        ensureCanFetchMoreResults(sizeOfNextRow)
+        ensureTotalSizeIsBelowLimit(sizeOfNextRow)
         val bs = new Array[Byte](sizeOfNextRow)
         ins.readFully(bs)
         val row = new UnsafeRow(nFields)
@@ -64,7 +95,7 @@ private[spark] class SizeLimitingByteArrayDecoder(
     }
   }
 
-  private def ensureCanFetchMoreResults(sizeOfNextRow: Int): Unit = {
+  private def ensureTotalSizeIsBelowLimit(sizeOfNextRow: Int): Unit = {
     totalUncompressedResultSize += sizeOfNextRow
     maxCollectSize match {
       case Some(maxSize) => if (totalUncompressedResultSize > maxSize) {

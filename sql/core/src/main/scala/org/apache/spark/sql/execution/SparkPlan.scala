@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{ByteArrayOutputStream, DataOutputStream}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,9 +24,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.broadcast
 import org.apache.spark.internal.Logging
-import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -326,23 +324,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(n: Int = -1): RDD[(Long, Array[Byte])] = {
     execute().mapPartitionsInternal { iter =>
-      var count = 0
-      val buffer = new Array[Byte](4 << 10)  // 4K
-      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
-      val bos = new ByteArrayOutputStream()
-      val out = new DataOutputStream(codec.compressedOutputStream(bos))
-      // `iter.hasNext` may produce one row and buffer it, we should only call it when the limit is
-      // not hit.
-      while ((n < 0 || count < n) && iter.hasNext) {
-        val row = iter.next().asInstanceOf[UnsafeRow]
-        out.writeInt(row.getSizeInBytes)
-        row.writeToStream(out, buffer)
-        count += 1
-      }
-      out.writeInt(-1)
-      out.flush()
-      out.close()
-      Iterator((count, bos.toByteArray))
+      new SizeLimitingByteArrayDecoder(schema.length, sqlContext.conf)
+        .encodeUnsafeRows(n, iter)
     }
   }
 
