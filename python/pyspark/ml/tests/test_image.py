@@ -20,7 +20,7 @@ import py4j
 
 from pyspark.ml.image import ImageSchema
 from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 
 
