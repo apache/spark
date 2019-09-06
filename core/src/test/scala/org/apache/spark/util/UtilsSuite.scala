@@ -42,6 +42,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
@@ -917,6 +918,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("Set Spark CallerContext") {
+    SparkHadoopUtil.get.conf.setBoolean("hadoop.caller.context.enabled", true);
     val context = "test"
     new CallerContext(context).setCurrentContext()
     if (CallerContext.callerContextSupported) {
