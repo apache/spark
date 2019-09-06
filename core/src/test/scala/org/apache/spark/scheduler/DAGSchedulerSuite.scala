@@ -204,41 +204,35 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       _endedTasks += taskEnd.taskInfo.taskId
     }
 
-    def submittedStageInfos: Set[StageInfo] = withWaitingListenerUntilEmpty {
+    def submittedStageInfos: Set[StageInfo] = {
+      waitForListeners()
       _submittedStageInfos.toSet
     }
 
-    def successfulStages: Set[Int] = withWaitingListenerUntilEmpty {
+    def successfulStages: Set[Int] = {
+      waitForListeners()
       _successfulStages.toSet
     }
 
-    def failedStages: List[Int] = withWaitingListenerUntilEmpty {
+    def failedStages: List[Int] = {
+      waitForListeners()
       _failedStages.toList
     }
 
-    def stageByOrderOfExecution: List[Int] = withWaitingListenerUntilEmpty {
+    def stageByOrderOfExecution: List[Int] = {
+      waitForListeners()
       _stageByOrderOfExecution.toList
     }
 
-    def endedTask: Set[Long] = withWaitingListenerUntilEmpty {
+    def endedTasks: Set[Long] = {
+      waitForListeners()
       _endedTasks.toSet
     }
 
-    def clear(): Unit = {
-      _submittedStageInfos.clear()
-      _successfulStages.clear()
-      _failedStages.clear()
-      _stageByOrderOfExecution.clear()
-      _endedTasks.clear()
-    }
-
-    private def withWaitingListenerUntilEmpty[T](fn: => T): T = {
-      sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
-      fn
-    }
+    private def waitForListeners(): Unit = sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
   }
 
-  val sparkListener = new EventInfoRecordingListener()
+  var sparkListener: EventInfoRecordingListener = null
 
   var mapOutputTracker: MapOutputTrackerMaster = null
   var broadcastManager: BroadcastManager = null
@@ -288,7 +282,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   private def init(testConf: SparkConf): Unit = {
     sc = new SparkContext("local[2]", "DAGSchedulerSuite", testConf)
-    sparkListener.clear()
+    sparkListener = new EventInfoRecordingListener
     failure = null
     sc.addSparkListener(sparkListener)
     taskSets.clear()
@@ -1340,7 +1334,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       Seq.empty, Array.empty, createFakeTaskInfoWithId(1)))
     // verify stage exists
     assert(scheduler.stageIdToStage.contains(0))
-    assert(sparkListener.endedTask.size === 2)
+    assert(sparkListener.endedTasks.size === 2)
 
     // finish other 2 tasks
     runEvent(makeCompletionEvent(
@@ -1349,7 +1343,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), Success, 42,
       Seq.empty, Array.empty, createFakeTaskInfoWithId(3)))
-    assert(sparkListener.endedTask.size === 4)
+    assert(sparkListener.endedTasks.size === 4)
 
     // verify the stage is done
     assert(!scheduler.stageIdToStage.contains(0))
@@ -1359,13 +1353,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), Success, 42,
       Seq.empty, Array.empty, createFakeTaskInfoWithId(5)))
-    assert(sparkListener.endedTask.size === 5)
+    assert(sparkListener.endedTasks.size === 5)
 
     // make sure non successful tasks also send out event
     runEvent(makeCompletionEvent(
       taskSets(0).tasks(3), UnknownReason, 42,
       Seq.empty, Array.empty, createFakeTaskInfoWithId(6)))
-    assert(sparkListener.endedTask.size === 6)
+    assert(sparkListener.endedTasks.size === 6)
   }
 
   test("ignore late map task completions") {
@@ -2823,7 +2817,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       null))
 
     assert(failure == null, "job should not fail")
-    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.length == 2)
     // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd2` needs to retry.
