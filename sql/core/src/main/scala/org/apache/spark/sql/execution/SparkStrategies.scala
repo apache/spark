@@ -291,7 +291,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createJoinWithoutHint() = {
-          createBroadcastHashJoin(canBroadcast(left), canBroadcast(right))
+          createBroadcastHashJoin(
+            canBroadcast(left) && !hint.leftHint.exists(_.strategy.contains(NO_BROADCAST_HASH)),
+            canBroadcast(right) && !hint.rightHint.exists(_.strategy.contains(NO_BROADCAST_HASH)))
             .orElse {
               if (!conf.preferSortMergeJoin) {
                 createShuffleHashJoin(
