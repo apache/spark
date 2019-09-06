@@ -28,6 +28,7 @@ import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
+import org.apache.spark.streaming.testutil.StreamingTestUtils
 import org.apache.spark.util.{ManualClock, Utils}
 
 
@@ -392,13 +393,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
-    var ssc: StreamingContext = null
-    try {
-      ssc = new  StreamingContext(conf, Seconds(1))
+    StreamingTestUtils.withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       new DummyInputDStream(ssc).foreachRDD(_ => { })
       body(ssc)
-    } finally {
-      if (ssc != null) ssc.stop()
     }
   }
 }

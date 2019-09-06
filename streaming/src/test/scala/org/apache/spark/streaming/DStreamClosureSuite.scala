@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{HashPartitioner, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.util.ReturnStatementInClosureException
 
 /**
@@ -40,7 +41,7 @@ class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     try {
-      ssc.stop(stopSparkContext = true)
+      ensureNoActiveSparkContext(ssc)
       ssc = null
     } finally {
       super.afterAll()

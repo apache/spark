@@ -41,6 +41,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.util.{ManualClock, Utils}
 
 
@@ -60,14 +61,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
   var ssc: StreamingContext = null
 
   after {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
-    if (sc != null) {
-      sc.stop()
-      sc = null
-    }
+    ensureNoActiveSparkContext(ssc, sc)
   }
 
   test("from no conf constructor") {

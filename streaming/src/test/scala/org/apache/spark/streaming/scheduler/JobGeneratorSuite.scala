@@ -25,6 +25,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.util.{ManualClock, Utils}
 
 class JobGeneratorSuite extends TestSuiteBase {

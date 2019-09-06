@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -34,10 +35,8 @@ class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   after {
-    if (ssc != null) {
-      ssc.stop()
-      ssc = null
-    }
+    ensureNoActiveSparkContext(ssc)
+    if (ssc != null) ssc = null
   }
 
   test("test report and get InputInfo from InputInfoTracker") {

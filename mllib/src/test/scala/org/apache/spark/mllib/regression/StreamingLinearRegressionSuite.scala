@@ -24,6 +24,7 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
@@ -33,9 +34,10 @@ class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
   var ssc: StreamingContext = _
 
   override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
+    try {
+      ensureNoActiveSparkContext(ssc)
+    } finally {
+      super.afterFunction()
     }
   }
 

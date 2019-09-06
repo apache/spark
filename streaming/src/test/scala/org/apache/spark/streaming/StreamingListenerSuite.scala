@@ -35,6 +35,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
@@ -45,9 +46,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
   override def afterFunction() {
     super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
+    ensureNoActiveSparkContext(ssc)
   }
 
   // To make sure that the processing start and end times in collected

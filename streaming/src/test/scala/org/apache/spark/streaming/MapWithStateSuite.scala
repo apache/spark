@@ -28,6 +28,7 @@ import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.util.{ManualClock, Utils}
 
 class MapWithStateSuite extends SparkFunSuite
@@ -58,9 +59,7 @@ class MapWithStateSuite extends SparkFunSuite
 
   override def afterAll(): Unit = {
     try {
-      if (sc != null) {
-        sc.stop()
-      }
+      ensureNoActiveSparkContext(sc)
     } finally {
       super.afterAll()
     }

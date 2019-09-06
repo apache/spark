@@ -25,6 +25,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase {
 
@@ -35,9 +36,7 @@ class StreamingLogisticRegressionSuite extends SparkFunSuite with TestSuiteBase 
 
   override def afterFunction() {
     super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
+    ensureNoActiveSparkContext(ssc)
   }
 
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data

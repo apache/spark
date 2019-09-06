@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.kafka010
 
 import java.io.File
-import java.lang.{ Long => JLong }
-import java.util.{ Arrays, HashMap => JHashMap, Map => JMap, UUID }
+import java.lang.{Long => JLong}
+import java.util.{Arrays, HashMap => JHashMap, Map => JMap, UUID}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
@@ -41,6 +41,7 @@ import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite
@@ -79,9 +80,7 @@ class DirectKafkaStreamSuite
   }
 
   after {
-    if (ssc != null) {
-      ssc.stop(stopSparkContext = true)
-    }
+    ensureNoActiveSparkContext(ssc)
     if (testDir != null) {
       Utils.deleteRecursively(testDir)
     }

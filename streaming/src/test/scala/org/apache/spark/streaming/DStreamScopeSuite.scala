@@ -24,6 +24,7 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.streaming.ui.UIUtils
 import org.apache.spark.util.ManualClock
 
@@ -43,7 +44,7 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
 
   override def afterAll(): Unit = {
     try {
-      ssc.stop(stopSparkContext = true)
+      ensureNoActiveSparkContext(ssc)
     } finally {
       super.afterAll()
     }

@@ -19,6 +19,7 @@ package org.apache.spark.streaming
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class WindowOperationsSuite extends TestSuiteBase {
 
@@ -146,15 +147,16 @@ class WindowOperationsSuite extends TestSuiteBase {
 
   test("window - persistence level") {
     val input = Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5))
-    val ssc = new StreamingContext(conf, batchDuration)
-    val inputStream = new TestInputStream[Int](ssc, input, 1)
-    val windowStream1 = inputStream.window(batchDuration * 2)
-    assert(windowStream1.storageLevel === StorageLevel.NONE)
-    assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY_SER)
-    windowStream1.persist(StorageLevel.MEMORY_ONLY)
-    assert(windowStream1.storageLevel === StorageLevel.NONE)
-    assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY)
-    ssc.stop()
+
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      val inputStream = new TestInputStream[Int](ssc, input, 1)
+      val windowStream1 = inputStream.window(batchDuration * 2)
+      assert(windowStream1.storageLevel === StorageLevel.NONE)
+      assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY_SER)
+      windowStream1.persist(StorageLevel.MEMORY_ONLY)
+      assert(windowStream1.storageLevel === StorageLevel.NONE)
+      assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY)
+    }
   }
 
   // Testing naive reduceByKeyAndWindow (without invertible function)

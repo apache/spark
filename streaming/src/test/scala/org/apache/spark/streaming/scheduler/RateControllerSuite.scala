@@ -22,6 +22,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class RateControllerSuite extends TestSuiteBase {
 
@@ -30,8 +31,7 @@ class RateControllerSuite extends TestSuiteBase {
   override def batchDuration: Duration = Milliseconds(50)
 
   test("RateController - rate controller publishes updates after batches complete") {
-    val ssc = new StreamingContext(conf, batchDuration)
-    withStreamingContext(ssc) { ssc =>
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       val dstream = new RateTestInputDStream(ssc)
       dstream.register()
       ssc.start()
@@ -43,8 +43,7 @@ class RateControllerSuite extends TestSuiteBase {
   }
 
   test("ReceiverRateController - published rates reach receivers") {
-    val ssc = new StreamingContext(conf, batchDuration)
-    withStreamingContext(ssc) { ssc =>
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
       val estimator = new ConstantEstimator(100)
       val dstream = new RateTestInputDStream(ssc) {
         override val rateController =

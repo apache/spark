@@ -39,8 +39,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties,
-  Utils}
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties, Utils}
 
 /**
  * A input stream that records the times of restore() invoked
@@ -220,9 +220,10 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 
   override def afterFunction() {
     try {
-      if (ssc != null) { ssc.stop() }
+      ensureNoActiveSparkContext(ssc)
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
+      ensureNoActiveSparkContext()
       super.afterFunction()
     }
   }
@@ -255,7 +256,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       .checkpoint(stateStreamCheckpointInterval)
       .map(t => (t._1, t._2))
     }
-    var ssc = setupStreams(input, operation)
+    ssc = setupStreams(input, operation)
     var stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
 
     // Run till a time such that at least one RDD in the stream should have been checkpointed,

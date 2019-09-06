@@ -28,6 +28,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
