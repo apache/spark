@@ -1141,6 +1141,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskSets(0).tasks(1),
       TaskKilled("test"),
       null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(failedStages === Seq(0))
     assert(mapOutputTracker.findMissingPartitions(shuffleId) === Some(Seq(0, 1)))
 
@@ -2653,6 +2654,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskSets(0).tasks(0),
       TaskKilled("test"),
       null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(failedStages === Seq(0))
 
     // The second map task fails with TaskKilled.
@@ -2689,6 +2691,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       taskSets(0).tasks(0),
       TaskKilled("test"),
       null))
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     assert(failedStages === Seq(0))
 
     // Trigger resubmission of the failed map stage.
@@ -2813,6 +2816,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       null))
 
     assert(failure == null, "job should not fail")
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     val failedStages = scheduler.failedStages.toSeq
     assert(failedStages.length == 2)
     // Shuffle blocks of "hostA" is lost, so first task of the `shuffleMapRdd2` needs to retry.
