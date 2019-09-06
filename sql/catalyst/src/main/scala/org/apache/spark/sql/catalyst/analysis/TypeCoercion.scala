@@ -861,24 +861,19 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
-        (left, right) match {
-          // Skip to handle decimals
-          case (l, r) if l.dataType.isInstanceOf[DecimalType] ||
-            r.dataType.isInstanceOf[DecimalType] => b
-          case _ =>
-            findTightestCommonType(left.dataType, right.dataType).map { commonType =>
-              if (b.inputType.acceptsType(commonType)) {
-                // If the expression accepts the tightest common type, cast to that.
-                val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-                val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-                b.withNewChildren(Seq(newLeft, newRight))
-              } else {
-                // Otherwise, don't do anything with the expression.
-                b
-              }
-            }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
-        }
+      case b @ BinaryOperator(left, right) if !left.dataType.isInstanceOf[DecimalType] &&
+        !right.dataType.isInstanceOf[DecimalType] && left.dataType != right.dataType =>
+        findTightestCommonType(left.dataType, right.dataType).map { commonType =>
+          if (b.inputType.acceptsType(commonType)) {
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
+            val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          } else {
+            // Otherwise, don't do anything with the expression.
+            b
+          }
+        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map { case (in, expected) =>
