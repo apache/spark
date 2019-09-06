@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Date, Timestamp}
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
@@ -26,11 +24,13 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, DateType, NumericType, StructType, TimestampType}
-import org.apache.spark.util.Utils
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Instructions on how to partition the table among workers.
@@ -85,8 +85,8 @@ private[sql] object JDBCRelation extends Logging {
         val (column, columnType) = verifyAndGetNormalizedPartitionColumn(
           schema, partitionColumn.get, resolver, jdbcOptions)
 
-        val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType)
-        val upperBoundValue = toInternalBoundValue(upperBound.get, columnType)
+        val lowerBoundValue = toInternalBoundValue(lowerBound.get, columnType, timeZoneId)
+        val upperBoundValue = toInternalBoundValue(upperBound.get, columnType, timeZoneId)
         JDBCPartitioningInfo(
           column, columnType, lowerBoundValue, upperBoundValue, numPartitions.get)
       }
@@ -159,8 +159,9 @@ private[sql] object JDBCRelation extends Logging {
     val column = schema.find { f =>
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
+      val maxNumToStringFields = SQLConf.get.maxToStringFields
       throw new AnalysisException(s"User-defined partition column $columnName not " +
-        s"found in the JDBC relation: ${schema.simpleString(Utils.maxNumToStringFields)}")
+        s"found in the JDBC relation: ${schema.simpleString(maxNumToStringFields)}")
     }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>
@@ -173,10 +174,21 @@ private[sql] object JDBCRelation extends Logging {
     (dialect.quoteIdentifier(column.name), column.dataType)
   }
 
-  private def toInternalBoundValue(value: String, columnType: DataType): Long = columnType match {
-    case _: NumericType => value.toLong
-    case DateType => DateTimeUtils.fromJavaDate(Date.valueOf(value)).toLong
-    case TimestampType => DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf(value))
+  private def toInternalBoundValue(
+      value: String,
+      columnType: DataType,
+      timeZoneId: String): Long = {
+    def parse[T](f: UTF8String => Option[T]): T = {
+      f(UTF8String.fromString(value)).getOrElse {
+        throw new IllegalArgumentException(
+          s"Cannot parse the bound value $value as ${columnType.catalogString}")
+      }
+    }
+    columnType match {
+      case _: NumericType => value.toLong
+      case DateType => parse(stringToDate).toLong
+      case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
+    }
   }
 
   private def toBoundValueInWhereClause(
@@ -184,10 +196,12 @@ private[sql] object JDBCRelation extends Logging {
       columnType: DataType,
       timeZoneId: String): String = {
     def dateTimeToString(): String = {
-      val timeZone = DateTimeUtils.getTimeZone(timeZoneId)
       val dateTimeStr = columnType match {
-        case DateType => DateTimeUtils.dateToString(value.toInt, timeZone)
-        case TimestampType => DateTimeUtils.timestampToString(value, timeZone)
+        case DateType => DateFormatter().format(value.toInt)
+        case TimestampType =>
+          val timestampFormatter = TimestampFormatter.getFractionFormatter(
+            DateTimeUtils.getZoneId(timeZoneId))
+          DateTimeUtils.timestampToString(timestampFormatter, value)
       }
       s"'$dateTimeStr'"
     }

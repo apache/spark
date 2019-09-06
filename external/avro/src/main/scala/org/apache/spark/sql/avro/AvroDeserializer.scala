@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.avro
 
-import java.math.{BigDecimal}
+import java.math.BigDecimal
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -218,11 +218,14 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
             i += 1
           }
 
+          // The Avro map will never have null or duplicated map keys, it's safe to create a
+          // ArrayBasedMapData directly here.
           updater.set(ordinal, new ArrayBasedMapData(keyArray, valueArray))
 
       case (UNION, _) =>
         val allTypes = avroType.getTypes.asScala
         val nonNullTypes = allTypes.filter(_.getType != NULL)
+        val nonNullAvroType = Schema.createUnion(nonNullTypes.asJava)
         if (nonNullTypes.nonEmpty) {
           if (nonNullTypes.length == 1) {
             newWriter(nonNullTypes.head, catalystType, path)
@@ -251,7 +254,7 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
                     (updater, ordinal, value) => {
                       val row = new SpecificInternalRow(st)
                       val fieldUpdater = new RowUpdater(row)
-                      val i = GenericData.get().resolveUnion(avroType, value)
+                      val i = GenericData.get().resolveUnion(nonNullAvroType, value)
                       fieldWriters(i)(fieldUpdater, i, value)
                       updater.set(ordinal, row)
                     }

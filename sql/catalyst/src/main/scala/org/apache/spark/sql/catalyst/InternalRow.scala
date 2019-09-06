@@ -125,22 +125,58 @@ object InternalRow {
    * actually takes a `SpecializedGetters` input because it can be generalized to other classes
    * that implements `SpecializedGetters` (e.g., `ArrayData`) too.
    */
-  def getAccessor(dataType: DataType): (SpecializedGetters, Int) => Any = dataType match {
-    case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
-    case ByteType => (input, ordinal) => input.getByte(ordinal)
-    case ShortType => (input, ordinal) => input.getShort(ordinal)
-    case IntegerType | DateType => (input, ordinal) => input.getInt(ordinal)
-    case LongType | TimestampType => (input, ordinal) => input.getLong(ordinal)
-    case FloatType => (input, ordinal) => input.getFloat(ordinal)
-    case DoubleType => (input, ordinal) => input.getDouble(ordinal)
-    case StringType => (input, ordinal) => input.getUTF8String(ordinal)
-    case BinaryType => (input, ordinal) => input.getBinary(ordinal)
-    case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
-    case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
-    case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
-    case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
-    case _: MapType => (input, ordinal) => input.getMap(ordinal)
-    case u: UserDefinedType[_] => getAccessor(u.sqlType)
-    case _ => (input, ordinal) => input.get(ordinal, dataType)
+  def getAccessor(dt: DataType, nullable: Boolean = true): (SpecializedGetters, Int) => Any = {
+    val getValueNullSafe: (SpecializedGetters, Int) => Any = dt match {
+      case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
+      case ByteType => (input, ordinal) => input.getByte(ordinal)
+      case ShortType => (input, ordinal) => input.getShort(ordinal)
+      case IntegerType | DateType => (input, ordinal) => input.getInt(ordinal)
+      case LongType | TimestampType => (input, ordinal) => input.getLong(ordinal)
+      case FloatType => (input, ordinal) => input.getFloat(ordinal)
+      case DoubleType => (input, ordinal) => input.getDouble(ordinal)
+      case StringType => (input, ordinal) => input.getUTF8String(ordinal)
+      case BinaryType => (input, ordinal) => input.getBinary(ordinal)
+      case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+      case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
+      case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
+      case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
+      case _: MapType => (input, ordinal) => input.getMap(ordinal)
+      case u: UserDefinedType[_] => getAccessor(u.sqlType, nullable)
+      case _ => (input, ordinal) => input.get(ordinal, dt)
+    }
+
+    if (nullable) {
+      (getter, index) => {
+        if (getter.isNullAt(index)) {
+          null
+        } else {
+          getValueNullSafe(getter, index)
+        }
+      }
+    } else {
+      getValueNullSafe
+    }
+  }
+
+  /**
+   * Returns a writer for an `InternalRow` with given data type.
+   */
+  def getWriter(ordinal: Int, dt: DataType): (InternalRow, Any) => Unit = dt match {
+    case BooleanType => (input, v) => input.setBoolean(ordinal, v.asInstanceOf[Boolean])
+    case ByteType => (input, v) => input.setByte(ordinal, v.asInstanceOf[Byte])
+    case ShortType => (input, v) => input.setShort(ordinal, v.asInstanceOf[Short])
+    case IntegerType | DateType => (input, v) => input.setInt(ordinal, v.asInstanceOf[Int])
+    case LongType | TimestampType => (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
+    case FloatType => (input, v) => input.setFloat(ordinal, v.asInstanceOf[Float])
+    case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
+    case DecimalType.Fixed(precision, _) =>
+      (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
+    case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
+    case NullType => (input, _) => input.setNullAt(ordinal)
+    case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
+    case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
+    case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())
+    case _ => (input, v) => input.update(ordinal, v)
   }
 }

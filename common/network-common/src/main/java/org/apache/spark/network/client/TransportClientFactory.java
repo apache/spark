@@ -84,7 +84,7 @@ public class TransportClientFactory implements Closeable {
 
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
-  private PooledByteBufAllocator pooledAllocator;
+  private final PooledByteBufAllocator pooledAllocator;
   private final NettyMemoryMetrics metrics;
 
   public TransportClientFactory(
@@ -103,8 +103,13 @@ public class TransportClientFactory implements Closeable {
         ioMode,
         conf.clientThreads(),
         conf.getModuleName() + "-client");
-    this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
-      conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    if (conf.sharedByteBufAllocators()) {
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
+          conf.preferDirectBufsForSharedByteBufAllocators(), false /* allowCache */);
+    } else {
+      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
+          conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    }
     this.metrics = new NettyMemoryMetrics(
       this.pooledAllocator, conf.getModuleName() + "-client", conf);
   }
@@ -167,10 +172,13 @@ public class TransportClientFactory implements Closeable {
     final long preResolveHost = System.nanoTime();
     final InetSocketAddress resolvedAddress = new InetSocketAddress(remoteHost, remotePort);
     final long hostResolveTimeMs = (System.nanoTime() - preResolveHost) / 1000000;
+    final String resolvMsg = resolvedAddress.isUnresolved() ? "failed" : "succeed";
     if (hostResolveTimeMs > 2000) {
-      logger.warn("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+      logger.warn("DNS resolution {} for {} took {} ms",
+          resolvMsg, resolvedAddress, hostResolveTimeMs);
     } else {
-      logger.trace("DNS resolution for {} took {} ms", resolvedAddress, hostResolveTimeMs);
+      logger.trace("DNS resolution {} for {} took {} ms",
+          resolvMsg, resolvedAddress, hostResolveTimeMs);
     }
 
     synchronized (clientPool.locks[clientIndex]) {

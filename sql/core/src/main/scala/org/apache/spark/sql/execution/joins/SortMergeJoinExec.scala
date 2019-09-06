@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans._
@@ -43,6 +44,23 @@ case class SortMergeJoinExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+
+  override def simpleStringWithNodeId(): String = {
+    val opId = ExplainUtils.getOpId(this)
+    s"$nodeName $joinType ($opId)".trim
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val joinCondStr = if (condition.isDefined) {
+      s"${condition.get}"
+    } else "None"
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${ExplainUtils.getCodegenId(this)}
+       |Left keys : ${leftKeys}
+       |Right keys: ${rightKeys}
+       |Join condition : ${joinCondStr}
+     """.stripMargin
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -393,7 +411,7 @@ case class SortMergeJoinExec(
       input: Seq[Attribute]): Seq[ExprCode] = {
     ctx.INPUT_ROW = row
     ctx.currentVars = null
-    keys.map(BindReferences.bindReference(_, input).genCode(ctx))
+    bindReferences(keys, input).map(_.genCode(ctx))
   }
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {

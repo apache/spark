@@ -34,13 +34,19 @@ import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
  * A class that holds all state shared across sessions in a given [[SQLContext]].
+ *
+ * @param sparkContext The Spark context associated with this SharedState
+ * @param initialConfigs The configs from the very first created SparkSession
  */
-private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
+private[sql] class SharedState(
+    val sparkContext: SparkContext,
+    initialConfigs: scala.collection.Map[String, String])
+  extends Logging {
 
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
@@ -77,6 +83,27 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   }
   logInfo(s"Warehouse path is '$warehousePath'.")
 
+  // These 2 variables should be initiated after `warehousePath`, because in the first place we need
+  // to load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
+  // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
+  private val (conf, hadoopConf) = {
+    val confClone = sparkContext.conf.clone()
+    val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
+    // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
+    // `SharedState`, all `SparkSession` level configurations have higher priority to generate a
+    // `SharedState` instance. This will be done only once then shared across `SparkSession`s
+    initialConfigs.foreach {
+      case (k, _)  if k == "hive.metastore.warehouse.dir" || k == WAREHOUSE_PATH.key =>
+        logWarning(s"Not allowing to set ${WAREHOUSE_PATH.key} or hive.metastore.warehouse.dir " +
+          s"in SparkSession's options, it should be set statically for cross-session usages")
+      case (k, v) =>
+        logDebug(s"Applying initial SparkSession options to SparkConf/HadoopConf: $k -> $v")
+        confClone.set(k, v)
+        hadoopConfClone.set(k, v)
+
+    }
+    (confClone, hadoopConfClone)
+  }
 
   /**
    * Class for caching query results reused in future executions.
@@ -89,7 +116,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    */
   val statusStore: SQLAppStatusStore = {
     val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
-    val listener = new SQLAppStatusListener(sparkContext.conf, kvStore, live = true)
+    val listener = new SQLAppStatusListener(conf, kvStore, live = true)
     sparkContext.listenerBus.addToStatusQueue(listener)
     val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
     sparkContext.ui.foreach(new SQLTab(statusStore, _))
@@ -101,9 +128,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    */
   lazy val externalCatalog: ExternalCatalogWithListener = {
     val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
-      SharedState.externalCatalogClassName(sparkContext.conf),
-      sparkContext.conf,
-      sparkContext.hadoopConfiguration)
+      SharedState.externalCatalogClassName(conf), conf, hadoopConf)
 
     val defaultDbDefinition = CatalogDatabase(
       SessionCatalog.DEFAULT_DATABASE,
@@ -121,11 +146,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     val wrapped = new ExternalCatalogWithListener(externalCatalog)
 
     // Make sure we propagate external catalog events to the spark listener bus
-    wrapped.addListener(new ExternalCatalogEventListener {
-      override def onEvent(event: ExternalCatalogEvent): Unit = {
-        sparkContext.listenerBus.post(event)
-      }
-    })
+    wrapped.addListener((event: ExternalCatalogEvent) => sparkContext.listenerBus.post(event))
 
     wrapped
   }
@@ -137,7 +158,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
-    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase(Locale.ROOT)
+    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +
@@ -192,15 +213,4 @@ object SharedState extends Logging {
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
     }
   }
-}
-
-
-/**
- * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
- * This class loader cannot be closed (its `close` method is a no-op).
- */
-private[sql] class NonClosableMutableURLClassLoader(parent: ClassLoader)
-  extends MutableURLClassLoader(Array.empty, parent) {
-
-  override def close(): Unit = {}
 }

@@ -22,8 +22,11 @@ import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy}
+import org.apache.spark.mllib.tree.model.GradientBoostedTreesModel
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
@@ -134,13 +137,20 @@ object GradientBoostedTreesRunner {
       } else {
         println(model) // Print model summary.
       }
-      val trainMSE = DecisionTreeRunner.meanSquaredError(model, training)
+      val trainMSE = meanSquaredError(model, training)
       println(s"Train mean squared error = $trainMSE")
-      val testMSE = DecisionTreeRunner.meanSquaredError(model, test)
+      val testMSE = meanSquaredError(model, test)
       println(s"Test mean squared error = $testMSE")
     }
 
     sc.stop()
   }
+
+  private[mllib] def meanSquaredError(
+      model: GradientBoostedTreesModel, data: RDD[LabeledPoint]): Double =
+    data.map { y =>
+      val err = model.predict(y.features) - y.label
+      err * err
+    }.mean()
 }
 // scalastyle:on println

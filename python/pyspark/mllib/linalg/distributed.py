@@ -30,6 +30,7 @@ from pyspark import RDD, since
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import _convert_to_vector, DenseMatrix, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
+from pyspark.sql import DataFrame
 from pyspark.storagelevel import StorageLevel
 
 
@@ -57,7 +58,8 @@ class RowMatrix(DistributedMatrix):
     Represents a row-oriented distributed Matrix with no meaningful
     row indices.
 
-    :param rows: An RDD of vectors.
+    :param rows: An RDD or DataFrame of vectors. If a DataFrame is provided, it must have a single
+                 vector typed column.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the number of
@@ -73,7 +75,7 @@ class RowMatrix(DistributedMatrix):
 
         Create a wrapper over a Java RowMatrix.
 
-        Publicly, we require that `rows` be an RDD.  However, for
+        Publicly, we require that `rows` be an RDD or DataFrame.  However, for
         internal usage, `rows` can also be a Java RowMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
@@ -93,6 +95,8 @@ class RowMatrix(DistributedMatrix):
         """
         if isinstance(rows, RDD):
             rows = rows.map(_convert_to_vector)
+            java_matrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
+        elif isinstance(rows, DataFrame):
             java_matrix = callMLlibFunc("createRowMatrix", rows, long(numRows), int(numCols))
         elif (isinstance(rows, JavaObject)
               and rows.getClass().getSimpleName() == "RowMatrix"):
@@ -270,7 +274,7 @@ class RowMatrix(DistributedMatrix):
         Reference:
          Paul G. Constantine, David F. Gleich. "Tall and skinny QR
          factorizations in MapReduce architectures"
-         ([[http://dx.doi.org/10.1145/1996092.1996103]])
+         ([[https://doi.org/10.1145/1996092.1996103]])
 
         :param: computeQ: whether to computeQ
         :return: QRDecomposition(Q: RowMatrix, R: Matrix), where
@@ -461,7 +465,8 @@ class IndexedRowMatrix(DistributedMatrix):
     """
     Represents a row-oriented distributed Matrix with indexed rows.
 
-    :param rows: An RDD of IndexedRows or (long, vector) tuples.
+    :param rows: An RDD of IndexedRows or (long, vector) tuples or a DataFrame consisting of a
+                 long typed column of indices and a vector typed column.
     :param numRows: Number of rows in the matrix. A non-positive
                     value means unknown, at which point the number
                     of rows will be determined by the max row
@@ -477,7 +482,7 @@ class IndexedRowMatrix(DistributedMatrix):
 
         Create a wrapper over a Java IndexedRowMatrix.
 
-        Publicly, we require that `rows` be an RDD.  However, for
+        Publicly, we require that `rows` be an RDD or DataFrame.  However, for
         internal usage, `rows` can also be a Java IndexedRowMatrix
         object, in which case we can wrap it directly.  This
         assists in clean matrix conversions.
@@ -506,6 +511,8 @@ class IndexedRowMatrix(DistributedMatrix):
             # IndexedRows on the Scala side.
             java_matrix = callMLlibFunc("createIndexedRowMatrix", rows.toDF(),
                                         long(numRows), int(numCols))
+        elif isinstance(rows, DataFrame):
+            java_matrix = callMLlibFunc("createIndexedRowMatrix", rows, long(numRows), int(numCols))
         elif (isinstance(rows, JavaObject)
               and rows.getClass().getSimpleName() == "IndexedRowMatrix"):
             java_matrix = rows

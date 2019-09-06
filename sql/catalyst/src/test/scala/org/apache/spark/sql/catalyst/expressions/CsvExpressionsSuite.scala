@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale}
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
@@ -225,5 +226,15 @@ class CsvExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with P
         CsvToStructs(schema, options, Literal.create(dateStr), gmtId),
         InternalRow(17836)) // number of days from 1970-01-01
     }
+  }
+
+  test("verify corrupt column") {
+    checkExceptionInExpression[AnalysisException](
+      CsvToStructs(
+        schema = StructType.fromDDL("i int, _unparsed boolean"),
+        options = Map("columnNameOfCorruptRecord" -> "_unparsed"),
+        child = Literal.create("a"),
+        timeZoneId = gmtId),
+      expectedErrMsg = "The field for corrupt records must be string type and nullable")
   }
 }

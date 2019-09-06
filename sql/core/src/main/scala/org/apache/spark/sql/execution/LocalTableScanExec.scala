@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    @transient rows: Seq[InternalRow]) extends LeafExecNode {
+    @transient rows: Seq[InternalRow]) extends LeafExecNode with InputRDDCodegen {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -76,4 +76,9 @@ case class LocalTableScanExec(
     longMetric("numOutputRows").add(taken.size)
     taken
   }
+
+  // Input is already UnsafeRows.
+  override protected val createUnsafeProjection: Boolean = false
+
+  override def inputRDD: RDD[InternalRow] = rdd
 }

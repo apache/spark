@@ -470,15 +470,12 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("zero-partition RDD") {
-    val emptyDir = Utils.createTempDir()
-    try {
+    withTempDir { emptyDir =>
       val file = sc.textFile(emptyDir.getAbsolutePath)
       assert(file.partitions.isEmpty)
       assert(file.collect().toList === Nil)
       // Test that a shuffle on the file works, because this used to be a bug
       assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    } finally {
-      Utils.deleteRecursively(emptyDir)
     }
   }
 
@@ -742,7 +739,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
         val dist = new BinomialDistribution(trials, p)
         val q = dist.cumulativeProbability(actual)
         withClue(s"p = $p: trials = $trials") {
-          assert(q >= 0.001 && q <= 0.999)
+          assert(0.0 < q && q < 1.0)
         }
       }
     }

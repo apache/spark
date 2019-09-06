@@ -22,13 +22,13 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
   def testWithMinPartitions(name: String, minPartition: Int)
       (f: KafkaOffsetRangeCalculator => Unit): Unit = {
-    val options = new DataSourceOptions(Map("minPartitions" -> minPartition.toString).asJava)
+    val options = new CaseInsensitiveStringMap(Map("minPartitions" -> minPartition.toString).asJava)
     test(s"with minPartition = $minPartition: $name") {
       f(KafkaOffsetRangeCalculator(options))
     }
@@ -36,7 +36,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
 
 
   test("with no minPartition: N TopicPartitions to N offset ranges") {
-    val calc = KafkaOffsetRangeCalculator(DataSourceOptions.empty())
+    val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
       calc.getRanges(
         fromOffsets = Map(tp1 -> 1),
@@ -64,7 +64,7 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   }
 
   test("with no minPartition: empty ranges ignored") {
-    val calc = KafkaOffsetRangeCalculator(DataSourceOptions.empty())
+    val calc = KafkaOffsetRangeCalculator(CaseInsensitiveStringMap.empty())
     assert(
       calc.getRanges(
         fromOffsets = Map(tp1 -> 1, tp2 -> 1),
@@ -139,6 +139,21 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
           KafkaOffsetRange(tp2, 1, 7, None),
           KafkaOffsetRange(tp2, 7, 14, None),
           KafkaOffsetRange(tp2, 14, 21, None)))
+  }
+
+  testWithMinPartitions("SPARK-28489: never drop offsets", 6) { calc =>
+    assert(
+      calc.getRanges(
+        fromOffsets = Map(tp1 -> 0, tp2 -> 0, tp3 -> 0),
+        untilOffsets = Map(tp1 -> 10, tp2 -> 10, tp3 -> 1)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 0, 3, None),
+          KafkaOffsetRange(tp1, 3, 6, None),
+          KafkaOffsetRange(tp1, 6, 10, None),
+          KafkaOffsetRange(tp2, 0, 3, None),
+          KafkaOffsetRange(tp2, 3, 6, None),
+          KafkaOffsetRange(tp2, 6, 10, None),
+          KafkaOffsetRange(tp3, 0, 1, None)))
   }
 
   private val tp1 = new TopicPartition("t1", 1)

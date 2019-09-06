@@ -18,26 +18,26 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-package object util {
+package object util extends Logging {
 
   /** Silences output to stderr or stdout for the duration of f */
   def quietly[A](f: => A): A = {
     val origErr = System.err
     val origOut = System.out
     try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
+      System.setErr(new PrintStream((_: Int) => {}))
+      System.setOut(new PrintStream((_: Int) => {}))
 
       f
     } finally {
@@ -46,7 +46,7 @@ package object util {
     }
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8"): String = {
+  def fileToString(file: File, encoding: Charset = UTF_8): String = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
@@ -88,15 +88,15 @@ package object util {
 
   def resourceToString(
       resource: String,
-      encoding: String = "UTF-8",
+      encoding: String = UTF_8.name(),
       classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
     new String(resourceToBytes(resource, classLoader), encoding)
   }
 
   def stringToFile(file: File, str: String): File = {
-    val out = new PrintWriter(file)
-    out.write(str)
-    out.close()
+    Utils.tryWithResource(new PrintWriter(file)) { out =>
+      out.write(str)
+    }
     file
   }
 
@@ -116,22 +116,11 @@ package object util {
 
   def stackTraceToString(t: Throwable): String = {
     val out = new java.io.ByteArrayOutputStream
-    val writer = new PrintWriter(out)
-    t.printStackTrace(writer)
-    writer.flush()
-    new String(out.toByteArray, StandardCharsets.UTF_8)
-  }
-
-  def stringOrNull(a: AnyRef): String = if (a == null) null else a.toString
-
-  def benchmark[A](f: => A): A = {
-    val startTime = System.nanoTime()
-    val ret = f
-    val endTime = System.nanoTime()
-    // scalastyle:off println
-    println(s"${(endTime - startTime).toDouble / 1000000}ms")
-    // scalastyle:on println
-    ret
+    Utils.tryWithResource(new PrintWriter(out)) { writer =>
+      t.printStackTrace(writer)
+      writer.flush()
+    }
+    new String(out.toByteArray, UTF_8)
   }
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
@@ -155,7 +144,6 @@ package object util {
 
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
-
   def escapeSingleQuotedString(str: String): String = {
     val builder = StringBuilder.newBuilder
 
@@ -167,10 +155,37 @@ package object util {
     builder.toString()
   }
 
-  /* FIX ME
-  implicit class debugLogging(a: Any) {
-    def debugLogging() {
-      org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
+  /** Whether we have warned about plan string truncation yet. */
+  private val truncationWarningPrinted = new AtomicBoolean(false)
+
+  /**
+   * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
+   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
+   *
+   * @return the trimmed and formatted string.
+   */
+  def truncatedString[T](
+      seq: Seq[T],
+      start: String,
+      sep: String,
+      end: String,
+      maxFields: Int): String = {
+    if (seq.length > maxFields) {
+      if (truncationWarningPrinted.compareAndSet(false, true)) {
+        logWarning(
+          "Truncated the string representation of a plan since it was too large. This " +
+            s"behavior can be adjusted by setting '${SQLConf.MAX_TO_STRING_FIELDS.key}'.")
+      }
+      val numFields = math.max(0, maxFields - 1)
+      seq.take(numFields).mkString(
+        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
+    } else {
+      seq.mkString(start, sep, end)
     }
-  } */
+  }
+
+  /** Shorthand for calling truncatedString() without start or end strings. */
+  def truncatedString[T](seq: Seq[T], sep: String, maxFields: Int): String = {
+    truncatedString(seq, "", sep, "", maxFields)
+  }
 }

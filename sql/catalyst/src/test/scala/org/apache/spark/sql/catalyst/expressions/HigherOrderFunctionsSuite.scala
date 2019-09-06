@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -254,13 +255,26 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     val isEven: Expression => Expression = x => x % 2 === 0
     val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val alwaysFalse: Expression => Expression = _ => Literal.FalseLiteral
+    val alwaysNull: Expression => Expression = _ => Literal(null, BooleanType)
 
-    checkEvaluation(exists(ai0, isEven), true)
-    checkEvaluation(exists(ai0, isNullOrOdd), true)
-    checkEvaluation(exists(ai1, isEven), false)
-    checkEvaluation(exists(ai1, isNullOrOdd), true)
-    checkEvaluation(exists(ain, isEven), null)
-    checkEvaluation(exists(ain, isNullOrOdd), null)
+    for (followThreeValuedLogic <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key
+          -> followThreeValuedLogic.toString) {
+        checkEvaluation(exists(ai0, isEven), true)
+        checkEvaluation(exists(ai0, isNullOrOdd), true)
+        checkEvaluation(exists(ai0, alwaysFalse), false)
+        checkEvaluation(exists(ai0, alwaysNull), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(ai1, isEven), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(ai1, isNullOrOdd), true)
+        checkEvaluation(exists(ai1, alwaysFalse), false)
+        checkEvaluation(exists(ai1, alwaysNull), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(ain, isEven), null)
+        checkEvaluation(exists(ain, isNullOrOdd), null)
+        checkEvaluation(exists(ain, alwaysFalse), null)
+        checkEvaluation(exists(ain, alwaysNull), null)
+      }
+    }
 
     val as0 =
       Literal.create(Seq("a0", "b1", "a2", "c3"), ArrayType(StringType, containsNull = false))
@@ -269,14 +283,75 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
     val startsWithA: Expression => Expression = x => x.startsWith("a")
 
-    checkEvaluation(exists(as0, startsWithA), true)
-    checkEvaluation(exists(as1, startsWithA), false)
-    checkEvaluation(exists(asn, startsWithA), null)
+    for (followThreeValuedLogic <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key
+          -> followThreeValuedLogic.toString) {
+        checkEvaluation(exists(as0, startsWithA), true)
+        checkEvaluation(exists(as0, alwaysFalse), false)
+        checkEvaluation(exists(as0, alwaysNull), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(as1, startsWithA), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(as1, alwaysFalse), false)
+        checkEvaluation(exists(as1, alwaysNull), if (followThreeValuedLogic) null else false)
+        checkEvaluation(exists(asn, startsWithA), null)
+        checkEvaluation(exists(asn, alwaysFalse), null)
+        checkEvaluation(exists(asn, alwaysNull), null)
+      }
+    }
 
     val aai = Literal.create(Seq(Seq(1, 2, 3), null, Seq(4, 5)),
       ArrayType(ArrayType(IntegerType, containsNull = false), containsNull = true))
     checkEvaluation(transform(aai, ix => exists(ix, isNullOrOdd)),
       Seq(true, null, true))
+  }
+
+  test("ArrayForAll") {
+    def forall(expr: Expression, f: Expression => Expression): Expression = {
+      val ArrayType(et, cn) = expr.dataType
+      ArrayForAll(expr, createLambda(et, cn, f)).bind(validateBinding)
+    }
+
+    val ai0 = Literal.create(Seq(2, 4, 8), ArrayType(IntegerType, containsNull = false))
+    val ai1 = Literal.create(Seq[Integer](1, null, 3), ArrayType(IntegerType, containsNull = true))
+    val ai2 = Literal.create(Seq[Integer](2, null, 8), ArrayType(IntegerType, containsNull = true))
+    val ain = Literal.create(null, ArrayType(IntegerType, containsNull = false))
+
+    val isEven: Expression => Expression = x => x % 2 === 0
+    val isNullOrOdd: Expression => Expression = x => x.isNull || x % 2 === 1
+    val alwaysFalse: Expression => Expression = _ => Literal.FalseLiteral
+    val alwaysNull: Expression => Expression = _ => Literal(null, BooleanType)
+
+    checkEvaluation(forall(ai0, isEven), true)
+    checkEvaluation(forall(ai0, isNullOrOdd), false)
+    checkEvaluation(forall(ai0, alwaysFalse), false)
+    checkEvaluation(forall(ai0, alwaysNull), null)
+    checkEvaluation(forall(ai1, isEven), false)
+    checkEvaluation(forall(ai1, isNullOrOdd), true)
+    checkEvaluation(forall(ai1, alwaysFalse), false)
+    checkEvaluation(forall(ai1, alwaysNull), null)
+    checkEvaluation(forall(ai2, isEven), null)
+    checkEvaluation(forall(ai2, isNullOrOdd), false)
+    checkEvaluation(forall(ai2, alwaysFalse), false)
+    checkEvaluation(forall(ai2, alwaysNull), null)
+    checkEvaluation(forall(ain, isEven), null)
+    checkEvaluation(forall(ain, isNullOrOdd), null)
+    checkEvaluation(forall(ain, alwaysFalse), null)
+    checkEvaluation(forall(ain, alwaysNull), null)
+
+    val as0 =
+      Literal.create(Seq("a0", "a1", "a2", "a3"), ArrayType(StringType, containsNull = false))
+    val as1 = Literal.create(Seq(null, "b", "c"), ArrayType(StringType, containsNull = true))
+    val asn = Literal.create(null, ArrayType(StringType, containsNull = false))
+
+    val startsWithA: Expression => Expression = x => x.startsWith("a")
+
+    checkEvaluation(forall(as0, startsWithA), true)
+    checkEvaluation(forall(as1, startsWithA), false)
+    checkEvaluation(forall(asn, startsWithA), null)
+
+    val aai = Literal.create(Seq(Seq(1, 3, null), null, Seq(4, 5)),
+      ArrayType(ArrayType(IntegerType, containsNull = true), containsNull = true))
+    checkEvaluation(transform(aai, ix => forall(ix, isNullOrOdd)),
+      Seq(true, null, false))
   }
 
   test("ArrayAggregate") {
@@ -310,13 +385,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
 
   test("TransformKeys") {
     val ai0 = Literal.create(
-      Map(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4),
+      create_map(1 -> 1, 2 -> 2, 3 -> 3, 4 -> 4),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
     val ai1 = Literal.create(
       Map.empty[Int, Int],
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val ai2 = Literal.create(
-      Map(1 -> 1, 2 -> null, 3 -> 3),
+      create_map(1 -> 1, 2 -> null, 3 -> 3),
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val ai3 = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
 
@@ -324,26 +399,27 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val plusValue: (Expression, Expression) => Expression = (k, v) => k + v
     val modKey: (Expression, Expression) => Expression = (k, v) => k % 3
 
-    checkEvaluation(transformKeys(ai0, plusOne), Map(2 -> 1, 3 -> 2, 4 -> 3, 5 -> 4))
-    checkEvaluation(transformKeys(ai0, plusValue), Map(2 -> 1, 4 -> 2, 6 -> 3, 8 -> 4))
+    checkEvaluation(transformKeys(ai0, plusOne), create_map(2 -> 1, 3 -> 2, 4 -> 3, 5 -> 4))
+    checkEvaluation(transformKeys(ai0, plusValue), create_map(2 -> 1, 4 -> 2, 6 -> 3, 8 -> 4))
     checkEvaluation(
-      transformKeys(transformKeys(ai0, plusOne), plusValue), Map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
-    checkEvaluation(transformKeys(ai0, modKey),
-      ArrayBasedMapData(Array(1, 2, 0, 1), Array(1, 2, 3, 4)))
+      transformKeys(transformKeys(ai0, plusOne), plusValue),
+      create_map(3 -> 1, 5 -> 2, 7 -> 3, 9 -> 4))
+    // Duplicated map keys will be removed w.r.t. the last wins policy.
+    checkEvaluation(transformKeys(ai0, modKey), create_map(1 -> 4, 2 -> 2, 0 -> 3))
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(transformKeys(ai1, plusOne), Map.empty[Int, Int])
     checkEvaluation(
       transformKeys(transformKeys(ai1, plusOne), plusValue), Map.empty[Int, Int])
-    checkEvaluation(transformKeys(ai2, plusOne), Map(2 -> 1, 3 -> null, 4 -> 3))
+    checkEvaluation(transformKeys(ai2, plusOne), create_map(2 -> 1, 3 -> null, 4 -> 3))
     checkEvaluation(
-      transformKeys(transformKeys(ai2, plusOne), plusOne), Map(3 -> 1, 4 -> null, 5 -> 3))
+      transformKeys(transformKeys(ai2, plusOne), plusOne), create_map(3 -> 1, 4 -> null, 5 -> 3))
     checkEvaluation(transformKeys(ai3, plusOne), null)
 
     val as0 = Literal.create(
-      Map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"),
+      create_map("a" -> "xy", "bb" -> "yz", "ccc" -> "zx"),
       MapType(StringType, StringType, valueContainsNull = false))
     val as1 = Literal.create(
-      Map("a" -> "xy", "bb" -> "yz", "ccc" -> null),
+      create_map("a" -> "xy", "bb" -> "yz", "ccc" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
     val as2 = Literal.create(null,
       MapType(StringType, StringType, valueContainsNull = false))
@@ -355,26 +431,35 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       (k, v) => Length(k) + 1
 
     checkEvaluation(
-      transformKeys(as0, concatValue), Map("axy" -> "xy", "bbyz" -> "yz", "ccczx" -> "zx"))
+      transformKeys(as0, concatValue), create_map("axy" -> "xy", "bbyz" -> "yz", "ccczx" -> "zx"))
     checkEvaluation(
       transformKeys(transformKeys(as0, concatValue), concatValue),
-      Map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
+      create_map("axyxy" -> "xy", "bbyzyz" -> "yz", "ccczxzx" -> "zx"))
     checkEvaluation(transformKeys(as3, concatValue), Map.empty[String, String])
     checkEvaluation(
       transformKeys(transformKeys(as3, concatValue), convertKeyToKeyLength),
       Map.empty[Int, String])
     checkEvaluation(transformKeys(as0, convertKeyToKeyLength),
-      Map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
+      create_map(2 -> "xy", 3 -> "yz", 4 -> "zx"))
     checkEvaluation(transformKeys(as1, convertKeyToKeyLength),
-      Map(2 -> "xy", 3 -> "yz", 4 -> null))
+      create_map(2 -> "xy", 3 -> "yz", 4 -> null))
     checkEvaluation(transformKeys(as2, convertKeyToKeyLength), null)
     checkEvaluation(transformKeys(as3, convertKeyToKeyLength), Map.empty[Int, String])
 
     val ax0 = Literal.create(
-      Map(1 -> "x", 2 -> "y", 3 -> "z"),
+      create_map(1 -> "x", 2 -> "y", 3 -> "z"),
       MapType(IntegerType, StringType, valueContainsNull = false))
 
-    checkEvaluation(transformKeys(ax0, plusOne), Map(2 -> "x", 3 -> "y", 4 -> "z"))
+    checkEvaluation(transformKeys(ax0, plusOne), create_map(2 -> "x", 3 -> "y", 4 -> "z"))
+
+    // map key can't be map
+    val makeMap: (Expression, Expression) => Expression = (k, v) => CreateMap(Seq(k, v))
+    val map = transformKeys(ai0, makeMap)
+    map.checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess => fail("should not allow map as map key")
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("The key of map cannot be/contain map"))
+    }
   }
 
   test("TransformValues") {
@@ -456,16 +541,13 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         .bind(validateBinding)
     }
 
-    val mii0 = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30),
+    val mii0 = Literal.create(create_map(1 -> 10, 2 -> 20, 3 -> 30),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val mii1 = Literal.create(Map(1 -> -1, 2 -> -2, 4 -> -4),
+    val mii1 = Literal.create(create_map(1 -> -1, 2 -> -2, 4 -> -4),
       MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val mii2 = Literal.create(Map(1 -> null, 2 -> -2, 3 -> null),
+    val mii2 = Literal.create(create_map(1 -> null, 2 -> -2, 3 -> null),
       MapType(IntegerType, IntegerType, valueContainsNull = true))
     val mii3 = Literal.create(Map(), MapType(IntegerType, IntegerType, valueContainsNull = false))
-    val mii4 = MapFromArrays(
-      Literal.create(Seq(2, 2), ArrayType(IntegerType, false)),
-      Literal.create(Seq(20, 200), ArrayType(IntegerType, false)))
     val miin = Literal.create(null, MapType(IntegerType, IntegerType, valueContainsNull = false))
 
     val multiplyKeyWithValues: (Expression, Expression, Expression) => Expression = {
@@ -482,12 +564,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       map_zip_with(mii0, mii3, multiplyKeyWithValues),
       Map(1 -> null, 2 -> null, 3 -> null))
     checkEvaluation(
-      map_zip_with(mii0, mii4, multiplyKeyWithValues),
-      Map(1 -> null, 2 -> 800, 3 -> null))
-    checkEvaluation(
-      map_zip_with(mii4, mii0, multiplyKeyWithValues),
-      Map(2 -> 800, 1 -> null, 3 -> null))
-    checkEvaluation(
       map_zip_with(mii0, miin, multiplyKeyWithValues),
       null)
     assert(map_zip_with(mii0, mii1, multiplyKeyWithValues).dataType ===
@@ -500,9 +576,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val mss2 = Literal.create(Map("c" -> null, "b" -> "t", "a" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
     val mss3 = Literal.create(Map(), MapType(StringType, StringType, valueContainsNull = false))
-    val mss4 = MapFromArrays(
-      Literal.create(Seq("a", "a"), ArrayType(StringType, false)),
-      Literal.create(Seq("a", "n"), ArrayType(StringType, false)))
     val mssn = Literal.create(null, MapType(StringType, StringType, valueContainsNull = false))
 
     val concat: (Expression, Expression, Expression) => Expression = {
@@ -519,12 +592,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       map_zip_with(mss0, mss3, concat),
       Map("a" -> null, "b" -> null, "d" -> null))
     checkEvaluation(
-      map_zip_with(mss0, mss4, concat),
-      Map("a" -> "axa", "b" -> null, "d" -> null))
-    checkEvaluation(
-      map_zip_with(mss4, mss0, concat),
-      Map("a" -> "aax", "b" -> null, "d" -> null))
-    checkEvaluation(
       map_zip_with(mss0, mssn, concat),
       null)
     assert(map_zip_with(mss0, mss1, concat).dataType ===
@@ -539,9 +606,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     val mbb2 = Literal.create(Map(b(1, 3) -> null, b(1, 2) -> b(2), b(2, 1) -> null),
       MapType(BinaryType, BinaryType, valueContainsNull = true))
     val mbb3 = Literal.create(Map(), MapType(BinaryType, BinaryType, valueContainsNull = false))
-    val mbb4 = MapFromArrays(
-      Literal.create(Seq(b(2, 1), b(2, 1)), ArrayType(BinaryType, false)),
-      Literal.create(Seq(b(1), b(9)), ArrayType(BinaryType, false)))
     val mbbn = Literal.create(null, MapType(BinaryType, BinaryType, valueContainsNull = false))
 
     checkEvaluation(
@@ -553,12 +617,6 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(
       map_zip_with(mbb0, mbb3, concat),
       Map(b(1, 2) -> null, b(2, 1) -> null, b(1, 3) -> null))
-    checkEvaluation(
-      map_zip_with(mbb0, mbb4, concat),
-      Map(b(1, 2) -> null, b(2, 1) -> b(2, 1, 5, 1), b(1, 3) -> null))
-    checkEvaluation(
-      map_zip_with(mbb4, mbb0, concat),
-      Map(b(2, 1) -> b(2, 1, 1, 5), b(1, 2) -> null, b(1, 3) -> null))
     checkEvaluation(
       map_zip_with(mbb0, mbbn, concat),
       null)

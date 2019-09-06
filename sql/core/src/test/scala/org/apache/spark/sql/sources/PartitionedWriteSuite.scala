@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
 private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
@@ -43,7 +43,7 @@ private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String
   }
 }
 
-class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
+class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("write many partitions") {

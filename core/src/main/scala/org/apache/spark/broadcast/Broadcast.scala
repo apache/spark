@@ -92,10 +92,9 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
   /**
    * Destroy all data and metadata related to this broadcast variable. Use this with caution;
    * once a broadcast variable has been destroyed, it cannot be used again.
-   * This method blocks until destroy has completed
    */
   def destroy() {
-    destroy(blocking = true)
+    destroy(blocking = false)
   }
 
   /**

@@ -224,9 +224,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setDouble(int ordinal, double value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
     Platform.putDouble(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -255,9 +252,6 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setFloat(int ordinal, float value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     Platform.putFloat(baseObject, getFieldOffset(ordinal), value);
   }
 
@@ -305,46 +299,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public Object get(int ordinal, DataType dataType) {
-    if (isNullAt(ordinal) || dataType instanceof NullType) {
-      return null;
-    } else if (dataType instanceof BooleanType) {
-      return getBoolean(ordinal);
-    } else if (dataType instanceof ByteType) {
-      return getByte(ordinal);
-    } else if (dataType instanceof ShortType) {
-      return getShort(ordinal);
-    } else if (dataType instanceof IntegerType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof LongType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof FloatType) {
-      return getFloat(ordinal);
-    } else if (dataType instanceof DoubleType) {
-      return getDouble(ordinal);
-    } else if (dataType instanceof DecimalType) {
-      DecimalType dt = (DecimalType) dataType;
-      return getDecimal(ordinal, dt.precision(), dt.scale());
-    } else if (dataType instanceof DateType) {
-      return getInt(ordinal);
-    } else if (dataType instanceof TimestampType) {
-      return getLong(ordinal);
-    } else if (dataType instanceof BinaryType) {
-      return getBinary(ordinal);
-    } else if (dataType instanceof StringType) {
-      return getUTF8String(ordinal);
-    } else if (dataType instanceof CalendarIntervalType) {
-      return getInterval(ordinal);
-    } else if (dataType instanceof StructType) {
-      return getStruct(ordinal, ((StructType) dataType).size());
-    } else if (dataType instanceof ArrayType) {
-      return getArray(ordinal);
-    } else if (dataType instanceof MapType) {
-      return getMap(ordinal);
-    } else if (dataType instanceof UserDefinedType) {
-      return get(ordinal, ((UserDefinedType)dataType).sqlType());
-    } else {
-      throw new UnsupportedOperationException("Unsupported data type " + dataType.simpleString());
-    }
+    return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
   }
 
   @Override
@@ -586,14 +541,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
-    if (baseObject instanceof byte[] && baseOffset == Platform.BYTE_ARRAY_OFFSET
-      && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
-    } else {
-      byte[] bytes = new byte[sizeInBytes];
-      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-      return bytes;
-    }
+    return UnsafeDataUtils.getBytes(baseObject, baseOffset, sizeInBytes);
   }
 
   // This is for debugging

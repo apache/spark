@@ -2,12 +2,27 @@
 layout: global
 displayTitle: Spark SQL, DataFrames and Datasets Guide
 title: Spark SQL and DataFrames
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Spark SQL is a Spark module for structured data processing. Unlike the basic Spark RDD API, the interfaces provided
 by Spark SQL provide Spark with more information about the structure of both the data and the computation being performed. Internally,
 Spark SQL uses this extra information to perform extra optimizations. There are several ways to
-interact with Spark SQL including SQL and the Dataset API. When computing a result
+interact with Spark SQL including SQL and the Dataset API. When computing a result,
 the same execution engine is used, independent of which API/language you are using to express the
 computation. This unification means that developers can easily switch back and forth between
 different APIs based on which provides the most natural way to express a given transformation.

@@ -146,7 +146,7 @@ class NaiveBayes @Since("1.5.0") (
           requireZeroOneBernoulliValues
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
     }
 
@@ -196,7 +196,7 @@ class NaiveBayes @Since("1.5.0") (
         case Bernoulli => math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
-          throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
       }
       var j = 0
       while (j < numFeatures) {
@@ -287,15 +287,15 @@ class NaiveBayesModel private[ml] (
   private lazy val (thetaMinusNegTheta, negThetaSum) = $(modelType) match {
     case Multinomial => (None, None)
     case Bernoulli =>
-      val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
+      val negTheta = theta.map(value => math.log1p(-math.exp(value)))
       val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
       val thetaMinusNegTheta = theta.map { value =>
-        value - math.log(1.0 - math.exp(value))
+        value - math.log1p(-math.exp(value))
       }
       (Option(thetaMinusNegTheta), Option(negTheta.multiply(ones)))
     case _ =>
       // This should never happen.
-      throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+      throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
   }
 
   @Since("1.6.0")
@@ -329,7 +329,7 @@ class NaiveBayesModel private[ml] (
         bernoulliCalculation(features)
       case _ =>
         // This should never happen.
-        throw new UnknownError(s"Invalid modelType: ${$(modelType)}.")
+        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
     }
   }
 

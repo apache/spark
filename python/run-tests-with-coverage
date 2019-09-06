@@ -50,8 +50,6 @@ export SPARK_CONF_DIR="$COVERAGE_DIR/conf"
 # This environment variable enables the coverage.
 export COVERAGE_PROCESS_START="$FWDIR/.coveragerc"
 
-# If you'd like to run a specific unittest class, you could do such as
-# SPARK_TESTING=1 ../bin/pyspark pyspark.sql.tests VectorizedUDFTests
 ./run-tests "$@"
 
 # Don't run coverage for the coverage command itself

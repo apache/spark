@@ -81,6 +81,10 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+class FooAnnotation extends scala.annotation.StaticAnnotation
+
+case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
+
 case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
 
 object TestingUDT {
@@ -109,6 +113,30 @@ object TestingUDT {
   }
 }
 
+/** An example derived from Twitter/Scrooge codegen for thrift  */
+object ScroogeLikeExample {
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
+
+  def unapply(_item: ScroogeLikeExample): Option[Int] = Some(_item.x)
+
+  class Immutable(val x: Int) extends ScroogeLikeExample
+}
+
+trait ScroogeLikeExample extends Product1[Int] with Serializable {
+  import ScroogeLikeExample._
+
+  def x: Int
+
+  def _1: Int = x
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+
+  override def equals(other: Any): Boolean =
+    canEqual(other) &&
+      this.x ==  other.asInstanceOf[ScroogeLikeExample].x
+
+  override def hashCode: Int = x
+}
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
@@ -120,6 +148,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression =
     deserializerForType(ScalaReflection.localTypeOf[T])
+
+  test("isSubtype") {
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[Int]]))
+    assert(!isSubtype(localTypeOf[Option[_]], localTypeOf[Option[Int]]))
+  }
 
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
@@ -361,5 +395,19 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
+    val schema = schemaFor[ScroogeLikeExample]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-27625: annotated data types") {
+    assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
+      StructField("f1", StringType),
+      StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
   }
 }

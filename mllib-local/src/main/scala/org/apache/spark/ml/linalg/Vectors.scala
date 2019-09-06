@@ -106,7 +106,7 @@ sealed trait Vector extends Serializable {
    */
   @Since("2.0.0")
   def copy: Vector = {
-    throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
+    throw new UnsupportedOperationException(s"copy is not implemented for ${this.getClass}.")
   }
 
   /**
@@ -602,6 +602,15 @@ class SparseVector @Since("2.0.0") (
   }
 
   private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  override def apply(i: Int): Double = {
+    if (i < 0 || i >= size) {
+      throw new IndexOutOfBoundsException(s"Index $i out of bounds [0, $size)")
+    }
+
+    val j = util.Arrays.binarySearch(indices, i)
+    if (j < 0) 0.0 else values(j)
+  }
 
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0

@@ -26,9 +26,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * Base class for operators that exchange data among multiple threads or processes.
@@ -39,6 +40,8 @@ import org.apache.spark.sql.types.StructType
  */
 abstract class Exchange extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
+
+  override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
 }
 
 /**
@@ -49,11 +52,17 @@ abstract class Exchange extends UnaryExecNode {
 case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
   extends LeafExecNode {
 
+  override def supportsColumnar: Boolean = child.supportsColumnar
+
   // Ignore this wrapper for canonicalizing.
   override def doCanonicalize(): SparkPlan = child.canonicalized
 
   def doExecute(): RDD[InternalRow] = {
     child.execute()
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    child.executeColumnar()
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
@@ -76,6 +85,15 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
 
   override def outputOrdering: Seq[SortOrder] = {
     child.outputOrdering.map(updateAttr(_).asInstanceOf[SortOrder])
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val cdgen = ExplainUtils.getCodegenId(this)
+    val reuse_op_str = ExplainUtils.getOpId(child)
+    s"""
+       |(${ExplainUtils.getOpId(this)}) $nodeName ${cdgen} [Reuses operator id: $reuse_op_str]
+       |Output : ${output}
+     """.stripMargin
   }
 }
 

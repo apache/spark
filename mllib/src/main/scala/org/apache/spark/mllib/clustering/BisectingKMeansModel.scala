@@ -41,11 +41,12 @@ import org.apache.spark.sql.{Row, SparkSession}
 @Since("1.6.0")
 class BisectingKMeansModel private[clustering] (
     private[clustering] val root: ClusteringTreeNode,
-    @Since("2.4.0") val distanceMeasure: String
+    @Since("2.4.0") val distanceMeasure: String,
+    @Since("3.0.0") val trainingCost: Double
   ) extends Serializable with Saveable with Logging {
 
   @Since("1.6.0")
-  def this(root: ClusteringTreeNode) = this(root, DistanceMeasure.EUCLIDEAN)
+  def this(root: ClusteringTreeNode) = this(root, DistanceMeasure.EUCLIDEAN, 0.0)
 
   private val distanceMeasureInstance: DistanceMeasure =
     DistanceMeasure.decodeFromString(distanceMeasure)
@@ -109,10 +110,8 @@ class BisectingKMeansModel private[clustering] (
 
   @Since("2.0.0")
   override def save(sc: SparkContext, path: String): Unit = {
-    BisectingKMeansModel.SaveLoadV2_0.save(sc, this, path)
+    BisectingKMeansModel.SaveLoadV3_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "2.0"
 }
 
 @Since("2.0.0")
@@ -128,11 +127,15 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       case (SaveLoadV2_0.thisClassName, SaveLoadV2_0.thisFormatVersion) =>
         val model = SaveLoadV2_0.load(sc, path)
         model
+      case (SaveLoadV3_0.thisClassName, SaveLoadV3_0.thisFormatVersion) =>
+        val model = SaveLoadV3_0.load(sc, path)
+        model
       case _ => throw new Exception(
         s"BisectingKMeansModel.load did not recognize model with (className, format version):" +
           s"($loadedClassName, $formatVersion).  Supported:\n" +
           s"  (${SaveLoadV1_0.thisClassName}, ${SaveLoadV1_0.thisClassName}\n" +
-          s"  (${SaveLoadV2_0.thisClassName}, ${SaveLoadV2_0.thisClassName})")
+          s"  (${SaveLoadV2_0.thisClassName}, ${SaveLoadV2_0.thisClassName})\n" +
+          s"  (${SaveLoadV3_0.thisClassName}, ${SaveLoadV3_0.thisClassName})")
     }
   }
 
@@ -195,7 +198,8 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
       val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
       val rootNode = buildTree(rootId, nodes)
-      new BisectingKMeansModel(rootNode, DistanceMeasure.EUCLIDEAN)
+      val totalCost = rootNode.leafNodes.map(_.cost).sum
+      new BisectingKMeansModel(rootNode, DistanceMeasure.EUCLIDEAN, totalCost)
     }
   }
 
@@ -231,7 +235,46 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
       val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
       val rootNode = buildTree(rootId, nodes)
-      new BisectingKMeansModel(rootNode, distanceMeasure)
+      val totalCost = rootNode.leafNodes.map(_.cost).sum
+      new BisectingKMeansModel(rootNode, distanceMeasure, totalCost)
+    }
+  }
+
+  private[clustering] object SaveLoadV3_0 {
+    private[clustering] val thisFormatVersion = "3.0"
+
+    private[clustering]
+    val thisClassName = "org.apache.spark.mllib.clustering.BisectingKMeansModel"
+
+    def save(sc: SparkContext, model: BisectingKMeansModel, path: String): Unit = {
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
+          ~ ("rootId" -> model.root.index) ~ ("distanceMeasure" -> model.distanceMeasure)
+          ~ ("trainingCost" -> model.trainingCost)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      val data = getNodes(model.root).map(node => Data(node.index, node.size,
+        node.centerWithNorm.vector, node.centerWithNorm.norm, node.cost, node.height,
+        node.children.map(_.index)))
+      spark.createDataFrame(data).write.parquet(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): BisectingKMeansModel = {
+      implicit val formats: DefaultFormats = DefaultFormats
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+      val rootId = (metadata \ "rootId").extract[Int]
+      val distanceMeasure = (metadata \ "distanceMeasure").extract[String]
+      val trainingCost = (metadata \ "trainingCost").extract[Double]
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+      val rows = spark.read.parquet(Loader.dataPath(path))
+      Loader.checkSchema[Data](rows.schema)
+      val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
+      val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap
+      val rootNode = buildTree(rootId, nodes)
+      new BisectingKMeansModel(rootNode, distanceMeasure, trainingCost)
     }
   }
 }

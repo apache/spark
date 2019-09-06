@@ -2,6 +2,21 @@
 layout: global
 title: Parquet Files
 displayTitle: Parquet Files
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -9,7 +24,7 @@ displayTitle: Parquet Files
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data. When writing Parquet files, all columns are automatically converted to be nullable for
+of the original data. When reading Parquet files, all columns are automatically converted to be nullable for
 compatibility reasons.
 
 ### Loading Data Programmatically
@@ -157,9 +172,10 @@ turned it off by default starting from 1.5.0. You may enable it by
 
 ### Hive metastore Parquet table conversion
 
-When reading from and writing to Hive metastore Parquet tables, Spark SQL will try to use its own
-Parquet support instead of Hive SerDe for better performance. This behavior is controlled by the
-`spark.sql.hive.convertMetastoreParquet` configuration, and is turned on by default.
+When reading from Hive metastore Parquet tables and writing to non-partitioned Hive metastore
+Parquet tables, Spark SQL will try to use its own Parquet support instead of Hive SerDe for
+better performance. This behavior is controlled by the `spark.sql.hive.convertMetastoreParquet`
+configuration, and is turned on by default.
 
 #### Hive/Parquet Schema Reconciliation
 
@@ -292,18 +308,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     <p>
       When true, the Parquet data source merges schemas collected from all data files, otherwise the
       schema is picked from the summary file or a random data file if no summary file is available.
-    </p>
-  </td>
-</tr>
-<tr>
-  <td><code>spark.sql.optimizer.metadataOnly</code></td>
-  <td>true</td>
-  <td>
-    <p>
-      When true, enable the metadata-only query optimization that use the table's metadata to
-      produce the partition columns instead of table scans. It applies when all the columns scanned
-      are partition columns and the query has an aggregate operator that satisfies distinct
-      semantics.
     </p>
   </td>
 </tr>

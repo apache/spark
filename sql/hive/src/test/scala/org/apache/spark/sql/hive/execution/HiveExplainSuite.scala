@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 /**
  * A set of tests that validates support for Hive Explain command.
@@ -180,6 +184,52 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         spark.table(tableName).explain(extended = false)
       }
       assert(output.toString.contains(s"Scan hive default.$tableName"))
+    }
+  }
+
+  test("SPARK-26661: Show actual class name of the writing command in CTAS explain") {
+    Seq(true, false).foreach { convertCTAS =>
+      withSQLConf(
+          HiveUtils.CONVERT_METASTORE_CTAS.key -> convertCTAS.toString,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertCTAS.toString) {
+
+        val df = sql(s"EXPLAIN CREATE TABLE tab1 STORED AS PARQUET AS SELECT * FROM range(2)")
+        val keywords = if (convertCTAS) {
+          Seq(
+            s"Execute ${Utils.getSimpleName(classOf[OptimizedCreateHiveTableAsSelectCommand])}",
+            Utils.getSimpleName(classOf[InsertIntoHadoopFsRelationCommand]))
+        } else {
+          Seq(
+            s"Execute ${Utils.getSimpleName(classOf[CreateHiveTableAsSelectCommand])}",
+            Utils.getSimpleName(classOf[InsertIntoHiveTable]))
+        }
+        checkKeywordsExist(df, keywords: _*)
+      }
+    }
+  }
+
+  test("SPARK-28595: explain should not trigger partition listing") {
+    Seq(true, false).foreach { legacyBucketedScan =>
+      withSQLConf(
+        SQLConf.LEGACY_BUCKETED_TABLE_SCAN_OUTPUT_ORDERING.key -> legacyBucketedScan.toString) {
+        HiveCatalogMetrics.reset()
+        withTable("t") {
+          sql(
+            """
+              |CREATE TABLE t USING json
+              |PARTITIONED BY (j)
+              |CLUSTERED BY (i) SORTED BY (i) INTO 4 BUCKETS
+              |AS SELECT 1 i, 2 j
+            """.stripMargin)
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+          spark.table("t").sort($"i").explain()
+          if (legacyBucketedScan) {
+            assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount > 0)
+          } else {
+            assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == 0)
+          }
+        }
+      }
     }
   }
 }

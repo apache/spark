@@ -23,10 +23,13 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -124,34 +127,43 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, null) ::
       (null, null, null) :: Nil)
 
-  test("basic IN predicate test") {
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
+  private def checkInAndInSet(in: In, expected: Any): Unit = {
+    // expecting all in.list are Literal or NonFoldableLiteral.
+    checkEvaluation(in, expected)
+    checkEvaluation(InSet(in.value, HashSet() ++ in.list.map(_.eval())), expected)
+  }
+
+  test("basic IN/INSET predicate test") {
+    checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
       Literal(2))), null)
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType),
+    checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType),
       Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty), null)
-    checkEvaluation(In(Literal(1), Seq.empty), false)
-    checkEvaluation(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
-    checkEvaluation(In(Literal(1), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+    checkInAndInSet(In(NonFoldableLiteral.create(null, IntegerType), Seq.empty), null)
+    checkInAndInSet(In(Literal(1), Seq.empty), false)
+    checkInAndInSet(In(Literal(1), Seq(NonFoldableLiteral.create(null, IntegerType))), null)
+    checkInAndInSet(In(Literal(1), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
       true)
-    checkEvaluation(In(Literal(2), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
+    checkInAndInSet(In(Literal(2), Seq(Literal(1), NonFoldableLiteral.create(null, IntegerType))),
       null)
-    checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))), true)
-    checkEvaluation(In(Literal(2), Seq(Literal(1), Literal(2))), true)
-    checkEvaluation(In(Literal(3), Seq(Literal(1), Literal(2))), false)
+    checkInAndInSet(In(Literal(1), Seq(Literal(1), Literal(2))), true)
+    checkInAndInSet(In(Literal(2), Seq(Literal(1), Literal(2))), true)
+    checkInAndInSet(In(Literal(3), Seq(Literal(1), Literal(2))), false)
+
     checkEvaluation(
       And(In(Literal(1), Seq(Literal(1), Literal(2))), In(Literal(2), Seq(Literal(1),
         Literal(2)))),
       true)
+    checkEvaluation(
+      And(InSet(Literal(1), HashSet(1, 2)), InSet(Literal(2), Set(1, 2))),
+      true)
 
     val ns = NonFoldableLiteral.create(null, StringType)
-    checkEvaluation(In(ns, Seq(Literal("1"), Literal("2"))), null)
-    checkEvaluation(In(ns, Seq(ns)), null)
-    checkEvaluation(In(Literal("a"), Seq(ns)), null)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"), ns)), true)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
-    checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
-
+    checkInAndInSet(In(ns, Seq(Literal("1"), Literal("2"))), null)
+    checkInAndInSet(In(ns, Seq(ns)), null)
+    checkInAndInSet(In(Literal("a"), Seq(ns)), null)
+    checkInAndInSet(In(Literal("^Ba*n"), Seq(Literal("^Ba*n"), ns)), true)
+    checkInAndInSet(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
+    checkInAndInSet(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
   }
 
   test("IN with different types") {
@@ -187,11 +199,12 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       } else {
         false
       }
-      checkEvaluation(In(input(0), input.slice(1, 10)), expected)
+      checkInAndInSet(In(input(0), input.slice(1, 10)), expected)
     }
 
     val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>
-      RandomDataGenerator.forType(t).isDefined && !t.isInstanceOf[DecimalType]
+      RandomDataGenerator.forType(t).isDefined &&
+        !t.isInstanceOf[DecimalType] && !t.isInstanceOf[BinaryType]
     } ++ Seq(DecimalType.USER_DEFAULT)
 
     val atomicArrayTypes = atomicTypes.map(ArrayType(_, containsNull = true))
@@ -221,22 +234,58 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       testWithRandomDataGeneration(structType, nullable)
     }
 
-    // Map types: not supported
-    for (
-        keyType <- atomicTypes;
-        valueType <- atomicTypes;
-        nullable <- Seq(true, false)) {
-      val mapType = MapType(keyType, valueType)
-      val e = intercept[Exception] {
-        testWithRandomDataGeneration(mapType, nullable)
-      }
-      if (e.getMessage.contains("Code generation of")) {
-        // If the `value` expression is null, `eval` will be short-circuited.
-        // Codegen version evaluation will be run then.
-        assert(e.getMessage.contains("cannot generate equality code for un-comparable type"))
-      } else {
-        assert(e.getMessage.contains("Exception evaluating"))
-      }
+    // In doesn't support map type and will fail the analyzer.
+    val map = Literal.create(create_map(1 -> 1), MapType(IntegerType, IntegerType))
+    In(map, Seq(map)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("function in does not support ordering on type map"))
+      case _ => fail("In should not work on map type")
+    }
+  }
+
+  test("switch statements in InSet for bytes, shorts, ints, dates") {
+    val byteValues = Set[Any](1.toByte, 2.toByte, Byte.MinValue, Byte.MaxValue)
+    val shortValues = Set[Any](-10.toShort, 20.toShort, Short.MinValue, Short.MaxValue)
+    val intValues = Set[Any](20, -100, 30, Int.MinValue, Int.MaxValue)
+    val dateValues = Set[Any](
+      CatalystTypeConverters.convertToCatalyst(Date.valueOf("2017-01-01")),
+      CatalystTypeConverters.convertToCatalyst(Date.valueOf("1950-01-02")))
+
+    def check(presentValue: Expression, absentValue: Expression, values: Set[Any]): Unit = {
+      require(presentValue.dataType == absentValue.dataType)
+
+      val nullLiteral = Literal(null, presentValue.dataType)
+
+      checkEvaluation(InSet(nullLiteral, values), expected = null)
+      checkEvaluation(InSet(nullLiteral, values + null), expected = null)
+      checkEvaluation(InSet(presentValue, values), expected = true)
+      checkEvaluation(InSet(presentValue, values + null), expected = true)
+      checkEvaluation(InSet(absentValue, values), expected = false)
+      checkEvaluation(InSet(absentValue, values + null), expected = null)
+    }
+
+    def checkAllTypes(): Unit = {
+      check(presentValue = Literal(2.toByte), absentValue = Literal(3.toByte), byteValues)
+      check(presentValue = Literal(Byte.MinValue), absentValue = Literal(5.toByte), byteValues)
+      check(presentValue = Literal(20.toShort), absentValue = Literal(-14.toShort), shortValues)
+      check(presentValue = Literal(Short.MaxValue), absentValue = Literal(30.toShort), shortValues)
+      check(presentValue = Literal(20), absentValue = Literal(-14), intValues)
+      check(presentValue = Literal(Int.MinValue), absentValue = Literal(2), intValues)
+      check(
+        presentValue = Literal(Date.valueOf("2017-01-01")),
+        absentValue = Literal(Date.valueOf("2017-01-02")),
+        dateValues)
+      check(
+        presentValue = Literal(Date.valueOf("1950-01-02")),
+        absentValue = Literal(Date.valueOf("2017-10-02")),
+        dateValues)
+    }
+
+    withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "0") {
+      checkAllTypes()
+    }
+    withSQLConf(SQLConf.OPTIMIZER_INSET_SWITCH_THRESHOLD.key -> "20") {
+      checkAllTypes()
     }
   }
 
@@ -252,45 +301,55 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.inlinedMutableStates.isEmpty)
   }
 
-  test("INSET") {
-    val hS = HashSet[Any]() + 1 + 2
-    val nS = HashSet[Any]() + 1 + 2 + null
-    val one = Literal(1)
-    val two = Literal(2)
-    val three = Literal(3)
-    val nl = Literal(null)
-    checkEvaluation(InSet(one, hS), true)
-    checkEvaluation(InSet(two, hS), true)
-    checkEvaluation(InSet(two, nS), true)
-    checkEvaluation(InSet(three, hS), false)
-    checkEvaluation(InSet(three, nS), null)
-    checkEvaluation(InSet(nl, hS), null)
-    checkEvaluation(InSet(nl, nS), null)
+  test("IN/INSET: binary") {
+    val onetwo = Literal(Array(1.toByte, 2.toByte))
+    val three = Literal(Array(3.toByte))
+    val threefour = Literal(Array(3.toByte, 4.toByte))
+    val nl = NonFoldableLiteral.create(null, onetwo.dataType)
+    val hS = Seq(Literal(Array(1.toByte, 2.toByte)), Literal(Array(3.toByte)))
+    val nS = Seq(Literal(Array(1.toByte, 2.toByte)), Literal(Array(3.toByte)),
+      NonFoldableLiteral.create(null, onetwo.dataType))
+    checkInAndInSet(In(onetwo, hS), true)
+    checkInAndInSet(In(three, hS), true)
+    checkInAndInSet(In(three, nS), true)
+    checkInAndInSet(In(threefour, hS), false)
+    checkInAndInSet(In(threefour, nS), null)
+    checkInAndInSet(In(nl, hS), null)
+    checkInAndInSet(In(nl, nS), null)
+  }
 
-    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
-      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.foreach { t =>
-      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
-      val inputData = Seq.fill(10) {
-        val value = dataGen.apply()
-        value match {
-          case d: Double if d.isNaN => 0.0d
-          case f: Float if f.isNaN => 0.0f
-          case _ => value
-        }
-      }
-      val input = inputData.map(Literal(_))
-      val expected = if (inputData(0) == null) {
-        null
-      } else if (inputData.slice(1, 10).contains(inputData(0))) {
-        true
-      } else if (inputData.slice(1, 10).contains(null)) {
-        null
-      } else {
-        false
-      }
-      checkEvaluation(InSet(input(0), inputData.slice(1, 10).toSet), expected)
-    }
+  test("IN/INSET: struct") {
+    val oneA = Literal.create((1, "a"))
+    val twoB = Literal.create((2, "b"))
+    val twoC = Literal.create((2, "c"))
+    val nl = NonFoldableLiteral.create(null, oneA.dataType)
+    val hS = Seq(Literal.create((1, "a")), Literal.create((2, "b")))
+    val nS = Seq(Literal.create((1, "a")), Literal.create((2, "b")),
+      NonFoldableLiteral.create(null, oneA.dataType))
+    checkInAndInSet(In(oneA, hS), true)
+    checkInAndInSet(In(twoB, hS), true)
+    checkInAndInSet(In(twoB, nS), true)
+    checkInAndInSet(In(twoC, hS), false)
+    checkInAndInSet(In(twoC, nS), null)
+    checkInAndInSet(In(nl, hS), null)
+    checkInAndInSet(In(nl, nS), null)
+  }
+
+  test("IN/INSET: array") {
+    val onetwo = Literal.create(Seq(1, 2))
+    val three = Literal.create(Seq(3))
+    val threefour = Literal.create(Seq(3, 4))
+    val nl = NonFoldableLiteral.create(null, onetwo.dataType)
+    val hS = Seq(Literal.create(Seq(1, 2)), Literal.create(Seq(3)))
+    val nS = Seq(Literal.create(Seq(1, 2)), Literal.create(Seq(3)),
+      NonFoldableLiteral.create(null, onetwo.dataType))
+    checkInAndInSet(In(onetwo, hS), true)
+    checkInAndInSet(In(three, hS), true)
+    checkInAndInSet(In(three, nS), true)
+    checkInAndInSet(In(threefour, hS), false)
+    checkInAndInSet(In(threefour, nS), null)
+    checkInAndInSet(In(nl, hS), null)
+    checkInAndInSet(In(nl, nS), null)
   }
 
   private case class MyStruct(a: Long, b: String)
@@ -454,5 +513,51 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
+  }
+
+  test("SPARK-24872: Replace taking the $symbol with $sqlOperator in BinaryOperator's" +
+    " toString method") {
+    val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
+    val expected = "(('id = 1) OR ('id = 2))"
+    assert(expression == expected)
+  }
+
+  val row0 = create_row(null)
+  val row1 = create_row(false)
+  val row2 = create_row(true)
+
+  test("istrue and isnottrue") {
+    checkEvaluation(IsTrue(Literal.create(null, BooleanType)), false, row0)
+    checkEvaluation(IsNotTrue(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsTrue(Literal.create(false, BooleanType)), false, row1)
+    checkEvaluation(IsNotTrue(Literal.create(false, BooleanType)), true, row1)
+    checkEvaluation(IsTrue(Literal.create(true, BooleanType)), true, row2)
+    checkEvaluation(IsNotTrue(Literal.create(true, BooleanType)), false, row2)
+    IsTrue(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
+  }
+
+  test("isfalse and isnotfalse") {
+    checkEvaluation(IsFalse(Literal.create(null, BooleanType)), false, row0)
+    checkEvaluation(IsNotFalse(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsFalse(Literal.create(false, BooleanType)), true, row1)
+    checkEvaluation(IsNotFalse(Literal.create(false, BooleanType)), false, row1)
+    checkEvaluation(IsFalse(Literal.create(true, BooleanType)), false, row2)
+    checkEvaluation(IsNotFalse(Literal.create(true, BooleanType)), true, row2)
+    IsFalse(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
+  }
+
+  test("isunknown and isnotunknown") {
+    checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
+    IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
   }
 }

@@ -118,6 +118,10 @@ df <- read.df("examples/src/main/resources/people.csv", "csv", sep = ";", inferS
 namesAndAges <- select(df, "name", "age")
 # $example off:manual_load_options_csv$
 
+# $example on:load_with_path_glob_filter$
+df <- read.df("examples/src/main/resources/partitioned_users.orc", "orc", pathGlobFilter = "*.orc")
+# $example off:load_with_path_glob_filter$
+
 # $example on:manual_save_options_orc$
 df <- read.df("examples/src/main/resources/users.orc", "orc")
 write.orc(df, "users_with_options.orc", orc.bloom.filter.columns = "favorite_color", orc.dictionary.key.threshold = 1.0, orc.column.encoding.direct = "name")

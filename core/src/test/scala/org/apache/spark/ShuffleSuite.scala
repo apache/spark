@@ -23,6 +23,8 @@ import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService
 import org.scalatest.Matchers
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
+import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListenerTaskEnd}
@@ -37,10 +39,10 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
   // Ensure that the DAGScheduler doesn't retry stages whose fetches fail, so that we accurately
   // test that the shuffle works (rather than retrying until all blocks are local to one Executor).
-  conf.set("spark.test.noStageRetry", "true")
+  conf.set(TEST_NO_STAGE_RETRY, true)
 
   test("groupByKey without compression") {
-    val myConf = conf.clone().set("spark.shuffle.compress", "false")
+    val myConf = conf.clone().set(config.SHUFFLE_COMPRESS, false)
     sc = new SparkContext("local", "test", myConf)
     val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4).collect()
@@ -214,7 +216,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
 
   test("sort with Java non serializable class - Kryo") {
     // Use a local cluster with 2 processes to make sure there are both local and remote blocks
-    val myConf = conf.clone().set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    val myConf = conf.clone().set(config.SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
     sc = new SparkContext("local-cluster[2,1,1024]", "test", myConf)
     val a = sc.parallelize(1 to 10, 2)
     val b = a.map { x =>
@@ -250,8 +252,8 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       val myConf = conf.clone()
         .setAppName("test")
         .setMaster("local")
-        .set("spark.shuffle.spill.compress", shuffleSpillCompress.toString)
-        .set("spark.shuffle.compress", shuffleCompress.toString)
+        .set(config.SHUFFLE_SPILL_COMPRESS, shuffleSpillCompress)
+        .set(config.SHUFFLE_COMPRESS, shuffleCompress)
       resetSparkContext()
       sc = new SparkContext(myConf)
       val diskBlockManager = sc.env.blockManager.diskBlockManager
@@ -261,15 +263,15 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
         assert(diskBlockManager.getAllFiles().nonEmpty)
       } catch {
         case e: Exception =>
-          val errMsg = s"Failed with spark.shuffle.spill.compress=$shuffleSpillCompress," +
-            s" spark.shuffle.compress=$shuffleCompress"
+          val errMsg = s"Failed with ${config.SHUFFLE_SPILL_COMPRESS.key}=$shuffleSpillCompress," +
+            s" ${config.SHUFFLE_COMPRESS.key}=$shuffleCompress"
           throw new Exception(errMsg, e)
       }
     }
   }
 
   test("[SPARK-4085] rerun map stage if reduce stage cannot find its local shuffle file") {
-    val myConf = conf.clone().set("spark.test.noStageRetry", "false")
+    val myConf = conf.clone().set(TEST_NO_STAGE_RETRY, false)
     sc = new SparkContext("local", "test", myConf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     rdd.count()
@@ -362,28 +364,37 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
-    val writer1 = manager.getWriter[Int, Int](shuffleHandle, 0,
-      new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val context1 =
+      new TaskContextImpl(0, 0, 0, 0L, 0, taskMemoryManager, new Properties, metricsSystem)
+    val writer1 = manager.getWriter[Int, Int](
+      shuffleHandle, 0, context1, context1.taskMetrics.shuffleWriteMetrics)
     val data1 = (1 to 10).map { x => x -> x}
 
     // second attempt -- also successful.  We'll write out different data,
     // just to simulate the fact that the records may get written differently
     // depending on what gets spilled, what gets combined, etc.
-    val writer2 = manager.getWriter[Int, Int](shuffleHandle, 0,
-      new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val context2 =
+      new TaskContextImpl(0, 0, 0, 1L, 0, taskMemoryManager, new Properties, metricsSystem)
+    val writer2 = manager.getWriter[Int, Int](
+      shuffleHandle, 0, context2, context2.taskMetrics.shuffleWriteMetrics)
     val data2 = (11 to 20).map { x => x -> x}
 
     // interleave writes of both attempts -- we want to test that both attempts can occur
     // simultaneously, and everything is still OK
 
     def writeAndClose(
-      writer: ShuffleWriter[Int, Int])(
-      iter: Iterator[(Int, Int)]): Option[MapStatus] = {
-      val files = writer.write(iter)
-      writer.stop(true)
+        writer: ShuffleWriter[Int, Int],
+        taskContext: TaskContext)(
+        iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+      try {
+        val files = writer.write(iter)
+        writer.stop(true)
+      } finally {
+        TaskContext.unset()
+      }
     }
     val interleaver = new InterleaveIterators(
-      data1, writeAndClose(writer1), data2, writeAndClose(writer2))
+      data1, writeAndClose(writer1, context1), data2, writeAndClose(writer2, context2))
     val (mapOutput1, mapOutput2) = interleaver.run()
 
     // check that we can read the map output and it has the right data
@@ -397,8 +408,11 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       mapTrackerMaster.registerMapOutput(0, 0, mapStatus)
     }
 
-    val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1,
-      new TaskContextImpl(1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem))
+    val taskContext = new TaskContextImpl(
+      1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem)
+    val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
+    val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
+    TaskContext.unset()
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 

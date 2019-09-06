@@ -26,10 +26,11 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReadSupport
+import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2Relation, StreamWriterCommitProgress}
+import org.apache.spark.sql.sources.v2.Table
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchStream, SparkDataStream}
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -44,7 +45,7 @@ import org.apache.spark.util.Clock
 trait ProgressReporter extends Logging {
 
   case class ExecutionStats(
-    inputRows: Map[BaseStreamingSource, Long],
+    inputRows: Map[SparkDataStream, Long],
     stateOperators: Seq[StateOperatorProgress],
     eventTimeStats: Map[String, String])
 
@@ -55,9 +56,10 @@ trait ProgressReporter extends Logging {
   protected def triggerClock: Clock
   protected def logicalPlan: LogicalPlan
   protected def lastExecution: QueryExecution
-  protected def newData: Map[BaseStreamingSource, LogicalPlan]
-  protected def sources: Seq[BaseStreamingSource]
-  protected def sink: BaseStreamingSink
+  protected def newData: Map[SparkDataStream, LogicalPlan]
+  protected def sinkCommitProgress: Option[StreamWriterCommitProgress]
+  protected def sources: Seq[SparkDataStream]
+  protected def sink: Table
   protected def offsetSeqMetadata: OffsetSeqMetadata
   protected def currentBatchId: Long
   protected def sparkSession: SparkSession
@@ -66,8 +68,8 @@ trait ProgressReporter extends Logging {
   // Local timestamps and counters.
   private var currentTriggerStartTimestamp = -1L
   private var currentTriggerEndTimestamp = -1L
-  private var currentTriggerStartOffsets: Map[BaseStreamingSource, String] = _
-  private var currentTriggerEndOffsets: Map[BaseStreamingSource, String] = _
+  private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
 
@@ -86,7 +88,7 @@ trait ProgressReporter extends Logging {
   private var lastNoDataProgressEventTime = Long.MinValue
 
   private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(DateTimeUtils.getTimeZone("UTC"))
+  timestampFormat.setTimeZone(getTimeZone("UTC"))
 
   @volatile
   protected var currentStatus: StreamingQueryStatus = {
@@ -114,7 +116,6 @@ trait ProgressReporter extends Logging {
     logDebug("Starting Trigger Calculation")
     lastTriggerStartTimestamp = currentTriggerStartTimestamp
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
-    currentStatus = currentStatus.copy(isTriggerActive = true)
     currentTriggerStartOffsets = null
     currentTriggerEndOffsets = null
     currentDurationsMs.clear()
@@ -147,10 +148,10 @@ trait ProgressReporter extends Logging {
 
     val executionStats = extractExecutionStats(hasNewData)
     val processingTimeSec =
-      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / 1000
+      (currentTriggerEndTimestamp - currentTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
 
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
-      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / 1000
+      (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
       Double.NaN
     }
@@ -168,7 +169,9 @@ trait ProgressReporter extends Logging {
       )
     }
 
-    val sinkProgress = new SinkProgress(sink.toString)
+    val sinkProgress = SinkProgress(
+      sink.toString,
+      sinkCommitProgress.map(_.numOutputRows))
 
     val newProgress = new StreamingQueryProgress(
       id = id,
@@ -238,17 +241,19 @@ trait ProgressReporter extends Logging {
   }
 
   /** Extract number of input sources for each streaming source in plan */
-  private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
+  private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
-    def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
+    def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
       tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
     }
 
     val onlyDataSourceV2Sources = {
-      // Check whether the streaming query's logical plan has only V2 data sources
-      val allStreamingLeaves =
-        logicalPlan.collect { case s: StreamingExecutionRelation => s }
-      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReadSupport] }
+      // Check whether the streaming query's logical plan has only V2 micro-batch data sources
+      val allStreamingLeaves = logicalPlan.collect {
+        case s: StreamingDataSourceV2Relation => s.stream.isInstanceOf[MicroBatchStream]
+        case _: StreamingExecutionRelation => false
+      }
+      allStreamingLeaves.forall(_ == true)
     }
 
     if (onlyDataSourceV2Sources) {
@@ -256,9 +261,9 @@ trait ProgressReporter extends Logging {
       // (can happen with self-unions or self-joins). This means the source is scanned multiple
       // times in the query, we should count the numRows for each scan.
       val sourceToInputRowsTuples = lastExecution.executedPlan.collect {
-        case s: DataSourceV2ScanExec if s.readSupport.isInstanceOf[BaseStreamingSource] =>
+        case s: MicroBatchScanExec =>
           val numRows = s.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          val source = s.readSupport.asInstanceOf[BaseStreamingSource]
+          val source = s.stream
           source -> numRows
       }
       logDebug("Source -> # input rows\n\t" + sourceToInputRowsTuples.mkString("\n\t"))

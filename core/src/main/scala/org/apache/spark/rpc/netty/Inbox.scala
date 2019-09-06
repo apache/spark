@@ -106,7 +106,7 @@ private[netty] class Inbox(
                 throw new SparkException(s"Unsupported message $message from ${_sender}")
               })
             } catch {
-              case NonFatal(e) =>
+              case e: Throwable =>
                 context.sendFailure(e)
                 // Throw the exception -- this exception will be caught by the safelyCall function.
                 // The endpoint's onError function will be called.

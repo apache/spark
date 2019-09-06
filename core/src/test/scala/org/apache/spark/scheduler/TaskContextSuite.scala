@@ -19,12 +19,13 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.executor.{Executor, TaskMetrics, TaskMetricsSuite}
+import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
@@ -37,7 +38,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("provide metrics sources") {
     val filePath = getClass.getClassLoader.getResource("test_metrics_config.properties").getFile
     val conf = new SparkConf(loadDefaults = false)
-      .set("spark.metrics.conf", filePath)
+      .set(METRICS_CONF, filePath)
     sc = new SparkContext("local", "test", conf)
     val rdd = sc.makeRDD(1 to 1)
     val result = sc.runJob(rdd, (tc: TaskContext, it: Iterator[Int]) => {
@@ -69,9 +70,9 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
-      task.run(0, 0, null)
+      task.run(0, 0, null, null)
     }
-    assert(TaskContextSuite.completed === true)
+    assert(TaskContextSuite.completed)
   }
 
   test("calls TaskFailureListeners after failure") {
@@ -91,7 +92,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0, new Properties,
       closureSerializer.serialize(TaskMetrics.registered).array())
     intercept[RuntimeException] {
-      task.run(0, 0, null)
+      task.run(0, 0, null, null)
     }
     assert(TaskContextSuite.lastError.getMessage == "damn error")
   }

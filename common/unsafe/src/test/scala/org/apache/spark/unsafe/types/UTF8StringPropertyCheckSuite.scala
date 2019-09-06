@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.types
 
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.text.similarity.LevenshteinDistance
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 // scalastyle:off
@@ -232,7 +232,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
   test("levenshteinDistance") {
     forAll { (one: String, another: String) =>
       assert(toUTF8(one).levenshteinDistance(toUTF8(another)) ===
-        StringUtils.getLevenshteinDistance(one, another))
+        LevenshteinDistance.getDefaultInstance.apply(one, another))
     }
   }
 

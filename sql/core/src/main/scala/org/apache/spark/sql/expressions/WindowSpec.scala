@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.expressions._
 
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
  *
  * @since 1.4.0
  */
-@InterfaceStability.Stable
+@Stable
 class WindowSpec private[sql](
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],

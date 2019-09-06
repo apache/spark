@@ -23,10 +23,9 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{Buffer, ListBuffer}
 import scala.xml.{Node, NodeSeq, Unparsed, Utility}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
@@ -62,7 +61,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       val stageId = stage.stageId
       val attemptId = stage.attemptId
       val name = stage.name
-      val status = stage.status.toString
+      val status = stage.status.toString.toLowerCase(Locale.ROOT)
       val submissionTime = stage.submissionTime.get.getTime()
       val completionTime = stage.completionTime.map(_.getTime())
         .getOrElse(System.currentTimeMillis())
@@ -184,12 +183,11 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val jobId = parameterId.toInt
-    val jobData = store.asOption(store.job(jobId)).getOrElse {
+    val (jobData, sqlExecutionId) = store.asOption(store.jobWithAssociatedSql(jobId)).getOrElse {
       val content =
         <div id="no-info">
           <p>No information to display for job {jobId}</p>
@@ -197,26 +195,64 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       return UIUtils.headerSparkPage(
         request, s"Details for Job $jobId", content, parent)
     }
+
     val isComplete = jobData.status != JobExecutionStatus.RUNNING
     val stages = jobData.stageIds.map { stageId =>
       // This could be empty if the listener hasn't received information about the
       // stage or if the stage information has been garbage collected
       store.asOption(store.lastStageAttempt(stageId)).getOrElse {
         new v1.StageData(
-          v1.StageStatus.PENDING,
-          stageId,
-          0, 0, 0, 0, 0, 0, 0,
-          0L, 0L, None, None, None, None,
-          0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L,
-          "Unknown",
-          None,
-          "Unknown",
-          null,
-          Nil,
-          Nil,
-          None,
-          None,
-          Map())
+          status = v1.StageStatus.PENDING,
+          stageId = stageId,
+          attemptId = 0,
+          numTasks = 0,
+          numActiveTasks = 0,
+          numCompleteTasks = 0,
+          numFailedTasks = 0,
+          numKilledTasks = 0,
+          numCompletedIndices = 0,
+
+          submissionTime = None,
+          firstTaskLaunchedTime = None,
+          completionTime = None,
+          failureReason = None,
+
+          executorDeserializeTime = 0L,
+          executorDeserializeCpuTime = 0L,
+          executorRunTime = 0L,
+          executorCpuTime = 0L,
+          resultSize = 0L,
+          jvmGcTime = 0L,
+          resultSerializationTime = 0L,
+          memoryBytesSpilled = 0L,
+          diskBytesSpilled = 0L,
+          peakExecutionMemory = 0L,
+          inputBytes = 0L,
+          inputRecords = 0L,
+          outputBytes = 0L,
+          outputRecords = 0L,
+          shuffleRemoteBlocksFetched = 0L,
+          shuffleLocalBlocksFetched = 0L,
+          shuffleFetchWaitTime = 0L,
+          shuffleRemoteBytesRead = 0L,
+          shuffleRemoteBytesReadToDisk = 0L,
+          shuffleLocalBytesRead = 0L,
+          shuffleReadBytes = 0L,
+          shuffleReadRecords = 0L,
+          shuffleWriteBytes = 0L,
+          shuffleWriteTime = 0L,
+          shuffleWriteRecords = 0L,
+
+          name = "Unknown",
+          description = None,
+          details = "Unknown",
+          schedulingPool = null,
+
+          rddIds = Nil,
+          accumulatorUpdates = Nil,
+          tasks = None,
+          executorSummary = None,
+          killedTasksSummary = Map())
       }
     }
 
@@ -278,6 +314,17 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
             <Strong>Status:</Strong>
             {jobData.status}
           </li>
+          {
+            if (sqlExecutionId.isDefined) {
+              <li>
+                <strong>Associated SQL Query: </strong>
+                {<a href={"%s/SQL/execution/?id=%s".format(
+                  UIUtils.prependBaseUri(request, parent.basePath),
+                  sqlExecutionId.get)
+                }>{sqlExecutionId.get}</a>}
+              </li>
+            }
+          }
           {
             if (jobData.jobGroup.isDefined) {
               <li>

@@ -594,7 +594,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           |  max(distinct value1)
           |FROM agg2
         """.stripMargin),
-      Row(-60, 70.0, 101.0/9.0, 5.6, 100))
+      Row(-60, 70, 101.0/9.0, 5.6, 100))
 
     checkAnswer(
       spark.sql(
@@ -884,7 +884,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new UDT.MyDenseVectorUDT())
+      new TestUDT.MyDenseVectorUDT())
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
@@ -1028,7 +1028,7 @@ class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySu
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     Seq("true", "false").foreach { enableTwoLevelMaps =>
-      withSQLConf("spark.sql.codegen.aggregate.map.twolevel.enabled" ->
+      withSQLConf(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key ->
         enableTwoLevelMaps) {
         (1 to 3).foreach { fallbackStartsAt =>
           withSQLConf("spark.sql.TungstenAggregate.testFallbackStartsAt" ->

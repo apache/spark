@@ -28,12 +28,13 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
  * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
- * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
+ * If `estimatedSize` does not return `None`, [[SizeEstimator]] will use the returned size
  * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
  * The difference between a [[KnownSizeEstimation]] and
  * [[org.apache.spark.util.collection.SizeTracker]] is that, a
@@ -126,12 +127,13 @@ object SizeEstimator extends Logging {
   private def getIsCompressedOops: Boolean = {
     // This is only used by tests to override the detection of compressed oops. The test
     // actually uses a system property instead of a SparkConf, so we'll stick with that.
-    if (System.getProperty("spark.test.useCompressedOops") != null) {
-      return System.getProperty("spark.test.useCompressedOops").toBoolean
+    if (System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY) != null) {
+      return System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY).toBoolean
     }
 
-    // java.vm.info provides compressed ref info for IBM JDKs
-    if (System.getProperty("java.vendor").contains("IBM")) {
+    // java.vm.info provides compressed ref info for IBM and OpenJ9 JDKs
+    val javaVendor = System.getProperty("java.vendor")
+    if (javaVendor.contains("IBM") || javaVendor.contains("OpenJ9")) {
       return System.getProperty("java.vm.info").contains("Compressed Ref")
     }
 
@@ -333,9 +335,21 @@ object SizeEstimator extends Logging {
         if (fieldClass.isPrimitive) {
           sizeCount(primitiveSize(fieldClass)) += 1
         } else {
-          field.setAccessible(true) // Enable future get()'s on this field
+          // Note: in Java 9+ this would be better with trySetAccessible and canAccess
+          try {
+            field.setAccessible(true) // Enable future get()'s on this field
+            pointerFields = field :: pointerFields
+          } catch {
+            // If the field isn't accessible, we can still record the pointer size
+            // but can't know more about the field, so ignore it
+            case _: SecurityException =>
+              // do nothing
+            // Java 9+ can throw InaccessibleObjectException but the class is Java 9+-only
+            case re: RuntimeException
+                if re.getClass.getSimpleName == "InaccessibleObjectException" =>
+              // do nothing
+          }
           sizeCount(pointerSize) += 1
-          pointerFields = field :: pointerFields
         }
       }
     }

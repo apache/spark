@@ -19,8 +19,9 @@
 
 DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
-ASF_REPO="https://git-wip-us.apache.org/repos/asf/spark.git"
-ASF_REPO_WEBUI="https://git-wip-us.apache.org/repos/asf?p=spark.git"
+ASF_REPO="https://gitbox.apache.org/repos/asf/spark.git"
+ASF_REPO_WEBUI="https://gitbox.apache.org/repos/asf?p=spark.git"
+ASF_GITHUB_REPO="https://github.com/apache/spark"
 
 function error {
   echo "$*"
@@ -73,7 +74,7 @@ function fcreate_secure {
 }
 
 function check_for_tag {
-  curl -s --head --fail "$ASF_REPO_WEBUI;a=commit;h=$1" >/dev/null
+  curl -s --head --fail "$ASF_GITHUB_REPO/releases/tag/$1" > /dev/null
 }
 
 function get_release_info {
@@ -101,7 +102,7 @@ function get_release_info {
   NEXT_VERSION="$VERSION"
   RELEASE_VERSION="${VERSION/-SNAPSHOT/}"
   SHORT_VERSION=$(echo "$VERSION" | cut -d . -f 1-2)
-  local REV=$(echo "$VERSION" | cut -d . -f 3)
+  local REV=$(echo "$RELEASE_VERSION" | cut -d . -f 3)
 
   # Find out what rc is being prepared.
   # - If the current version is "x.y.0", then this is rc1 of the "x.y.0" release.
@@ -149,6 +150,9 @@ function get_release_info {
   GIT_REF="$RELEASE_TAG"
   if is_dry_run; then
     echo "This is a dry run. Please confirm the ref that will be built for testing."
+    if [[ $SKIP_TAG = 0 ]]; then
+      GIT_REF="$GIT_BRANCH"
+    fi
     GIT_REF=$(read_config "Ref" "$GIT_REF")
   fi
   export GIT_REF

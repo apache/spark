@@ -23,7 +23,7 @@ from __future__ import print_function
 from pyspark import SparkContext
 # $example on$
 import math
-from pyspark.mllib.regression import LabeledPoint, IsotonicRegression, IsotonicRegressionModel
+from pyspark.mllib.regression import IsotonicRegression, IsotonicRegressionModel
 from pyspark.mllib.util import MLUtils
 # $example off$
 

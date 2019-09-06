@@ -30,13 +30,14 @@ public class ExpressionInfo {
     private String examples;
     private String note;
     private String since;
+    private String deprecated;
 
     public String getClassName() {
         return className;
     }
 
     public String getUsage() {
-        return usage;
+        return replaceFunctionName(usage);
     }
 
     public String getName() {
@@ -44,7 +45,7 @@ public class ExpressionInfo {
     }
 
     public String getExtended() {
-        return extended;
+        return replaceFunctionName(extended);
     }
 
     public String getSince() {
@@ -56,11 +57,15 @@ public class ExpressionInfo {
     }
 
     public String getExamples() {
-        return examples;
+        return replaceFunctionName(examples);
     }
 
     public String getNote() {
         return note;
+    }
+
+    public String getDeprecated() {
+        return deprecated;
     }
 
     public String getDb() {
@@ -75,13 +80,15 @@ public class ExpressionInfo {
             String arguments,
             String examples,
             String note,
-            String since) {
+            String since,
+            String deprecated) {
         assert name != null;
         assert arguments != null;
         assert examples != null;
-        assert examples.isEmpty() || examples.startsWith("\n    Examples:");
+        assert examples.isEmpty() || examples.contains("    Examples:");
         assert note != null;
         assert since != null;
+        assert deprecated != null;
 
         this.className = className;
         this.db = db;
@@ -91,6 +98,7 @@ public class ExpressionInfo {
         this.examples = examples;
         this.note = note;
         this.since = since;
+        this.deprecated = deprecated;
 
         // Make the extended description.
         this.extended = arguments + examples;
@@ -98,25 +106,56 @@ public class ExpressionInfo {
             this.extended = "\n    No example/argument for _FUNC_.\n";
         }
         if (!note.isEmpty()) {
+            if (!note.contains("    ") || !note.endsWith("  ")) {
+                throw new IllegalArgumentException("'note' is malformed in the expression [" +
+                    this.name + "]. It should start with a newline and 4 leading spaces; end " +
+                    "with a newline and two spaces; however, got [" + note + "].");
+            }
             this.extended += "\n    Note:\n      " + note.trim() + "\n";
         }
         if (!since.isEmpty()) {
+            if (Integer.parseInt(since.split("\\.")[0]) < 0) {
+                throw new IllegalArgumentException("'since' is malformed in the expression [" +
+                    this.name + "]. It should not start with a negative number; however, " +
+                    "got [" + since + "].");
+            }
             this.extended += "\n    Since: " + since + "\n";
+        }
+        if (!deprecated.isEmpty()) {
+            if (!deprecated.contains("    ") || !deprecated.endsWith("  ")) {
+                throw new IllegalArgumentException("'deprecated' is malformed in the " +
+                    "expression [" + this.name + "]. It should start with a newline and 4 " +
+                    "leading spaces; end with a newline and two spaces; however, got [" +
+                    deprecated + "].");
+            }
+            this.extended += "\n    Deprecated:\n      " + deprecated.trim() + "\n";
         }
     }
 
     public ExpressionInfo(String className, String name) {
-        this(className, null, name, null, "", "", "", "");
+        this(className, null, name, null, "", "", "", "", "");
     }
 
     public ExpressionInfo(String className, String db, String name) {
-        this(className, db, name, null, "", "", "", "");
+        this(className, db, name, null, "", "", "", "", "");
     }
 
-    // This is to keep the original constructor just in case.
+    /**
+     * @deprecated This constructor is deprecated as of Spark 3.0. Use other constructors to fully
+     *   specify each argument for extended usage.
+     */
+    @Deprecated
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.
-        this(className, db, name, usage, extended, "", "", "");
+        this(className, db, name, usage, extended, "", "", "", "");
+    }
+
+    private String replaceFunctionName(String usage) {
+        if (usage == null) {
+            return "N/A.";
+        } else {
+            return usage.replaceAll("_FUNC_", name);
+        }
     }
 }

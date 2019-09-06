@@ -19,8 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
@@ -30,9 +29,10 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
   BisectingKMeansModel => MLlibBisectingKMeansModel}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -87,8 +87,9 @@ private[clustering] trait BisectingKMeansParams extends Params with HasMaxIter
 @Since("2.0.0")
 class BisectingKMeansModel private[ml] (
     @Since("2.0.0") override val uid: String,
-    private val parentModel: MLlibBisectingKMeansModel
-  ) extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable {
+    private val parentModel: MLlibBisectingKMeansModel)
+  extends Model[BisectingKMeansModel] with BisectingKMeansParams with MLWritable
+  with HasTrainingSummary[BisectingKMeansSummary] {
 
   @Since("2.0.0")
   override def copy(extra: ParamMap): BisectingKMeansModel = {
@@ -117,7 +118,8 @@ class BisectingKMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
+  @Since("3.0.0")
+  def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("2.0.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
@@ -143,28 +145,12 @@ class BisectingKMeansModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter = new BisectingKMeansModel.BisectingKMeansModelWriter(this)
 
-  private var trainingSummary: Option[BisectingKMeansSummary] = None
-
-  private[clustering] def setSummary(summary: Option[BisectingKMeansSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
-  /**
-   * Return true if there exists summary of model.
-   */
-  @Since("2.1.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
-
   /**
    * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * thrown if `hasSummary` is false.
    */
   @Since("2.1.0")
-  def summary: BisectingKMeansSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
+  override def summary: BisectingKMeansSummary = super.summary
 }
 
 object BisectingKMeansModel extends MLReadable[BisectingKMeansModel] {
@@ -263,7 +249,12 @@ class BisectingKMeans @Since("2.0.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val rdd = DatasetUtils.columnToOldVector(dataset, getFeaturesCol)
+    if (handlePersistence) {
+      rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
@@ -278,8 +269,17 @@ class BisectingKMeans @Since("2.0.0") (
       .setDistanceMeasure($(distanceMeasure))
     val parentModel = bkm.run(rdd, Some(instr))
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
+    if (handlePersistence) {
+      rdd.unpersist()
+    }
+
     val summary = new BisectingKMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), $(maxIter))
+      model.transform(dataset),
+      $(predictionCol),
+      $(featuresCol),
+      $(k),
+      $(maxIter),
+      parentModel.trainingCost)
     instr.logNamedValue("clusterSizes", summary.clusterSizes)
     instr.logNumFeatures(model.clusterCenters.head.size)
     model.setSummary(Some(summary))
@@ -301,7 +301,6 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
 
 
 /**
- * :: Experimental ::
  * Summary of BisectingKMeans.
  *
  * @param predictions  `DataFrame` produced by `BisectingKMeansModel.transform()`.
@@ -309,12 +308,15 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
  * @param numIter  Number of iterations.
+ * @param trainingCost Sum of the cost to the nearest centroid for all points in the training
+ *                     dataset. This is equivalent to sklearn's inertia.
  */
 @Since("2.1.0")
-@Experimental
 class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
     k: Int,
-    numIter: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)
+    numIter: Int,
+    @Since("3.0.0") val trainingCost: Double)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)

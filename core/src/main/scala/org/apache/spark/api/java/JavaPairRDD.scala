@@ -19,7 +19,7 @@ package org.apache.spark.api.java
 
 import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
-import java.util.{Comparator, Iterator => JIterator, List => JList}
+import java.util.{Comparator, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -952,7 +952,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -969,7 +969,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
@@ -985,7 +985,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.

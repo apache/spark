@@ -22,12 +22,14 @@ from multiprocessing.pool import ThreadPool
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.param.shared import *
-from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel, \
-    RandomForestParams, TreeEnsembleModel, TreeEnsembleParams
+from pyspark.ml.regression import DecisionTreeModel, DecisionTreeParams, \
+    DecisionTreeRegressionModel, GBTParams, HasVarianceImpurity, RandomForestParams, \
+    TreeEnsembleModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.linalg import Vectors
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -67,8 +69,6 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
                 HasWeightCol, HasAggregationDepth, HasThreshold, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
@@ -158,8 +158,6 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
 
 class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by LinearSVC.
 
     .. versionadded:: 2.2.0
@@ -483,7 +481,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
-class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable,
+                              HasTrainingSummary):
     """
     Model fitted by LogisticRegression.
 
@@ -532,23 +531,15 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_lrt_summary = self._call_java("summary")
             if self.numClasses <= 2:
-                return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
+                return BinaryLogisticRegressionTrainingSummary(super(LogisticRegressionModel,
+                                                                     self).summary)
             else:
-                return LogisticRegressionTrainingSummary(java_lrt_summary)
+                return LogisticRegressionTrainingSummary(super(LogisticRegressionModel,
+                                                               self).summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
-
-    @property
-    @since("2.0.0")
-    def hasSummary(self):
-        """
-        Indicates whether a training summary exists for this model
-        instance.
-        """
-        return self._call_java("hasSummary")
 
     @since("2.0.0")
     def evaluate(self, dataset):
@@ -570,8 +561,6 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
 
 class LogisticRegressionSummary(JavaWrapper):
     """
-    .. note:: Experimental
-
     Abstraction for Logistic Regression Results for a given model.
 
     .. versionadded:: 2.0.0
@@ -728,8 +717,6 @@ class LogisticRegressionSummary(JavaWrapper):
 @inherit_doc
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
     """
-    .. note:: Experimental
-
     Abstraction for multinomial Logistic Regression Training results.
     Currently, the training summary ignores the training weights except
     for the objective trace.
@@ -758,8 +745,6 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
 @inherit_doc
 class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     """
-    .. note:: Experimental
-
     Binary Logistic regression results for a given model.
 
     .. versionadded:: 2.0.0
@@ -855,8 +840,6 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
 class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,
                                               LogisticRegressionTrainingSummary):
     """
-    .. note:: Experimental
-
     Binary Logistic regression training results for a given model.
 
     .. versionadded:: 2.0.0
@@ -881,13 +864,6 @@ class TreeClassifierParams(object):
         super(TreeClassifierParams, self).__init__()
 
     @since("1.6.0")
-    def setImpurity(self, value):
-        """
-        Sets the value of :py:attr:`impurity`.
-        """
-        return self._set(impurity=value)
-
-    @since("1.6.0")
     def getImpurity(self):
         """
         Gets the value of impurity or its default value.
@@ -895,20 +871,11 @@ class TreeClassifierParams(object):
         return self.getOrDefault(self.impurity)
 
 
-class GBTParams(TreeEnsembleParams):
-    """
-    Private class to track supported GBT params.
-
-    .. versionadded:: 1.4.0
-    """
-    supportedLossTypes = ["logistic"]
-
-
 @inherit_doc
-class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                             HasProbabilityCol, HasRawPredictionCol, DecisionTreeParams,
-                             TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
-                             JavaMLReadable):
+class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasWeightCol,
+                             HasPredictionCol, HasProbabilityCol, HasRawPredictionCol,
+                             DecisionTreeParams, TreeClassifierParams, HasCheckpointInterval,
+                             HasSeed, JavaMLWritable, JavaMLReadable):
     """
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
@@ -923,7 +890,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed")
+    >>> dt = DecisionTreeClassifier(maxDepth=2, labelCol="indexed", leafCol="leafId")
     >>> model = dt.fit(td)
     >>> model.numNodes
     3
@@ -945,10 +912,11 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     DenseVector([1.0, 0.0])
     >>> result.rawPrediction
     DenseVector([1.0, 0.0])
+    >>> result.leafId
+    0.0
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
-
     >>> dtc_path = temp_path + "/dtc"
     >>> dt.save(dtc_path)
     >>> dt2 = DecisionTreeClassifier.load(dtc_path)
@@ -960,6 +928,18 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> model.featureImportances == model2.featureImportances
     True
 
+    >>> df3 = spark.createDataFrame([
+    ...     (1.0, 0.2, Vectors.dense(1.0)),
+    ...     (1.0, 0.8, Vectors.dense(1.0)),
+    ...     (0.0, 1.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
+    >>> si3 = StringIndexer(inputCol="label", outputCol="indexed")
+    >>> si_model3 = si3.fit(df3)
+    >>> td3 = si_model3.transform(df3)
+    >>> dt3 = DecisionTreeClassifier(maxDepth=2, weightCol="weight", labelCol="indexed")
+    >>> model3 = dt3.fit(td3)
+    >>> print(model3.toDebugString)
+    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+
     .. versionadded:: 1.4.0
     """
 
@@ -968,20 +948,20 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 seed=None):
+                 seed=None, weightCol=None, leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 seed=None)
+                 seed=None, weightCol=None, leafCol="")
         """
         super(DecisionTreeClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.DecisionTreeClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini")
+                         impurity="gini", leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -991,13 +971,13 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  impurity="gini", seed=None):
+                  impurity="gini", seed=None, weightCol=None, leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                  seed=None)
+                  seed=None, weightCol=None, leafCol="")
         Sets params for the DecisionTreeClassifier.
         """
         kwargs = self._input_kwargs
@@ -1005,6 +985,49 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     def _create_model(self, java_model):
         return DecisionTreeClassificationModel(java_model)
+
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    @since("1.4.0")
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
 
 
 @inherit_doc
@@ -1059,7 +1082,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
+    >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42,
+    ...     leafCol="leafId")
     >>> model = rf.fit(td)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
@@ -1073,6 +1097,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     0
     >>> numpy.argmax(result.rawPrediction)
     0
+    >>> result.leafId
+    DenseVector([0.0, 0.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1097,13 +1123,15 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0):
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0,
+                 leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0)
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0, \
+                 leafCol="")
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1111,7 +1139,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="gini", numTrees=20, featureSubsetStrategy="auto",
-                         subsamplingRate=1.0)
+                         subsamplingRate=1.0, leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1121,13 +1149,15 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0):
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0,
+                  leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0)
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0, \
+                  leafCol="")
         Sets params for linear classification.
         """
         kwargs = self._input_kwargs
@@ -1135,6 +1165,63 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     def _create_model(self, java_model):
         return RandomForestClassificationModel(java_model)
+
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    @since("1.4.0")
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
+
+    @since("1.4.0")
+    def setNumTrees(self, value):
+        """
+        Sets the value of :py:attr:`numTrees`.
+        """
+        return self._set(numTrees=value)
+
+    @since("1.4.0")
+    def setSubsamplingRate(self, value):
+        """
+        Sets the value of :py:attr:`subsamplingRate`.
+        """
+        return self._set(subsamplingRate=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
@@ -1174,9 +1261,31 @@ class RandomForestClassificationModel(TreeEnsembleModel, JavaClassificationModel
         return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
 
+class GBTClassifierParams(GBTParams, HasVarianceImpurity):
+    """
+    Private class to track supported GBTClassifier params.
+
+    .. versionadded:: 3.0.0
+    """
+
+    supportedLossTypes = ["logistic"]
+
+    lossType = Param(Params._dummy(), "lossType",
+                     "Loss function which GBT tries to minimize (case-insensitive). " +
+                     "Supported options: " + ", ".join(supportedLossTypes),
+                     typeConverter=TypeConverters.toString)
+
+    @since("1.4.0")
+    def getLossType(self):
+        """
+        Gets the value of lossType or its default value.
+        """
+        return self.getOrDefault(self.lossType)
+
+
 @inherit_doc
-class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
+class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
+                    GBTClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
@@ -1204,7 +1313,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
     >>> si_model = stringIndexer.fit(df)
     >>> td = si_model.transform(df)
-    >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42)
+    >>> gbt = GBTClassifier(maxIter=5, maxDepth=2, labelCol="indexed", seed=42,
+    ...     leafCol="leafId")
     >>> gbt.getFeatureSubsetStrategy()
     'all'
     >>> model = gbt.fit(td)
@@ -1213,8 +1323,11 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
-    >>> model.transform(test0).head().prediction
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
     0.0
+    >>> result.leafId
+    DenseVector([0.0, 0.0, 0.0, 0.0, 0.0])
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
@@ -1242,32 +1355,29 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     [0.25..., 0.23..., 0.21..., 0.19..., 0.18...]
     >>> model.numClasses
     2
+    >>> gbt = gbt.setValidationIndicatorCol("validationIndicator")
+    >>> gbt.getValidationIndicatorCol()
+    'validationIndicator'
+    >>> gbt.getValidationTol()
+    0.01
 
     .. versionadded:: 1.4.0
     """
-
-    lossType = Param(Params._dummy(), "lossType",
-                     "Loss function which GBT tries to minimize (case-insensitive). " +
-                     "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
-                     typeConverter=TypeConverters.toString)
-
-    stepSize = Param(Params._dummy(), "stepSize",
-                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
-                     "the contribution of each estimator.",
-                     typeConverter=TypeConverters.toFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
-                 maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
-                 featureSubsetStrategy="all"):
+                 maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, impurity="variance",
+                 featureSubsetStrategy="all", validationTol=0.01, validationIndicatorCol=None,
+                 leafCol=""):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                 featureSubsetStrategy="all")
+                 impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
+                 validationIndicatorCol=None, leafCol="")
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1275,7 +1385,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0,
-                         featureSubsetStrategy="all")
+                         impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                         leafCol="")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -1285,13 +1396,15 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0,
-                  featureSubsetStrategy="all"):
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01,
+                  validationIndicatorCol=None, leafCol=""):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
                   lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0, \
-                  featureSubsetStrategy="all")
+                  impurity="variance", featureSubsetStrategy="all", validationTol=0.01, \
+                  validationIndicatorCol=None, leafCol="")
         Sets params for Gradient Boosted Tree Classification.
         """
         kwargs = self._input_kwargs
@@ -1299,6 +1412,49 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
 
     def _create_model(self, java_model):
         return GBTClassificationModel(java_model)
+
+    def setMaxDepth(self, value):
+        """
+        Sets the value of :py:attr:`maxDepth`.
+        """
+        return self._set(maxDepth=value)
+
+    def setMaxBins(self, value):
+        """
+        Sets the value of :py:attr:`maxBins`.
+        """
+        return self._set(maxBins=value)
+
+    def setMinInstancesPerNode(self, value):
+        """
+        Sets the value of :py:attr:`minInstancesPerNode`.
+        """
+        return self._set(minInstancesPerNode=value)
+
+    def setMinInfoGain(self, value):
+        """
+        Sets the value of :py:attr:`minInfoGain`.
+        """
+        return self._set(minInfoGain=value)
+
+    def setMaxMemoryInMB(self, value):
+        """
+        Sets the value of :py:attr:`maxMemoryInMB`.
+        """
+        return self._set(maxMemoryInMB=value)
+
+    def setCacheNodeIds(self, value):
+        """
+        Sets the value of :py:attr:`cacheNodeIds`.
+        """
+        return self._set(cacheNodeIds=value)
+
+    @since("1.4.0")
+    def setImpurity(self, value):
+        """
+        Sets the value of :py:attr:`impurity`.
+        """
+        return self._set(impurity=value)
 
     @since("1.4.0")
     def setLossType(self, value):
@@ -1308,11 +1464,11 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self._set(lossType=value)
 
     @since("1.4.0")
-    def getLossType(self):
+    def setSubsamplingRate(self, value):
         """
-        Gets the value of lossType or its default value.
+        Sets the value of :py:attr:`subsamplingRate`.
         """
-        return self.getOrDefault(self.lossType)
+        return self._set(subsamplingRate=value)
 
     @since("2.4.0")
     def setFeatureSubsetStrategy(self, value):
@@ -1320,6 +1476,13 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
         return self._set(featureSubsetStrategy=value)
+
+    @since("3.0.0")
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
 
 
 class GBTClassificationModel(TreeEnsembleModel, JavaClassificationModel, JavaMLWritable,
@@ -1701,7 +1864,8 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaClassificationModel
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol,
+                      HasRawPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1728,8 +1892,6 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCo
 @inherit_doc
 class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
     For a multiclass classification with k classes, train k models (one per class).
@@ -1742,6 +1904,8 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> df = spark.read.format("libsvm").load(data_path)
     >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
+    >>> ovr.getRawPredictionCol()
+    'rawPrediction'
     >>> model = ovr.fit(df)
     >>> model.models[0].coefficients
     DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
@@ -1765,16 +1929,18 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().prediction
     0.0
+    >>> model.transform(test2).columns
+    ['features', 'rawPrediction', 'prediction']
 
     .. versionadded:: 2.0.0
     """
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None, weightCol=None, parallelism=1):
+                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None, weightCol=None, parallelism=1):
+                 rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         """
         super(OneVsRest, self).__init__()
         self._setDefault(parallelism=1)
@@ -1784,10 +1950,10 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     @keyword_only
     @since("2.0.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  classifier=None, weightCol=None, parallelism=1):
+                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  classifier=None, weightCol=None, parallelism=1):
+                  rawPredictionCol="rawPrediction", classifier=None, weightCol=None, parallelism=1):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -1798,8 +1964,6 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         featuresCol = self.getFeaturesCol()
         predictionCol = self.getPredictionCol()
         classifier = self.getClassifier()
-        assert isinstance(classifier, HasRawPredictionCol),\
-            "Classifier %s doesn't extend from HasRawPredictionCol." % type(classifier)
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
@@ -1868,10 +2032,12 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         featuresCol = java_stage.getFeaturesCol()
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
+        rawPredictionCol = java_stage.getRawPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
         parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       classifier=classifier, parallelism=parallelism)
+                       rawPredictionCol=rawPredictionCol, classifier=classifier,
+                       parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -1888,6 +2054,7 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
+        _java_obj.setRawPredictionCol(self.getRawPredictionCol())
         return _java_obj
 
     def _make_java_param_pair(self, param, value):
@@ -1937,8 +2104,6 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
 
 class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
-    .. note:: Experimental
-
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
     Each example is scored against all k models, and the model with the highest score
@@ -1978,7 +2143,8 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         # update the accumulator column with the result of prediction of models
         aggregatedDataset = newDataset
         for index, model in enumerate(self.models):
-            rawPredictionCol = model._call_java("getRawPredictionCol")
+            rawPredictionCol = self.getRawPredictionCol()
+
             columns = origCols + [rawPredictionCol, accColName]
 
             # add temporary column to store intermediate scores and update
@@ -1999,14 +2165,24 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         if handlePersistence:
             newDataset.unpersist()
 
-        # output the index of the classifier with highest confidence as prediction
-        labelUDF = udf(
-            lambda predictions: float(max(enumerate(predictions), key=operator.itemgetter(1))[0]),
-            DoubleType())
+        if self.getRawPredictionCol():
+            def func(predictions):
+                predArray = []
+                for x in predictions:
+                    predArray.append(x)
+                return Vectors.dense(predArray)
 
-        # output label and label metadata as prediction
-        return aggregatedDataset.withColumn(
-            self.getPredictionCol(), labelUDF(aggregatedDataset[accColName])).drop(accColName)
+            rawPredictionUDF = udf(func)
+            aggregatedDataset = aggregatedDataset.withColumn(
+                self.getRawPredictionCol(), rawPredictionUDF(aggregatedDataset[accColName]))
+
+        if self.getPredictionCol():
+            # output the index of the classifier with highest confidence as prediction
+            labelUDF = udf(lambda predictions: float(max(enumerate(predictions),
+                           key=operator.itemgetter(1))[0]), DoubleType())
+            aggregatedDataset = aggregatedDataset.withColumn(
+                self.getPredictionCol(), labelUDF(aggregatedDataset[accColName]))
+        return aggregatedDataset.drop(accColName)
 
     @since("2.0.0")
     def copy(self, extra=None):

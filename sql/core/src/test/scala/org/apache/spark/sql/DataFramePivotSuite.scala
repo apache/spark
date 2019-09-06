@@ -22,10 +22,10 @@ import java.util.Locale
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSQLContext {
+class DataFramePivotSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("pivot courses") {
@@ -332,5 +332,16 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext {
         .collect()
     }
     assert(exception.getMessage.contains("Unsupported literal type"))
+  }
+
+  test("SPARK-26403: pivoting by array column") {
+    val df = Seq(
+      (2, Seq.empty[String]),
+      (2, Seq("a", "x")),
+      (3, Seq.empty[String]),
+      (3, Seq("a", "x"))).toDF("x", "s")
+    val expected = Seq((3, 1, 1), (2, 1, 1)).toDF
+    val actual = df.groupBy("x").pivot("s").count()
+    checkAnswer(actual, expected)
   }
 }

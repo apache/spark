@@ -41,6 +41,9 @@ public class CalendarIntervalSuite {
   public void toStringTest() {
     CalendarInterval i;
 
+    i = new CalendarInterval(0, 0);
+    assertEquals("interval 0 microseconds", i.toString());
+
     i = new CalendarInterval(34, 0);
     assertEquals("interval 2 years 10 months", i.toString());
 
@@ -102,6 +105,31 @@ public class CalendarIntervalSuite {
   }
 
   @Test
+  public void fromCaseInsensitiveStringTest() {
+    for (String input : new String[]{"5 MINUTES", "5 minutes", "5 Minutes"}) {
+      assertEquals(fromCaseInsensitiveString(input), new CalendarInterval(0, 5L * 60 * 1_000_000));
+    }
+
+    for (String input : new String[]{null, "", " "}) {
+      try {
+        fromCaseInsensitiveString(input);
+        fail("Expected to throw an exception for the invalid input");
+      } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("cannot be null or blank"));
+      }
+    }
+
+    for (String input : new String[]{"interval", "interval1 day", "foo", "foo 1 day"}) {
+      try {
+        fromCaseInsensitiveString(input);
+        fail("Expected to throw an exception for the invalid input");
+      } catch (IllegalArgumentException e) {
+        assertTrue(e.getMessage().contains("Invalid interval"));
+      }
+    }
+  }
+
+  @Test
   public void fromYearMonthStringTest() {
     String input;
     CalendarInterval i;
@@ -134,7 +162,8 @@ public class CalendarIntervalSuite {
     assertEquals(fromDayTimeString(input), i);
 
     input = "10 0:12:0.888";
-    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE);
+    i = new CalendarInterval(0, 10 * MICROS_PER_DAY + 12 * MICROS_PER_MINUTE +
+      888 * MICROS_PER_MILLI);
     assertEquals(fromDayTimeString(input), i);
 
     input = "-3 0:0:0";
@@ -155,6 +184,14 @@ public class CalendarIntervalSuite {
       fail("Expected to throw an exception for the invalid input");
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("not match day-time format"));
+    }
+
+    try {
+      input = "5 1:12:20";
+      fromDayTimeString(input, "hour", "microsecond");
+      fail("Expected to throw an exception for the invalid convention type");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("Cannot support (interval"));
     }
   }
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import java.util.concurrent.TimeUnit
+
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -192,9 +194,9 @@ private object SizeTrackerSuite {
   }
 
   def time(f: => Unit): Long = {
-    val start = System.currentTimeMillis()
+    val startNs = System.nanoTime()
     f
-    System.currentTimeMillis() - start
+    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs)
   }
 
   def averageTime(v: Seq[Long]): Long = {

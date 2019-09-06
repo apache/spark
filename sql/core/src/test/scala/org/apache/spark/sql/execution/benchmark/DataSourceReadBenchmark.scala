@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -50,13 +51,12 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
     .set("spark.master", "local[1]")
     .setIfMissing("spark.driver.memory", "3g")
     .setIfMissing("spark.executor.memory", "3g")
-    .setIfMissing("spark.ui.enabled", "false")
+    .setIfMissing(UI_ENABLED, false)
 
   val spark = SparkSession.builder.config(conf).getOrCreate()
 
   // Set default configs. Individual cases will change them if necessary.
   spark.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
-  spark.conf.set(SQLConf.ORC_COPY_BATCH_TO_SPARK.key, "false")
   spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
   spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
 
@@ -137,12 +137,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
         sqlBenchmark.addCase("SQL ORC Vectorized") { _ =>
           spark.sql("SELECT sum(id) FROM orcTable").collect()
-        }
-
-        sqlBenchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(id) FROM orcTable").collect()
-          }
         }
 
         sqlBenchmark.addCase("SQL ORC MR") { _ =>
@@ -261,12 +255,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").collect()
         }
 
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").collect()
-          }
-        }
-
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(c1), sum(length(c2)) FROM orcTable").collect()
@@ -312,12 +300,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           spark.sql("select sum(length(c1)) from orcTable").collect()
         }
 
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("select sum(length(c1)) from orcTable").collect()
-          }
-        }
-
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("select sum(length(c1)) from orcTable").collect()
@@ -361,12 +343,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           spark.sql("SELECT sum(id) FROM orcTable").collect()
         }
 
-        benchmark.addCase("Data column - ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(id) FROM orcTable").collect()
-          }
-        }
-
         benchmark.addCase("Data column - ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(id) FROM orcTable").collect()
@@ -395,12 +371,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
           spark.sql("SELECT sum(p) FROM orcTable").collect()
         }
 
-        benchmark.addCase("Partition column - ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(p) FROM orcTable").collect()
-          }
-        }
-
         benchmark.addCase("Partition column - ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT sum(p) FROM orcTable").collect()
@@ -427,12 +397,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
         benchmark.addCase("Both columns - ORC Vectorized") { _ =>
           spark.sql("SELECT sum(p), sum(id) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("Both column - ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT sum(p), sum(id) FROM orcTable").collect()
-          }
         }
 
         benchmark.addCase("Both columns - ORC MR") { _ =>
@@ -513,13 +477,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
             "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
         }
 
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
-              "WHERE c1 IS NOT NULL AND c2 IS NOT NULL").collect()
-          }
-        }
-
         benchmark.addCase("SQL ORC MR") { _ =>
           withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> "false") {
             spark.sql("SELECT SUM(LENGTH(c2)) FROM orcTable " +
@@ -568,12 +525,6 @@ object DataSourceReadBenchmark extends BenchmarkBase with SQLHelper {
 
         benchmark.addCase("SQL ORC Vectorized") { _ =>
           spark.sql(s"SELECT sum(c$middle) FROM orcTable").collect()
-        }
-
-        benchmark.addCase("SQL ORC Vectorized with copy") { _ =>
-          withSQLConf(SQLConf.ORC_COPY_BATCH_TO_SPARK.key -> "true") {
-            spark.sql(s"SELECT sum(c$middle) FROM orcTable").collect()
-          }
         }
 
         benchmark.addCase("SQL ORC MR") { _ =>

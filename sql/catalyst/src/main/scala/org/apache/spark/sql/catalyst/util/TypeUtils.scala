@@ -46,14 +46,27 @@ object TypeUtils {
     if (TypeCoercion.haveSameType(types)) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      return TypeCheckResult.TypeCheckFailure(
+      TypeCheckResult.TypeCheckFailure(
         s"input to $caller should all be the same type, but it's " +
           types.map(_.catalogString).mkString("[", ", ", "]"))
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def checkForMapKeyType(keyType: DataType): TypeCheckResult = {
+    if (keyType.existsRecursively(_.isInstanceOf[MapType])) {
+      TypeCheckResult.TypeCheckFailure("The key of map cannot be/contain map.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+    } else {
+      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    }
+  }
 
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
@@ -65,11 +78,12 @@ object TypeUtils {
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val v1 = x(i) & 0xff
-      val v2 = y(i) & 0xff
-      val res = v1 - v2
+    val limit = if (x.length <= y.length) x.length else y.length
+    var i = 0
+    while (i < limit) {
+      val res = (x(i) & 0xff) - (y(i) & 0xff)
       if (res != 0) return res
+      i += 1
     }
     x.length - y.length
   }

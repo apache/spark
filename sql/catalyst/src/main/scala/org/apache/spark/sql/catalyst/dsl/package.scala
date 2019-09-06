@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.types._
 
 /**
@@ -136,7 +137,7 @@ package object dsl {
     implicit def longToLiteral(l: Long): Literal = Literal(l)
     implicit def floatToLiteral(f: Float): Literal = Literal(f)
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
-    implicit def stringToLiteral(s: String): Literal = Literal(s)
+    implicit def stringToLiteral(s: String): Literal = Literal.create(s, StringType)
     implicit def dateToLiteral(d: Date): Literal = Literal(d)
     implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d.underlying())
     implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
@@ -295,10 +296,7 @@ package object dsl {
   object expressions extends ExpressionConversions  // scalastyle:ignore
 
   object plans {  // scalastyle:ignore
-    def table(ref: String): LogicalPlan = UnresolvedRelation(TableIdentifier(ref))
-
-    def table(db: String, ref: String): LogicalPlan =
-      UnresolvedRelation(TableIdentifier(ref, Option(db)))
+    def table(parts: String*): LogicalPlan = UnresolvedRelation(parts)
 
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) {
       def select(exprs: Expression*): LogicalPlan = {
@@ -325,7 +323,7 @@ package object dsl {
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
         condition: Option[Expression] = None): LogicalPlan =
-        Join(logicalPlan, otherPlan, joinType, condition)
+        Join(logicalPlan, otherPlan, joinType, condition, JoinHint.NONE)
 
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
@@ -382,10 +380,14 @@ package object dsl {
         Generate(generator, unrequiredChildIndex, outer,
           alias, outputNames.map(UnresolvedAttribute(_)), logicalPlan)
 
-      def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
-        InsertIntoTable(
-          analysis.UnresolvedRelation(TableIdentifier(tableName)),
-          Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
+      def insertInto(tableName: String): LogicalPlan = insertInto(table(tableName))
+
+      def insertInto(
+          table: LogicalPlan,
+          partition: Map[String, Option[String]] = Map.empty,
+          overwrite: Boolean = false,
+          ifPartitionNotExists: Boolean = false): LogicalPlan =
+        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 

@@ -24,62 +24,29 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
-import org.apache.spark.sql.sources.v2.BatchReadSupportProvider;
-import org.apache.spark.sql.sources.v2.DataSourceOptions;
-import org.apache.spark.sql.sources.v2.DataSourceV2;
+import org.apache.spark.sql.sources.v2.Table;
+import org.apache.spark.sql.sources.v2.TableProvider;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
-public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportProvider {
+public class JavaAdvancedDataSourceV2 implements TableProvider {
 
-  public class ReadSupport extends JavaSimpleReadSupport {
-    @Override
-    public ScanConfigBuilder newScanConfigBuilder() {
-      return new AdvancedScanConfigBuilder();
-    }
-
-    @Override
-    public InputPartition[] planInputPartitions(ScanConfig config) {
-      Filter[] filters = ((AdvancedScanConfigBuilder) config).filters;
-      List<InputPartition> res = new ArrayList<>();
-
-      Integer lowerBound = null;
-      for (Filter filter : filters) {
-        if (filter instanceof GreaterThan) {
-          GreaterThan f = (GreaterThan) filter;
-          if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
-            lowerBound = (Integer) f.value();
-            break;
-          }
-        }
+  @Override
+  public Table getTable(CaseInsensitiveStringMap options) {
+    return new JavaSimpleBatchTable() {
+      @Override
+      public ScanBuilder newScanBuilder(CaseInsensitiveStringMap options) {
+        return new AdvancedScanBuilder();
       }
-
-      if (lowerBound == null) {
-        res.add(new JavaRangeInputPartition(0, 5));
-        res.add(new JavaRangeInputPartition(5, 10));
-      } else if (lowerBound < 4) {
-        res.add(new JavaRangeInputPartition(lowerBound + 1, 5));
-        res.add(new JavaRangeInputPartition(5, 10));
-      } else if (lowerBound < 9) {
-        res.add(new JavaRangeInputPartition(lowerBound + 1, 10));
-      }
-
-      return res.stream().toArray(InputPartition[]::new);
-    }
-
-    @Override
-    public PartitionReaderFactory createReaderFactory(ScanConfig config) {
-      StructType requiredSchema = ((AdvancedScanConfigBuilder) config).requiredSchema;
-      return new AdvancedReaderFactory(requiredSchema);
-    }
+    };
   }
 
-  public static class AdvancedScanConfigBuilder implements ScanConfigBuilder, ScanConfig,
+  static class AdvancedScanBuilder implements ScanBuilder, Scan,
     SupportsPushDownFilters, SupportsPushDownRequiredColumns {
 
-    // Exposed for testing.
-    public StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
-    public Filter[] filters = new Filter[0];
+    private StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
+    private Filter[] filters = new Filter[0];
 
     @Override
     public void pruneColumns(StructType requiredSchema) {
@@ -121,8 +88,57 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
     }
 
     @Override
-    public ScanConfig build() {
+    public Scan build() {
       return this;
+    }
+
+    @Override
+    public Batch toBatch() {
+      return new AdvancedBatch(requiredSchema, filters);
+    }
+  }
+
+  public static class AdvancedBatch implements Batch {
+    // Exposed for testing.
+    public StructType requiredSchema;
+    public Filter[] filters;
+
+    AdvancedBatch(StructType requiredSchema, Filter[] filters) {
+      this.requiredSchema = requiredSchema;
+      this.filters = filters;
+    }
+
+    @Override
+    public InputPartition[] planInputPartitions() {
+      List<InputPartition> res = new ArrayList<>();
+
+      Integer lowerBound = null;
+      for (Filter filter : filters) {
+        if (filter instanceof GreaterThan) {
+          GreaterThan f = (GreaterThan) filter;
+          if ("i".equals(f.attribute()) && f.value() instanceof Integer) {
+            lowerBound = (Integer) f.value();
+            break;
+          }
+        }
+      }
+
+      if (lowerBound == null) {
+        res.add(new JavaRangeInputPartition(0, 5));
+        res.add(new JavaRangeInputPartition(5, 10));
+      } else if (lowerBound < 4) {
+        res.add(new JavaRangeInputPartition(lowerBound + 1, 5));
+        res.add(new JavaRangeInputPartition(5, 10));
+      } else if (lowerBound < 9) {
+        res.add(new JavaRangeInputPartition(lowerBound + 1, 10));
+      }
+
+      return res.stream().toArray(InputPartition[]::new);
+    }
+
+    @Override
+    public PartitionReaderFactory createReaderFactory() {
+      return new AdvancedReaderFactory(requiredSchema);
     }
   }
 
@@ -164,11 +180,5 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, BatchReadSupportP
         }
       };
     }
-  }
-
-
-  @Override
-  public BatchReadSupport createBatchReadSupport(DataSourceOptions options) {
-    return new ReadSupport();
   }
 }

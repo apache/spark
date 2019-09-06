@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -101,7 +102,7 @@ case class UserDefinedGenerator(
     inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map { e =>
-        StructField(e.simpleString, e.dataType, nullable = true)
+        StructField(e.simpleString(SQLConf.get.maxToStringFields), e.dataType, nullable = true)
       })
       CatalystTypeConverters.createToScalaConverter(inputSchema)
     }.asInstanceOf[InternalRow => Row]
@@ -126,14 +127,16 @@ case class UserDefinedGenerator(
  *   3      NULL
  * }}}
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows.",
+  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
        1  2
        3  NULL
   """)
+// scalastyle:on line.size.limit
 case class Stack(children: Seq[Expression]) extends Generator {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
@@ -258,7 +261,7 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 
   override def elementSchema: StructType = child.elementSchema
 
@@ -351,7 +354,7 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
@@ -374,7 +377,7 @@ case class Explode(child: Expression) extends ExplodeBase {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions.",
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
@@ -389,14 +392,16 @@ case class PosExplode(child: Expression) extends ExplodeBase {
 /**
  * Explodes an array of structs into a table.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Explodes an array of structs into a table.",
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1  a
        2  b
   """)
+// scalastyle:on line.size.limit
 case class Inline(child: Expression) extends UnaryExpression with CollectionGenerator {
   override val inline: Boolean = true
   override val position: Boolean = false

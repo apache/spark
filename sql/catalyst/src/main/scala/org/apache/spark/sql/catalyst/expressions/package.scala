@@ -86,13 +86,6 @@ package object expressions  {
   }
 
   /**
-   * A helper function to bind given expressions to an input schema.
-   */
-  def toBoundExprs(exprs: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] = {
-    exprs.map(BindReferences.bindReference(_, inputSchema))
-  }
-
-  /**
    * Helper functions for working with `Seq[Attribute]`.
    */
   implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
@@ -101,7 +94,7 @@ package object expressions  {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
     }
 
-    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n) loops when
     // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
     // to an array.
     @transient private lazy val attrsArray = attrs.toArray
@@ -184,7 +177,7 @@ package object expressions  {
             a => (resolver(dbPart, a.qualifier.head) && resolver(tblPart, a.qualifier.last))
           }
           (attributes, nestedFields)
-        case all =>
+        case _ =>
           (Seq.empty, Seq.empty)
       }
 
@@ -204,7 +197,7 @@ package object expressions  {
               resolver(qualifier, a.qualifier.last)
             }
             (attributes, nestedFields)
-          case all =>
+          case _ =>
             (Seq.empty[Attribute], Seq.empty[String])
         }
       }

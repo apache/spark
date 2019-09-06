@@ -106,4 +106,19 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
       assert(proj(input).toSeq(StructType.fromDDL("c0 int, c1 int")) === expected)
     }
   }
+
+  test("SPARK-25374 Correctly handles NoOp in SafeProjection") {
+    val exprs = Seq(Add(BoundReference(0, IntegerType, nullable = true), Literal.create(1)), NoOp)
+    val input = InternalRow.fromSeq(1 :: 1 :: Nil)
+    val expected = 2 :: null :: Nil
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
+      val proj = SafeProjection.createObject(exprs)
+      assert(proj(input).toSeq(StructType.fromDDL("c0 int, c1 int")) === expected)
+    }
+
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> noCodegen) {
+      val proj = SafeProjection.createObject(exprs)
+      assert(proj(input).toSeq(StructType.fromDDL("c0 int, c1 int")) === expected)
+    }
+  }
 }

@@ -164,52 +164,14 @@ if __name__ == "__main__":
          "False", "TypeConverters.toBoolean"),
         ("loss", "the loss function to be optimized.", None, "TypeConverters.toString"),
         ("distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.",
-         "'euclidean'", "TypeConverters.toString")]
+         "'euclidean'", "TypeConverters.toString"),
+        ("validationIndicatorCol", "name of the column that indicates whether each row is for " +
+         "training or for validation. False indicates training; true indicates validation.",
+         None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr, typeConverter)
         code.append(param_code + "\n" + _gen_param_code(name, doc, defaultValueStr))
 
-    decisionTreeParams = [
-        ("maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; " +
-         "depth 1 means 1 internal node + 2 leaf nodes.", "TypeConverters.toInt"),
-        ("maxBins", "Max number of bins for" +
-         " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-         " categorical feature.", "TypeConverters.toInt"),
-        ("minInstancesPerNode", "Minimum number of instances each child must have after split. " +
-         "If a split causes the left or right child to have fewer than minInstancesPerNode, the " +
-         "split will be discarded as invalid. Should be >= 1.", "TypeConverters.toInt"),
-        ("minInfoGain", "Minimum information gain for a split to be considered at a tree node.",
-         "TypeConverters.toFloat"),
-        ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small," +
-         " then 1 node will be split per iteration, and its aggregates may exceed this size.",
-         "TypeConverters.toInt"),
-        ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
-         "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
-         "Caching can speed up training of deeper trees. Users can set how often should the " +
-         "cache be checkpointed or disable it by setting checkpointInterval.",
-         "TypeConverters.toBoolean")]
-
-    decisionTreeCode = '''class DecisionTreeParams(Params):
-    """
-    Mixin for Decision Tree parameters.
-    """
-
-    $dummyPlaceHolders
-
-    def __init__(self):
-        super(DecisionTreeParams, self).__init__()'''
-    dtParamMethods = ""
-    dummyPlaceholders = ""
-    paramTemplate = """$name = Param($owner, "$name", "$doc", typeConverter=$typeConverterStr)"""
-    for name, doc, typeConverterStr in decisionTreeParams:
-        if typeConverterStr is None:
-            typeConverterStr = str(None)
-        variable = paramTemplate.replace("$name", name).replace("$doc", doc) \
-            .replace("$typeConverterStr", typeConverterStr)
-        dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
-        dtParamMethods += _gen_param_code(name, doc, None) + "\n"
-    code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" +
-                dtParamMethods)
     print("\n\n\n".join(code))

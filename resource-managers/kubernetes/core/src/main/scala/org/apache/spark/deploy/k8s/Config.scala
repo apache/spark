@@ -24,6 +24,18 @@ import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
 
+  val KUBERNETES_CONTEXT =
+    ConfigBuilder("spark.kubernetes.context")
+      .doc("The desired context from your K8S config file used to configure the K8S " +
+        "client for interacting with the cluster.  Useful if your config file has " +
+        "multiple clusters or user identities defined.  The client library used " +
+        "locates the config file via the KUBECONFIG environment variable or by defaulting " +
+        "to .kube/config under your home directory.  If not specified then your current " +
+        "context is used.  You can always override specific aspects of the config file " +
+        "provided configuration using other Spark on K8S configuration options.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
       .doc("The namespace that will be used for running the driver and executor pods.")
@@ -60,18 +72,42 @@ private[spark] object Config extends Logging {
       .doc("Comma separated list of the Kubernetes secrets used " +
         "to access private image registries.")
       .stringConf
-      .createOptional
+      .toSequence
+      .createWithDefault(Nil)
 
-  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
-      "spark.kubernetes.authenticate.driver"
-  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
-      "spark.kubernetes.authenticate.driver.mounted"
+  val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
+  val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
+  val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"
   val KUBERNETES_AUTH_CLIENT_MODE_PREFIX = "spark.kubernetes.authenticate"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
+
+  val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.submission.requestTimeout")
+      .doc("request timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val SUBMISSION_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.submission.connectionTimeout")
+      .doc("connection timeout to be used in milliseconds for starting the driver")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_REQUEST_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.driver.requestTimeout")
+      .doc("request timeout to be used in milliseconds for driver to request executors")
+      .intConf
+      .createWithDefault(10000)
+
+  val DRIVER_CLIENT_CONNECTION_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.driver.connectionTimeout")
+      .doc("connection timeout to be used in milliseconds for driver to request executors")
+      .intConf
+      .createWithDefault(10000)
 
   val KUBERNETES_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
@@ -85,6 +121,12 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.driver.limit.cores")
       .doc("Specify the hard cpu limit for the driver pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_DRIVER_REQUEST_CORES =
+    ConfigBuilder("spark.kubernetes.driver.request.cores")
+      .doc("Specify the cpu request for the driver pod")
       .stringConf
       .createOptional
 
@@ -112,16 +154,16 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  // For testing only.
+  val KUBERNETES_DRIVER_POD_NAME_PREFIX =
+    ConfigBuilder("spark.kubernetes.driver.resourceNamePrefix")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_EXECUTOR_POD_NAME_PREFIX =
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
-      .internal()
-      .stringConf
-      .createWithDefault("spark")
-
-  val KUBERNETES_PYSPARK_PY_FILES =
-    ConfigBuilder("spark.kubernetes.python.pyFiles")
-      .doc("The PyFiles that are distributed via client arguments")
       .internal()
       .stringConf
       .createOptional
@@ -281,6 +323,33 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_NODE_SELECTOR_PREFIX = "spark.kubernetes.node.selector."
 
+  val KUBERNETES_DELETE_EXECUTORS =
+    ConfigBuilder("spark.kubernetes.executor.deleteOnTermination")
+      .doc("If set to false then executor pods will not be deleted in case " +
+        "of failure or normal termination.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.dynamicAllocation.deleteGracePeriod")
+      .doc("How long to wait for executors to shut down gracefully before a forceful kill.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("5s")
+
+  val KUBERNETES_SUBMIT_GRACE_PERIOD =
+    ConfigBuilder("spark.kubernetes.appKillPodDeletionGracePeriod")
+      .doc("Time to wait for graceful deletion of Spark pods when spark-submit" +
+        " is used for killing an application.")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  val KUBERNETES_FILE_UPLOAD_PATH =
+    ConfigBuilder("spark.kubernetes.file.upload.path")
+      .doc("Hadoop compatible file system path where files from the local file system " +
+        "will be uploded to in cluster mode.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
@@ -297,6 +366,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
   val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
+  val KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY = "mount.subPath"
   val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"

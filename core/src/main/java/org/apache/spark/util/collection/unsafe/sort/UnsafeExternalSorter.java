@@ -213,14 +213,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       spillWriters.size() > 1 ? " times" : " time");
 
     ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-    // We only write out contents of the inMemSorter if it is not empty.
-    if (inMemSorter.numRecords() > 0) {
-      final UnsafeSorterSpillWriter spillWriter =
-        new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
-          inMemSorter.numRecords());
-      spillWriters.add(spillWriter);
-      spillIterator(inMemSorter.getSortedIterator(), spillWriter);
-    }
+
+    final UnsafeSorterSpillWriter spillWriter =
+      new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
+        inMemSorter.numRecords());
+    spillWriters.add(spillWriter);
+    spillIterator(inMemSorter.getSortedIterator(), spillWriter);
 
     final long spillSize = freeMemory();
     // Note that this is more-or-less going to be a multiple of the page size, so wasted space in
@@ -575,19 +573,31 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public void loadNext() throws IOException {
-      synchronized (this) {
-        loaded = true;
-        if (nextUpstream != null) {
-          // Just consumed the last record from in memory iterator
-          if (lastPage != null) {
-            freePage(lastPage);
-            lastPage = null;
+      MemoryBlock pageToFree = null;
+      try {
+        synchronized (this) {
+          loaded = true;
+          if (nextUpstream != null) {
+            // Just consumed the last record from in memory iterator
+            if(lastPage != null) {
+              // Do not free the page here, while we are locking `SpillableIterator`. The `freePage`
+              // method locks the `TaskMemoryManager`, and it's a bad idea to lock 2 objects in
+              // sequence. We may hit dead lock if another thread locks `TaskMemoryManager` and
+              // `SpillableIterator` in sequence, which may happen in
+              // `TaskMemoryManager.acquireExecutionMemory`.
+              pageToFree = lastPage;
+              lastPage = null;
+            }
+            upstream = nextUpstream;
+            nextUpstream = null;
           }
-          upstream = nextUpstream;
-          nextUpstream = null;
+          numRecords--;
+          upstream.loadNext();
         }
-        numRecords--;
-        upstream.loadNext();
+      } finally {
+        if (pageToFree != null) {
+          freePage(pageToFree);
+        }
       }
     }
 

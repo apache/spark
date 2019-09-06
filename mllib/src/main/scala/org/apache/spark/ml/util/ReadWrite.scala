@@ -31,7 +31,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -84,7 +84,7 @@ private[util] sealed trait BaseReadWrite {
  *
  * @since 2.4.0
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 trait MLWriterFormat {
   /**
@@ -108,7 +108,7 @@ trait MLWriterFormat {
  *
  * @since 2.4.0
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 trait MLFormatRegister extends MLWriterFormat {
   /**
@@ -164,7 +164,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
-    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sparkSession)
     saveImpl(path)
   }
 
@@ -208,7 +208,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 /**
  * A ML Writer which delegates based on the requested format.
  */
-@InterfaceStability.Unstable
+@Unstable
 @Since("2.4.0")
 class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
   private var source: String = "internal"
@@ -291,7 +291,7 @@ trait MLWritable {
  * Trait for classes that provide `GeneralMLWriter`.
  */
 @Since("2.4.0")
-@InterfaceStability.Unstable
+@Unstable
 trait GeneralMLWritable extends MLWritable {
   /**
    * Returns an `MLWriter` instance for this ML instance.
@@ -624,10 +624,17 @@ private[ml] object DefaultParamsReader {
    * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
-  def loadParamsInstance[T](path: String, sc: SparkContext): T = {
+  def loadParamsInstance[T](path: String, sc: SparkContext): T =
+    loadParamsInstanceReader(path, sc).load(path)
+
+  /**
+   * Load a `Params` instance reader from the given path, and return it.
+   * This assumes the instance implements [[MLReadable]].
+   */
+  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
-    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }
 }
 
@@ -666,8 +673,8 @@ private[ml] object MetaAlgorithmReadWrite {
 
 private[ml] class FileSystemOverwrite extends Logging {
 
-  def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
-    val hadoopConf = sc.hadoopConfiguration
+  def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
+    val hadoopConf = session.sessionState.newHadoopConf()
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

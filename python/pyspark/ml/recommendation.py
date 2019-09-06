@@ -57,7 +57,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 
     For implicit preference data, the algorithm used is based on
     `"Collaborative Filtering for Implicit Feedback Datasets",
-    <http://dx.doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
+    <https://doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
     approach used here.
 
     Essentially instead of finding the low-rank approximations to the
@@ -79,27 +79,27 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> test = spark.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
-    Row(user=0, item=2, prediction=-0.13807615637779236)
+    Row(user=0, item=2, prediction=0.6929101347923279)
     >>> predictions[1]
-    Row(user=1, item=0, prediction=2.6258413791656494)
+    Row(user=1, item=0, prediction=3.47356915473938)
     >>> predictions[2]
-    Row(user=2, item=0, prediction=-1.5018409490585327)
+    Row(user=2, item=0, prediction=-0.8991986513137817)
     >>> user_recs = model.recommendForAllUsers(3)
     >>> user_recs.where(user_recs.user == 0)\
         .select("recommendations.item", "recommendations.rating").collect()
-    [Row(item=[0, 1, 2], rating=[3.910..., 1.992..., -0.138...])]
+    [Row(item=[0, 1, 2], rating=[3.910..., 1.997..., 0.692...])]
     >>> item_recs = model.recommendForAllItems(3)
     >>> item_recs.where(item_recs.item == 2)\
         .select("recommendations.user", "recommendations.rating").collect()
-    [Row(user=[2, 1, 0], rating=[4.901..., 3.981..., -0.138...])]
+    [Row(user=[2, 1, 0], rating=[4.892..., 3.991..., 0.692...])]
     >>> user_subset = df.where(df.user == 2)
     >>> user_subset_recs = model.recommendForUserSubset(user_subset, 3)
     >>> user_subset_recs.select("recommendations.item", "recommendations.rating").first()
-    Row(item=[2, 1, 0], rating=[4.901..., 1.056..., -1.501...])
+    Row(item=[2, 1, 0], rating=[4.892..., 1.076..., -0.899...])
     >>> item_subset = df.where(df.item == 0)
     >>> item_subset_recs = model.recommendForItemSubset(item_subset, 3)
     >>> item_subset_recs.select("recommendations.user", "recommendations.rating").first()
-    Row(user=[0, 1, 2], rating=[3.910..., 2.625..., -1.501...])
+    Row(user=[0, 1, 2], rating=[3.910..., 3.473..., -0.899...])
     >>> als_path = temp_path + "/als"
     >>> als.save(als_path)
     >>> als2 = ALS.load(als_path)

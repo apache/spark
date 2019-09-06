@@ -629,7 +629,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     require(allFiles.exists(_.version == version))
 
     val latestSnapshotFileBeforeVersion = allFiles
-      .filter(_.isSnapshot == true)
+      .filter(_.isSnapshot)
       .takeWhile(_.version <= version)
       .lastOption
     val deltaBatchFiles = latestSnapshotFileBeforeVersion match {
