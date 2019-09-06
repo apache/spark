@@ -848,4 +848,23 @@ object DateTimeUtils {
     val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
     new Decimal().set(sinceEpoch, 20, 6)
   }
+
+  def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())
+
+  private def today(zoneId: ZoneId): ZonedDateTime = {
+    Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
+  }
+
+  /** Notational shorthands that are converted to ordinary dates. */
+  val specialTimestamps: Map[String, ZoneId => SQLTimestamp] = Map(
+    ("epoch", (_: ZoneId) => 0),
+    ("now", (_: ZoneId) => currentTimestamp),
+    ("today", (z: ZoneId) => instantToMicros(today(z).toInstant)),
+    ("tomorrow", (z: ZoneId) => instantToMicros(today(z).plusDays(1).toInstant)),
+    ("yesterday", (z: ZoneId) => instantToMicros(today(z).minusDays(1).toInstant)))
+  val specialTimestampKeys: Set[String] = specialTimestamps.keySet
+
+  val specialUTF8Timestamps: Map[UTF8String, ZoneId => SQLTimestamp] =
+    specialTimestamps.map { case (key, value) => UTF8String.fromString(key) -> value}
+  val specialUTF8TimestampKeys: Set[UTF8String] = specialTimestampKeys.map(UTF8String.fromString)
 }
