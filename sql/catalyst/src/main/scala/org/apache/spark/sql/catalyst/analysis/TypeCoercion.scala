@@ -23,7 +23,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.analysis.DecimalPrecision.isFloat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -864,19 +863,9 @@ object TypeCoercion {
 
       case b @ BinaryOperator(left, right) if left.dataType != right.dataType =>
         (left, right) match {
-          // this process logic is a copy of nondecimalAndDecimal method of DecimalPrecision class
-          case (l: Literal, r) if r.dataType.isInstanceOf[DecimalType]
-            && l.dataType.isInstanceOf[IntegralType] =>
-            b.makeCopy(Array(Cast(l, DecimalType.fromLiteral(l)), r))
-          case (l, r: Literal) if l.dataType.isInstanceOf[DecimalType]
-            && r.dataType.isInstanceOf[IntegralType] =>
-            b.makeCopy(Array(l, Cast(r, DecimalType.fromLiteral(r))))
-          // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-          // and fixed-precision decimals in an expression with floats / doubles to doubles
-          case (l @ IntegralType(), r @ DecimalType.Expression(_, _)) =>
-            b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
-          case (l @ DecimalType.Expression(_, _), r @ IntegralType()) =>
-            b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
+          // Skip to handle decimals
+          case (l, r) if l.dataType.isInstanceOf[DecimalType] ||
+            r.dataType.isInstanceOf[DecimalType] => b
           case _ =>
             findTightestCommonType(left.dataType, right.dataType).map { commonType =>
               if (b.inputType.acceptsType(commonType)) {
