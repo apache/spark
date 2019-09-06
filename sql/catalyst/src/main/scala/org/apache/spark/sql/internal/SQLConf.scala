@@ -350,7 +350,7 @@ object SQLConf {
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .doc("The relation with a non-empty partition ratio lower than this config will not be " +
         "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
-        "of its size .")
+        "of its size.")
       .doubleConf
       .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
       .createWithDefault(0.2)
