@@ -31,7 +31,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -201,10 +201,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile = "../hive/src/test/resources/" +
-      s"hive-hcatalog-core-${if (HiveUtils.isHive23) "2.3.5" else "0.13.1"}.jar"
-        .split("/")
-        .mkString(File.separator)
+    val jarFile = s"../hive/src/test/resources/${HiveTestJars.HIVE_HCATALOG_CORE_JAR}"
+      .split("/")
+      .mkString(File.separator)
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -299,10 +298,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Support hive.aux.jars.path") {
-    val hiveContribJar = "../hive/src/test/resources/" +
-      s"hive-contrib-${if (HiveUtils.isHive23) "2.3.5" else "0.13.1"}.jar"
-        .split("/")
-        .mkString(File.separator)
+    val hiveContribJar = s"../hive/src/test/resources/${HiveTestJars.HIVE_CONTRIB_JAR}"
+      .split("/")
+      .mkString(File.separator)
     runCliWithin(
       1.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(

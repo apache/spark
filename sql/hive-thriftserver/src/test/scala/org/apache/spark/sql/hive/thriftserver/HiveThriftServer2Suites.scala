@@ -43,6 +43,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.HiveTestJars
 import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -484,10 +485,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement("smallKV", "addJar")(
       {
         statement =>
-          val jarFile = "../hive/src/test/resources/" +
-            s"hive-hcatalog-core-${if (HiveUtils.isHive23) "2.3.5" else "0.13.1"}.jar"
-              .split("/")
-              .mkString(File.separator)
+          val jarFile = s"../hive/src/test/resources/${HiveTestJars.HIVE_HCATALOG_CORE_JAR}"
+            .split("/")
+            .mkString(File.separator)
 
           statement.executeQuery(s"ADD JAR $jarFile")
       },
