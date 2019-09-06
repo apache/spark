@@ -40,12 +40,18 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         cls.hive_available = True
+        cls.spark = None
         try:
-            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+            cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
+            cls.tearDownClass()
             cls.hive_available = False
         except TypeError:
+            cls.tearDownClass()
             cls.hive_available = False
+        if cls.hive_available:
+            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+
         os.unlink(cls.tempdir.name)
         if cls.hive_available:
             cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
@@ -59,6 +65,9 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
+        if cls.spark is not None:
+            cls.spark.stop()
+            cls.spark = None
 
     def test_save_and_load_table(self):
         df = self.df

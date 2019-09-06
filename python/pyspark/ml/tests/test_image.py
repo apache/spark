@@ -67,44 +67,6 @@ class ImageFileFormatTest(SparkSessionTestCase):
                 lambda: ImageSchema.toImage("a"))
 
 
-class ImageFileFormatOnHiveContextTest(PySparkTestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        super(ImageFileFormatOnHiveContextTest, cls).setUpClass()
-        cls.hive_available = True
-        # Note that here we enable Hive's support.
-        try:
-            cls.spark = SparkSession.builder.enableHiveSupport().getOrCreate()
-        except py4j.protocol.Py4JError:
-            cls.tearDownClass()
-            cls.hive_available = False
-        except TypeError:
-            cls.tearDownClass()
-            cls.hive_available = False
-
-    def setUp(self):
-        if not self.hive_available:
-            self.skipTest("Hive is not available.")
-
-    @classmethod
-    def tearDownClass(cls):
-        super(ImageFileFormatOnHiveContextTest, cls).tearDownClass()
-        if cls.spark is not None:
-            cls.spark.stop()
-            cls.spark = None
-
-    def test_read_images_multiple_times(self):
-        # This test case is to check if ImageFileFormat tries to
-        # initiate Hive client multiple times. See SPARK-22651.
-        data_path = 'data/mllib/images/origin/kittens'
-        for i in range(2):
-            self.spark.read.format("image") \
-                .option("dropInvalid", True) \
-                .option("recursiveFileLookup", True) \
-                .load(data_path)
-
-
 if __name__ == "__main__":
     from pyspark.ml.tests.test_image import *
 
