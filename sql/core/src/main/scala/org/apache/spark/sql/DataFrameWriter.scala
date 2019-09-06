@@ -399,7 +399,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-
   private def insertInto(catalog: CatalogPlugin, ident: Identifier): Unit = {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
@@ -436,8 +435,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def insertInto(tableIdent: TableIdentifier,
-                         partionInfo: Map[String, Option[String]]): Unit = {
+  private def insertInto(
+      tableIdent: TableIdentifier,
+      partionInfo: Map[String, Option[String]]): Unit = {
     runCommand(df.sparkSession, "insertInto") {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),

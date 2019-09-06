@@ -827,7 +827,6 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
   test("SPARK-28050: DataFrameWriter support insertInto a specific table partition") {
     withTable("mc_test_pt_table") {
-      import spark.implicits._
       spark.sql(
         s"CREATE TABLE mc_test_pt_table (name STRING, num BIGINT) PARTITIONED BY (pt1 STRING, pt2 STRING)")
       val result =
