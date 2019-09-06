@@ -1057,13 +1057,16 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToDateCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = {
-    val zoneIdClass = classOf[ZoneId]
-    val zid = JavaCode.global(
-      ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-      zoneIdClass)
+    def getZoneId() = {
+      val zoneIdClass = classOf[ZoneId]
+      JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+    }
     from match {
       case StringType =>
         val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
+        val zid = getZoneId()
         (c, evPrim, evNull) =>
           code"""
           scala.Option<Integer> $intOpt =
@@ -1075,6 +1078,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           }
          """
       case TimestampType =>
+        val zid = getZoneId()
         (c, evPrim, evNull) =>
           code"""$evPrim =
             org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
