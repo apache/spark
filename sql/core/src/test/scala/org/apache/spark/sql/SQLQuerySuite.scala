@@ -3185,9 +3185,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.decimalOperations.allowPrecisionLoss" -> "false") {
       val df1 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * 1")
       checkAnswer(df1, Array(Row(100)))
-      val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end *" +
+      val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * " +
         "case when 1=2 then 2 else 1 end")
       checkAnswer(df2, Array(Row(100)))
+      val df3 = sql("select case when 1=2 then 1 else 1.000000000000000000000001 end / 10")
+      checkAnswer(df3, Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))))
     }
   }
 }
