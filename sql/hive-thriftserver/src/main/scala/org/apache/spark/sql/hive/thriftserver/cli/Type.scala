@@ -162,20 +162,23 @@ trait Type {
 
 object Type {
 
-  def types: Seq[Type] =
-    Seq(NULL,
-      STRING,
-      INTEGER,
-      BOOLEAN,
-      DOUBLE,
-      FLOAT,
-      DECIMAL,
-      LONG,
-      BYTE,
-      SHORT,
-      DATE,
-      TIMESTAMP,
-      BINARY)
+  val typeMap: Map[String, Type] = Map(
+    NULL.getName -> NULL,
+    STRING.getName -> STRING,
+    INTEGER.getName -> INTEGER,
+    BOOLEAN.getName -> BOOLEAN,
+    DOUBLE.getName -> DOUBLE,
+    FLOAT.getName -> FLOAT,
+    DECIMAL.getName -> DECIMAL,
+    LONG.getName -> LONG,
+    BYTE.getName -> BYTE,
+    SHORT.getName -> SHORT,
+    DATE.getName -> DATE,
+    TIMESTAMP.getName -> TIMESTAMP,
+    BINARY.getName -> BINARY
+  )
+
+  def values: Seq[Type] = typeMap.values.toSeq
 
   case object NULL extends Type() {
     override def getName: String = "NULL"
