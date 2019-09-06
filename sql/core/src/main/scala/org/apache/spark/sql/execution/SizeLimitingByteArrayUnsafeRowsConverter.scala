@@ -28,12 +28,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * Provides methods for converting compressed byte arrays back to UnsafeRows.
+ * Provides methods for converting compressed byte arrays to UnsafeRows and vice versa.
  * Additionally, can enforce a limit on the total, decoded size of all decoded UnsafeRows.
  * Enforcing the limit is controlled via a sql config and if it is turned on the encoder will
  * throw a SparkException when the limit is reached.
  */
-private[spark] class SizeLimitingByteArrayDecoder(
+private[spark] class SizeLimitingByteArrayUnsafeRowsConverter(
      nFields: Int,
      sqlConf: SQLConf) extends Logging {
   private var totalUncompressedResultSize = 0L
