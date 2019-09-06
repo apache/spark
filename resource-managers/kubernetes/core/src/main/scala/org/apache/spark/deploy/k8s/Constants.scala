@@ -89,8 +89,8 @@ private[spark] object Constants {
   val HADOOP_CONF_VOLUME = "hadoop-properties"
   val KRB_FILE_VOLUME = "krb5-file"
   val HADOOP_CONF_DIR_PATH = "/opt/hadoop/conf"
-  val KRB_FILE_DIR_PATH = "/etc"
   val KRB_FILE_NAME = "krb5.conf"
+  val KRB_FILE_FULL_NAME = s"/etc/$KRB_FILE_NAME"
   val ENV_HADOOP_CONF_DIR = "HADOOP_CONF_DIR"
   val HADOOP_CONFIG_MAP_NAME =
     "spark.kubernetes.executor.hadoopConfigMapName"

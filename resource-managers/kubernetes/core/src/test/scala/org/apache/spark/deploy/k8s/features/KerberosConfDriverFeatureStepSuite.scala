@@ -149,7 +149,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
   private def checkPodForKrbConf(pod: SparkPod, confMapName: String): Unit = {
     val podVolume = pod.pod.getSpec().getVolumes().asScala.find(_.getName() == KRB_FILE_VOLUME)
     assert(podVolume.isDefined)
-    assert(containerHasVolume(pod.container, KRB_FILE_VOLUME, KRB_FILE_DIR_PATH + "/krb5.conf"))
+    assert(containerHasVolume(pod.container, KRB_FILE_VOLUME, KRB_FILE_FULL_NAME))
     assert(podVolume.get.getConfigMap().getName() === confMapName)
   }
 

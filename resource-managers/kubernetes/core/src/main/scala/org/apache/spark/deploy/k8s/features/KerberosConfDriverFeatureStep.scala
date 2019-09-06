@@ -20,6 +20,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.google.common.io.Files
 import io.fabric8.kubernetes.api.model._
@@ -149,7 +150,7 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
       val containerWithMount = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
           .withName(KRB_FILE_VOLUME)
-          .withMountPath(s"$KRB_FILE_DIR_PATH/$KRB_FILE_NAME")
+          .withMountPath(KRB_FILE_FULL_NAME)
           .withSubPath(KRB_FILE_NAME)
           .endVolumeMount()
         .build()
@@ -210,14 +211,19 @@ private[spark] class KerberosConfDriverFeatureStep(kubernetesConf: KubernetesDri
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    val additionalProps = mutable.Map[String, String]()
     // If a submission-local keytab is provided, update the Spark config so that it knows the
     // path of the keytab in the driver container.
     if (needKeytabUpload) {
       val ktName = new File(keytab.get).getName()
-      Map(KEYTAB.key -> s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
-    } else {
-      Map.empty
+      additionalProps.put(KEYTAB.key, s"$KERBEROS_KEYTAB_MOUNT_POINT/$ktName")
     }
+
+    // Forward the krb5 conf iff hasKerberosConf
+    if (hasKerberosConf) {
+      additionalProps.put(KUBERNETES_KERBEROS_KRB5_FILE.key, KRB_FILE_FULL_NAME)
+    }
+    additionalProps.toMap
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
