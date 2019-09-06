@@ -19,8 +19,8 @@ package org.apache.spark.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.UUID
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
