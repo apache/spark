@@ -43,7 +43,7 @@ class HiveClientSuite(version: String)
     })
   }
 
-  test("username of HiveClient - Proxy user as HADOOP_USER_NAME") {
+  test("username of HiveClient - Proxy user") {
     val ugi = UserGroupInformation.createUserForTesting(
       "fakeprincipal@EXAMPLE.COM", Array.empty)
     val proxyUgi = UserGroupInformation.createProxyUserForTesting(
