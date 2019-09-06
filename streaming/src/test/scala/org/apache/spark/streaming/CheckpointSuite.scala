@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -33,7 +32,6 @@ import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutput
 import org.mockito.Mockito.mock
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
@@ -844,6 +842,38 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     // try to read from it at first.
     assert(Files.toByteArray(checkpointFiles(0)) === bytes2)
     assert(Files.toByteArray(checkpointFiles(1)) === bytes1)
+    checkpointWriter.stop()
+  }
+
+  test("SPARK-28912: Fix MatchError in getCheckpointFiles") {
+    val tempDir = Utils.createTempDir()
+    val checkpointDir = tempDir + "/checkpoint-01"
+
+    Utils.deleteRecursively(tempDir)
+
+    val hadoopConf = new Configuration
+    val checkpointWriter =
+      new CheckpointWriter(mock(classOf[JobGenerator]), conf, checkpointDir, hadoopConf)
+
+    // Create a fake RDD checkpoint dir to emulate SparkContext.setCheckpointDir()
+    val fakeRddPath = new Path(checkpointDir, java.util.UUID.randomUUID().toString)
+    fakeRddPath.getFileSystem(hadoopConf).mkdirs(fakeRddPath)
+
+    val checkpointTimes = (1 to 20).map(_ * 1000)
+
+    try {
+      checkpointTimes.foreach(tm => new checkpointWriter.CheckpointWriteHandler(
+        Time(tm), Array.fill[Byte](10)(1), clearCheckpointDataLater = false).run())
+    } catch {
+      case ex: MatchError => fail("Should not throw MatchError", ex)
+    }
+
+    val expectedCheckpoints = checkpointTimes.takeRight(10).map { tm =>
+      Checkpoint.checkpointFile(checkpointDir, Time(tm)).getName }
+
+    assert(Checkpoint.getCheckpointFiles(checkpointDir).map(_.getName) == expectedCheckpoints)
+
+    Utils.deleteRecursively(tempDir)
     checkpointWriter.stop()
   }
 
