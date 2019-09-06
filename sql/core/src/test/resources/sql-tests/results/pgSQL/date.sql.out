@@ -504,7 +504,7 @@ struct<Days From 2K:int>
 -- !query 47
 SELECT EXTRACT(EPOCH FROM DATE        '1970-01-01')
 -- !query 47 schema
-struct<epoch(CAST(DATE '1970-01-01' AS TIMESTAMP)):decimal(20,6)>
+struct<date_part('EPOCH', DATE '1970-01-01'):decimal(20,6)>
 -- !query 47 output
 0
 
@@ -512,7 +512,7 @@ struct<epoch(CAST(DATE '1970-01-01' AS TIMESTAMP)):decimal(20,6)>
 -- !query 48
 SELECT EXTRACT(EPOCH FROM TIMESTAMP   '1970-01-01')
 -- !query 48 schema
-struct<epoch(TIMESTAMP('1970-01-01 00:00:00')):decimal(20,6)>
+struct<date_part('EPOCH', TIMESTAMP('1970-01-01 00:00:00')):decimal(20,6)>
 -- !query 48 output
 0
 
@@ -520,7 +520,7 @@ struct<epoch(TIMESTAMP('1970-01-01 00:00:00')):decimal(20,6)>
 -- !query 49
 SELECT EXTRACT(CENTURY FROM TO_DATE('0101-12-31 BC', 'yyyy-MM-dd G'))
 -- !query 49 schema
-struct<century(to_date('0101-12-31 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('CENTURY', TO_DATE('0101-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 49 output
 -2
 
@@ -528,7 +528,7 @@ struct<century(to_date('0101-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 50
 SELECT EXTRACT(CENTURY FROM TO_DATE('0100-12-31 BC', 'yyyy-MM-dd G'))
 -- !query 50 schema
-struct<century(to_date('0100-12-31 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('CENTURY', TO_DATE('0100-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 50 output
 -1
 
@@ -536,7 +536,7 @@ struct<century(to_date('0100-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 51
 SELECT EXTRACT(CENTURY FROM TO_DATE('0001-12-31 BC', 'yyyy-MM-dd G'))
 -- !query 51 schema
-struct<century(to_date('0001-12-31 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('CENTURY', TO_DATE('0001-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 51 output
 -1
 
@@ -544,7 +544,7 @@ struct<century(to_date('0001-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 52
 SELECT EXTRACT(CENTURY FROM DATE '0001-01-01')
 -- !query 52 schema
-struct<century(DATE '0001-01-01'):int>
+struct<date_part('CENTURY', DATE '0001-01-01'):int>
 -- !query 52 output
 1
 
@@ -552,7 +552,7 @@ struct<century(DATE '0001-01-01'):int>
 -- !query 53
 SELECT EXTRACT(CENTURY FROM DATE '0001-01-01 AD')
 -- !query 53 schema
-struct<century(DATE '0001-01-01'):int>
+struct<date_part('CENTURY', DATE '0001-01-01'):int>
 -- !query 53 output
 1
 
@@ -560,7 +560,7 @@ struct<century(DATE '0001-01-01'):int>
 -- !query 54
 SELECT EXTRACT(CENTURY FROM DATE '1900-12-31')
 -- !query 54 schema
-struct<century(DATE '1900-12-31'):int>
+struct<date_part('CENTURY', DATE '1900-12-31'):int>
 -- !query 54 output
 19
 
@@ -568,7 +568,7 @@ struct<century(DATE '1900-12-31'):int>
 -- !query 55
 SELECT EXTRACT(CENTURY FROM DATE '1901-01-01')
 -- !query 55 schema
-struct<century(DATE '1901-01-01'):int>
+struct<date_part('CENTURY', DATE '1901-01-01'):int>
 -- !query 55 output
 20
 
@@ -576,7 +576,7 @@ struct<century(DATE '1901-01-01'):int>
 -- !query 56
 SELECT EXTRACT(CENTURY FROM DATE '2000-12-31')
 -- !query 56 schema
-struct<century(DATE '2000-12-31'):int>
+struct<date_part('CENTURY', DATE '2000-12-31'):int>
 -- !query 56 output
 20
 
@@ -584,7 +584,7 @@ struct<century(DATE '2000-12-31'):int>
 -- !query 57
 SELECT EXTRACT(CENTURY FROM DATE '2001-01-01')
 -- !query 57 schema
-struct<century(DATE '2001-01-01'):int>
+struct<date_part('CENTURY', DATE '2001-01-01'):int>
 -- !query 57 output
 21
 
@@ -600,7 +600,7 @@ true
 -- !query 59
 SELECT EXTRACT(MILLENNIUM FROM TO_DATE('0001-12-31 BC', 'yyyy-MM-dd G'))
 -- !query 59 schema
-struct<millennium(to_date('0001-12-31 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('MILLENNIUM', TO_DATE('0001-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 59 output
 -1
 
@@ -608,7 +608,7 @@ struct<millennium(to_date('0001-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 60
 SELECT EXTRACT(MILLENNIUM FROM DATE '0001-01-01 AD')
 -- !query 60 schema
-struct<millennium(DATE '0001-01-01'):int>
+struct<date_part('MILLENNIUM', DATE '0001-01-01'):int>
 -- !query 60 output
 1
 
@@ -616,7 +616,7 @@ struct<millennium(DATE '0001-01-01'):int>
 -- !query 61
 SELECT EXTRACT(MILLENNIUM FROM DATE '1000-12-31')
 -- !query 61 schema
-struct<millennium(DATE '1000-12-31'):int>
+struct<date_part('MILLENNIUM', DATE '1000-12-31'):int>
 -- !query 61 output
 1
 
@@ -624,7 +624,7 @@ struct<millennium(DATE '1000-12-31'):int>
 -- !query 62
 SELECT EXTRACT(MILLENNIUM FROM DATE '1001-01-01')
 -- !query 62 schema
-struct<millennium(DATE '1001-01-01'):int>
+struct<date_part('MILLENNIUM', DATE '1001-01-01'):int>
 -- !query 62 output
 2
 
@@ -632,7 +632,7 @@ struct<millennium(DATE '1001-01-01'):int>
 -- !query 63
 SELECT EXTRACT(MILLENNIUM FROM DATE '2000-12-31')
 -- !query 63 schema
-struct<millennium(DATE '2000-12-31'):int>
+struct<date_part('MILLENNIUM', DATE '2000-12-31'):int>
 -- !query 63 output
 2
 
@@ -640,7 +640,7 @@ struct<millennium(DATE '2000-12-31'):int>
 -- !query 64
 SELECT EXTRACT(MILLENNIUM FROM DATE '2001-01-01')
 -- !query 64 schema
-struct<millennium(DATE '2001-01-01'):int>
+struct<date_part('MILLENNIUM', DATE '2001-01-01'):int>
 -- !query 64 output
 3
 
@@ -648,7 +648,7 @@ struct<millennium(DATE '2001-01-01'):int>
 -- !query 65
 SELECT EXTRACT(MILLENNIUM FROM CURRENT_DATE)
 -- !query 65 schema
-struct<millennium(current_date()):int>
+struct<date_part('MILLENNIUM', current_date()):int>
 -- !query 65 output
 3
 
@@ -656,7 +656,7 @@ struct<millennium(current_date()):int>
 -- !query 66
 SELECT EXTRACT(DECADE FROM DATE '1994-12-25')
 -- !query 66 schema
-struct<decade(DATE '1994-12-25'):int>
+struct<date_part('DECADE', DATE '1994-12-25'):int>
 -- !query 66 output
 199
 
@@ -664,7 +664,7 @@ struct<decade(DATE '1994-12-25'):int>
 -- !query 67
 SELECT EXTRACT(DECADE FROM DATE '0010-01-01')
 -- !query 67 schema
-struct<decade(DATE '0010-01-01'):int>
+struct<date_part('DECADE', DATE '0010-01-01'):int>
 -- !query 67 output
 1
 
@@ -672,7 +672,7 @@ struct<decade(DATE '0010-01-01'):int>
 -- !query 68
 SELECT EXTRACT(DECADE FROM DATE '0009-12-31')
 -- !query 68 schema
-struct<decade(DATE '0009-12-31'):int>
+struct<date_part('DECADE', DATE '0009-12-31'):int>
 -- !query 68 output
 0
 
@@ -680,7 +680,7 @@ struct<decade(DATE '0009-12-31'):int>
 -- !query 69
 SELECT EXTRACT(DECADE FROM TO_DATE('0001-01-01 BC', 'yyyy-MM-dd G'))
 -- !query 69 schema
-struct<decade(to_date('0001-01-01 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('DECADE', TO_DATE('0001-01-01 BC', 'yyyy-MM-dd G')):int>
 -- !query 69 output
 0
 
@@ -688,7 +688,7 @@ struct<decade(to_date('0001-01-01 BC', 'yyyy-MM-dd G')):int>
 -- !query 70
 SELECT EXTRACT(DECADE FROM TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G'))
 -- !query 70 schema
-struct<decade(to_date('0002-12-31 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('DECADE', TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 70 output
 -1
 
@@ -696,7 +696,7 @@ struct<decade(to_date('0002-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 71
 SELECT EXTRACT(DECADE FROM TO_DATE('0011-01-01 BC', 'yyyy-MM-dd G'))
 -- !query 71 schema
-struct<decade(to_date('0011-01-01 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('DECADE', TO_DATE('0011-01-01 BC', 'yyyy-MM-dd G')):int>
 -- !query 71 output
 -1
 
@@ -704,7 +704,7 @@ struct<decade(to_date('0011-01-01 BC', 'yyyy-MM-dd G')):int>
 -- !query 72
 SELECT EXTRACT(DECADE FROM TO_DATE('0012-12-31 BC', 'yyyy-MM-dd G'))
 -- !query 72 schema
-struct<decade(to_date('0012-12-31 BC', 'yyyy-MM-dd G')):int>
+struct<date_part('DECADE', TO_DATE('0012-12-31 BC', 'yyyy-MM-dd G')):int>
 -- !query 72 output
 -2
 
@@ -720,7 +720,7 @@ true
 -- !query 74
 SELECT EXTRACT(CENTURY FROM TIMESTAMP '1970-03-20 04:30:00.00000')
 -- !query 74 schema
-struct<century(CAST(TIMESTAMP('1970-03-20 04:30:00') AS DATE)):int>
+struct<date_part('CENTURY', TIMESTAMP('1970-03-20 04:30:00')):int>
 -- !query 74 output
 20
 

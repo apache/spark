@@ -1963,3 +1963,90 @@ case class Epoch(child: Expression, timeZoneId: Option[String] = None)
     defineCodeGen(ctx, ev, c => s"$dtu.getEpoch($c, $zid)")
   }
 }
+
+object DatePart {
+
+  def parseExtractField(
+      extractField: String,
+      source: Expression,
+      errorHandleFunc: => Nothing): Expression = extractField.toUpperCase(Locale.ROOT) match {
+    case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" => Millennium(source)
+    case "CENTURY" | "CENTURIES" | "C" | "CENT" => Century(source)
+    case "DECADE" | "DECADES" | "DEC" | "DECS" => Decade(source)
+    case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" => Year(source)
+    case "ISOYEAR" => IsoYear(source)
+    case "QUARTER" | "QTR" => Quarter(source)
+    case "MONTH" | "MON" | "MONS" | "MONTHS" => Month(source)
+    case "WEEK" | "W" | "WEEKS" => WeekOfYear(source)
+    case "DAY" | "D" | "DAYS" => DayOfMonth(source)
+    case "DAYOFWEEK" => DayOfWeek(source)
+    case "DOW" => Subtract(DayOfWeek(source), Literal(1))
+    case "ISODOW" => Add(WeekDay(source), Literal(1))
+    case "DOY" => DayOfYear(source)
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => Second(source)
+    case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
+      Milliseconds(source)
+    case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
+      Microseconds(source)
+    case "EPOCH" => Epoch(source)
+    case _ => errorHandleFunc
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(field, source) - Extracts a part of the date/timestamp.",
+  arguments = """
+    Arguments:
+      * field - selects which part of the source should be extracted. Supported string values are:
+                ["MILLENNIUM", ("MILLENNIA", "MIL", "MILS"),
+                 "CENTURY", ("CENTURIES", "C", "CENT"),
+                 "DECADE", ("DECADES", "DEC", "DECS"),
+                 "YEAR", ("Y", "YEARS", "YR", "YRS"),
+                 "ISOYEAR",
+                 "QUARTER", ("QTR"),
+                 "MONTH", ("MON", "MONS", "MONTHS"),
+                 "WEEK", ("W", "WEEKS"),
+                 "DAY", ("D", "DAYS"),
+                 "DAYOFWEEK",
+                 "DOW",
+                 "ISODOW",
+                 "DOY",
+                 "HOUR", ("H", "HOURS", "HR", "HRS"),
+                 "MINUTE", ("M", "MIN", "MINS", "MINUTES"),
+                 "SECOND", ("S", "SEC", "SECONDS", "SECS"),
+                 "MILLISECONDS", ("MSEC", "MSECS", "MILLISECON", "MSECONDS", "MS"),
+                 "MICROSECONDS", ("USEC", "USECS", "USECONDS", "MICROSECON", "US"),
+                 "EPOCH"]
+      * source - a date (or timestamp) column from where `field` should be extracted
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('YEAR', TIMESTAMP '2019-08-12 01:00:00.123456');
+       2019
+      > SELECT _FUNC_('week', timestamp'2019-08-12 01:00:00.123456');
+       33
+      > SELECT _FUNC_('doy', DATE'2019-08-12');
+       224
+  """,
+  since = "3.0.0")
+case class DatePart(field: Expression, source: Expression, child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(field: Expression, source: Expression) {
+    this(field, source, {
+      if (!field.foldable) {
+        throw new AnalysisException("The field parameter needs to be a foldable string value.")
+      }
+      val fieldStr = field.eval().asInstanceOf[UTF8String].toString
+      DatePart.parseExtractField(fieldStr, source, {
+        throw new AnalysisException(s"Literals of type '$fieldStr' are currently not supported.")
+      })
+    })
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(field, source)
+  override def sql: String = s"$prettyName(${field.sql}, ${source.sql})"
+  override def prettyName: String = "date_part"
+}
