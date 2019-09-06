@@ -289,7 +289,7 @@ SELECT DATE_TRUNC('DECADE', DATE '1993-12-25'); -- 1990-01-01
 SELECT DATE_TRUNC('DECADE', DATE '0004-12-25'); -- 0001-01-01 BC
 SELECT DATE_TRUNC('DECADE', TO_DATE('0002-12-31 BC', 'yyyy-MM-dd G')); -- 0011-01-01 BC
 
--- [SPARK-28141] Date type can not accept special values
+-- [SPARK-29006] Support special date/timestamp values `infinity`/`-infinity`
 --
 -- test infinity
 --
