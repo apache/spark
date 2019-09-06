@@ -855,7 +855,7 @@ object DateTimeUtils {
     Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
   }
 
-  /** Notational shorthands that are converted to ordinary dates. */
+  /** Notational shorthands that are converted to ordinary timestamps. */
   val specialTimestamps: Map[String, ZoneId => SQLTimestamp] = Map(
     ("epoch", (_: ZoneId) => 0),
     ("now", (_: ZoneId) => currentTimestamp),
