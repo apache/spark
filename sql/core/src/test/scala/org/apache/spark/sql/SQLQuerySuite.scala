@@ -3180,6 +3180,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
     }
 
   }
+
+  test("SPARK-29010: cast decimal to float type may lost precision when don't allow loss") {
+    withSQLConf("spark.sql.decimalOperations.allowPrecisionLoss" -> "false") {
+      val df1 = sql("select case when 1=2 then 1 else 0.123456789012345678901234 end * " +
+        "cast(1 as double)")
+      checkAnswer(df1, Array(Row(new java.math.BigDecimal("0.123456789012345678901234"))))
+
+      val df2 = sql("select cast(1 as double) * case when 1=2 then 1 else " +
+        "0.123456789012345678901234 end")
+      checkAnswer(df2, Array(Row(new java.math.BigDecimal("0.123456789012345678901234"))))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

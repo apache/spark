@@ -324,9 +324,17 @@ object DecimalPrecision extends TypeCoercionRule {
         case (l @ DecimalType.Expression(_, _), r @ IntegralType()) =>
           b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
         case (l, r @ DecimalType.Expression(_, _)) if isFloat(l.dataType) =>
-          b.makeCopy(Array(l, Cast(r, DoubleType)))
+          if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+            b.makeCopy(Array(l, Cast(r, DoubleType)))
+          } else {
+            b.makeCopy(Array(Cast(l, DecimalType.forType(l.dataType)), r))
+          }
         case (l @ DecimalType.Expression(_, _), r) if isFloat(r.dataType) =>
-          b.makeCopy(Array(Cast(l, DoubleType), r))
+          if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
+            b.makeCopy(Array(Cast(l, DoubleType), r))
+          } else {
+            b.makeCopy(Array(l, Cast(r, DecimalType.forType(r.dataType))))
+          }
         case _ => b
       }
   }

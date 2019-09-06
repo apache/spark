@@ -281,6 +281,25 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     checkType(Multiply(b, c), DecimalType(37, 0))
   }
 
+  test("SPARK-29010: cast decimal to float type may lost precision when don't allow loss") {
+    val a = AttributeReference("a", DecimalType(29, 19))()
+    val b = AttributeReference("b", DoubleType)()
+    val c = AttributeReference("c", FloatType)()
+    withSQLConf("spark.sql.decimalOperations.allowPrecisionLoss" -> "false") {
+      checkType(Multiply(a, b), DecimalType(38, 34))
+      checkType(Multiply(b, a), DecimalType(38, 34))
+      checkType(Multiply(a, c), DecimalType(38, 26))
+      checkType(Multiply(c, a), DecimalType(38, 26))
+    }
+
+    withSQLConf("spark.sql.decimalOperations.allowPrecisionLoss" -> "true") {
+      checkType(Multiply(a, b), DoubleType)
+      checkType(Multiply(b, a), DoubleType)
+      checkType(Multiply(a, c), DoubleType)
+      checkType(Multiply(c, a), DoubleType)
+    }
+  }
+
   /** strength reduction for integer/decimal comparisons */
   def ruleTest(initial: Expression, transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
