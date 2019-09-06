@@ -26,7 +26,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.thriftserver.cli.Type
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
@@ -68,11 +67,11 @@ private[hive] class SparkGetTypeInfoOperation(
       parentSession.getUsername)
 
     try {
-      Type.values.foreach(typeInfo => {
+      ThriftserverShimUtils.supportedType().foreach(typeInfo => {
         val rowData = Array[AnyRef](
           typeInfo.getName, // TYPE_NAME
           typeInfo.toJavaSQLType.asInstanceOf[AnyRef], // DATA_TYPE
-          typeInfo.getMaxPrecision.getOrElse(null).asInstanceOf[AnyRef], // PRECISION
+          typeInfo.getMaxPrecision.asInstanceOf[AnyRef], // PRECISION
           typeInfo.getLiteralPrefix, // LITERAL_PREFIX
           typeInfo.getLiteralSuffix, // LITERAL_SUFFIX
           typeInfo.getCreateParams, // CREATE_PARAMS
