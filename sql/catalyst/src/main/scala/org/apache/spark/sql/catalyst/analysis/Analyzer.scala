@@ -196,10 +196,10 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      ResolveTimeZone(conf) ::
       ResolveInlineTables(conf) ::
       ResolveHigherOrderFunctions(catalog) ::
       ResolveLambdaVariables(conf) ::
-      ResolveTimeZone(conf) ::
       ResolveRandomSeed ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
