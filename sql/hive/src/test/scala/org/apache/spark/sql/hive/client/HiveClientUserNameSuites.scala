@@ -21,8 +21,8 @@ import scala.collection.immutable.IndexedSeq
 
 import org.scalatest.Suite
 
-class HiveClientSuites extends Suite with HiveClientVersions {
+class HiveClientUserNameSuites extends Suite with HiveClientVersions {
   override def nestedSuites: IndexedSeq[Suite] = {
-    versions.map(new HiveClientSuite(_))
+    versions.map(new HiveClientUserNameSuite(_))
   }
 }

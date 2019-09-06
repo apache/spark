@@ -25,7 +25,7 @@ import org.scalatest.{BeforeAndAfterAll, PrivateMethodTester}
 
 import org.apache.spark.util.Utils
 
-class HiveClientSuite(version: String)
+class HiveClientUserNameSuite(version: String)
     extends HiveVersionSuite(version) with BeforeAndAfterAll {
 
   test("username of HiveClient - no UGI") {
