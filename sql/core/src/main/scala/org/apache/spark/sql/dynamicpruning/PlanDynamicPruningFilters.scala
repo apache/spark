@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.dynamicpruning
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, DynamicPruningSubquery, Expression, ListQuery, Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
+import org.apache.spark.sql.execution.{BaseSubqueryExec, InSubqueryExec, QueryExecution, SparkPlan, SubqueryBroadcastExec}
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
@@ -33,8 +35,10 @@ import org.apache.spark.sql.internal.SQLConf
  * results of broadcast. For joins that are not planned as broadcast hash joins we keep
  * the fallback mechanism with subquery duplicate.
 */
-case class PlanDynamicPruningFilters(sparkSession: SparkSession)
-    extends Rule[SparkPlan] with PredicateHelper {
+case class PlanDynamicPruningFilters(
+    sparkSession: SparkSession,
+    subqueryCache: mutable.Map[SparkPlan, BaseSubqueryExec])
+  extends Rule[SparkPlan] with PredicateHelper {
 
   private def reuseBroadcast: Boolean =
     SQLConf.get.dynamicPartitionPruningReuseBroadcast && SQLConf.get.exchangeReuseEnabled
@@ -55,7 +59,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
     plan transformAllExpressions {
       case DynamicPruningSubquery(
           value, buildPlan, buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId) =>
-        val qe = new QueryExecution(sparkSession, buildPlan)
+        val qe = new QueryExecution(sparkSession, buildPlan, subqueryCache = subqueryCache)
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
         // the first to be applied (apart from `InsertAdaptiveSparkPlan`).
         val canReuseExchange = reuseBroadcast && buildKeys.nonEmpty &&

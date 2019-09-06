@@ -124,7 +124,7 @@ class QueryExecution(
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     InsertAdaptiveSparkPlan(sparkSession, this),
-    PlanDynamicPruningFilters(sparkSession),
+    PlanDynamicPruningFilters(sparkSession, subqueryCache),
     PlanSubqueries(sparkSession, subqueryCache),
     EnsureRequirements(sparkSession.sessionState.conf),
     ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
