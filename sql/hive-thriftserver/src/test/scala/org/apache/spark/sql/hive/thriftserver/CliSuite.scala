@@ -313,7 +313,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Seq("--jars", s"$jarFile"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
-      "SELECT testjar(1,'A', 10);" -> "A\t10"
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
     )
   }
 
@@ -326,9 +326,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
         " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
-      "SELECT testjar(1,'A', 10);" -> "A\t10",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
       s"CREATE TEMPORARY FUNCTION example_max AS '${classOf[UDAFExampleMax].getName}';" -> "",
-      "SELECT example_max(1);" -> "1"
+      "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
     )
   }
 }

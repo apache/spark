@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.security.AccessController
-
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.thrift.Type
 import org.apache.hadoop.hive.serde2.thrift.Type._
