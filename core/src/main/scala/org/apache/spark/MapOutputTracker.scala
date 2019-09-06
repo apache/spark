@@ -292,7 +292,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * endPartition is excluded from the range).
    *
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
-   *         and the second item is a sequence of (shuffle block id, shuffle block size, map id)
+   *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
    *         tuples describing the shuffle blocks that are stored at that block manager.
    */
   def getMapSizesByExecutorId(
@@ -846,7 +846,7 @@ private[spark] object MapOutputTracker extends Logging {
    * @param shuffleId Identifier for the shuffle
    * @param startPartition Start of map output partition ID range (included in range)
    * @param endPartition End of map output partition ID range (excluded from range)
-   * @param statuses List of map statuses, indexed by map ID.
+   * @param statuses List of map statuses, indexed by map partition index.
    * @param useOldFetchProtocol Whether to use the old shuffle fetch protocol.
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block id, shuffle block size, map index)
