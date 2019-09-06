@@ -223,7 +223,6 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       ensureNoActiveSparkContext(ssc)
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
-      ensureNoActiveSparkContext()
       super.afterFunction()
     }
   }
