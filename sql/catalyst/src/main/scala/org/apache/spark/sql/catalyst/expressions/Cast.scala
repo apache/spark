@@ -469,7 +469,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
-      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s).orNull)
+      buildCast[UTF8String](_, s => DateTimeUtils.stringToDate(s, zoneId).orNull)
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.

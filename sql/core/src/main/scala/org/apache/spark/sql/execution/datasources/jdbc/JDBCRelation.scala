@@ -186,7 +186,7 @@ private[sql] object JDBCRelation extends Logging {
     }
     columnType match {
       case _: NumericType => value.toLong
-      case DateType => parse(stringToDate).toLong
+      case DateType => parse(stringToDate(_, getZoneId(timeZoneId))).toLong
       case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
     }
   }
