@@ -928,24 +928,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
-  test("test class ClassCastException") {
-    // CallerContext added after hadoop-2.8.0 for HDFS-9184
-    if (VersionInfo.getVersion >= "2.8") {
-      try {
-        val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
-        val builderInst = builder.getConstructor(classOf[String]).newInstance("test")
-        val hdfsContext = builder.getMethod("build").invoke(builderInst)
-        callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)
-        assert(false)
-      } catch {
-        case NonFatal(e) =>
-          assert(e.toString == "java.lang.ClassCastException: " +
-            "org.apache.hadoop.ipc.CallerContext$Builder cannot be cast to scala.runtime.Nothing$")
-      }
-    }
-  }
-
   test("encodeFileNameToURIRawPath") {
     assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
     assert(Utils.encodeFileNameToURIRawPath("abc xyz") === "abc%20xyz")
