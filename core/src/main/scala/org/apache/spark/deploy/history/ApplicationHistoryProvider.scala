@@ -114,6 +114,8 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def stop(): Unit = { }
 
+  def start(): Unit = { }
+
   /**
    * Returns configuration data to be shown in the History Server home page.
    *
