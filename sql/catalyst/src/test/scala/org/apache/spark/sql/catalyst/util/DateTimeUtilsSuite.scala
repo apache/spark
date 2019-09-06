@@ -120,7 +120,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   private def toDate(s: String, zoneId: ZoneId = ZoneOffset.UTC): Option[SQLDate] = {
-    stringToDate(UTF8String.fromString(s), ZoneOffset.UTC)
+    stringToDate(UTF8String.fromString(s), zoneId)
   }
 
   test("string to date") {
