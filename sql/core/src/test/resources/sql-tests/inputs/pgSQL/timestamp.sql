@@ -7,7 +7,6 @@
 
 CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 
--- [SPARK-28141] Timestamp type can not accept special values
 -- Test shorthand input values
 -- We can't just "select" the results since they aren't constants; test for
 -- equality instead.  We can do that by running the test inside a transaction
@@ -17,22 +16,22 @@ CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 -- block is entered exactly at local midnight; then 'now' and 'today' have
 -- the same values and the counts will come out different.
 
--- INSERT INTO TIMESTAMP_TBL VALUES ('now');
+INSERT INTO TIMESTAMP_TBL VALUES ('now');
 -- SELECT pg_sleep(0.1);
 
 -- BEGIN;
 
--- INSERT INTO TIMESTAMP_TBL VALUES ('now');
--- INSERT INTO TIMESTAMP_TBL VALUES ('today');
--- INSERT INTO TIMESTAMP_TBL VALUES ('yesterday');
--- INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow');
+INSERT INTO TIMESTAMP_TBL VALUES ('now');
+INSERT INTO TIMESTAMP_TBL VALUES ('today');
+INSERT INTO TIMESTAMP_TBL VALUES ('yesterday');
+INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow');
 -- time zone should be ignored by this data type
--- INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow EST');
--- INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow zulu');
+INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow EST');
+INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow zulu');
 
--- SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'today';
--- SELECT count(*) AS Three FROM TIMESTAMP_TBL WHERE d1 = timestamp 'tomorrow';
--- SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'yesterday';
+SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'today';
+SELECT count(*) AS Three FROM TIMESTAMP_TBL WHERE d1 = timestamp 'tomorrow';
+SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'yesterday';
 -- SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp(2) 'now';
 
 -- COMMIT;
@@ -53,7 +52,7 @@ CREATE TABLE TIMESTAMP_TBL (d1 timestamp) USING parquet;
 -- Special values
 -- INSERT INTO TIMESTAMP_TBL VALUES ('-infinity');
 -- INSERT INTO TIMESTAMP_TBL VALUES ('infinity');
--- INSERT INTO TIMESTAMP_TBL VALUES ('epoch');
+INSERT INTO TIMESTAMP_TBL VALUES ('epoch');
 -- [SPARK-27923] Spark SQL insert there obsolete special values to NULL
 -- Obsolete special values
 -- INSERT INTO TIMESTAMP_TBL VALUES ('invalid');
