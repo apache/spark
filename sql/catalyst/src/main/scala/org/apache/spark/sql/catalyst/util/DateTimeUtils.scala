@@ -378,8 +378,8 @@ object DateTimeUtils {
   def stringToDate(s: UTF8String, zoneId: ZoneId): Option[SQLDate] = {
     if (s == null) {
       return None
-    } else if (specialDateUTF8Keys.contains(s)) {
-      return Some(specialDates(s.toString)(zoneId))
+    } else if (specialUTF8DateKeys.contains(s)) {
+      return Some(specialUTF8Dates(s)(zoneId))
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var i = 0
@@ -861,5 +861,8 @@ object DateTimeUtils {
     ("tomorrow", (z: ZoneId) => Math.addExact(currentDate(z), 1)),
     ("yesterday", (z: ZoneId) => Math.subtractExact(currentDate(z), 1)))
   val specialDateKeys: Set[String] = specialDates.keySet
-  val specialDateUTF8Keys: Set[UTF8String] = specialDateKeys.map(UTF8String.fromString)
+
+  val specialUTF8Dates: Map[UTF8String, ZoneId => SQLDate] =
+    specialDates.map { case (key, value) => UTF8String.fromString(key) -> value}
+  val specialUTF8DateKeys: Set[UTF8String] = specialDateKeys.map(UTF8String.fromString)
 }
