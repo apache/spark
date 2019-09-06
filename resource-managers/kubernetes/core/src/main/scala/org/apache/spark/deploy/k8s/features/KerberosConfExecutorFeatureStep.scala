@@ -23,12 +23,13 @@ import io.fabric8.kubernetes.api.model.{ContainerBuilder, KeyToPathBuilder, PodB
 
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.internal.Logging
 
 /**
  * Forward kerberos conf file to executor pods iff it has been mounted on driver pod.
  */
-class KerberosConfExecutorFeatureStep(kubernetesConf: KubernetesExecutorConf)
-  extends KubernetesFeatureConfigStep {
+private[spark] class KerberosConfExecutorFeatureStep(kubernetesConf: KubernetesExecutorConf)
+  extends KubernetesFeatureConfigStep with Logging {
 
   private val krb5File = new File(s"$KRB_FILE_DIR_PATH/$KRB_FILE_NAME")
 
@@ -37,12 +38,12 @@ class KerberosConfExecutorFeatureStep(kubernetesConf: KubernetesExecutorConf)
       val krb5Volume = new VolumeBuilder()
         .withName(KRB_FILE_VOLUME)
         .withNewConfigMap()
-        .withName(s"${kubernetesConf.resourceNamePrefix}-krb5-file")
-        .withItems(new KeyToPathBuilder()
-          .withKey(krb5File.getName)
-          .withPath(krb5File.getName)
-          .build())
-        .endConfigMap()
+          .withName(s"${kubernetesConf.resourceNamePrefix}-krb5-file")
+          .withItems(new KeyToPathBuilder()
+            .withKey(krb5File.getName)
+            .withPath(krb5File.getName)
+            .build())
+          .endConfigMap()
         .build()
 
       val podWithVolume = new PodBuilder(pod.pod)

@@ -29,20 +29,22 @@ import org.apache.spark.deploy.k8s.Constants._
 /**
  * Mounts the Hadoop configuration for executor pods iff the driver pod is mounted.
  */
-class HadoopConfExecutorFeatureStep(conf: KubernetesExecutorConf)
+private[spark] class HadoopConfExecutorFeatureStep(conf: KubernetesExecutorConf)
   extends KubernetesFeatureConfigStep {
 
-  private val confFiles: Seq[File] = Option(conf.sparkConf.getenv(ENV_HADOOP_CONF_DIR)) match {
-    case Some(dir) =>
-      val file = new File(dir)
-      if (file.isDirectory) file.listFiles().filter(_.isFile).toSeq else Nil
-    case _ => Nil
+  private val confFiles =
+    Option(conf.sparkConf.getenv(ENV_HADOOP_CONF_DIR)).map(new File(_)) match {
+      case Some(dir) if dir.isDirectory => dir.listFiles().filter(_.isFile).toSeq
+      case _ => Nil
   }
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if confFiles.nonEmpty =>
       val keyPaths = confFiles.map { file =>
-        new KeyToPathBuilder().withKey(file.getName).withPath(file.getName).build()
+        new KeyToPathBuilder()
+          .withKey(file.getName)
+          .withPath(file.getName)
+          .build()
       }.asJava
 
       val confVolume = new VolumeBuilder()
@@ -62,13 +64,13 @@ class HadoopConfExecutorFeatureStep(conf: KubernetesExecutorConf)
 
       val containerWithMount = new ContainerBuilder(pod.container)
         .addNewVolumeMount()
-        .withName(HADOOP_CONF_VOLUME)
-        .withMountPath(HADOOP_CONF_DIR_PATH)
-        .endVolumeMount()
+          .withName(HADOOP_CONF_VOLUME)
+          .withMountPath(HADOOP_CONF_DIR_PATH)
+          .endVolumeMount()
         .addNewEnv()
-        .withName(ENV_HADOOP_CONF_DIR)
-        .withValue(HADOOP_CONF_DIR_PATH)
-        .endEnv()
+          .withName(ENV_HADOOP_CONF_DIR)
+          .withValue(HADOOP_CONF_DIR_PATH)
+          .endEnv()
         .build()
 
       SparkPod(podWithConf, containerWithMount)
