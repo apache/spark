@@ -18,25 +18,59 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
-import org.apache.spark.sql.sources.v2.TableCapability.{CONTINUOUS_READ, MICRO_BATCH_READ}
+import org.apache.spark.sql.sources.v2.TableCapability._
+import org.apache.spark.sql.types.BooleanType
 
 /**
- * This rules adds some basic table capability check for streaming scan, without knowing the actual
- * streaming execution mode.
+ * Checks the capabilities of Data Source V2 tables, and fail problematic queries earlier.
  */
-object V2StreamingScanSupportCheck extends (LogicalPlan => Unit) {
+object TableCapabilityCheck extends (LogicalPlan => Unit) {
   import DataSourceV2Implicits._
 
+  private def failAnalysis(msg: String): Unit = throw new AnalysisException(msg)
+
   override def apply(plan: LogicalPlan): Unit = {
-    plan.foreach {
+    plan foreach {
+      case r: DataSourceV2Relation if !r.table.supports(BATCH_READ) =>
+        failAnalysis(s"Table ${r.table.name()} does not support batch scan.")
+
       case r: StreamingRelationV2 if !r.table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ) =>
-        throw new AnalysisException(
-          s"Table ${r.table.name()} does not support either micro-batch or continuous scan.")
-      case _ =>
+        throw new AnalysisException(s"Table ${r.table.name()} does not support either " +
+          "micro-batch or continuous scan.")
+
+      // TODO: check STREAMING_WRITE capability. It's not doable now because we don't have a
+      //       a logical plan for streaming write.
+
+      case AppendData(r: DataSourceV2Relation, _, _) if !r.table.supports(BATCH_WRITE) =>
+        failAnalysis(s"Table ${r.table.name()} does not support append in batch mode.")
+
+      case OverwritePartitionsDynamic(r: DataSourceV2Relation, _, _)
+        if !r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_DYNAMIC) =>
+        failAnalysis(s"Table ${r.table.name()} does not support dynamic overwrite in batch mode.")
+
+      case OverwriteByExpression(r: DataSourceV2Relation, expr, _, _) =>
+        expr match {
+          case Literal(true, BooleanType) =>
+            if (!r.table.supports(BATCH_WRITE) ||
+              !r.table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER)) {
+              failAnalysis(
+                s"Table ${r.table.name()} does not support truncate in batch mode.")
+            }
+          case _ =>
+            if (!r.table.supports(BATCH_WRITE) || !r.table.supports(OVERWRITE_BY_FILTER)) {
+              failAnalysis(s"Table ${r.table.name()} does not support " +
+                "overwrite by filter in batch mode.")
+            }
+        }
+
+      case _ => // OK
     }
 
+    // The streaming sources in a query should all support micro-batch scan, or all support
+    // continuous scan.
     val streamingSources = plan.collect {
       case r: StreamingRelationV2 => r.table
     }

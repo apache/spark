@@ -34,7 +34,7 @@ metadata information is returned along with the extended usage information.
 <dl>
   <dt><code><em>function_name</em></code></dt>
   <dd>
-    Specifies a name of an existing function in the syetem. The function name may be
+    Specifies a name of an existing function in the system. The function name may be
     optionally qualified with a database name. If `function_name` is qualified with
     a database then the function is resolved from the user specified database, otherwise
     it is resolved from the current database.<br><br>

@@ -22,7 +22,7 @@ import java.util
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -82,6 +82,17 @@ class DataSourceV2DataFrameSessionCatalogSuite
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
         checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
       }
+    }
+  }
+
+  test("saveAsTable passes path and provider information properly") {
+    val t1 = "prop_table"
+    withTable(t1) {
+      spark.range(20).write.format(v2Format).option("path", "abc").saveAsTable(t1)
+      val cat = spark.sessionState.catalogManager.v2SessionCatalog.get.asInstanceOf[TableCatalog]
+      val tableInfo = cat.loadTable(Identifier.of(Array.empty, t1))
+      assert(tableInfo.properties().get("location") === "abc")
+      assert(tableInfo.properties().get("provider") === v2Format)
     }
   }
 }

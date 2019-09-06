@@ -144,14 +144,9 @@ private[kafka010] class KafkaMicroBatchStream(
       untilOffsets = untilOffsets,
       executorLocations = getSortedExecutorList())
 
-    // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
-    // that is, concurrent tasks will not read the same TopicPartitions.
-    val reuseKafkaConsumer = offsetRanges.map(_.topicPartition).toSet.size == offsetRanges.size
-
     // Generate factories based on the offset ranges
     offsetRanges.map { range =>
-      KafkaBatchInputPartition(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
+      KafkaBatchInputPartition(range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
     }.toArray
   }
 

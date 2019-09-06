@@ -1409,48 +1409,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    ctx.field.getText.toUpperCase(Locale.ROOT) match {
-      case "MILLENNIUM" | "MILLENNIA" | "MIL" | "MILS" =>
-        Millennium(expression(ctx.source))
-      case "CENTURY" | "CENTURIES" | "C" | "CENT" =>
-        Century(expression(ctx.source))
-      case "DECADE" | "DECADES" | "DEC" | "DECS" =>
-        Decade(expression(ctx.source))
-      case "YEAR" | "Y" | "YEARS" | "YR" | "YRS" =>
-        Year(expression(ctx.source))
-      case "ISOYEAR" =>
-        IsoYear(expression(ctx.source))
-      case "QUARTER" | "QTR" =>
-        Quarter(expression(ctx.source))
-      case "MONTH" | "MON" | "MONS" | "MONTHS" =>
-        Month(expression(ctx.source))
-      case "WEEK" | "W" | "WEEKS" =>
-        WeekOfYear(expression(ctx.source))
-      case "DAY" | "D" | "DAYS" =>
-        DayOfMonth(expression(ctx.source))
-      case "DAYOFWEEK" =>
-        DayOfWeek(expression(ctx.source))
-      case "DOW" =>
-        Subtract(DayOfWeek(expression(ctx.source)), Literal(1))
-      case "ISODOW" =>
-        Add(WeekDay(expression(ctx.source)), Literal(1))
-      case "DOY" =>
-        DayOfYear(expression(ctx.source))
-      case "HOUR" | "H" | "HOURS" | "HR" | "HRS" =>
-        Hour(expression(ctx.source))
-      case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" =>
-        Minute(expression(ctx.source))
-      case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
-        Second(expression(ctx.source))
-      case "MILLISECONDS" | "MSEC" | "MSECS" | "MILLISECON" | "MSECONDS" | "MS" =>
-        Milliseconds(expression(ctx.source))
-      case "MICROSECONDS" | "USEC" | "USECS" | "USECONDS" | "MICROSECON" | "US" =>
-        Microseconds(expression(ctx.source))
-      case "EPOCH" =>
-        Epoch(expression(ctx.source))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
-    }
+    val fieldStr = ctx.field.getText
+    val source = expression(ctx.source)
+    val extractField = DatePart.parseExtractField(fieldStr, source, {
+      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
+    })
+    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
   }
 
   /**
