@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
@@ -627,6 +627,11 @@ case class ShowTables(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
 }
+
+case class UseCatalogAndNamespace(
+    catalogManager: CatalogManager,
+    catalogName: Option[String],
+    namespace: Option[Seq[String]]) extends Command
 
 /**
  * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the

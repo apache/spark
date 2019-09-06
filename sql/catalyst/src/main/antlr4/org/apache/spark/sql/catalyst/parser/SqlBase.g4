@@ -83,6 +83,8 @@ statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
     | USE db=errorCapturingIdentifier                                  #use
+    | USE CATALOG catalog=STRING                                       #useCatalog
+    | USE NAMESPACE namespace=multipartIdentifier                      #useNamespace
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
@@ -922,6 +924,7 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
+    | CATALOG
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1006,6 +1009,7 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACE
     | NO
     | NULLS
     | OF
@@ -1141,6 +1145,7 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
+    | CATALOG
     | CHANGE
     | CHECK
     | CLEAR
@@ -1255,6 +1260,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACE
     | NO
     | NOT
     | NULL
@@ -1395,6 +1401,7 @@ CACHE: 'CACHE';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
+CATALOG: 'CATALOG';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';
@@ -1515,6 +1522,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACE: 'NAMESPACE';
 NATURAL: 'NATURAL';
 NO: 'NO';
 NOT: 'NOT' | '!';
