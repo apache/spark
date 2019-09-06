@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -34,10 +33,8 @@ import org.apache.spark.util.Utils
  * throw a SparkException when the limit is reached.
  */
 private[spark] class SizeLimitingByteArrayUnsafeRowsConverter(
-     nFields: Int,
-     sqlConf: SQLConf) extends Logging {
+     maxCollectSize: Option[Long]) extends Logging {
   private var totalUncompressedResultSize = 0L
-  private val maxCollectSize = sqlConf.maxCollectSize
 
   /**
    * Packing the UnsafeRows into byte array for faster serialization.
@@ -73,7 +70,7 @@ private[spark] class SizeLimitingByteArrayUnsafeRowsConverter(
   /**
    * Decodes the byte arrays back to UnsafeRows and puts them into buffer.
    */
-  def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
+  def decodeUnsafeRows(nFields: Int, bytes: Array[Byte]): Iterator[InternalRow] = {
     val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(codec.compressedInputStream(bis))
@@ -101,7 +98,7 @@ private[spark] class SizeLimitingByteArrayUnsafeRowsConverter(
       case Some(maxSize) => if (totalUncompressedResultSize > maxSize) {
         val msg = s"Total size of uncompressed results " +
           s"(${Utils.bytesToString(totalUncompressedResultSize)}) " +
-          s"is bigger than ${config.MAX_RESULT_SIZE.key} (${Utils.bytesToString(maxSize)})"
+          s"is bigger than the limit of (${Utils.bytesToString(maxSize)})"
         logError(msg)
         throw new SparkException(msg)
       }
