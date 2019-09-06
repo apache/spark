@@ -242,6 +242,10 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
       OverwritePartitionsDynamicExec(r.table.asWritable, r.options, planLater(query)) :: Nil
 
     case DeleteFromTable(r: DataSourceV2Relation, condition) =>
+      if (SubqueryExpression.hasSubquery(condition)) {
+        throw new AnalysisException(
+          s"Delete by condition with subquery is not supported: $condition")
+      }
       // fail if any filter cannot be converted. correctness depends on removing all matching data.
       val filters = splitConjunctivePredicates(condition).map {
         f => DataSourceStrategy.translateFilter(f).getOrElse(
