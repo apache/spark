@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{LocalDate, ZoneId, ZoneOffset}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
@@ -118,7 +119,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String): Option[SQLDate] = {
+  private def toDate(s: String, zoneId: ZoneId = ZoneOffset.UTC): Option[SQLDate] = {
     stringToDate(UTF8String.fromString(s), ZoneOffset.UTC)
   }
 
@@ -565,5 +566,18 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   test("toMillis") {
     assert(DateTimeUtils.toMillis(-9223372036844776001L) === -9223372036844777L)
     assert(DateTimeUtils.toMillis(-157700927876544L) === -157700927877L)
+  }
+
+  test("special date values") {
+    DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
+      val zoneId = getZoneId(timeZone)
+
+      assert(toDate("epoch", zoneId).get === 0)
+      val today = localDateToDays(LocalDate.now(zoneId))
+      assert(toDate("yesterday", zoneId).get === today - 1)
+      assert(toDate("now", zoneId).get === today)
+      assert(toDate("today", zoneId).get === today)
+      assert(toDate("tomorrow", zoneId).get === today + 1)
+    }
   }
 }

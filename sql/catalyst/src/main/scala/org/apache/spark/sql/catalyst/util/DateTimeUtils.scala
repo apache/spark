@@ -379,7 +379,7 @@ object DateTimeUtils {
     if (s == null) {
       return None
     } else if (specialDateUTF8Keys.contains(s)) {
-      Some(specialDates(s.toString)(zoneId))
+      return Some(specialDates(s.toString)(zoneId))
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var i = 0
