@@ -19,7 +19,6 @@ package org.apache.spark.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
@@ -850,35 +849,18 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 
   test("SPARK-28912: Fix MatchError in getCheckpointFiles") {
     withTempDir { tempDir =>
-      val checkpointDir = tempDir + "/checkpoint-01"
+      val fs = FileSystem.get(tempDir.toURI, new Configuration)
+      val checkpointDir = tempDir.getAbsolutePath + "/checkpoint-01"
 
-      val hadoopConf = new Configuration
-      val checkpointWriter =
-        new CheckpointWriter(mock(classOf[JobGenerator]), conf, checkpointDir, hadoopConf)
+      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
 
-      try {
-        // Create a fake RDD checkpoint dir to emulate SparkContext.setCheckpointDir()
-        val fakeRddPath = new Path(checkpointDir, UUID.randomUUID().toString)
-        fakeRddPath.getFileSystem(hadoopConf).mkdirs(fakeRddPath)
+      // Ignore files whose parent path match.
+      fs.create(new Path(checkpointDir, "this-is-matched-before-due-to-parent-path")).close()
+      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
 
-        // Create an empty directory which matches the regex used in getCheckpointFiles()
-        // and parses as the most recent checkpoint
-        val checkpointLikeDir = new Path(checkpointDir, "checkpoint-1000000000")
-        checkpointLikeDir.getFileSystem(hadoopConf).mkdirs(checkpointLikeDir)
-
-        val checkpointTimes = 1000 to 20000 by 1000
-
-        checkpointTimes.foreach(tm => new checkpointWriter.CheckpointWriteHandler(
-          Time(tm), Array.fill[Byte](10)(1), clearCheckpointDataLater = false).run())
-
-        val expectedCheckpoints = checkpointTimes.takeRight(10).map { tm =>
-          Checkpoint.checkpointFile(checkpointDir, Time(tm)).getName
-        }
-
-        assert(Checkpoint.getCheckpointFiles(checkpointDir).map(_.getName) == expectedCheckpoints)
-      } finally {
-        checkpointWriter.stop()
-      }
+      // Ignore directories whose names match.
+      fs.mkdirs(new Path(checkpointDir, "checkpoint-1000000000"))
+      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
     }
   }
 
