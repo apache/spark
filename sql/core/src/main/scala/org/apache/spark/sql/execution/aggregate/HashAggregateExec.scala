@@ -261,14 +261,6 @@ case class HashAggregateExec(
      """.stripMargin
   }
 
-  private def isValidParamLength(paramLength: Int): Boolean = {
-    // This config is only for testing
-    sqlContext.getConf("spark.sql.HashAggregateExec.validParamLength", null) match {
-      case null | "" => CodeGenerator.isValidParamLength(paramLength)
-      case validLength => paramLength <= validLength.toInt
-    }
-  }
-
   // Splits aggregate code into small functions because the most of JVM implementations
   // can not compile too long functions. Returns None if we are not able to split the given code.
   //
@@ -294,7 +286,7 @@ case class HashAggregateExec(
         val paramLength = CodeGenerator.calculateParamLengthFromExprValues(inputVarsForOneFunc)
 
         // Checks if a parameter length for the `aggExprsForOneFunc` does not go over the JVM limit
-        if (isValidParamLength(paramLength)) {
+        if (CodeGenerator.isValidParamLength(paramLength)) {
           Some(inputVarsForOneFunc)
         } else {
           None
