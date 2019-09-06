@@ -1056,28 +1056,31 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   private[this] def castToDateCode(
       from: DataType,
-      ctx: CodegenContext): CastFunction = from match {
-    case StringType =>
-      val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
-      (c, evPrim, evNull) => code"""
-        scala.Option<Integer> $intOpt =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c);
-        if ($intOpt.isDefined()) {
-          $evPrim = ((Integer) $intOpt.get()).intValue();
-        } else {
-          $evNull = true;
-        }
-       """
-    case TimestampType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
-      (c, evPrim, evNull) =>
-        code"""$evPrim =
-          org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
-    case _ =>
-      (c, evPrim, evNull) => code"$evNull = true;"
+      ctx: CodegenContext): CastFunction = {
+    val zoneIdClass = classOf[ZoneId]
+    val zid = JavaCode.global(
+      ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+      zoneIdClass)
+    from match {
+      case StringType =>
+        val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
+        (c, evPrim, evNull) =>
+          code"""
+          scala.Option<Integer> $intOpt =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToDate($c, $zid);
+          if ($intOpt.isDefined()) {
+            $evPrim = ((Integer) $intOpt.get()).intValue();
+          } else {
+            $evNull = true;
+          }
+         """
+      case TimestampType =>
+        (c, evPrim, evNull) =>
+          code"""$evPrim =
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
+      case _ =>
+        (c, evPrim, evNull) => code"$evNull = true;"
+    }
   }
 
   private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
