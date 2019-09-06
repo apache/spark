@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -848,35 +849,37 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
   }
 
   test("SPARK-28912: Fix MatchError in getCheckpointFiles") {
-    val tempDir = Utils.createTempDir()
-    val checkpointDir = tempDir + "/checkpoint-01"
+    withTempDir { tempDir =>
+      val checkpointDir = tempDir + "/checkpoint-01"
 
-    Utils.deleteRecursively(tempDir)
+      val hadoopConf = new Configuration
+      val checkpointWriter =
+        new CheckpointWriter(mock(classOf[JobGenerator]), conf, checkpointDir, hadoopConf)
 
-    val hadoopConf = new Configuration
-    val checkpointWriter =
-      new CheckpointWriter(mock(classOf[JobGenerator]), conf, checkpointDir, hadoopConf)
+      try {
+        // Create a fake RDD checkpoint dir to emulate SparkContext.setCheckpointDir()
+        val fakeRddPath = new Path(checkpointDir, UUID.randomUUID().toString)
+        fakeRddPath.getFileSystem(hadoopConf).mkdirs(fakeRddPath)
 
-    // Create a fake RDD checkpoint dir to emulate SparkContext.setCheckpointDir()
-    val fakeRddPath = new Path(checkpointDir, java.util.UUID.randomUUID().toString)
-    fakeRddPath.getFileSystem(hadoopConf).mkdirs(fakeRddPath)
+        // Create an empty directory which matches the regex used in getCheckpointFiles()
+        // and parses as the most recent checkpoint
+        val checkpointLikeDir = new Path(checkpointDir, "checkpoint-1000000000")
+        checkpointLikeDir.getFileSystem(hadoopConf).mkdirs(checkpointLikeDir)
 
-    val checkpointTimes = (1 to 20).map(_ * 1000)
+        val checkpointTimes = 1000 to 20000 by 1000
 
-    try {
-      checkpointTimes.foreach(tm => new checkpointWriter.CheckpointWriteHandler(
-        Time(tm), Array.fill[Byte](10)(1), clearCheckpointDataLater = false).run())
-    } catch {
-      case ex: MatchError => fail("Should not throw MatchError", ex)
+        checkpointTimes.foreach(tm => new checkpointWriter.CheckpointWriteHandler(
+          Time(tm), Array.fill[Byte](10)(1), clearCheckpointDataLater = false).run())
+
+        val expectedCheckpoints = checkpointTimes.takeRight(10).map { tm =>
+          Checkpoint.checkpointFile(checkpointDir, Time(tm)).getName
+        }
+
+        assert(Checkpoint.getCheckpointFiles(checkpointDir).map(_.getName) == expectedCheckpoints)
+      } finally {
+        checkpointWriter.stop()
+      }
     }
-
-    val expectedCheckpoints = checkpointTimes.takeRight(10).map { tm =>
-      Checkpoint.checkpointFile(checkpointDir, Time(tm)).getName }
-
-    assert(Checkpoint.getCheckpointFiles(checkpointDir).map(_.getName) == expectedCheckpoints)
-
-    Utils.deleteRecursively(tempDir)
-    checkpointWriter.stop()
   }
 
   test("SPARK-6847: stack overflow when updateStateByKey is followed by a checkpointed dstream") {
