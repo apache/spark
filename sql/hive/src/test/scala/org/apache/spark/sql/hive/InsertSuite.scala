@@ -843,7 +843,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           (s"name-$f", f)
         })
         .toDF("name", "num")
-      partionDf.write.insertInto("mc_test_pt_table", "pt1='0101',pt2='0202'")
+      partionDf.write.insertInto("mc_test_pt_table", "pt1='0101'", "pt2='0202'")
       assert(spark.sql(s"select pt1,pt2 from mc_test_pt_table").showString(1) === result)
     }
   }

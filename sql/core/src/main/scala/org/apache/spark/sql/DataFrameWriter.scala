@@ -346,17 +346,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Inserts the content of the `DataFrame` to the specific table partition.
    *
    * {{{
-   *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto(ptTableName,"pt1='0101',pt2='0202'")
+   *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto(ptTableName, "pt1='0101'", "pt2='0202'")
    * }}}
    *
    * @since 3.0
    */
-  def insertInto(tableName: String, partionInfo: String): Unit = {
-    insertInto(tableName, Some(partionInfo))
+  def insertInto(tableName: String, partionInfo: String*): Unit = {
+    insertInto(tableName, Option(partionInfo))
   }
 
 
-  private def insertInto(tableName: String, partionInfo: Option[String]): Unit = {
+  private def insertInto(tableName: String, partionInfo: Option[Seq[String]]): Unit = {
     import df.sparkSession.sessionState.analyzer.{AsTableIdentifier, CatalogObjectIdentifier}
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
@@ -376,7 +376,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     var parition = Map[String, Option[String]]()
     if (partionInfo.isDefined) {
-      val res = partionInfo.get.split(",").foreach(partion => {
+      val res = partionInfo.get.foreach(partion => {
         val partionKey = partion.replaceAll("'", "").split("=")(0)
         val partionValue = partion.replaceAll("'", "").split("=")(1)
         parition += (partionKey -> Some(partionValue))
