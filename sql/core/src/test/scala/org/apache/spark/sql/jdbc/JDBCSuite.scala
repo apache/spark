@@ -1547,9 +1547,9 @@ class JDBCSuite extends QueryTest
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < CAST('2018-07-10' AS DATE) or "D" is null""",
+          """"D" >= CAST('2018-07-10' AS DATE) AND "D" < CAST('2018-07-14' AS DATE)""",
+          """"D" >= CAST('2018-07-14' AS DATE)"""))
     }
     checkAnswer(df1, expectedResult)
 
@@ -1567,8 +1567,8 @@ class JDBCSuite extends QueryTest
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"T" < '2018-07-15 20:50:32.5' or "T" is null""",
-          """"T" >= '2018-07-15 20:50:32.5'"""))
+          """"T" < CAST('2018-07-15 20:50:32.5' AS TIMESTAMP) or "T" is null""",
+          """"T" >= CAST('2018-07-15 20:50:32.5' AS TIMESTAMP)"""))
     }
     checkAnswer(df2, expectedResult)
   }
@@ -1651,8 +1651,8 @@ class JDBCSuite extends QueryTest
               val jdbcRelation = lr.relation.asInstanceOf[JDBCRelation]
               val whereClauses = jdbcRelation.parts.map(_.asInstanceOf[JDBCPartition].whereClause)
               assert(whereClauses.toSet === Set(
-                s""""T" < '$middle' or "T" is null""",
-                s""""T" >= '$middle'"""))
+                s""""T" < CAST('$middle' AS TIMESTAMP) or "T" is null""",
+                s""""T" >= CAST('$middle' AS TIMESTAMP)"""))
           }
         }
       }
