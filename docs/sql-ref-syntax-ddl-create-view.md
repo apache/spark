@@ -37,36 +37,50 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
         [TBLPROPERTIES (property_name = property_value, ...)]
 {% endhighlight %}
 
+### Parameters
+<dl>
+  <dt><code><em>OR REPLACE</em></code></dt>
+  <dd>If a view of same name already exists, it will be replaced.</dd>
+</dl>
+<dl>
+  <dt><code><em>[GLOBAL] TEMPORARY</em></code></dt>
+  <dd>TEMPORARY views are session-scoped and will be dropped when session ends 
+      because it skips persisting the definition in the underlying metastore, if any.
+      GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.</dd>
+</dl>
+<dl>
+  <dt><code><em>IF NOT EXISTS</em></code></dt>
+  <dd>Creates a view if it does not exists.</dd>
+</dl>
+<dl>
+  <dt><code><em>COMMENT</em></code></dt>
+  <dd>View-level and column-level comments can be specified in CREATE VIEW statement.</dd>
+</dl>
+<dl>
+  <dt><code><em>TBLPROPERTIES</em></code></dt>
+  <dd>Metadata key-value pairs.</dd>
+</dl>
+<dl>
+  <dt><code><em>AS SELECT</em></code></dt>
+  <dd>A <a href="sql-ref-syntax-qry-select.md">SELECT</a> statement that constructs the view from base tables or other views.</dd>
+</dl>
+
 ### Examples
 {% highlight sql %}
 -- Create a global temporary view `subscribed_movies` if it does not exist.
 CREATE GLOBAL TEMPORARY VIEW IF NOT EXISTS subscribed_movies 
     AS SELECT mo.member_id, mb.full_name, mo.movie_title
-     FROM movies AS mo INNER JOIN members AS mb 
-     ON mo.member_id = mb.id;
--- Create or replace view for `experienced_employee` with comments.
-CREATE OR REPLACE VIEW experienced_employee 
-    (ID COMMENT 'Unique identification number', Name) 
-    COMMENT 'View for experienced employees' 
-    AS SELECT id, name FROM all_employee 
-        WHERE working_years > 5;
-{% endhighlight %}
+        FROM movies AS mo INNER JOIN members AS mb 
+        ON mo.member_id = mb.id;
 
-### Parameters
-#### OR REPLACE
-If a view of same name already exists, it will be replaced.
-#### [GLOBAL] TEMPORARY
-TEMPORARY views are session-scoped and will be dropped when session ends 
-because it skips persisting the definition in the underlying metastore, if any.
-GLOBAL TEMPORARY views are tied to a system preserved temporary database `global_temp`.
-#### IF NOT EXISTS
-Creates a view if it does not exists.
-#### COMMENT
-View-level and column-level comments can be specified in CREATE VIEW statement.
-#### TBLPROPERTIES
-Metadata key-value pairs.
-#### AS SELECT
-A [SELECT](sql-ref-syntax-qry-select.md) statement that constructs the view from base tables or other views.
+-- Create or replace view for `experienced_employee` with comments.
+CREATE OR REPLACE VIEW experienced_employee
+    (ID COMMENT 'Unique identification number', Name) 
+    COMMENT 'View for experienced employees'
+    AS SELECT id, name FROM all_employee
+        WHERE working_years > 5;
+
+{% endhighlight %}
 
 ### Related Statements
 - [ALTER VIEW](sql-ref-syntax-ddl-alter-view.md)
