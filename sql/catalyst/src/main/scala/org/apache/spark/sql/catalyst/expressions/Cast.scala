@@ -106,7 +106,7 @@ object Cast {
    * * Cast.castToTimestamp
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
-    case (StringType, TimestampType) => true
+    case (StringType, TimestampType | DateType) => true
     case (DateType, TimestampType) => true
     case (TimestampType, StringType) => true
     case (TimestampType, DateType) => true
