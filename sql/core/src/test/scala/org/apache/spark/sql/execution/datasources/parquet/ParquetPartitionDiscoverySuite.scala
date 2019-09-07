@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -51,7 +51,7 @@ case class ParquetData(intField: Int, stringField: String)
 case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 abstract class ParquetPartitionDiscoverySuite
-  extends QueryTest with ParquetTest with SharedSQLContext {
+  extends QueryTest with ParquetTest with SharedSparkSession {
   import PartitioningUtils._
   import testImplicits._
 
@@ -1047,8 +1047,7 @@ class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "parquet")
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "parquet")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
@@ -1195,7 +1194,7 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>

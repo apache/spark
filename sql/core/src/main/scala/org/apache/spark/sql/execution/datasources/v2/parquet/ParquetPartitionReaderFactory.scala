@@ -197,7 +197,7 @@ case class ParquetPartitionReaderFactory(
       new ParquetRecordReader[UnsafeRow](readSupport)
     }
     val iter = new RecordReaderIterator(reader)
-    // SPARK-23457 Register a task completion lister before `initialization`.
+    // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
     reader
   }
@@ -219,7 +219,7 @@ case class ParquetPartitionReaderFactory(
     val vectorizedReader = new VectorizedParquetRecordReader(
       convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
     val iter = new RecordReaderIterator(vectorizedReader)
-    // SPARK-23457 Register a task completion lister before `initialization`.
+    // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
     logDebug(s"Appending $partitionSchema $partitionValues")
     vectorizedReader

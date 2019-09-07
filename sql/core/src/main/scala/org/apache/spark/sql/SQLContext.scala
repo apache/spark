@@ -23,7 +23,7 @@ import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.annotation._
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
@@ -85,8 +85,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    */
-  @Experimental
-  @Evolving
   def listenerManager: ExecutionListenerManager = sparkSession.listenerManager
 
   /**
@@ -231,7 +229,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**
-   * :: Experimental ::
    * (Scala-specific) Implicit methods available in Scala for converting
    * common Scala objects into `DataFrame`s.
    *
@@ -243,35 +240,27 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group basic
    * @since 1.3.0
    */
-  @Experimental
-  @Evolving
   object implicits extends SQLImplicits with Serializable {
     protected override def _sqlContext: SQLContext = self
   }
   // scalastyle:on
 
   /**
-   * :: Experimental ::
    * Creates a DataFrame from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
    * @since 1.3.0
    */
-  @Experimental
-  @Evolving
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     sparkSession.createDataFrame(rdd)
   }
 
   /**
-   * :: Experimental ::
    * Creates a DataFrame from a local Seq of Product.
    *
    * @group dataframes
    * @since 1.3.0
    */
-  @Experimental
-  @Evolving
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
     sparkSession.createDataFrame(data)
   }
@@ -319,13 +308,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
-  @Evolving
   def createDataFrame(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
 
   /**
-   * :: Experimental ::
    * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
    * that is generally created automatically through implicits from a `SparkSession`, or can be
@@ -353,14 +340,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 2.0.0
    * @group dataset
    */
-  @Experimental
-  @Evolving
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
   /**
-   * :: Experimental ::
    * Creates a [[Dataset]] from an RDD of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
    * that is generally created automatically through implicits from a `SparkSession`, or can be
@@ -369,13 +353,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 2.0.0
    * @group dataset
    */
-  @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
   /**
-   * :: Experimental ::
    * Creates a [[Dataset]] from a `java.util.List` of a given type. This method requires an
    * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
    * that is generally created automatically through implicits from a `SparkSession`, or can be
@@ -391,8 +373,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 2.0.0
    * @group dataset
    */
-  @Experimental
-  @Evolving
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -419,7 +399,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   @DeveloperApi
-  @Evolving
   def createDataFrame(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rowRDD, schema)
   }
@@ -434,7 +413,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.6.0
    */
   @DeveloperApi
-  @Evolving
   def createDataFrame(rows: java.util.List[Row], schema: StructType): DataFrame = {
     sparkSession.createDataFrame(rows, schema)
   }
@@ -498,7 +476,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  @Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
 
@@ -614,45 +591,35 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 1.4.1
    * @group dataframe
    */
-  @Experimental
-  @Evolving
   def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
-   * :: Experimental ::
    * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 1.4.0
    * @group dataframe
    */
-  @Experimental
-  @Evolving
   def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
-   * :: Experimental ::
    * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
    * @group dataframe
    */
-  @Experimental
-  @Evolving
   def range(start: Long, end: Long, step: Long): DataFrame = {
     sparkSession.range(start, end, step).toDF()
   }
 
   /**
-   * :: Experimental ::
    * Creates a `DataFrame` with a single `LongType` column named `id`, containing elements
    * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
@@ -660,8 +627,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.4.0
    * @group dataframe
    */
-  @Experimental
-  @Evolving
   def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
     sparkSession.range(start, end, step, numPartitions).toDF()
   }

@@ -22,9 +22,9 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class FileStreamSinkLogSuite extends SparkFunSuite with SharedSQLContext {
+class FileStreamSinkLogSuite extends SparkFunSuite with SharedSparkSession {
 
   import CompactibleFileStreamLog._
   import FileStreamSinkLog._

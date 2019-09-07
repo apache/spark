@@ -70,7 +70,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
+  override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
 
   override def output: Seq[Attribute] = cmd.output
 
@@ -143,7 +143,8 @@ case class ExplainCommand(
     logicalPlan: LogicalPlan,
     extended: Boolean = false,
     codegen: Boolean = false,
-    cost: Boolean = false)
+    cost: Boolean = false,
+    formatted: Boolean = false)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -160,6 +161,8 @@ case class ExplainCommand(
         queryExecution.toString
       } else if (cost) {
         queryExecution.stringWithStats
+      } else if (formatted) {
+        queryExecution.simpleString(formatted = true)
       } else {
         queryExecution.simpleString
       }

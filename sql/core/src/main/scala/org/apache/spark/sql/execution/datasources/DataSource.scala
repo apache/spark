@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -254,9 +255,12 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
+        val forceNullable =
+          sparkSession.sessionState.conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
-          StructType(dataSchema ++ partitionSchema),
+          StructType(sourceDataSchema ++ partitionSchema),
           partitionSchema.fieldNames)
 
       case _ =>
@@ -705,6 +709,24 @@ object DataSource extends Logging {
         } else {
           throw e
         }
+    }
+  }
+
+  /**
+   * Returns an optional [[TableProvider]] instance for the given provider. It returns None if
+   * there is no corresponding Data Source V2 implementation, or the provider is configured to
+   * fallback to Data Source V1 code path.
+   */
+  def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
+    val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
+      .split(",").map(_.trim)
+    val cls = lookupDataSource(provider, conf)
+    cls.newInstance() match {
+      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
+      case t: TableProvider
+          if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        Some(t)
+      case _ => None
     }
   }
 

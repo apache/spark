@@ -156,7 +156,7 @@ private[python] object PythonHadoopUtil {
    * Convert a [[java.util.Map]] of properties to a [[org.apache.hadoop.conf.Configuration]]
    */
   def mapToConf(map: java.util.Map[String, String]): Configuration = {
-    val conf = new Configuration()
+    val conf = new Configuration(false)
     map.asScala.foreach { case (k, v) => conf.set(k, v) }
     conf
   }

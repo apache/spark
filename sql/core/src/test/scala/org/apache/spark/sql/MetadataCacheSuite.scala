@@ -21,12 +21,12 @@ import java.io.File
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test suite to handle metadata cache related.
  */
-abstract class MetadataCacheSuite extends QueryTest with SharedSQLContext {
+abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
 
   /** Removes one data file in the given directory. */
   protected def deleteOneFileInDirectory(dir: File): Unit = {
@@ -65,7 +65,7 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "orc")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 
   test("SPARK-16337 temporary view refresh") {
     withTempView("view_refresh") { withTempPath { (location: File) =>
@@ -123,5 +123,5 @@ class MetadataCacheV2Suite extends MetadataCacheSuite {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

@@ -18,10 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -200,6 +200,26 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
+  }
+
+  test("model support predict leaf index") {
+    val model0 = new DecisionTreeClassificationModel("dtc", TreeTests.root0, 3, 2)
+    val model1 = new DecisionTreeClassificationModel("dtc", TreeTests.root1, 3, 2)
+    val model = new RandomForestClassificationModel("rfc", Array(model0, model1), 3, 2)
+    model.setLeafCol("predictedLeafId")
+      .setRawPredictionCol("")
+      .setPredictionCol("")
+      .setProbabilityCol("")
+
+    val data = TreeTests.getTwoTreesLeafData
+    data.foreach { case (leafId, vec) => assert(leafId === model.predictLeaf(vec)) }
+
+    val df = sc.parallelize(data, 1).toDF("leafId", "features")
+    model.transform(df).select("leafId", "predictedLeafId")
+      .collect()
+      .foreach { case Row(leafId: Vector, predictedLeafId: Vector) =>
+        assert(leafId === predictedLeafId)
+    }
   }
 
   test("should support all NumericType labels and not support other types") {
