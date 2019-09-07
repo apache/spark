@@ -104,7 +104,7 @@ case class CatalogTablePartition(
     storage: CatalogStorageFormat,
     parameters: Map[String, String] = Map.empty,
     createTime: Long = System.currentTimeMillis,
-    lastAccessTime: Long = -1,
+    lastAccessTime: Long = 0,
     stats: Option[CatalogStatistics] = None) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
@@ -117,7 +117,7 @@ case class CatalogTablePartition(
     }
     map.put("Created Time", new Date(createTime).toString)
     val lastAccess = {
-      if (-1 == lastAccessTime) "UNKNOWN" else new Date(lastAccessTime).toString
+      if (0 == lastAccessTime) "UNKNOWN" else new Date(lastAccessTime).toString
     }
     map.put("Last Access", lastAccess)
     stats.foreach(s => map.put("Partition Statistics", s.simpleString))
@@ -236,7 +236,7 @@ case class CatalogTable(
     bucketSpec: Option[BucketSpec] = None,
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
-    lastAccessTime: Long = -1,
+    lastAccessTime: Long = 0,
     createVersion: String = "",
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
@@ -320,12 +320,15 @@ case class CatalogTable(
     val map = new mutable.LinkedHashMap[String, String]()
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
+    val lastAccess = {
+      if (0 == lastAccessTime) "UNKNOWN" else new Date(lastAccessTime).toString
+    }
 
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner != null && owner.nonEmpty) map.put("Owner", owner)
     map.put("Created Time", new Date(createTime).toString)
-    map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Last Access", lastAccess)
     map.put("Created By", "Spark " + createVersion)
     map.put("Type", tableType.name)
     provider.foreach(map.put("Provider", _))
