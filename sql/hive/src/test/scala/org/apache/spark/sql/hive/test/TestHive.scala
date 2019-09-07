@@ -657,8 +657,13 @@ private[hive] object HiveTestJars {
   private val hiveHcatalogCoreUrl = s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
     s"${HiveUtils.builtinHiveVersion}/${HIVE_HCATALOG_CORE_JAR}"
 
-  val getHiveContribJar: String = getFileFromUrl(hiveContribUrl, HIVE_CONTRIB_JAR)
-  val getHiveHcatalogCoreJar: String = getFileFromUrl(hiveHcatalogCoreUrl, HIVE_HCATALOG_CORE_JAR)
+  def getHiveContribJar: String = synchronized {
+    getFileFromUrl(hiveContribUrl, HIVE_CONTRIB_JAR)
+  }
+
+  def getHiveHcatalogCoreJar: String = synchronized {
+    getFileFromUrl(hiveHcatalogCoreUrl, HIVE_HCATALOG_CORE_JAR)
+  }
 
   private def getFileFromUrl(urlString: String, filename: String): String = {
     val hiveTestJars = new File("/tmp/test-spark/hiveTestJars")
