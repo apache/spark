@@ -1,7 +1,7 @@
 -- Portions Copyright (c) 1996-2019, PostgreSQL Global Development Group
 --
 -- Window Functions Testing
--- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/window.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA3/src/test/regress/sql/window.sql
 
 CREATE TEMPORARY VIEW tenk2 AS SELECT * FROM tenk1;
 
@@ -1038,13 +1038,16 @@ SELECT ntile(0) OVER (ORDER BY ten), ten, four FROM tenk1;
 -- cleanup
 DROP TABLE empsalary;
 
+-- Spark doesn't handle UDFs in SQL
 -- test user-defined window function with named args and default args
 -- CREATE FUNCTION nth_value_def(val anyelement, n integer = 1) RETURNS anyelement
 --   LANGUAGE internal WINDOW IMMUTABLE STRICT AS 'window_nth_value';
 
+-- Spark doesn't handle UDFs in SQL
 -- SELECT nth_value_def(n := 2, val := ten) OVER (PARTITION BY four), ten, four
 --   FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
 
+-- Spark doesn't handle UDFs in SQL
 -- SELECT nth_value_def(ten) OVER (PARTITION BY four), ten, four
 --   FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten) s;
 
@@ -1055,18 +1058,22 @@ DROP TABLE empsalary;
 -- create aggregates that record the series of transform calls (these are
 -- intentionally not true inverses)
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION logging_sfunc_nonstrict(text, anyelement) RETURNS text AS
 -- $$ SELECT COALESCE($1, '') || '*' || quote_nullable($2) $$
 -- LANGUAGE SQL IMMUTABLE;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION logging_msfunc_nonstrict(text, anyelement) RETURNS text AS
 -- $$ SELECT COALESCE($1, '') || '+' || quote_nullable($2) $$
 -- LANGUAGE SQL IMMUTABLE;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION logging_minvfunc_nonstrict(text, anyelement) RETURNS text AS
 -- $$ SELECT $1 || '-' || quote_nullable($2) $$
 -- LANGUAGE SQL IMMUTABLE;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE AGGREGATE logging_agg_nonstrict (anyelement)
 -- (
 -- 	stype = text,
@@ -1076,6 +1083,7 @@ DROP TABLE empsalary;
 -- 	minvfunc = logging_minvfunc_nonstrict
 -- );
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE AGGREGATE logging_agg_nonstrict_initcond (anyelement)
 -- (
 -- 	stype = text,
@@ -1087,18 +1095,22 @@ DROP TABLE empsalary;
 -- 	minitcond = 'MI'
 -- );
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION logging_sfunc_strict(text, anyelement) RETURNS text AS
 -- $$ SELECT $1 || '*' || quote_nullable($2) $$
 -- LANGUAGE SQL STRICT IMMUTABLE;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION logging_msfunc_strict(text, anyelement) RETURNS text AS
 -- $$ SELECT $1 || '+' || quote_nullable($2) $$
 -- LANGUAGE SQL STRICT IMMUTABLE;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION logging_minvfunc_strict(text, anyelement) RETURNS text AS
 -- $$ SELECT $1 || '-' || quote_nullable($2) $$
 -- LANGUAGE SQL STRICT IMMUTABLE;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE AGGREGATE logging_agg_strict (text)
 -- (
 -- 	stype = text,
@@ -1108,6 +1120,7 @@ DROP TABLE empsalary;
 -- 	minvfunc = logging_minvfunc_strict
 -- );
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE AGGREGATE logging_agg_strict_initcond (anyelement)
 -- (
 -- 	stype = text,
@@ -1119,6 +1132,7 @@ DROP TABLE empsalary;
 -- 	minitcond = 'MI'
 -- );
 
+-- Spark doesn't handle UDFs in SQL
 -- test strict and non-strict cases
 -- SELECT
 -- 	p::text || ',' || i::text || ':' || COALESCE(v::text, 'NULL') AS row,
@@ -1140,6 +1154,7 @@ DROP TABLE empsalary;
 -- WINDOW wnd AS (PARTITION BY P ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 -- ORDER BY p, i;
 
+-- Spark doesn't handle UDFs in SQL
 -- and again, but with filter
 -- SELECT
 -- 	p::text || ',' || i::text || ':' ||
@@ -1162,6 +1177,7 @@ DROP TABLE empsalary;
 -- WINDOW wnd AS (PARTITION BY p ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 -- ORDER BY p, i;
 
+-- Spark doesn't handle UDFs in SQL
 -- test that volatile arguments disable moving-aggregate mode
 -- SELECT
 -- 	i::text || ':' || COALESCE(v::text, 'NULL') as row,
@@ -1177,6 +1193,7 @@ DROP TABLE empsalary;
 -- WINDOW wnd AS (ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 -- ORDER BY i;
 
+-- Spark doesn't handle UDFs in SQL
 -- SELECT
 -- 	i::text || ':' || COALESCE(v::text, 'NULL') as row,
 -- 	logging_agg_strict(v::text) filter(where true)
@@ -1191,6 +1208,7 @@ DROP TABLE empsalary;
 -- WINDOW wnd AS (ORDER BY i ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 -- ORDER BY i;
 
+-- Spark doesn't handle UDFs in SQL
 -- test that non-overlapping windows don't use inverse transitions
 -- SELECT
 -- 	logging_agg_strict(v::text) OVER wnd
@@ -1202,15 +1220,18 @@ DROP TABLE empsalary;
 -- WINDOW wnd AS (ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW)
 -- ORDER BY i;
 
+-- Spark doesn't handle UDFs in SQL
 -- test that returning NULL from the inverse transition functions
 -- restarts the aggregation from scratch. The second aggregate is supposed
 -- to test cases where only some aggregates restart, the third one checks
 -- that one aggregate restarting doesn't cause others to restart.
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE FUNCTION sum_int_randrestart_minvfunc(int4, int4) RETURNS int4 AS
 -- $$ SELECT CASE WHEN random() < 0.2 THEN NULL ELSE $1 - $2 END $$
 -- LANGUAGE SQL STRICT;
 
+-- Spark doesn't handle UDFs in SQL
 -- CREATE AGGREGATE sum_int_randomrestart (int4)
 -- (
 -- 	stype = int4,
@@ -1220,6 +1241,7 @@ DROP TABLE empsalary;
 -- 	minvfunc = sum_int_randrestart_minvfunc
 -- );
 
+-- Spark doesn't handle UDFs in SQL
 -- WITH
 -- vs AS (
 -- 	SELECT i, (random() * 100)::int4 AS v
@@ -1258,7 +1280,7 @@ SELECT i,AVG(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWIN
   FROM (VALUES(1,1.5),(2,2.5),(3,NULL),(4,NULL)) t(i,v);
 
 -- [SPARK-28602] Spark does not recognize 'interval' type as 'numeric'
--- SELECT i,AVG(cast(v as interval)) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+-- SELECT i,AVG(v::interval) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
 --   FROM (VALUES(1,'1 sec'),(2,'2 sec'),(3,NULL),(4,NULL)) t(i,v);
 
 SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
@@ -1378,9 +1400,6 @@ SELECT i,SUM(v) OVER (ORDER BY i ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
 SELECT a, b,
        SUM(b) OVER(ORDER BY A ROWS BETWEEN 1 PRECEDING AND CURRENT ROW)
 FROM (VALUES(1,1),(2,2),(3,'NaN'),(4,3),(5,4)) t(a,b);
-
-select f_float4, sum(f_float4) over (order by f_float8 rows between 1
-  preceding and current row) from numerics;
 
 -- It might be tempting for someone to add an inverse trans function for
 -- float and double precision. This should not be done as it can give incorrect
