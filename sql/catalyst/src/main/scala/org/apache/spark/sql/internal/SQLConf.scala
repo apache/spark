@@ -216,6 +216,39 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DYNAMIC_PARTITION_PRUNING_ENABLED =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.enabled")
+      .doc("When true, we will generate predicate for partition column when it's used as join key")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_USE_STATS =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.useStats")
+      .internal()
+      .doc("When true, distinct count statistics will be used for computing the data size of the " +
+        "partitioned table after dynamic partition pruning, in order to evaluate if it is worth " +
+        "adding an extra subquery as the pruning filter if broadcast reuse is not applicable.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO = buildConf(
+    "spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio")
+    .internal()
+    .doc("When statistics are not available or configured not to be used, this config will be " +
+      "used as the fallback filter ratio for computing the data size of the partitioned table " +
+      "after dynamic partition pruning, in order to evaluate if it is worth adding an extra " +
+      "subquery as the pruning filter if broadcast reuse is not applicable.")
+    .doubleConf
+    .createWithDefault(0.5)
+
+  val DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST =
+    buildConf("spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcast")
+      .internal()
+      .doc("When true, dynamic partition pruning will seek to reuse the broadcast results from " +
+        "a broadcast hash join operation.")
+      .booleanConf
+      .createWithDefault(true)
+
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
@@ -312,6 +345,15 @@ object SQLConf {
     .doc("When true, enable adaptive query execution.")
     .booleanConf
     .createWithDefault(false)
+
+  val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
+    buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
+      .doc("The relation with a non-empty partition ratio lower than this config will not be " +
+        "considered as the build side of a broadcast-hash join in adaptive execution regardless " +
+        "of its size.")
+      .doubleConf
+      .checkValue(_ >= 0, "The non-empty partition ratio must be positive number.")
+      .createWithDefault(0.2)
 
   val REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED =
     buildConf("spark.sql.adaptive.reducePostShufflePartitions.enabled")
@@ -1046,6 +1088,15 @@ object SQLConf {
       .doc("Enable vectorized aggregate hash map. This is for testing/benchmarking only.")
       .booleanConf
       .createWithDefault(false)
+
+  val CODEGEN_SPLIT_AGGREGATE_FUNC =
+    buildConf("spark.sql.codegen.aggregate.splitAggregateFunc.enabled")
+      .internal()
+      .doc("When true, the code generator would split aggregate code into individual methods " +
+        "instead of a single big method. This can be used to avoid oversized function that " +
+        "can miss the opportunity of JIT optimization.")
+      .booleanConf
+      .createWithDefault(true)
 
   val MAX_NESTED_VIEW_DEPTH =
     buildConf("spark.sql.view.maxNestedViewDepth")
@@ -1970,6 +2021,16 @@ class SQLConf extends Serializable with Logging {
 
   def optimizerPlanChangeBatches: Option[String] = getConf(OPTIMIZER_PLAN_CHANGE_LOG_BATCHES)
 
+  def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
+
+  def dynamicPartitionPruningUseStats: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_USE_STATS)
+
+  def dynamicPartitionPruningFallbackFilterRatio: Double =
+    getConf(DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO)
+
+  def dynamicPartitionPruningReuseBroadcast: Boolean =
+    getConf(DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST)
+
   def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
@@ -2040,6 +2101,9 @@ class SQLConf extends Serializable with Logging {
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
   def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+
+  def nonEmptyPartitionRatioForBroadcastJoin: Double =
+    getConf(NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN)
 
   def reducePostShufflePartitionsEnabled: Boolean = getConf(REDUCE_POST_SHUFFLE_PARTITIONS_ENABLED)
 
@@ -2309,6 +2373,8 @@ class SQLConf extends Serializable with Logging {
 
   def cartesianProductExecBufferSpillThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def codegenSplitAggregateFunc: Boolean = getConf(SQLConf.CODEGEN_SPLIT_AGGREGATE_FUNC)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
 

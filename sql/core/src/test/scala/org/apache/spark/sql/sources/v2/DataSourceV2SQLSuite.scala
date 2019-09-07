@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog, Stag
 import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
-import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -524,7 +524,7 @@ class DataSourceV2SQLSuite
     // can load the table.
     val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
-    assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
+    assert(t.isInstanceOf[V1Table], "V1 table wasn't returned as an unresolved table")
   }
 
   test("CreateTableAsSelect: nullable schema") {

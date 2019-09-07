@@ -463,6 +463,7 @@ javax.xml.stream:stax-api    https://jcp.org/en/jsr/detail?id=173
 Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 
+javax.el:javax.el-api	https://javaee.github.io/uel-ri/
 javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2

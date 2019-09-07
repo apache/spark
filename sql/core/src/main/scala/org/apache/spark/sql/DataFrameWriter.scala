@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NoSuchT
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, InsertIntoTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
@@ -37,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.TableCapability._
-import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
+import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -375,7 +376,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
 
     val table = catalog.asTableCatalog.loadTable(ident) match {
-      case _: UnresolvedTable =>
+      case _: V1Table =>
         return insertInto(TableIdentifier(ident.name(), ident.namespace().headOption))
       case t =>
         DataSourceV2Relation.create(t)
@@ -522,8 +523,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case _: NoSuchTableException => None
     }
 
+    def getLocationIfExists: Option[(String, String)] = {
+      val opts = CaseInsensitiveMap(extraOptions.toMap)
+      opts.get("path").map("location" -> _)
+    }
+
     val command = (mode, tableOpt) match {
-      case (_, Some(table: UnresolvedTable)) =>
+      case (_, Some(table: V1Table)) =>
         return saveAsTable(TableIdentifier(ident.name(), ident.namespace().headOption))
 
       case (SaveMode.Append, Some(table)) =>
@@ -535,7 +541,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map.empty,            // properties can't be specified through this API
+          Map("provider" -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           orCreate = true)      // Create the table if it doesn't exist
 
@@ -548,7 +554,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           ident,
           partitionTransforms,
           df.queryExecution.analyzed,
-          Map.empty,
+          Map("provider" -> source) ++ getLocationIfExists,
           extraOptions.toMap,
           ignoreIfExists = other == SaveMode.Ignore)
     }
