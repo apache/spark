@@ -846,23 +846,6 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     checkpointWriter.stop()
   }
 
-  test("SPARK-28912: Fix MatchError in getCheckpointFiles") {
-    withTempDir { tempDir =>
-      val fs = FileSystem.get(tempDir.toURI, new Configuration)
-      val checkpointDir = tempDir.getAbsolutePath + "/checkpoint-01"
-
-      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
-
-      // Ignore files whose parent path match.
-      fs.create(new Path(checkpointDir, "this-is-matched-before-due-to-parent-path")).close()
-      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
-
-      // Ignore directories whose names match.
-      fs.mkdirs(new Path(checkpointDir, "checkpoint-1000000000"))
-      assert(Checkpoint.getCheckpointFiles(checkpointDir, Some(fs)).length === 0)
-    }
-  }
-
   test("SPARK-6847: stack overflow when updateStateByKey is followed by a checkpointed dstream") {
     // In this test, there are two updateStateByKey operators. The RDD DAG is as follows:
     //
