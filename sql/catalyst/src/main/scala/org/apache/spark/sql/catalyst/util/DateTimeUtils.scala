@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
@@ -378,13 +380,13 @@ object DateTimeUtils {
   def stringToDate(s: UTF8String, zoneId: ZoneId): Option[SQLDate] = {
     if (s == null) {
       return None
-    } else if (specialUTF8DateKeys.contains(s)) {
-      return Some(specialUTF8Dates(s)(zoneId))
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
+    val specialDate = convertSpecialDate(bytes, zoneId)
+    if (specialDate.isDefined) return specialDate
     var j = 0
     while (j < bytes.length && (i < 3 && !(bytes(j) == ' ' || bytes(j) == 'T'))) {
       val b = bytes(j)
@@ -853,16 +855,37 @@ object DateTimeUtils {
 
   def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
 
-  /** Notational shorthands that are converted to ordinary dates. */
-  val specialDates: Map[String, ZoneId => SQLDate] = Map(
-    ("epoch", (_: ZoneId) => 0),
-    ("now", currentDate),
-    ("today", currentDate),
-    ("tomorrow", (z: ZoneId) => Math.addExact(currentDate(z), 1)),
-    ("yesterday", (z: ZoneId) => Math.subtractExact(currentDate(z), 1)))
-  val specialDateKeys: Set[String] = specialDates.keySet
+  private val specialDate = """(EPOCH|NOW|TODAY|TOMORROW|YESTERDAY)\p{Blank}*(.*)""".r
+  /**
+   * Converts notational shorthands that are converted to ordinary dates.
+   * @param input - left trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some of days since the epoch if the conversion completed successfully otherwise None.
+   */
+  def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
+    def isValidZoneId(z: String): Boolean = {
+      z == "" || Try { getZoneId(z) }.isSuccess
+    }
 
-  val specialUTF8Dates: Map[UTF8String, ZoneId => SQLDate] =
-    specialDates.map { case (key, value) => UTF8String.fromString(key) -> value}
-  val specialUTF8DateKeys: Set[UTF8String] = specialDateKeys.map(UTF8String.fromString)
+    if (input.length < 3 || !input(0).isLetter) return None
+    input.toUpperCase(Locale.US) match {
+      case specialDate("EPOCH", z) if isValidZoneId(z) => Some(0)
+      case specialDate("NOW", "") => Some(currentDate(zoneId))
+      case specialDate("TODAY", z) if isValidZoneId(z) =>
+        Some(currentDate(zoneId))
+      case specialDate("TOMORROW", z) if isValidZoneId(z) =>
+        Some(Math.addExact(currentDate(zoneId), 1))
+      case specialDate("YESTERDAY", z) if isValidZoneId(z) =>
+        Some(Math.subtractExact(currentDate(zoneId), 1))
+      case _ => None
+    }
+  }
+
+  private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[SQLDate] = {
+    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
+      convertSpecialDate(new String(bytes, StandardCharsets.UTF_8), zoneId)
+    } else {
+      None
+    }
+  }
 }

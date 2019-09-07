@@ -571,10 +571,10 @@ class DateTimeUtilsSuite extends SparkFunSuite {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       assert(toDate("epoch", zoneId).get === 0)
       val today = localDateToDays(LocalDate.now(zoneId))
-      assert(toDate("yesterday", zoneId).get === today - 1)
-      assert(toDate("now", zoneId).get === today)
+      assert(toDate("YESTERDAY", zoneId).get === today - 1)
+      assert(toDate(" Now ", zoneId).get === today)
       assert(toDate("today", zoneId).get === today)
-      assert(toDate("tomorrow", zoneId).get === today + 1)
+      assert(toDate("tomorrow cet", zoneId).get === today + 1)
     }
   }
 }

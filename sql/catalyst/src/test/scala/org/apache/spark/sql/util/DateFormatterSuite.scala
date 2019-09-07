@@ -108,12 +108,12 @@ class DateFormatterSuite extends SparkFunSuite with SQLHelper {
         val zoneId = getZoneId(timeZone)
         val formatter = DateFormatter(zoneId)
 
-        assert(formatter.parse("epoch") === 0)
+        assert(formatter.parse("EPOCH") === 0)
         val today = localDateToDays(LocalDate.now(zoneId))
-        assert(formatter.parse("yesterday") === today - 1)
+        assert(formatter.parse("Yesterday") === today - 1)
         assert(formatter.parse("now") === today)
-        assert(formatter.parse("today") === today)
-        assert(formatter.parse("tomorrow") === today + 1)
+        assert(formatter.parse("today ") === today)
+        assert(formatter.parse("tomorrow UTC") === today + 1)
       }
     }
   }
