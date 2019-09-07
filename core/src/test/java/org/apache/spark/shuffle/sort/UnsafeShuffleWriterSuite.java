@@ -137,7 +137,7 @@ public class UnsafeShuffleWriterSuite {
 
     when(shuffleBlockResolver.getDataFile(anyInt(), anyInt())).thenReturn(mergedOutputFile);
 
-    Answer renameTempAnswer = invocationOnMock -> {
+    Answer<?> renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
       File tmp = (File) invocationOnMock.getArguments()[3];
       if (!mergedOutputFile.delete()) {

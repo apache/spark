@@ -268,8 +268,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
               mapId,
               taskContext.taskAttemptId(),
               partitioner.numPartitions());
-      mapWriter.commitAllPartitions();
-      return new long[partitioner.numPartitions()];
+      return mapWriter.commitAllPartitions();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(
@@ -379,7 +378,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           inputBufferSizeInBytes);
       }
       for (int partition = 0; partition < numPartitions; partition++) {
-        boolean copyThrewExecption = true;
+        boolean copyThrewException = true;
         ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
         OutputStream partitionOutput = writer.openStream();
         try {
@@ -409,9 +408,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
               }
             }
           }
-          copyThrewExecption = false;
+          copyThrewException = false;
         } finally {
-          Closeables.close(partitionOutput, copyThrewExecption);
+          Closeables.close(partitionOutput, copyThrewException);
         }
         long numBytesWritten = writer.getNumBytesWritten();
         writeMetrics.incBytesWritten(numBytesWritten);
@@ -458,10 +457,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             final FileChannel spillInputChannel = spillInputChannels[i];
             final long writeStartTime = System.nanoTime();
             Utils.copyFileStreamNIO(
-                    spillInputChannel,
-                    resolvedChannel.channel(),
-                    spillInputChannelPositions[i],
-                    partitionLengthInSpill);
+                spillInputChannel,
+                resolvedChannel.channel(),
+                spillInputChannelPositions[i],
+                partitionLengthInSpill);
             copyThrewExecption = false;
             spillInputChannelPositions[i] += partitionLengthInSpill;
             writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);

@@ -102,8 +102,7 @@ public class LocalDiskShuffleMapOutputWriter implements ShuffleMapOutputWriter {
     // exception if it is incorrect. The position will not be increased to the expected length
     // after calling transferTo in kernel version 2.6.32. This issue is described at
     // https://bugs.openjdk.java.net/browse/JDK-7052359 and SPARK-3948.
-    if (outputFileChannel != null
-        && outputFileChannel.position() != bytesWrittenToMergedFile) {
+    if (outputFileChannel != null && outputFileChannel.position() != bytesWrittenToMergedFile) {
       throw new IOException(
           "Current position " + outputFileChannel.position() + " does not equal expected " +
               "position " + bytesWrittenToMergedFile + " after transferTo. Please check your " +
