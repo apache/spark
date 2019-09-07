@@ -61,6 +61,7 @@ private[thriftserver] object ThriftserverShimUtils {
       Type.BIGINT_TYPE, Type.FLOAT_TYPE, Type.DOUBLE_TYPE, Type.STRING_TYPE, Type.DATE_TYPE,
       Type.TIMESTAMP_TYPE, Type.DECIMAL_TYPE, Type.BINARY_TYPE)
   }
+
   private[thriftserver] def addToClassPath(
       loader: ClassLoader,
       auxJars: Array[String]): ClassLoader = {
