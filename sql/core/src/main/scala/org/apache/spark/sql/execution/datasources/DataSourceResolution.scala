@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogNotFoundException, CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, Filter, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowTables, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, Filter, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowTables, SubqueryAlias, UseCatalogAndNamespace}
 import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowTablesStatement, UseCatalogStatement, UseNamespaceStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowTablesCommand}
@@ -203,8 +203,22 @@ case class DataSourceResolution(
       }
 
     case UseCatalogStatement(catalogName) =>
+      try {
+        catalogManager.catalog(catalogName)
+        UseCatalogAndNamespace(catalogManager, Some(catalogName), None)
+      } catch {
+        case _: CatalogNotFoundException =>
+          throw new AnalysisException(s"v2 catalog '$catalogName' cannot be loaded")
+      }
 
-
+    case UseNamespaceStatement(namespace) =>
+      val CatalogNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
+        case Some(catalog) =>
+          UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
+        case None =>
+          throw new AnalysisException(s"No v2 catalog is available for ${namespace.quoted}")
+      }
   }
 
   object V1Provider {

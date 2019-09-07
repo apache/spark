@@ -32,7 +32,7 @@ case class UseCatalogAndNamespaceExec(
     namespace: Option[Seq[String]])
     extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
-    // The catalog is updated first because [[CatalogManager]] resets the current namespace
+    // The catalog is updated first because CatalogManager resets the current namespace
     // when the current catalog is set.
     catalogName.map(catalogManager.setCurrentCatalog)
     namespace.map(ns => catalogManager.setCurrentNamespace(ns.toArray))

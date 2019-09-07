@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalog.v2.StagingTableCatalog
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect, ShowTables, UseCatalogAndNamespace}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -280,6 +280,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case r : ShowTables =>
       ShowTablesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
+
+    case UseCatalogAndNamespace(catalogManager, catalogName, namespace) =>
+      UseCatalogAndNamespaceExec(catalogManager, catalogName, namespace) :: Nil
 
     case _ => Nil
   }
