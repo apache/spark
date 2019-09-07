@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
@@ -146,14 +146,6 @@ class TestHiveContext(
 
   def getHiveFile(path: String): File = {
     sparkSession.getHiveFile(path)
-  }
-
-  def getHiveContribJar(): File = {
-    sparkSession.getHiveFile(HiveTestJars.HIVE_CONTRIB_JAR)
-  }
-
-  def getHiveHcatalogCoreJar(): File = {
-    sparkSession.getHiveFile(HiveTestJars.HIVE_HCATALOG_CORE_JAR)
   }
 
   def loadTestTable(name: String): Unit = {
@@ -656,8 +648,29 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  val HIVE_CONTRIB_JAR: String =
-    if (HiveUtils.isHive23) "hive-contrib-2.3.5.jar" else "hive-contrib-0.13.1.jar"
-  val HIVE_HCATALOG_CORE_JAR: String =
-    if (HiveUtils.isHive23) "hive-hcatalog-core-2.3.5.jar" else "hive-hcatalog-core-0.13.1.jar"
+  val HIVE_CONTRIB_JAR: String = s"hive-contrib-${HiveUtils.builtinHiveVersion}.jar"
+  val HIVE_HCATALOG_CORE_JAR: String = s"hive-hcatalog-core-${HiveUtils.builtinHiveVersion}.jar"
+
+  private val repository = "https://repository.apache.org/content/repositories/releases/"
+  private val hiveContribUrl = s"${repository}org/apache/hive/hive-contrib/" +
+    s"${HiveUtils.builtinHiveVersion}/${HIVE_CONTRIB_JAR}"
+  private val hiveHcatalogCoreUrl = s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
+    s"${HiveUtils.builtinHiveVersion}/${HIVE_HCATALOG_CORE_JAR}"
+
+  val getHiveContribJar: String = getFileFromUrl(hiveContribUrl, HIVE_CONTRIB_JAR)
+  val getHiveHcatalogCoreJar: String = getFileFromUrl(hiveHcatalogCoreUrl, HIVE_HCATALOG_CORE_JAR)
+
+  private def getFileFromUrl(urlString: String, filename: String): String = {
+    val hiveTestJars = new File("/tmp/test-spark/hiveTestJars")
+    val targetFile = new File(hiveTestJars, filename)
+    if (!targetFile.exists() || !(targetFile.length() > 0)) {
+      val conf = new SparkConf
+      val securityManager = new SecurityManager(conf)
+      val hadoopConf = new Configuration
+
+      // propagate exceptions up to the caller of getFileFromUrl
+      Utils.doFetchFile(urlString, hiveTestJars, filename, conf, securityManager, hadoopConf)
+    }
+    targetFile.getCanonicalPath
+  }
 }

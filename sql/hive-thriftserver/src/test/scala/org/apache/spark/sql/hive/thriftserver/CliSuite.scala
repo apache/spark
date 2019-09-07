@@ -201,9 +201,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile = s"../hive/src/test/resources/${HiveTestJars.HIVE_HCATALOG_CORE_JAR}"
-      .split("/")
-      .mkString(File.separator)
+    val jarFile = HiveTestJars.getHiveHcatalogCoreJar
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -298,12 +296,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Support hive.aux.jars.path") {
-    val hiveContribJar = s"../hive/src/test/resources/${HiveTestJars.HIVE_CONTRIB_JAR}"
-      .split("/")
-      .mkString(File.separator)
+    val hiveContribJar = HiveTestJars.getHiveContribJar
     runCliWithin(
       1.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=${hiveContribJar}"))(
       "CREATE TEMPORARY FUNCTION example_max AS " +
         "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
       "SELECT example_max(1);" -> "1"
