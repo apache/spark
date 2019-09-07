@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
@@ -212,14 +214,14 @@ object DateTimeUtils {
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
     if (s == null) {
       return None
-    } else if (specialUTF8TimestampKeys.contains(s)) {
-      return Some(specialUTF8Timestamps(s)(timeZoneId))
     }
     var tz: Option[Byte] = None
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
+    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
+    if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
     var digitsMilli = 0
     var justTime = false
@@ -857,16 +859,39 @@ object DateTimeUtils {
     Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
   }
 
-  /** Notational shorthands that are converted to ordinary timestamps. */
-  val specialTimestamps: Map[String, ZoneId => SQLTimestamp] = Map(
-    ("epoch", (_: ZoneId) => 0),
-    ("now", (_: ZoneId) => currentTimestamp),
-    ("today", (z: ZoneId) => instantToMicros(today(z).toInstant)),
-    ("tomorrow", (z: ZoneId) => instantToMicros(today(z).plusDays(1).toInstant)),
-    ("yesterday", (z: ZoneId) => instantToMicros(today(z).minusDays(1).toInstant)))
-  val specialTimestampKeys: Set[String] = specialTimestamps.keySet
+  private val specialValue = """(EPOCH|NOW|TODAY|TOMORROW|YESTERDAY)\p{Blank}*(.*)""".r
 
-  val specialUTF8Timestamps: Map[UTF8String, ZoneId => SQLTimestamp] =
-    specialTimestamps.map { case (key, value) => UTF8String.fromString(key) -> value}
-  val specialUTF8TimestampKeys: Set[UTF8String] = specialTimestampKeys.map(UTF8String.fromString)
+  /**
+   * Converts notational shorthands that are converted to ordinary timestamps.
+   * @param input - left trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some of microseconds since the epoch if the conversion completed
+   *         successfully otherwise None.
+   */
+  def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+    def isValidZoneId(z: String): Boolean = {
+      z == "" || Try { getZoneId(z) }.isSuccess
+    }
+
+    if (input.length < 3 || !input(0).isLetter) return None
+    input.toUpperCase(Locale.US) match {
+      case specialValue("EPOCH", z) if isValidZoneId(z) => Some(0)
+      case specialValue("NOW", "") => Some(currentTimestamp())
+      case specialValue("TODAY", z) if isValidZoneId(z) =>
+        Some(instantToMicros(today(zoneId).toInstant))
+      case specialValue("TOMORROW", z) if isValidZoneId(z) =>
+        Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
+      case specialValue("YESTERDAY", z) if isValidZoneId(z) =>
+        Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+      case _ => None
+    }
+  }
+
+  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[SQLTimestamp] = {
+    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
+      convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
+    } else {
+      None
+    }
+  }
 }

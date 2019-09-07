@@ -574,15 +574,15 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
     DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
       val tolerance = TimeUnit.SECONDS.toMicros(30)
 
-      assert(toTimestamp("epoch", zoneId).get === 0)
+      assert(toTimestamp("Epoch", zoneId).get === 0)
       val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
-      toTimestamp("now", zoneId).get should be (now +- tolerance)
+      toTimestamp("NOW", zoneId).get should be (now +- tolerance)
       val today = instantToMicros(LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
         .atZone(zoneId).toInstant)
-      toTimestamp("yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
-      toTimestamp("today", zoneId).get should be (today +- tolerance)
-      toTimestamp("tomorrow", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+      toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
+      toTimestamp("Today ", zoneId).get should be (today +- tolerance)
+      toTimestamp(" tomorrow UTC", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
     }
   }
 }

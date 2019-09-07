@@ -25,7 +25,7 @@ import java.time.temporal.TemporalQueries
 import java.util.Locale
 import java.util.concurrent.TimeUnit.SECONDS
 
-import DateTimeUtils.{specialTimestampKeys, specialTimestamps}
+import DateTimeUtils.{convertSpecialTimestamp}
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -52,9 +52,8 @@ class Iso8601TimestampFormatter(
   protected lazy val formatter = getOrCreateFormatter(pattern, locale)
 
   override def parse(s: String): Long = {
-    if (specialTimestampKeys.contains(s)) {
-      specialTimestamps(s)(zoneId)
-    } else {
+    val specialDate = convertSpecialTimestamp(s.trim, zoneId)
+    specialDate.getOrElse {
       val parsed = formatter.parse(s)
       val parsedZoneId = parsed.query(TemporalQueries.zone())
       val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
