@@ -50,7 +50,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
       new SparkConf(false).set(KUBERNETES_KERBEROS_KRB5_CONFIG_MAP, configMap))
 
     checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), configMap)
-    assert(step.getAdditionalPodSystemProperties().isEmpty)
+    assert(step.getAdditionalPodSystemProperties().contains(KUBERNETES_KERBEROS_KRB5_FILE.key))
     assert(filter[ConfigMap](step.getAdditionalKubernetesResources()).isEmpty)
   }
 
@@ -66,7 +66,7 @@ class KerberosConfDriverFeatureStepSuite extends SparkFunSuite {
     assert(confMap.getData().keySet().asScala === Set(krbConf.getName()))
 
     checkPodForKrbConf(step.configurePod(SparkPod.initialPod()), confMap.getMetadata().getName())
-    assert(step.getAdditionalPodSystemProperties().isEmpty)
+    assert(step.getAdditionalPodSystemProperties().contains(KUBERNETES_KERBEROS_KRB5_FILE.key))
   }
 
   test("create keytab secret if client keytab file used") {
