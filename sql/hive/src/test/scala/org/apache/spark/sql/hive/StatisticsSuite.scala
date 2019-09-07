@@ -136,10 +136,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
              |)""".stripMargin)
 
         spark.sql("REFRESH TABLE t1")
-        // Before SPARK-19678, sizeInBytes should be equal to dataSize.
-        // After SPARK-19678, sizeInBytes should be equal to DEFAULT_SIZE_IN_BYTES.
+        // After SPARK-28573, sizeInBytes should be equal to dataSize.
         val relation1 = spark.table("t1").queryExecution.analyzed.children.head
-        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+        assert(relation1.stats.sizeInBytes === dataSize)
 
         spark.sql("REFRESH TABLE t1")
         // After SPARK-19678 and enable ENABLE_FALL_BACK_TO_HDFS_FOR_STATS,
@@ -1474,7 +1473,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         spark.sql("REFRESH TABLE t1")
         val relation1 = spark.table("t1").queryExecution.analyzed.children.head
-        assert(relation1.stats.sizeInBytes === spark.sessionState.conf.defaultSizeInBytes)
+        // After SPARK-28573, sizeInBytes should be the actual size.
+        assert(relation1.stats.sizeInBytes === getDataSize(tempDir))
 
         spark.sql("REFRESH TABLE t1")
         withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
