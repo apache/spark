@@ -3182,7 +3182,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-29000: arithmetic computation overflow when don't allow decimal precision loss ") {
-    withSQLConf("spark.sql.decimalOperations.allowPrecisionLoss" -> "false") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
       val df1 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * 1")
       checkAnswer(df1, Array(Row(100)))
       val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * " +
