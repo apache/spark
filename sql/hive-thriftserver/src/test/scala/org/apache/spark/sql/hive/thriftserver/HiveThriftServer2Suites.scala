@@ -485,9 +485,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement("smallKV", "addJar")(
       {
         statement =>
-          val jarFile = s"../hive/src/test/resources/${HiveTestJars.HIVE_HCATALOG_CORE_JAR}"
-            .split("/")
-            .mkString(File.separator)
+          val jarFile = HiveTestJars.getHiveHcatalogCoreJar
 
           statement.executeQuery(s"ADD JAR $jarFile")
       },
