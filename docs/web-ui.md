@@ -370,7 +370,7 @@ scheduling delay and processing time for each micro-batch in the data stream, wh
 for troubleshooting the streaming application.
 
 ## JDBC/ODBC Server Tab
-We can see this tab when Spark is running as a [distributed sql engine](sql-distributed-sql-engine.html) and shows information about sessions and sql jobs submitted.
+We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html) and shows information about sessions and SQL jobs submitted.
 
 At the beginning of the page is the server start time.
 
@@ -388,7 +388,7 @@ The first section contains information of active and finished sessions with some
   <img src="img/JDBCServer2.png" title="JDBC/ODBC sessions" alt="JDBC/ODBC sessions">
 </p>
 
-The second section has the sql statistics of the submitted  jobs.
+The second section has the SQL statistics of the submitted  jobs.
 * **User** that submit the job.
 * **Job id** link to [jobs tab](web-ui.html#jobs-tab).
 * **Group id** of the query that group all jobs together. An application can cancel all running jobs using this group id.
@@ -397,14 +397,15 @@ The second section has the sql statistics of the submitted  jobs.
 * **Close time** of the process after fetching the results.
 * **Execution time** is the difference between finish time and start time.
 * **Duration time** is the difference between close time and start time.
-* **Statement** is the Sql statement executed.
+* **Statement** is the SQL statement executed.
 * **State** of the process.
 	* _Started_, first state, when the process begins.
 	* _Compiled_, execution plan generated.
 	* _Failed_, final ko state.
+	* _Canceled_, final state when the execution is canceled.
 	* _Finished_ processing and waiting to fetch results.
 	* _Closed_, final ok state.
-* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan.
+* **Detail** of the execution plan with parsed logical plan, analyzed logical plan, optimized logical plan and physical plan or errors in the the SQL statement.
 
 <p style="text-align: center;">
   <img src="img/JDBCServer3.png" title="JDBC/ODBC SQL Statistics" alt="JDBC/ODBC SQL Statistics">
