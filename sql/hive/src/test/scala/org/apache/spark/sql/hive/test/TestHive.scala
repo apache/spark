@@ -662,6 +662,9 @@ private[hive] object HiveTestJars {
 
   private def getFileFromUrl(urlString: String, filename: String): String = {
     val hiveTestJars = new File("/tmp/test-spark/hiveTestJars")
+    if (!hiveTestJars.exists()) {
+      hiveTestJars.mkdirs()
+    }
     val targetFile = new File(hiveTestJars, filename)
     if (!targetFile.exists() || !(targetFile.length() > 0)) {
       val conf = new SparkConf
