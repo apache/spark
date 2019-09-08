@@ -22,14 +22,12 @@ import java.util.Date
 import java.util.concurrent.TimeoutException
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.TaskType
-import org.mockito.Matchers
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{any, eq => meq}
+import org.mockito.Mockito.{doAnswer, spy, times, verify}
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
@@ -71,6 +69,8 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  */
 class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
+
   var outputCommitCoordinator: OutputCommitCoordinator = null
   var tempDir: File = null
   var sc: SparkContext = null
@@ -96,34 +96,33 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
     val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
-    doAnswer(new Answer[Unit]() {
-      override def answer(invoke: InvocationOnMock): Unit = {
-        // Submit the tasks, then force the task scheduler to dequeue the
-        // speculated task
-        invoke.callRealMethod()
-        mockTaskScheduler.backend.reviveOffers()
-      }
-    }).when(mockTaskScheduler).submitTasks(Matchers.any())
+    doAnswer { (invoke: InvocationOnMock) =>
+      // Submit the tasks, then force the task scheduler to dequeue the
+      // speculated task
+      invoke.callRealMethod()
+      mockTaskScheduler.backend.reviveOffers()
+    }.when(mockTaskScheduler).submitTasks(any())
 
-    doAnswer(new Answer[TaskSetManager]() {
-      override def answer(invoke: InvocationOnMock): TaskSetManager = {
-        val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
-        new TaskSetManager(mockTaskScheduler, taskSet, 4) {
-          var hasDequeuedSpeculatedTask = false
-          override def dequeueSpeculativeTask(
-              execId: String,
-              host: String,
-              locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
-            if (!hasDequeuedSpeculatedTask) {
-              hasDequeuedSpeculatedTask = true
-              Some((0, TaskLocality.PROCESS_LOCAL))
-            } else {
-              None
-            }
+    doAnswer { (invoke: InvocationOnMock) =>
+      val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
+      new TaskSetManager(mockTaskScheduler, taskSet, 4) {
+        private var hasDequeuedSpeculatedTask = false
+        override def dequeueTaskHelper(
+            execId: String,
+            host: String,
+            locality: TaskLocality.Value,
+            speculative: Boolean): Option[(Int, TaskLocality.Value, Boolean)] = {
+          if (!speculative) {
+            super.dequeueTaskHelper(execId, host, locality, speculative)
+          } else if (hasDequeuedSpeculatedTask) {
+            None
+          } else {
+            hasDequeuedSpeculatedTask = true
+            Some((0, TaskLocality.PROCESS_LOCAL, true))
           }
         }
       }
-    }).when(mockTaskScheduler).createTaskSetManager(Matchers.any(), Matchers.any())
+    }.when(mockTaskScheduler).createTaskSetManager(any(), any())
 
     sc.taskScheduler = mockTaskScheduler
     val dagSchedulerWithMockTaskScheduler = new DAGScheduler(sc, mockTaskScheduler)
@@ -154,7 +153,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Job should not complete if all commits are denied") {
     // Create a mock OutputCommitCoordinator that denies all attempts to commit
     doReturn(false).when(outputCommitCoordinator).handleAskPermissionToCommit(
-      Matchers.any(), Matchers.any(), Matchers.any(), Matchers.any())
+      any(), any(), any(), any())
     val rdd: RDD[Int] = sc.parallelize(Seq(1), 1)
     def resultHandler(x: Int, y: Unit): Unit = {}
     val futureAction: SimpleFutureAction[Unit] = sc.submitJob[Int, Unit, Unit](rdd,
@@ -163,7 +162,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     // It's an error if the job completes successfully even though no committer was authorized,
     // so throw an exception if the job was allowed to complete.
     intercept[TimeoutException] {
-      ThreadUtils.awaitResult(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5.seconds)
     }
     assert(tempDir.list().size === 0)
   }
@@ -268,8 +267,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(retriedStage.size === 1)
     assert(sc.dagScheduler.outputCommitCoordinator.isEmpty)
     verify(sc.env.outputCommitCoordinator, times(2))
-      .stageStart(Matchers.eq(retriedStage.head), Matchers.any())
-    verify(sc.env.outputCommitCoordinator).stageEnd(Matchers.eq(retriedStage.head))
+      .stageStart(meq(retriedStage.head), any())
+    verify(sc.env.outputCommitCoordinator).stageEnd(meq(retriedStage.head))
   }
 }
 

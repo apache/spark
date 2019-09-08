@@ -34,7 +34,7 @@ import org.mockito.Mockito.{atLeast, mock, verify}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.logging.{FileAppender, RollingFileAppender, SizeBasedRollingPolicy, TimeBasedRollingPolicy}
 
 class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
@@ -128,7 +128,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val files = testRolling(appender, testOutputStream, textToAppend, 0, isCompressed = true)
     files.foreach { file =>
       logInfo(file.toString + ": " + file.length + " bytes")
-      assert(file.length < rolloverSize)
+      assert(file.length <= rolloverSize)
     }
   }
 
@@ -136,7 +136,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     // setup input stream and appender
     val testOutputStream = new PipedOutputStream()
     val testInputStream = new PipedInputStream(testOutputStream, 100 * 1000)
-    val conf = new SparkConf().set(RollingFileAppender.RETAINED_FILES_PROPERTY, "10")
+    val conf = new SparkConf().set(config.EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES, 10)
     val appender = new RollingFileAppender(testInputStream, testFile,
       new SizeBasedRollingPolicy(1000, false), conf, 10)
 
@@ -200,13 +200,12 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       appender.awaitTermination()
     }
 
-    import RollingFileAppender._
-
     def rollingStrategy(strategy: String): Seq[(String, String)] =
-      Seq(STRATEGY_PROPERTY -> strategy)
-    def rollingSize(size: String): Seq[(String, String)] = Seq(SIZE_PROPERTY -> size)
+      Seq(config.EXECUTOR_LOGS_ROLLING_STRATEGY.key -> strategy)
+    def rollingSize(size: String): Seq[(String, String)] =
+      Seq(config.EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> size)
     def rollingInterval(interval: String): Seq[(String, String)] =
-      Seq(INTERVAL_PROPERTY -> interval)
+      Seq(config.EXECUTOR_LOGS_ROLLING_TIME_INTERVAL.key -> interval)
 
     val msInDay = 24 * 60 * 60 * 1000L
     val msInHour = 60 * 60 * 1000L

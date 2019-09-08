@@ -17,14 +17,21 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util
+
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.sources.v2.{Table, TableCapability}
+import org.apache.spark.sql.types.StructType
 
 /**
  * An interface for systems that can collect the results of a streaming query. In order to preserve
  * exactly once semantics a sink must be idempotent in the face of multiple attempts to add the same
  * batch.
+ *
+ * Note that, we extends `Table` here, to make the v1 streaming sink API be compatible with
+ * data source v2.
  */
-trait Sink extends BaseStreamingSink {
+trait Sink extends Table {
 
   /**
    * Adds a batch of data to this sink. The data for a given `batchId` is deterministic and if
@@ -38,4 +45,16 @@ trait Sink extends BaseStreamingSink {
    * after data is consumed by sink successfully.
    */
   def addBatch(batchId: Long, data: DataFrame): Unit
+
+  override def name: String = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def schema: StructType = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def capabilities: util.Set[TableCapability] = {
+    throw new IllegalStateException("should not be called.")
+  }
 }

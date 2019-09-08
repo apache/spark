@@ -512,16 +512,14 @@ class HiveParquetMetastoreSuite extends ParquetPartitioningTest {
         |PARTITION (`date`='2015-04-01')
         |select a, b from jt
       """.stripMargin)
-    // Right now, insert into a partitioned Parquet is not supported in data source Parquet.
-    // So, we expect it is not cached.
-    assert(getCachedDataSourceTable(tableIdentifier) === null)
+    checkCached(tableIdentifier)
     sql(
       """
         |INSERT INTO TABLE test_parquet_partitioned_cache_test
         |PARTITION (`date`='2015-04-02')
         |select a, b from jt
       """.stripMargin)
-    assert(getCachedDataSourceTable(tableIdentifier) === null)
+    checkCached(tableIdentifier)
 
     // Make sure we can cache the partitioned table.
     table("test_parquet_partitioned_cache_test")

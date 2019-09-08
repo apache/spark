@@ -25,7 +25,15 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.metric.SQLShuffleMetricsReporter
+import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+
+/**
+ * The operator takes limited number of elements from its child operator.
+ */
+trait LimitExec extends UnaryExecNode {
+  /** Number of element should be taken from child operator */
+  def limit: Int
+}
 
 /**
  * Take the first `limit` elements and collect them to a single partition.
@@ -33,18 +41,26 @@ import org.apache.spark.sql.execution.metric.SQLShuffleMetricsReporter
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimitExec(limit: Int, child: SparkPlan) extends UnaryExecNode {
+case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
-  override lazy val metrics = SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        locallyLimited, child.output, SinglePartition, serializer),
-      metrics)
+        locallyLimited,
+        child.output,
+        SinglePartition,
+        serializer,
+        writeMetrics),
+      readMetrics)
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -62,8 +78,7 @@ object BaseLimitExec {
  * Helper trait which defines methods that are shared by both
  * [[LocalLimitExec]] and [[GlobalLimitExec]].
  */
-trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
-  val limit: Int
+trait BaseLimitExec extends LimitExec with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
@@ -154,7 +169,11 @@ case class TakeOrderedAndProjectExec(
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
-  override lazy val metrics = SQLShuffleMetricsReporter.createShuffleReadMetrics(sparkContext)
+  private lazy val writeMetrics =
+    SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
+  private lazy val readMetrics =
+    SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
+  override lazy val metrics = readMetrics ++ writeMetrics
 
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
@@ -165,8 +184,12 @@ case class TakeOrderedAndProjectExec(
     }
     val shuffled = new ShuffledRowRDD(
       ShuffleExchangeExec.prepareShuffleDependency(
-        localTopK, child.output, SinglePartition, serializer),
-      metrics)
+        localTopK,
+        child.output,
+        SinglePartition,
+        serializer,
+        writeMetrics),
+      readMetrics)
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList != child.output) {
@@ -182,9 +205,9 @@ case class TakeOrderedAndProjectExec(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  override def simpleString: String = {
-    val orderByString = truncatedString(sortOrder, "[", ",", "]")
-    val outputString = truncatedString(output, "[", ",", "]")
+  override def simpleString(maxFields: Int): String = {
+    val orderByString = truncatedString(sortOrder, "[", ",", "]", maxFields)
+    val outputString = truncatedString(output, "[", ",", "]", maxFields)
 
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
   }

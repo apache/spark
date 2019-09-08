@@ -26,7 +26,6 @@ import scala.collection.mutable.ListBuffer
 import scala.concurrent.{Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.sys.process._
 
 import org.json4s._
@@ -34,7 +33,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -60,7 +59,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private object FaultToleranceTest extends App with Logging {
 
   private val conf = new SparkConf()
-  private val ZK_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark")
+  private val zkDir = conf.get(config.Deploy.ZOOKEEPER_DIRECTORY).getOrElse("/spark")
 
   private val masters = ListBuffer[TestMasterInfo]()
   private val workers = ListBuffer[TestWorkerInfo]()
@@ -77,7 +76,7 @@ private object FaultToleranceTest extends App with Logging {
   private val containerSparkHome = "/opt/spark"
   private val dockerMountDir = "%s:%s".format(sparkHome, containerSparkHome)
 
-  System.setProperty("spark.driver.host", "172.17.42.1") // default docker host ip
+  System.setProperty(config.DRIVER_HOST_ADDRESS.key, "172.17.42.1") // default docker host ip
 
   private def afterEach() {
     if (sc != null) {
@@ -87,8 +86,8 @@ private object FaultToleranceTest extends App with Logging {
     terminateCluster()
 
     // Clear ZK directories in between tests (for speed purposes)
-    SparkCuratorUtil.deleteRecursive(zk, ZK_DIR + "/spark_leader")
-    SparkCuratorUtil.deleteRecursive(zk, ZK_DIR + "/master_status")
+    SparkCuratorUtil.deleteRecursive(zk, zkDir + "/spark_leader")
+    SparkCuratorUtil.deleteRecursive(zk, zkDir + "/master_status")
   }
 
   test("sanity-basic") {
@@ -112,7 +111,7 @@ private object FaultToleranceTest extends App with Logging {
     assertValidClusterState()
 
     killLeader()
-    delay(30 seconds)
+    delay(30.seconds)
     assertValidClusterState()
     createClient()
     assertValidClusterState()
@@ -126,12 +125,12 @@ private object FaultToleranceTest extends App with Logging {
 
     killLeader()
     addMasters(1)
-    delay(30 seconds)
+    delay(30.seconds)
     assertValidClusterState()
 
     killLeader()
     addMasters(1)
-    delay(30 seconds)
+    delay(30.seconds)
     assertValidClusterState()
   }
 
@@ -156,7 +155,7 @@ private object FaultToleranceTest extends App with Logging {
     killLeader()
     workers.foreach(_.kill())
     workers.clear()
-    delay(30 seconds)
+    delay(30.seconds)
     addWorkers(2)
     assertValidClusterState()
   }
@@ -174,7 +173,7 @@ private object FaultToleranceTest extends App with Logging {
 
     (1 to 3).foreach { _ =>
       killLeader()
-      delay(30 seconds)
+      delay(30.seconds)
       assertValidClusterState()
       assertTrue(getLeader == masters.head)
       addMasters(1)
@@ -216,7 +215,7 @@ private object FaultToleranceTest extends App with Logging {
     if (sc != null) { sc.stop() }
     // Counter-hack: Because of a hack in SparkEnv#create() that changes this
     // property, we need to reset it.
-    System.setProperty("spark.driver.port", "0")
+    System.setProperty(config.DRIVER_PORT.key, "0")
     sc = new SparkContext(getMasterUrls(masters), "fault-tolerance", containerSparkHome)
   }
 
@@ -264,7 +263,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     // Avoid waiting indefinitely (e.g., we could register but get no executors).
-    assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
+    assertTrue(ThreadUtils.awaitResult(f, 2.minutes))
   }
 
   /**
@@ -317,7 +316,7 @@ private object FaultToleranceTest extends App with Logging {
     }
 
     try {
-      assertTrue(ThreadUtils.awaitResult(f, 120 seconds))
+      assertTrue(ThreadUtils.awaitResult(f, 2.minutes))
     } catch {
       case e: TimeoutException =>
         logError("Master states: " + masters.map(_.state))
@@ -421,7 +420,7 @@ private object SparkDocker {
     }
 
     dockerCmd.run(ProcessLogger(findIpAndLog _))
-    val ip = ThreadUtils.awaitResult(ipPromise.future, 30 seconds)
+    val ip = ThreadUtils.awaitResult(ipPromise.future, 30.seconds)
     val dockerId = Docker.getLastProcessId
     (ip, dockerId, outFile)
   }

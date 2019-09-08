@@ -17,11 +17,10 @@
 
 package org.apache.spark.internal
 
-import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.JavaConverters._
 
 import org.apache.log4j._
+import org.apache.log4j.spi.{Filter, LoggingEvent}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -154,16 +153,10 @@ trait Logging {
             System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
               "For SparkR, use setLogLevel(newLevel).")
           }
+          Logging.sparkShellThresholdLevel = replLevel
           rootLogger.getAllAppenders().asScala.foreach {
             case ca: ConsoleAppender =>
-              Option(ca.getThreshold()) match {
-                case Some(t) =>
-                  Logging.consoleAppenderToThreshold.put(ca, t)
-                  if (!t.isGreaterOrEqual(replLevel)) {
-                    ca.setThreshold(replLevel)
-                  }
-                case None => ca.setThreshold(replLevel)
-              }
+              ca.addFilter(new SparkShellLoggingFilter())
             case _ => // no-op
           }
         }
@@ -182,7 +175,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  private val consoleAppenderToThreshold = new ConcurrentHashMap[ConsoleAppender, Priority]()
+  @volatile private[spark] var sparkShellThresholdLevel: Level = null
 
   val initLock = new Object()
   try {
@@ -211,11 +204,7 @@ private[spark] object Logging {
       } else {
         val rootLogger = LogManager.getRootLogger()
         rootLogger.setLevel(defaultRootLevel)
-        rootLogger.getAllAppenders().asScala.foreach {
-          case ca: ConsoleAppender =>
-            ca.setThreshold(consoleAppenderToThreshold.get(ca))
-          case _ => // no-op
-        }
+        sparkShellThresholdLevel = null
       }
     }
     this.initialized = false
@@ -227,5 +216,33 @@ private[spark] object Logging {
     // org.apache.logging.slf4j.Log4jLoggerFactory
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
     "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
+  }
+}
+
+private class SparkShellLoggingFilter extends Filter {
+
+  /**
+   * If sparkShellThresholdLevel is not defined, this filter is a no-op.
+   * If log level of event is not equal to root level, the event is allowed. Otherwise,
+   * the decision is made based on whether the log came from root or some custom configuration
+   * @param loggingEvent
+   * @return decision for accept/deny log event
+   */
+  def decide(loggingEvent: LoggingEvent): Int = {
+    if (Logging.sparkShellThresholdLevel == null) {
+      return Filter.NEUTRAL
+    }
+    val rootLevel = LogManager.getRootLogger().getLevel()
+    if (!loggingEvent.getLevel().eq(rootLevel)) {
+      return Filter.NEUTRAL
+    }
+    var logger = loggingEvent.getLogger()
+    while (logger.getParent() != null) {
+      if (logger.getLevel() != null) {
+        return Filter.NEUTRAL
+      }
+      logger = logger.getParent()
+    }
+    return Filter.DENY
   }
 }

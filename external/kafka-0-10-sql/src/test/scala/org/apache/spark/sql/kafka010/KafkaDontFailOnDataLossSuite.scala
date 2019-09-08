@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
@@ -27,8 +28,9 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
-import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
 
 /**
  * This is a basic test trait which will set up a Kafka cluster that keeps only several records in
@@ -41,7 +43,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
  * does see missing offsets, you can check the earliest offset in `eventually` and make sure it's
  * not 0 rather than sleeping a hard-code duration.
  */
-trait KafkaMissingOffsetsTest extends SharedSQLContext {
+trait KafkaMissingOffsetsTest extends SharedSparkSession {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -98,7 +100,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
     testUtils.createTopic(topic, partitions = 1)
     testUtils.sendMessages(topic, (0 until 50).map(_.toString).toArray)
 
-    eventually(timeout(60.seconds)) {
+    eventually(timeout(1.minute)) {
       assert(
         testUtils.getEarliestOffsets(Set(topic)).head._2 > 0,
         "Kafka didn't delete records after 1 minute")
@@ -131,9 +133,9 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
     }
   }
 
-  test("failOnDataLoss=false should not return duplicated records: v1") {
+  test("failOnDataLoss=false should not return duplicated records: microbatch v1") {
     withSQLConf(
-      "spark.sql.streaming.disabledV2MicroBatchReaders" ->
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key ->
         classOf[KafkaSourceProvider].getCanonicalName) {
       verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = true) { (df, table) =>
         val query = df.writeStream.format("memory").queryName(table).start()
@@ -146,7 +148,7 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
     }
   }
 
-  test("failOnDataLoss=false should not return duplicated records: v2") {
+  test("failOnDataLoss=false should not return duplicated records: microbatch v2") {
     verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = true) { (df, table) =>
       val query = df.writeStream.format("memory").queryName(table).start()
       try {
@@ -176,9 +178,19 @@ class KafkaDontFailOnDataLossSuite extends StreamTest with KafkaMissingOffsetsTe
     }
   }
 
-  test("failOnDataLoss=false should not return duplicated records: batch") {
-    verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = false) { (df, table) =>
-      df.write.saveAsTable(table)
+  test("failOnDataLoss=false should not return duplicated records: batch v1") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "kafka") {
+      verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = false) { (df, table) =>
+        df.write.saveAsTable(table)
+      }
+    }
+  }
+
+  test("failOnDataLoss=false should not return duplicated records: batch v2") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+      verifyMissingOffsetsDontCauseDuplicatedRecords(testStreamingQuery = false) { (df, table) =>
+        df.write.saveAsTable(table)
+      }
     }
   }
 }
@@ -221,13 +233,13 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
       .as[(String, String)]
     val query = startStream(kafka.map(kv => kv._2.toInt))
 
-    val testTime = 20.seconds
-    val startTime = System.currentTimeMillis()
+    val testTimeNs = TimeUnit.SECONDS.toNanos(20)
+    val startTimeNs = System.nanoTime()
     // Track the current existing topics
     val topics = mutable.ArrayBuffer[String]()
     // Track topics that have been deleted
     val deletedTopics = mutable.Set[String]()
-    while (System.currentTimeMillis() - testTime.toMillis < startTime) {
+    while (System.nanoTime() - startTimeNs < testTimeNs) {
       Random.nextInt(10) match {
         case 0 => // Create a new topic
           val topic = newTopic()

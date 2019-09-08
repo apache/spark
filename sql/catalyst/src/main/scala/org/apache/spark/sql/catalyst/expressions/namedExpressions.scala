@@ -109,7 +109,8 @@ trait NamedExpression extends Expression {
 
 abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
 
-  override def references: AttributeSet = AttributeSet(this)
+  @transient
+  override lazy val references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
@@ -311,7 +312,7 @@ case class AttributeReference(
     }
   }
 
-  override def withMetadata(newMetadata: Metadata): Attribute = {
+  override def withMetadata(newMetadata: Metadata): AttributeReference = {
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
@@ -330,7 +331,9 @@ case class AttributeReference(
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.
-  override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+  override def simpleString(maxFields: Int): String = {
+    s"$name#${exprId.id}: ${dataType.simpleString(maxFields)}"
+  }
 
   override def sql: String = {
     val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""

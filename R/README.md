@@ -17,10 +17,10 @@ export R_HOME=/home/username/R
 
 #### Build Spark
 
-Build Spark with [Maven](http://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
+Build Spark with [Maven](https://spark.apache.org/docs/latest/building-spark.html#buildmvn) and include the `-Psparkr` profile to build the R package. For example to use the default Hadoop versions you can run
 
 ```bash
-build/mvn -DskipTests -Psparkr package
+./build/mvn -DskipTests -Psparkr package
 ```
 
 #### Running sparkR
@@ -35,23 +35,15 @@ SparkContext, you can run
 
     ./bin/sparkR --master "local[2]"
 
-To set other options like driver memory, executor memory etc. you can pass in the [spark-submit](http://spark.apache.org/docs/latest/submitting-applications.html) arguments to `./bin/sparkR`
+To set other options like driver memory, executor memory etc. you can pass in the [spark-submit](https://spark.apache.org/docs/latest/submitting-applications.html) arguments to `./bin/sparkR`
 
 #### Using SparkR from RStudio
 
-If you wish to use SparkR from RStudio or other R frontends you will need to set some environment variables which point SparkR to your Spark installation. For example
-```R
-# Set this to where Spark is installed
-Sys.setenv(SPARK_HOME="/Users/username/spark")
-# This line loads SparkR from the installed directory
-.libPaths(c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib"), .libPaths()))
-library(SparkR)
-sparkR.session()
-```
+If you wish to use SparkR from RStudio, please refer [SparkR documentation](https://spark.apache.org/docs/latest/sparkr.html#starting-up-from-rstudio).
 
 #### Making changes to SparkR
 
-The [instructions](http://spark.apache.org/contributing.html) for making contributions to Spark also apply to SparkR.
+The [instructions](https://spark.apache.org/contributing.html) for making contributions to Spark also apply to SparkR.
 If you only make R file changes (i.e. no Scala changes) then you can just re-install the R package using `R/install-dev.sh` and test your changes.
 Once you have made your changes, please include unit tests for them and run existing unit tests using the `R/run-tests.sh` script as described below.
 
@@ -66,7 +58,7 @@ To run one of them, use `./bin/spark-submit <filename> <args>`. For example:
 ```bash
 ./bin/spark-submit examples/src/main/r/dataframe.R
 ```
-You can run R unit tests by following the instructions under [Running R Tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
+You can run R unit tests by following the instructions under [Running R Tests](https://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
 
 ### Running on YARN
 

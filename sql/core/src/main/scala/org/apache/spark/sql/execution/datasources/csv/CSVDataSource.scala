@@ -35,6 +35,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVInferSchema, CSVOptions, UnivocityParser}
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
@@ -135,7 +136,9 @@ object TextInputCSVDataSource extends CSVDataSource {
           val parser = new CsvParser(parsedOptions.asParserSettings)
           linesWithoutHeader.map(parser.parseLine)
         }
-        new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
+        SQLExecution.withSQLConfPropagated(csv.sparkSession) {
+          new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
+        }
       case _ =>
         // If the first line could not be read, just return the empty schema.
         StructType(Nil)
@@ -208,7 +211,9 @@ object MultiLineCSVDataSource extends CSVDataSource {
             encoding = parsedOptions.charset)
         }
         val sampled = CSVUtils.sample(tokenRDD, parsedOptions)
-        new CSVInferSchema(parsedOptions).infer(sampled, header)
+        SQLExecution.withSQLConfPropagated(sparkSession) {
+          new CSVInferSchema(parsedOptions).infer(sampled, header)
+        }
       case None =>
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import org.mockito.Matchers
+import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 
@@ -45,7 +45,7 @@ class PartiallyUnrolledIteratorSuite extends SparkFunSuite with MockitoSugar {
     joinIterator.hasNext
     joinIterator.hasNext
     verify(memoryStore, times(1))
-      .releaseUnrollMemoryForThisTask(Matchers.eq(ON_HEAP), Matchers.eq(unrollSize.toLong))
+      .releaseUnrollMemoryForThisTask(meq(ON_HEAP), meq(unrollSize.toLong))
 
     // Secondly, iterate over rest iterator
     (unrollSize until unrollSize + restSize).foreach { value =>

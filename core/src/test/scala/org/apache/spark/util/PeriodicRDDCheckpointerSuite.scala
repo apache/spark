@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.utils
+package org.apache.spark.util
 
 import org.apache.hadoop.fs.Path
 
@@ -23,7 +23,6 @@ import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 
 class PeriodicRDDCheckpointerSuite extends SparkFunSuite with SharedSparkContext {

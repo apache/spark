@@ -20,7 +20,7 @@ package org.apache.spark.util.logging
 import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.util.{IntParam, Utils}
 
 /**
@@ -115,11 +115,9 @@ private[spark] object FileAppender extends Logging {
   /** Create the right appender based on Spark configuration */
   def apply(inputStream: InputStream, file: File, conf: SparkConf): FileAppender = {
 
-    import RollingFileAppender._
-
-    val rollingStrategy = conf.get(STRATEGY_PROPERTY, STRATEGY_DEFAULT)
-    val rollingSizeBytes = conf.get(SIZE_PROPERTY, STRATEGY_DEFAULT)
-    val rollingInterval = conf.get(INTERVAL_PROPERTY, INTERVAL_DEFAULT)
+    val rollingStrategy = conf.get(config.EXECUTOR_LOGS_ROLLING_STRATEGY)
+    val rollingSizeBytes = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_SIZE)
+    val rollingInterval = conf.get(config.EXECUTOR_LOGS_ROLLING_TIME_INTERVAL)
 
     def createTimeBasedAppender(): FileAppender = {
       val validatedParams: Option[(Long, String)] = rollingInterval match {

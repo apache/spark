@@ -156,8 +156,8 @@ object PageRank extends Logging {
 
       rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
       logInfo(s"PageRank finished iteration $iteration.")
-      prevRankGraph.vertices.unpersist(false)
-      prevRankGraph.edges.unpersist(false)
+      prevRankGraph.vertices.unpersist()
+      prevRankGraph.edges.unpersist()
 
       iteration += 1
     }
@@ -234,9 +234,9 @@ object PageRank extends Logging {
           popActivations +:+ resetActivations
         }.cache()
 
-      rankGraph.edges.foreachPartition(x => {}) // also materializes rankGraph.vertices
-      prevRankGraph.vertices.unpersist(false)
-      prevRankGraph.edges.unpersist(false)
+      rankGraph.edges.foreachPartition(_ => {}) // also materializes rankGraph.vertices
+      prevRankGraph.vertices.unpersist()
+      prevRankGraph.edges.unpersist()
 
       logInfo(s"Parallel Personalized PageRank finished iteration $i.")
 

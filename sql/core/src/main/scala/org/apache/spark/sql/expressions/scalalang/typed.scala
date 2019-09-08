@@ -17,20 +17,17 @@
 
 package org.apache.spark.sql.expressions.scalalang
 
-import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.aggregate._
 
 /**
- * :: Experimental ::
  * Type-safe functions available for `Dataset` operations in Scala.
  *
  * Java users should use [[org.apache.spark.sql.expressions.javalang.typed]].
  *
  * @since 2.0.0
  */
-@Experimental
-@Evolving
+@deprecated("please use untyped builtin aggregate functions.", "3.0.0")
 // scalastyle:off
 object typed {
   // scalastyle:on
@@ -76,15 +73,4 @@ object typed {
    * @since 2.0.0
    */
   def sumLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedSumLong[IN](f).toColumn
-
-  // TODO:
-  // stddevOf: Double
-  // varianceOf: Double
-  // approx_count_distinct: Long
-
-  // minOf: T
-  // maxOf: T
-
-  // firstOf: T
-  // lastOf: T
 }

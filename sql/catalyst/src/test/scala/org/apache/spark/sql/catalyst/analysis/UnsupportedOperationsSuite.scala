@@ -404,7 +404,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.join(_, joinType = Inner),
     outputMode = Update,
     streamStreamSupported = false,
-    expectedMsg = "inner join")
+    expectedMsg = "is not supported in Update output mode")
 
   // Full outer joins: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
@@ -421,6 +421,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     batchStreamSupported = false,
     streamStreamSupported = false,
     expectedMsg = "outer join")
+
+  // Left outer joins: update and complete mode not allowed
+  assertNotSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and update mode",
+    streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attribute)),
+    OutputMode.Update(),
+    Seq("is not supported in Update output mode"))
+  assertNotSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and complete mode",
+    Aggregate(Nil, aggExprs("d"), streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attribute))),
+    OutputMode.Complete(),
+    Seq("is not supported in Complete output mode"))
 
   // Left outer joins: stream-stream allowed with join on watermark attribute
   // Note that the attribute need not be watermarked on both sides.

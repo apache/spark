@@ -153,7 +153,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     if (SQLConf.staticConfKeys.contains(key)) {
       throw new AnalysisException(s"Cannot modify the value of a static config: $key")
     }
-    if (sqlConf.setCommandRejectsSparkConfs &&
+    if (sqlConf.setCommandRejectsSparkCoreConfs &&
         ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
       throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
     }

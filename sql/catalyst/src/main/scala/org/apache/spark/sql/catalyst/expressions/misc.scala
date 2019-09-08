@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -40,7 +41,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
     input
   }
 
-  private val outputPrefix = s"Result of ${child.simpleString} is "
+  private val outputPrefix = s"Result of ${child.simpleString(SQLConf.get.maxToStringFields)} is "
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val outputPrefixField = ctx.addReferenceObj("outputPrefix", outputPrefix)
@@ -72,7 +73,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
 
   override def prettyName: String = "assert_true"
 
-  private val errMsg = s"'${child.simpleString}' is not true!"
+  private val errMsg = s"'${child.simpleString(SQLConf.get.maxToStringFields)}' is not true!"
 
   override def eval(input: InternalRow) : Any = {
     val v = child.eval(input)
@@ -124,7 +125,9 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
       > SELECT _FUNC_();
        46707d92-02f4-4817-8116-a4c3b23e6266
   """,
-  note = "The function is non-deterministic.")
+  note = """
+    The function is non-deterministic.
+  """)
 // scalastyle:on line.size.limit
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful
     with ExpressionWithRandomSeed {

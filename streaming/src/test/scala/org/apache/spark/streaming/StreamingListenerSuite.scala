@@ -130,7 +130,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     ssc.start()
     try {
-      eventually(timeout(30 seconds), interval(20 millis)) {
+      eventually(timeout(30.seconds), interval(20.milliseconds)) {
         collector.startedReceiverStreamIds.size should equal (1)
         collector.startedReceiverStreamIds.peek() should equal (0)
         collector.stoppedReceiverStreamIds.size should equal (1)
@@ -157,7 +157,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
     ssc.start()
     try {
-      eventually(timeout(30 seconds), interval(20 millis)) {
+      eventually(timeout(30.seconds), interval(20.milliseconds)) {
         collector.startedOutputOperationIds.asScala.take(3) should be (Seq(0, 1, 2))
         collector.completedOutputOperationIds.asScala.take(3) should be (Seq(0, 1, 2))
       }

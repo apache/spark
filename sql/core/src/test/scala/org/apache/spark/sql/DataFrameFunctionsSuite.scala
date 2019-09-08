@@ -30,13 +30,13 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
-class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
+class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("array with column name") {
@@ -1395,7 +1395,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // Test with local relation, the Project will be evaluated without codegen
-    df.unpersist()
+    df.unpersist(blocking = true)
     nullTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
@@ -2246,6 +2246,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("exists function - array for primitive type containing null") {
     val df = Seq[Seq[Integer]](
       Seq(1, 9, 8, null, 7),
+      Seq(1, 3, 5),
       Seq(5, null, null, 9, 7, null),
       Seq.empty,
       null
@@ -2256,6 +2257,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         Seq(
           Row(true),
           Row(false),
+          Row(null),
           Row(false),
           Row(null)))
     }
@@ -2316,6 +2318,116 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val ex4 = intercept[AnalysisException] {
       df.selectExpr("exists(a, x -> x)")
+    }
+    assert(ex4.getMessage.contains("cannot resolve '`a`'"))
+  }
+
+  test("forall function - array for primitive type not containing null") {
+    val df = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(2, 4, 6),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeNotContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(true),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeNotContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("forall function - array for primitive type containing null") {
+    val df = Seq[Seq[Integer]](
+      Seq(1, 9, 8, null, 7),
+      Seq(2, null, null, 4, 6, null),
+      Seq(2, 4, 6, 8),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    def testArrayOfPrimitiveTypeContainsNull(): Unit = {
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0 or x is null)"),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(true),
+          Row(true),
+          Row(null)))
+      checkAnswer(df.selectExpr("forall(i, x -> x % 2 == 0)"),
+        Seq(
+          Row(false),
+          Row(null),
+          Row(true),
+          Row(true),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testArrayOfPrimitiveTypeContainsNull()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testArrayOfPrimitiveTypeContainsNull()
+  }
+
+  test("forall function - array for non-primitive type") {
+    val df = Seq(
+      Seq("c", "a", "b"),
+      Seq[String](null, null, null, null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    def testNonPrimitiveType(): Unit = {
+      checkAnswer(df.selectExpr("forall(s, x -> x is null)"),
+        Seq(
+          Row(false),
+          Row(true),
+          Row(true),
+          Row(null)))
+    }
+
+    // Test with local relation, the Project will be evaluated without codegen
+    testNonPrimitiveType()
+    // Test with cached relation, the Project will be evaluated with codegen
+    df.cache()
+    testNonPrimitiveType()
+  }
+
+  test("forall function - invalid") {
+    val df = Seq(
+      (Seq("c", "a", "b"), 1),
+      (Seq("b", null, "c", null), 2),
+      (Seq.empty, 3),
+      (null, 4)
+    ).toDF("s", "i")
+
+    val ex1 = intercept[AnalysisException] {
+      df.selectExpr("forall(s, (x, y) -> x + y)")
+    }
+    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+
+    val ex2 = intercept[AnalysisException] {
+      df.selectExpr("forall(i, x -> x)")
+    }
+    assert(ex2.getMessage.contains("data type mismatch: argument 1 requires array type"))
+
+    val ex3 = intercept[AnalysisException] {
+      df.selectExpr("forall(s, x -> x)")
+    }
+    assert(ex3.getMessage.contains("data type mismatch: argument 2 requires boolean type"))
+
+    val ex4 = intercept[AnalysisException] {
+      df.selectExpr("forall(a, x -> x)")
     }
     assert(ex4.getMessage.contains("cannot resolve '`a`'"))
   }
@@ -2884,7 +2996,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
       ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
       ("hash", (df: DataFrame) => df.select(hash())) ::
-      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) ::
+      ("xxhash64", (df: DataFrame) => df.select(xxhash64())) ::
+      ("xxhash64", (df: DataFrame) => df.selectExpr("xxhash64()")) :: Nil
     funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
       val errMsg = intercept[AnalysisException] { func(df) }.getMessage
       assert(errMsg.contains(s"input to function $name requires at least one argument"))
@@ -2907,6 +3021,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(map_from_arrays(concat($"k1", $"k2"), $"v")).show()
     }
     assert(ex.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("SPARK-26370: Fix resolution of higher-order function for the same identifier") {
+    val df = Seq(
+      (Seq(1, 9, 8, 7), 1, 2),
+      (Seq(5, 9, 7), 2, 2),
+      (Seq.empty, 3, 2),
+      (null, 4, 2)
+    ).toDF("i", "x", "d")
+
+    checkAnswer(df.selectExpr("x", "exists(i, x -> x % d == 0)"),
+      Seq(
+        Row(1, true),
+        Row(2, false),
+        Row(3, false),
+        Row(4, null)))
+    checkAnswer(df.filter("exists(i, x -> x % d == 0)"),
+      Seq(Row(Seq(1, 9, 8, 7), 1, 2)))
+    checkAnswer(df.select("x").filter("exists(i, x -> x % d == 0)"),
+      Seq(Row(1)))
   }
 }
 

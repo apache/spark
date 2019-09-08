@@ -20,7 +20,7 @@ import os
 from collections import namedtuple
 
 ExpressionInfo = namedtuple(
-    "ExpressionInfo", "className name usage arguments examples note since")
+    "ExpressionInfo", "className name usage arguments examples note since deprecated")
 
 
 def _list_function_infos(jvm):
@@ -42,7 +42,8 @@ def _list_function_infos(jvm):
             arguments=jinfo.getArguments().replace("_FUNC_", name),
             examples=jinfo.getExamples().replace("_FUNC_", name),
             note=jinfo.getNote(),
-            since=jinfo.getSince()))
+            since=jinfo.getSince(),
+            deprecated=jinfo.getDeprecated()))
     return sorted(infos, key=lambda i: i.name)
 
 
@@ -136,6 +137,27 @@ def _make_pretty_note(note):
         return "**Note:**\n%s\n" % note
 
 
+def _make_pretty_deprecated(deprecated):
+    """
+    Makes the deprecated description pretty and returns a formatted string if `deprecated`
+    is not an empty string. Otherwise, returns None.
+
+    Expected input:
+
+        ...
+
+    Expected output:
+    **Deprecated:**
+
+    ...
+
+    """
+
+    if deprecated != "":
+        deprecated = "\n".join(map(lambda n: n[4:], deprecated.split("\n")))
+        return "**Deprecated:**\n%s\n" % deprecated
+
+
 def generate_sql_markdown(jvm, path):
     """
     Generates a markdown file after listing the function information. The output file
@@ -162,6 +184,10 @@ def generate_sql_markdown(jvm, path):
 
     **Since:** SINCE
 
+    **Deprecated:**
+
+    DEPRECATED
+
     <br/>
 
     """
@@ -174,6 +200,7 @@ def generate_sql_markdown(jvm, path):
             examples = _make_pretty_examples(info.examples)
             note = _make_pretty_note(info.note)
             since = info.since
+            deprecated = _make_pretty_deprecated(info.deprecated)
 
             mdfile.write("### %s\n\n" % name)
             if usage is not None:
@@ -186,6 +213,8 @@ def generate_sql_markdown(jvm, path):
                 mdfile.write(note)
             if since is not None and since != "":
                 mdfile.write("**Since:** %s\n\n" % since.strip())
+            if deprecated is not None:
+                mdfile.write(deprecated)
             mdfile.write("<br/>\n\n")
 
 

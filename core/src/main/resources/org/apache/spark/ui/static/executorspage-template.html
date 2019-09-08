@@ -16,6 +16,7 @@ limitations under the License.
 -->
 
 <script id="executors-summary-template" type="text/html">
+  <div id="showAdditionalMetrics"></div>
   <h4 class="title-table">Summary</h4>
   <div class="container-fluid">
     <div class="container-fluid">
@@ -26,11 +27,11 @@ limitations under the License.
         <th><span data-toggle="tooltip"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">Storage Memory</span>
         </th>
-        <th class="on_heap_memory">
+        <th>
           <span data-toggle="tooltip"
                 title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">On Heap Storage Memory</span>
         </th>
-        <th class="off_heap_memory">
+        <th>
           <span data-toggle="tooltip"
                 title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">Off Heap Storage Memory</span>
         </th>
@@ -81,16 +82,17 @@ limitations under the License.
             <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for storage of data like RDD partitions cached in memory.">
               Storage Memory</span></th>
-          <th class="on_heap_memory">
+          <th>
             <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for on heap storage of data like RDD partitions cached in memory.">
               On Heap Storage Memory</span></th>
-          <th class="off_heap_memory">
+          <th>
             <span data-toggle="tooltip"
                   title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
               Off Heap Storage Memory</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Disk Used">Disk Used</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Cores">Cores</span></th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Resources">Resources</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Active Tasks">Active Tasks</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Failed Tasks">Failed Tasks</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Complete Tasks">Complete Tasks</span></th>

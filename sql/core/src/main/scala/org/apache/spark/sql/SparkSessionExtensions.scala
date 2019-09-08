@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.ColumnarRule
 
 /**
  * :: Experimental ::
@@ -42,14 +43,15 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * <li>Planning Strategies.</li>
  * <li>Customized Parser.</li>
  * <li>(External) Catalog listeners.</li>
+ * <li>Columnar Rules.</li>
  * </ul>
  *
- * The extensions can be used by calling withExtension on the [[SparkSession.Builder]], for
+ * The extensions can be used by calling `withExtensions` on the [[SparkSession.Builder]], for
  * example:
  * {{{
  *   SparkSession.builder()
  *     .master("...")
- *     .conf("...", true)
+ *     .config("...", true)
  *     .withExtensions { extensions =>
  *       extensions.injectResolutionRule { session =>
  *         ...
@@ -59,6 +61,26 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *       }
  *     }
  *     .getOrCreate()
+ * }}}
+ *
+ * The extensions can also be used by setting the Spark SQL configuration property
+ * `spark.sql.extensions`. Multiple extensions can be set using a comma-separated list. For example:
+ * {{{
+ *   SparkSession.builder()
+ *     .master("...")
+ *     .config("spark.sql.extensions", "org.example.MyExtensions")
+ *     .getOrCreate()
+ *
+ *   class MyExtensions extends Function1[SparkSessionExtensions, Unit] {
+ *     override def apply(extensions: SparkSessionExtensions): Unit = {
+ *       extensions.injectResolutionRule { session =>
+ *         ...
+ *       }
+ *       extensions.injectParser { (session, parser) =>
+ *         ...
+ *       }
+ *     }
+ *   }
  * }}}
  *
  * Note that none of the injected builders should assume that the [[SparkSession]] is fully
@@ -73,6 +95,23 @@ class SparkSessionExtensions {
   type StrategyBuilder = SparkSession => Strategy
   type ParserBuilder = (SparkSession, ParserInterface) => ParserInterface
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
+  type ColumnarRuleBuilder = SparkSession => ColumnarRule
+
+  private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
+
+  /**
+   * Build the override rules for columnar execution.
+   */
+  private[sql] def buildColumnarRules(session: SparkSession): Seq[ColumnarRule] = {
+    columnarRuleBuilders.map(_.apply(session))
+  }
+
+  /**
+   * Inject a rule that can override the columnar execution of an executor.
+   */
+  def injectColumnar(builder: ColumnarRuleBuilder): Unit = {
+    columnarRuleBuilders += builder
+  }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 

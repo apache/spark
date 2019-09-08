@@ -16,7 +16,9 @@
  */
 package org.apache.spark.examples.sql
 
+// $example on:programmatic_schema$
 import org.apache.spark.sql.Row
+// $example off:programmatic_schema$
 // $example on:init_session$
 import org.apache.spark.sql.SparkSession
 // $example off:init_session$

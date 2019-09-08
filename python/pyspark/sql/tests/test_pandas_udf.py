@@ -17,11 +17,15 @@
 
 import unittest
 
+from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import *
 from pyspark.sql.utils import ParseException
+from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
+
+from py4j.protocol import Py4JJavaError
 
 
 @unittest.skipIf(
@@ -30,9 +34,6 @@ from pyspark.testing.utils import QuietTest
 class PandasUDFTests(ReusedSQLTestCase):
 
     def test_pandas_udf_basic(self):
-        from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEqual(udf.returnType, DoubleType())
         self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
@@ -65,10 +66,6 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_pandas_udf_decorator(self):
-        from pyspark.rdd import PythonEvalType
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-        from pyspark.sql.types import StructType, StructField, DoubleType
-
         @pandas_udf(DoubleType())
         def foo(x):
             return x
@@ -114,8 +111,6 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_udf_wrong_arg(self):
-        from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         with QuietTest(self.sc):
             with self.assertRaises(ParseException):
                 @pandas_udf('blah')
@@ -151,9 +146,6 @@ class PandasUDFTests(ReusedSQLTestCase):
                     return k
 
     def test_stopiteration_in_udf(self):
-        from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-        from py4j.protocol import Py4JJavaError
-
         def foo(x):
             raise StopIteration()
 
@@ -205,13 +197,57 @@ class PandasUDFTests(ReusedSQLTestCase):
             ).collect
         )
 
+    def test_pandas_udf_detect_unsafe_type_conversion(self):
+        import pandas as pd
+        import numpy as np
+
+        values = [1.0] * 3
+        pdf = pd.DataFrame({'A': values})
+        df = self.spark.createDataFrame(pdf).repartition(1)
+
+        @pandas_udf(returnType="int")
+        def udf(column):
+            return pd.Series(np.linspace(0, 1, len(column)))
+
+        # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
+        with self.sql_conf({
+                "spark.sql.execution.pandas.arrowSafeTypeConversion": True}):
+            with self.assertRaisesRegexp(Exception,
+                                         "Exception thrown when converting pandas.Series"):
+                df.select(['A']).withColumn('udf', udf('A')).collect()
+
+        # Disabling Arrow safe type check.
+        with self.sql_conf({
+                "spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+            df.select(['A']).withColumn('udf', udf('A')).collect()
+
+    def test_pandas_udf_arrow_overflow(self):
+        import pandas as pd
+
+        df = self.spark.range(0, 1)
+
+        @pandas_udf(returnType="byte")
+        def udf(column):
+            return pd.Series([128] * len(column))
+
+        # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
+        with self.sql_conf({
+                "spark.sql.execution.pandas.arrowSafeTypeConversion": True}):
+            with self.assertRaisesRegexp(Exception,
+                                         "Exception thrown when converting pandas.Series"):
+                df.withColumn('udf', udf('id')).collect()
+
+        # Disabling safe type check, let Arrow do the cast anyway.
+        with self.sql_conf({"spark.sql.execution.pandas.arrowSafeTypeConversion": False}):
+            df.withColumn('udf', udf('id')).collect()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_udf import *
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

@@ -17,16 +17,18 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, EOFException, File, FileOutputStream}
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.Files
+import java.nio.file.{Files, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.zip.GZIPOutputStream
 
 import scala.collection.JavaConverters._
 import scala.util.Properties
 
+import com.univocity.parsers.common.TextParsingException
 import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
@@ -37,10 +39,10 @@ import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with TestCsvData {
+class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
   import testImplicits._
 
   private val carsFile = "test-data/cars.csv"
@@ -63,6 +65,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   private val datesFile = "test-data/dates.csv"
   private val unescapedQuotesFile = "test-data/unescaped-quotes.csv"
   private val valueMalformedFile = "test-data/value-malformed.csv"
+  private val badAfterGoodFile = "test-data/bad_after_good.csv"
 
   /** Verifies data and schema. */
   private def verifyCars(
@@ -586,6 +589,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val results = spark.read
       .format("csv")
       .options(Map("comment" -> "~", "header" -> "false", "inferSchema" -> "true"))
+      .option("timestampFormat", "yyyy-MM-dd HH:mm:ss")
       .load(testFile(commentsFile))
       .collect()
 
@@ -622,10 +626,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val options = Map(
       "header" -> "true",
       "inferSchema" -> "false",
-      "dateFormat" -> "dd/MM/yyyy hh:mm")
+      "dateFormat" -> "dd/MM/yyyy HH:mm")
     val results = spark.read
       .format("csv")
       .options(options)
+      .option("timeZone", "UTC")
       .schema(customSchema)
       .load(testFile(datesFile))
       .select("date")
@@ -893,36 +898,38 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
   }
 
   test("Write dates correctly in ISO8601 format by default") {
-    withTempDir { dir =>
-      val customSchema = new StructType(Array(StructField("date", DateType, true)))
-      val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
-      val dates = spark.read
-        .format("csv")
-        .schema(customSchema)
-        .option("header", "true")
-        .option("inferSchema", "false")
-        .option("dateFormat", "dd/MM/yyyy HH:mm")
-        .load(testFile(datesFile))
-      dates.write
-        .format("csv")
-        .option("header", "true")
-        .save(iso8601datesPath)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTempDir { dir =>
+        val customSchema = new StructType(Array(StructField("date", DateType, true)))
+        val iso8601datesPath = s"${dir.getCanonicalPath}/iso8601dates.csv"
+        val dates = spark.read
+          .format("csv")
+          .schema(customSchema)
+          .option("header", "true")
+          .option("inferSchema", "false")
+          .option("dateFormat", "dd/MM/yyyy HH:mm")
+          .load(testFile(datesFile))
+        dates.write
+          .format("csv")
+          .option("header", "true")
+          .save(iso8601datesPath)
 
-      // This will load back the dates as string.
-      val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
-      val iso8601dates = spark.read
-        .format("csv")
-        .schema(stringSchema)
-        .option("header", "true")
-        .load(iso8601datesPath)
+        // This will load back the dates as string.
+        val stringSchema = StructType(StructField("date", StringType, true) :: Nil)
+        val iso8601dates = spark.read
+          .format("csv")
+          .schema(stringSchema)
+          .option("header", "true")
+          .load(iso8601datesPath)
 
-      val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
-      val expectedDates = dates.collect().map { r =>
-        // This should be ISO8601 formatted string.
-        Row(iso8501.format(r.toSeq.head))
+        val iso8501 = FastDateFormat.getInstance("yyyy-MM-dd", Locale.US)
+        val expectedDates = dates.collect().map { r =>
+          // This should be ISO8601 formatted string.
+          Row(iso8501.format(r.toSeq.head))
+        }
+
+        checkAnswer(iso8601dates, expectedDates)
       }
-
-      checkAnswer(iso8601dates, expectedDates)
     }
   }
 
@@ -1107,7 +1114,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
 
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
     Seq(false, true).foreach { multiLine =>
-      val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+      val schema = new StructType().add("a", IntegerType).add("b", DateType)
       // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
@@ -1139,7 +1146,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val schemaWithCorrField2 = new StructType()
         .add("a", IntegerType)
         .add(columnNameOfCorruptRecord, StringType)
-        .add("b", TimestampType)
+        .add("b", DateType)
       val df3 = spark
         .read
         .option("mode", "permissive")
@@ -1163,6 +1170,40 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
           .collect
       }.getMessage
       assert(errMsg.startsWith("The field for corrupt records must be string type and nullable"))
+    }
+  }
+
+  test("Enabling/disabling ignoreCorruptFiles") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.csv(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.csv(inputFile.toURI.toString).collect().isEmpty)
+      }
+    } finally {
+      inputFile.delete()
     }
   }
 
@@ -1325,7 +1366,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val columnNameOfCorruptRecord = "_corrupt_record"
     val schema = new StructType()
       .add("a", IntegerType)
-      .add("b", TimestampType)
+      .add("b", DateType)
       .add(columnNameOfCorruptRecord, StringType)
     // negative cases
     val msg = intercept[AnalysisException] {
@@ -1338,15 +1379,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .collect()
     }.getMessage
     assert(msg.contains("only include the internal corrupt record column"))
-    intercept[org.apache.spark.sql.catalyst.errors.TreeNodeException[_]] {
-      spark
-        .read
-        .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .schema(schema)
-        .csv(testFile(valueMalformedFile))
-        .filter($"_corrupt_record".isNotNull)
-        .count()
-    }
+
     // workaround
     val df = spark
       .read
@@ -1367,8 +1400,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     // that whole test file is mapped to only one partition. This will guarantee
     // reliable sampling of the input file.
     withSQLConf(
-      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
-      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+      SQLConf.FILES_MAX_PARTITION_BYTES.key -> (128 * 1024 * 1024).toString,
+      SQLConf.FILES_OPEN_COST_IN_BYTES.key -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
@@ -1692,21 +1725,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     }
 
     val testAppender1 = new TestAppender
-    LogManager.getRootLogger.addAppender(testAppender1)
-    try {
+    withLogAppender(testAppender1) {
       val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
       val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
 
       spark.read.schema(ischema).option("header", true).option("enforceSchema", true).csv(ds)
-    } finally {
-      LogManager.getRootLogger.removeAppender(testAppender1)
     }
     assert(testAppender1.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
 
     val testAppender2 = new TestAppender
-    LogManager.getRootLogger.addAppender(testAppender2)
-    try {
+    withLogAppender(testAppender2) {
       withTempPath { path =>
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
         val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
@@ -1719,8 +1748,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
           .csv(path.getCanonicalPath)
           .collect()
       }
-    } finally {
-      LogManager.getRootLogger.removeAppender(testAppender2)
     }
     assert(testAppender2.events.asScala
       .exists(msg => msg.getRenderedMessage.contains("CSV header does not conform to the schema")))
@@ -2006,6 +2033,80 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       spark.emptyDataset[String].write.csv(path)
       val files = new File(path).listFiles()
       assert(!files.exists(_.getName.endsWith("csv")))
+    }
+  }
+
+  test("Do not reuse last good value for bad input field") {
+    val schema = StructType(
+      StructField("col1", StringType) ::
+      StructField("col2", DateType) ::
+      Nil
+    )
+    val rows = spark.read
+      .schema(schema)
+      .format("csv")
+      .load(testFile(badAfterGoodFile))
+
+    val expectedRows = Seq(
+      Row("good record", java.sql.Date.valueOf("1999-08-01")),
+      Row("bad record", null))
+
+    checkAnswer(rows, expectedRows)
+  }
+
+  test("SPARK-27512: Decimal type inference should not handle ',' for backward compatibility") {
+    assert(spark.read
+      .option("delimiter", "|")
+      .option("inferSchema", "true")
+      .csv(Seq("1,2").toDS).schema.head.dataType === StringType)
+  }
+
+  test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
+    Seq("csv", "").foreach { reader =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> reader) {
+        withTempPath { path =>
+          val df = Seq(("0", "2013-111-11")).toDF("a", "b")
+          df.write
+            .option("header", "true")
+            .csv(path.getAbsolutePath)
+
+          val schema = StructType.fromDDL("a int, b date")
+          val columnNameOfCorruptRecord = "_unparsed"
+          val schemaWithCorrField = schema.add(columnNameOfCorruptRecord, StringType)
+          val readDF = spark
+            .read
+            .option("mode", "Permissive")
+            .option("header", "true")
+            .option("enforceSchema", false)
+            .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
+            .schema(schemaWithCorrField)
+            .csv(path.getAbsoluteFile.toString)
+          checkAnswer(readDF, Row(0, null, "0,2013-111-11") :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-28431: prevent CSV datasource throw TextParsingException with large size message") {
+    withTempPath { path =>
+      val maxCharsPerCol = 10000
+      val str = "a" * (maxCharsPerCol + 1)
+
+      Files.write(
+        path.toPath,
+        str.getBytes(StandardCharsets.UTF_8),
+        StandardOpenOption.CREATE, StandardOpenOption.WRITE
+      )
+
+      val errMsg = intercept[TextParsingException] {
+        spark.read
+          .option("maxCharsPerColumn", maxCharsPerCol)
+          .csv(path.getAbsolutePath)
+          .count()
+      }.getMessage
+
+      assert(errMsg.contains("..."),
+        "expect the TextParsingException truncate the error content to be 1000 length.")
     }
   }
 }

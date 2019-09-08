@@ -96,7 +96,7 @@ private[sql] object TypeCollection {
 /**
  * An `AbstractDataType` that matches any concrete data types.
  */
-protected[sql] object AnyDataType extends AbstractDataType {
+protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
@@ -142,6 +142,8 @@ abstract class NumericType extends AtomicType {
   // desugared by the compiler into an argument to the objects constructor. This means there is no
   // longer a no argument constructor and thus the JVM cannot serialize the object anymore.
   private[sql] val numeric: Numeric[InternalType]
+
+  private[sql] def exactNumeric: Numeric[InternalType] = numeric
 }
 
 

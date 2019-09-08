@@ -20,7 +20,7 @@ import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
-import org.mockito.Mockito.{doReturn, verify, when}
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mockito.MockitoSugar._
 
@@ -30,6 +30,8 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
+
+  private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
   private val DRIVER_POD_UID = "pod-id"
   private val DRIVER_POD_API_VERSION = "v1"
@@ -126,7 +128,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     MockitoAnnotations.initMocks(this)
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
-    when(driverBuilder.buildFromFeatures(kconf)).thenReturn(BUILT_KUBERNETES_SPEC)
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withName(POD_NAME)).thenReturn(namedPods)
 

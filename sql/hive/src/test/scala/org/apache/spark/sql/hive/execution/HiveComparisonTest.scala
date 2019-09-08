@@ -30,7 +30,9 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
@@ -171,7 +173,7 @@ abstract class HiveComparisonTest
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeTableCommand | ShowColumnsCommand(_, _) =>
+      case _: DescribeCommandBase | ShowColumnsCommand(_, _) =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -345,7 +347,8 @@ abstract class HiveComparisonTest
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
           def getResult(): Seq[String] = {
-            SQLExecution.withNewExecutionId(query.sparkSession, query)(query.hiveResultString())
+            SQLExecution.withNewExecutionId(
+              query.sparkSession, query)(hiveResultString(query.executedPlan))
           }
           try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
@@ -373,7 +376,9 @@ abstract class HiveComparisonTest
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeTableCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTableStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

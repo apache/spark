@@ -18,34 +18,39 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.fs.Path
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types._
 
 
 object DataSourceUtils {
+  /**
+   * The key to use for storing partitionBy columns as options.
+   */
+  val PARTITIONING_COLUMNS_KEY = "__partition_columns"
 
   /**
-   * Verify if the schema is supported in datasource in write path.
+   * Utility methods for converting partitionBy columns to options and back.
    */
-  def verifyWriteSchema(format: FileFormat, schema: StructType): Unit = {
-    verifySchema(format, schema, isReadPath = false)
+  private implicit val formats = Serialization.formats(NoTypeHints)
+
+  def encodePartitioningColumns(columns: Seq[String]): String = {
+    Serialization.write(columns)
   }
 
-  /**
-   * Verify if the schema is supported in datasource in read path.
-   */
-  def verifyReadSchema(format: FileFormat, schema: StructType): Unit = {
-    verifySchema(format, schema, isReadPath = true)
+  def decodePartitioningColumns(str: String): Seq[String] = {
+    Serialization.read[Seq[String]](str)
   }
 
   /**
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */
-  private def verifySchema(format: FileFormat, schema: StructType, isReadPath: Boolean): Unit = {
+  def verifySchema(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
-      if (!format.supportDataType(field.dataType, isReadPath)) {
+      if (!format.supportDataType(field.dataType)) {
         throw new AnalysisException(
           s"$format data source does not support ${field.dataType.catalogString} data type.")
       }
@@ -55,8 +60,8 @@ object DataSourceUtils {
   // SPARK-24626: Metadata files and temporary files should not be
   // counted as data files, so that they shouldn't participate in tasks like
   // location size calculation.
-  private[sql] def isDataPath(path: Path): Boolean = {
-    val name = path.getName
-    !(name.startsWith("_") || name.startsWith("."))
-  }
+  private[sql] def isDataPath(path: Path): Boolean = isDataFile(path.getName)
+
+  private[sql] def isDataFile(fileName: String) =
+    !(fileName.startsWith("_") || fileName.startsWith("."))
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
@@ -25,8 +26,9 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.xml.{Node, Unparsed}
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
+import org.apache.spark.internal.config.UI._
 import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
@@ -63,7 +65,7 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
   // TODO: We should consider increasing the number of this parameter over time
   // if we find that it's okay.
-  private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
+  private val MAX_TIMELINE_TASKS = parent.conf.get(UI_TIMELINE_TASKS_MAXIMUM)
 
   private def getLocalitySummaryString(localitySummary: Map[String, Long]): String = {
     val names = Map(
@@ -80,27 +82,22 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
+    val parameterAttempt = request.getParameter("attempt")
     require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
-    val parameterTaskPage = UIUtils.stripXSS(request.getParameter("task.page"))
-    val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
-    val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
-    val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
+    val parameterTaskSortColumn = request.getParameter("task.sort")
+    val parameterTaskSortDesc = request.getParameter("task.desc")
+    val parameterTaskPageSize = request.getParameter("task.pageSize")
 
-    val eventTimelineParameterTaskPage = UIUtils.stripXSS(
-      request.getParameter("task.eventTimelinePageNumber"))
-    val eventTimelineParameterTaskPageSize = UIUtils.stripXSS(
-      request.getParameter("task.eventTimelinePageSize"))
+    val eventTimelineParameterTaskPage = request.getParameter("task.eventTimelinePageNumber")
+    val eventTimelineParameterTaskPageSize = request.getParameter("task.eventTimelinePageSize")
     var eventTimelineTaskPage = Option(eventTimelineParameterTaskPage).map(_.toInt).getOrElse(1)
     var eventTimelineTaskPageSize = Option(
       eventTimelineParameterTaskPageSize).map(_.toInt).getOrElse(100)
 
-    val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
     val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
       UIUtils.decodeURLParameter(sortColumn)
     }.getOrElse("Index")
@@ -133,13 +130,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       return UIUtils.headerSparkPage(request, stageHeader, content, parent)
     }
 
-    val storedTasks = store.taskCount(stageData.stageId, stageData.attemptId)
-    val numCompleted = stageData.numCompleteTasks
-    val totalTasksNumStr = if (totalTasks == storedTasks) {
-      s"$totalTasks"
-    } else {
-      s"$totalTasks, showing $storedTasks"
-    }
     if (eventTimelineTaskPageSize < 1 || eventTimelineTaskPageSize > totalTasks) {
       eventTimelineTaskPageSize = totalTasks
     }
@@ -188,11 +178,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
           }}
           {if (hasBytesSpilled(stageData)) {
             <li>
-              <strong>Shuffle Spill (Memory): </strong>
+              <strong>Spill (Memory): </strong>
               {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
-              <strong>Shuffle Spill (Disk): </strong>
+              <strong>Spill (Disk): </strong>
               {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
           }}
@@ -212,19 +202,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
     val stageGraph = parent.store.asOption(parent.store.operationGraphForStage(stageId))
     val dagViz = UIUtils.showDagVizForStage(stageId, stageGraph)
 
-    val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-    def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
-      if (acc.name != null && acc.value != null) {
-        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
-      } else {
-        Nil
-      }
-    }
-    val accumulableTable = UIUtils.listingTable(
-      accumulableHeaders,
-      accumulableRow,
-      stageData.accumulatorUpdates.toSeq)
-
     val currentTime = System.currentTimeMillis()
     val taskTable = try {
       val _taskTable = new TaskPagedTable(
@@ -242,21 +219,6 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
         null
     }
-
-    val jsForScrollingDownToTaskTable =
-      <script>
-        {Unparsed {
-          """
-            |$(function() {
-            |  if (/.*&task.sort=.*$/.test(location.search)) {
-            |    var topOffset = $("#tasks-section").offset().top;
-            |    $("html,body").animate({scrollTop: topOffset}, 200);
-            |  }
-            |});
-          """.stripMargin
-          }
-        }
-      </script>
 
     val content =
       summary ++
@@ -545,7 +507,7 @@ private[ui] class TaskPagedTable(
     store)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     basePath +
       s"&$pageNumberFormField=$page" +
       s"&task.sort=$encodedSortColumn" +
@@ -554,7 +516,7 @@ private[ui] class TaskPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$basePath&task.sort=$encodedSortColumn&task.desc=$desc"
   }
 
@@ -602,7 +564,7 @@ private[ui] class TaskPagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             basePath +
-              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&task.desc=${!desc}" +
               s"&task.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
@@ -615,7 +577,7 @@ private[ui] class TaskPagedTable(
         } else {
           val headerLink = Unparsed(
             basePath +
-              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&task.pageSize=$pageSize")
           <th class={cssClass}>
             <a href={headerLink}>
@@ -680,18 +642,22 @@ private[ui] class TaskPagedTable(
         <td>{accumulatorsInfo(task)}</td>
       }}
       {if (hasInput(stage)) {
-        metricInfo(task) { m =>
-          val bytesRead = Utils.bytesToString(m.inputMetrics.bytesRead)
-          val records = m.inputMetrics.recordsRead
-          <td>{bytesRead} / {records}</td>
-        }
+        <td>{
+          metricInfo(task) { m =>
+            val bytesRead = Utils.bytesToString(m.inputMetrics.bytesRead)
+            val records = m.inputMetrics.recordsRead
+            Unparsed(s"$bytesRead / $records")
+          }
+        }</td>
       }}
       {if (hasOutput(stage)) {
-        metricInfo(task) { m =>
-          val bytesWritten = Utils.bytesToString(m.outputMetrics.bytesWritten)
-          val records = m.outputMetrics.recordsWritten
-          <td>{bytesWritten} / {records}</td>
-        }
+        <td>{
+          metricInfo(task) { m =>
+            val bytesWritten = Utils.bytesToString(m.outputMetrics.bytesWritten)
+            val records = m.outputMetrics.recordsWritten
+            Unparsed(s"$bytesWritten / $records")
+          }
+        }</td>
       }}
       {if (hasShuffleRead(stage)) {
         <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
@@ -797,8 +763,8 @@ private[spark] object ApiHelper {
   val HEADER_SHUFFLE_REMOTE_READS = "Shuffle Remote Reads"
   val HEADER_SHUFFLE_WRITE_TIME = "Write Time"
   val HEADER_SHUFFLE_WRITE_SIZE = "Shuffle Write Size / Records"
-  val HEADER_MEM_SPILL = "Shuffle Spill (Memory)"
-  val HEADER_DISK_SPILL = "Shuffle Spill (Disk)"
+  val HEADER_MEM_SPILL = "Spill (Memory)"
+  val HEADER_DISK_SPILL = "Spill (Disk)"
   val HEADER_ERROR = "Errors"
 
   private[ui] val COLUMN_TO_INDEX = Map(
@@ -859,8 +825,13 @@ private[spark] object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
-    (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
+    // Some jobs have only 0 partitions.
+    if (job.stageIds.isEmpty) {
+      ("", job.name)
+    } else {
+      val stage = store.asOption(store.stageAttempt(job.stageIds.max, 0)._1)
+      (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
+    }
   }
 
 }

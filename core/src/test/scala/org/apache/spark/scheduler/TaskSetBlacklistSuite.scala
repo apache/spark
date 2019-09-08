@@ -16,7 +16,7 @@
  */
 package org.apache.spark.scheduler
 
-import org.mockito.Matchers.isA
+import org.mockito.ArgumentMatchers.isA
 import org.mockito.Mockito.{never, verify}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar

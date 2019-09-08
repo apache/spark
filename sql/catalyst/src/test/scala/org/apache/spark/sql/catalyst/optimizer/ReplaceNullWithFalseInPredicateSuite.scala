@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
@@ -306,22 +307,35 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
+  private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
+
   test("replace nulls in lambda function of ArrayFilter") {
-    testHigherOrderFunc('a, ArrayFilter, Seq('e))
+    testHigherOrderFunc('a, ArrayFilter, Seq(lv('e)))
   }
 
   test("replace nulls in lambda function of ArrayExists") {
-    testHigherOrderFunc('a, ArrayExists, Seq('e))
+    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "true") {
+      val lambdaArgs = Seq(lv('e))
+      val cond = GreaterThan(lambdaArgs.last, Literal(0))
+      val lambda = LambdaFunction(
+        function = If(cond, Literal(null, BooleanType), TrueLiteral),
+        arguments = lambdaArgs)
+      val expr = ArrayExists('a, lambda)
+      testProjection(originalExpr = expr, expectedExpr = expr)
+    }
+    withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
+      testHigherOrderFunc('a, ArrayExists, Seq(lv('e)))
+    }
   }
 
   test("replace nulls in lambda function of MapFilter") {
-    testHigherOrderFunc('m, MapFilter, Seq('k, 'v))
+    testHigherOrderFunc('m, MapFilter, Seq(lv('k), lv('v)))
   }
 
   test("inability to replace nulls in arbitrary higher-order function") {
     val lambdaFunc = LambdaFunction(
-      function = If('e > 0, Literal(null, BooleanType), TrueLiteral),
-      arguments = Seq[NamedExpression]('e))
+      function = If(lv('e) > 0, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq[NamedExpression](lv('e)))
     val column = ArrayTransform('a, lambdaFunc)
     testProjection(originalExpr = column, expectedExpr = column)
   }

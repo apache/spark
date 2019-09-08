@@ -23,6 +23,8 @@ import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoTest._
 import org.apache.spark.util.ThreadUtils
 
@@ -69,9 +71,9 @@ object KryoSerializerBenchmark extends BenchmarkBase {
 
   def createSparkContext(usePool: Boolean): SparkContext = {
     val conf = new SparkConf()
-    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    conf.set("spark.kryo.registrator", classOf[MyRegistrator].getName)
-    conf.set("spark.kryo.pool", usePool.toString)
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USE_POOL, usePool)
 
     if (sc != null) {
       sc.stop()

@@ -2,6 +2,21 @@
 layout: global
 title: Distributed SQL Engine
 displayTitle: Distributed SQL Engine
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -70,6 +85,8 @@ To test, use beeline to connect to the JDBC/ODBC server in http mode with:
 
     beeline> !connect jdbc:hive2://<host>:<port>/<database>?hive.server2.transport.mode=http;hive.server2.thrift.http.path=<http_endpoint>
 
+If you closed a session and do CTAS, you must set `fs.%s.impl.disable.cache` to true in `hive-site.xml`.
+See more details in [[SPARK-21067]](https://issues.apache.org/jira/browse/SPARK-21067).
 
 ## Running the Spark SQL CLI
 

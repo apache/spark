@@ -17,24 +17,23 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{BufferedWriter, OutputStreamWriter, Writer}
-import java.nio.charset.StandardCharsets
-import java.sql.{Date, Timestamp}
+import java.io.{BufferedWriter, OutputStreamWriter}
 
-import org.apache.commons.io.output.StringBuilderWriter
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
+import org.apache.spark.sql.dynamicpruning.PlanDynamicPruningFilters
+import org.apache.spark.sql.execution.adaptive.InsertAdaptiveSparkPlan
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -62,33 +61,50 @@ class QueryExecution(
 
   lazy val analyzed: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.ANALYSIS) {
     SparkSession.setActiveSession(sparkSession)
+    // We can't clone `logical` here, which will reset the `_analyzed` flag.
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     assertSupported()
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed)
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
   }
 
   lazy val optimizedPlan: LogicalPlan = tracker.measurePhase(QueryPlanningTracker.OPTIMIZATION) {
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData, tracker)
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
   }
 
   lazy val sparkPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
-    planner.plan(ReturnAnswer(optimizedPlan)).next()
+    // Clone the logical plan here, in case the planner rules change the states of the logical plan.
+    planner.plan(ReturnAnswer(optimizedPlan.clone())).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
   lazy val executedPlan: SparkPlan = tracker.measurePhase(QueryPlanningTracker.PLANNING) {
-    prepareForExecution(sparkPlan)
+    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+    // optimizing and planning.
+    prepareForExecution(sparkPlan.clone())
   }
 
-  /** Internal version of the RDD. Avoids copies and has no schema */
+  /**
+   * Internal version of the RDD. Avoids copies and has no schema.
+   * Note for callers: Spark may apply various optimization including reusing object: this means
+   * the row is valid only for the iteration it is retrieved. You should avoid storing row and
+   * accessing after iteration. (Calling `collect()` is one of known bad usage.)
+   * If you want to store these rows into collection, please apply some converter or copy row
+   * which produces new object per iteration.
+   * Given QueryExecution is not a public class, end users are discouraged to use this: please
+   * use `Dataset.rdd` instead where conversion will be applied.
+   */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
 
   /**
@@ -101,150 +117,72 @@ class QueryExecution(
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
+    // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
+    // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
+    InsertAdaptiveSparkPlan(sparkSession, this),
+    PlanDynamicPruningFilters(sparkSession),
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
+    ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
+      sparkSession.sessionState.columnarRules),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
-  protected def stringOrError[A](f: => A): String =
-    try f.toString catch { case e: AnalysisException => e.toString }
+  def simpleString: String = simpleString(false)
 
-
-  /**
-   * Returns the result as a hive compatible sequence of strings. This is used in tests and
-   * `SparkSQLDriver` for CLI applications.
-   */
-  def hiveResultString(): Seq[String] = executedPlan match {
-    case ExecutedCommandExec(desc: DescribeTableCommand) =>
-      // If it is a describe command for a Hive table, we want to have the output format
-      // be similar with Hive.
-      desc.run(sparkSession).map {
-        case Row(name: String, dataType: String, comment) =>
-          Seq(name, dataType,
-            Option(comment.asInstanceOf[String]).getOrElse(""))
-            .map(s => String.format(s"%-20s", s))
-            .mkString("\t")
-      }
-    // SHOW TABLES in Hive only output table names, while ours output database, table name, isTemp.
-    case command @ ExecutedCommandExec(s: ShowTablesCommand) if !s.isExtended =>
-      command.executeCollect().map(_.getString(1))
-    case other =>
-      val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-      // We need the types so we can output struct field names
-      val types = analyzed.output.map(_.dataType)
-      // Reformat to match hive tab delimited output.
-      result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t"))
+  def simpleString(formatted: Boolean): String = withRedaction {
+    val concat = new PlanStringConcat()
+    concat.append("== Physical Plan ==\n")
+    if (formatted) {
+      ExplainUtils.processPlan(executedPlan, concat.append)
+    } else {
+      QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    }
+    concat.append("\n")
+    concat.toString
   }
 
-  /** Formats a datum (based on the given data type) and returns the string representation. */
-  private def toHiveString(a: (Any, DataType)): String = {
-    val primitiveTypes = Seq(StringType, IntegerType, LongType, DoubleType, FloatType,
-      BooleanType, ByteType, ShortType, DateType, TimestampType, BinaryType)
-
-    def formatDecimal(d: java.math.BigDecimal): String = {
-      if (d.compareTo(java.math.BigDecimal.ZERO) == 0) {
-        java.math.BigDecimal.ZERO.toPlainString
-      } else {
-        d.stripTrailingZeros().toPlainString
-      }
-    }
-
-    /** Hive outputs fields of structs slightly differently than top level attributes. */
-    def toHiveStructString(a: (Any, DataType)): String = a match {
-      case (struct: Row, StructType(fields)) =>
-        struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-        }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
-        map.map {
-          case (key, value) =>
-            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (null, _) => "null"
-      case (s: String, StringType) => "\"" + s + "\""
-      case (decimal, DecimalType()) => decimal.toString
-      case (interval, CalendarIntervalType) => interval.toString
-      case (other, tpe) if primitiveTypes contains tpe => other.toString
-    }
-
-    a match {
-      case (struct: Row, StructType(fields)) =>
-        struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
-        }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
-        map.map {
-          case (key, value) =>
-            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (null, _) => "NULL"
-      case (d: Date, DateType) =>
-        DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
-      case (t: Timestamp, TimestampType) =>
-        DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(t),
-          DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
-      case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-      case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
-      case (interval, CalendarIntervalType) => interval.toString
-      case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
-    }
-  }
-
-  def simpleString: String = withRedaction {
-    s"""== Physical Plan ==
-       |${stringOrError(executedPlan.treeString(verbose = false))}
-      """.stripMargin.trim
-  }
-
-  private def writeOrError(writer: Writer)(f: Writer => Unit): Unit = {
-    try f(writer)
-    catch {
-      case e: AnalysisException => writer.write(e.toString)
-    }
-  }
-
-  private def writePlans(writer: Writer): Unit = {
+  private def writePlans(append: String => Unit, maxFields: Int): Unit = {
     val (verbose, addSuffix) = (true, false)
-
-    writer.write("== Parsed Logical Plan ==\n")
-    writeOrError(writer)(logical.treeString(_, verbose, addSuffix))
-    writer.write("\n== Analyzed Logical Plan ==\n")
-    val analyzedOutput = stringOrError(truncatedString(
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", "))
-    writer.write(analyzedOutput)
-    writer.write("\n")
-    writeOrError(writer)(analyzed.treeString(_, verbose, addSuffix))
-    writer.write("\n== Optimized Logical Plan ==\n")
-    writeOrError(writer)(optimizedPlan.treeString(_, verbose, addSuffix))
-    writer.write("\n== Physical Plan ==\n")
-    writeOrError(writer)(executedPlan.treeString(_, verbose, addSuffix))
+    append("== Parsed Logical Plan ==\n")
+    QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
+    append("\n== Analyzed Logical Plan ==\n")
+    val analyzedOutput = try {
+      truncatedString(
+        analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+    } catch {
+      case e: AnalysisException => e.toString
+    }
+    append(analyzedOutput)
+    append("\n")
+    QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
+    append("\n== Optimized Logical Plan ==\n")
+    QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
+    append("\n== Physical Plan ==\n")
+    QueryPlan.append(executedPlan, append, verbose, addSuffix, maxFields)
   }
 
   override def toString: String = withRedaction {
-    val writer = new StringBuilderWriter()
-    try {
-      writePlans(writer)
-      writer.toString
-    } finally {
-      writer.close()
-    }
+    val concat = new PlanStringConcat()
+    writePlans(concat.append, SQLConf.get.maxToStringFields)
+    concat.toString
   }
 
   def stringWithStats: String = withRedaction {
+    val concat = new PlanStringConcat()
+    val maxFields = SQLConf.get.maxToStringFields
+
     // trigger to compute stats for logical plans
     optimizedPlan.stats
 
     // only show optimized logical plan and physical plan
-    s"""== Optimized Logical Plan ==
-        |${stringOrError(optimizedPlan.treeString(verbose = true, addSuffix = true))}
-        |== Physical Plan ==
-        |${stringOrError(executedPlan.treeString(verbose = true))}
-    """.stripMargin.trim
+    concat.append("== Optimized Logical Plan ==\n")
+    QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
+    concat.append("\n== Physical Plan ==\n")
+    QueryPlan.append(executedPlan, concat.append, verbose = true, addSuffix = false, maxFields)
+    concat.append("\n")
+    concat.toString
   }
 
   /**
@@ -280,16 +218,20 @@ class QueryExecution(
 
     /**
      * Dumps debug information about query execution into the specified file.
+     *
+     * @param maxFields maximum number of fields converted to string representation.
      */
-    def toFile(path: String): Unit = {
+    def toFile(path: String, maxFields: Int = Int.MaxValue): Unit = {
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
-
+      val append = (s: String) => {
+        writer.write(s)
+      }
       try {
-        writePlans(writer)
+        writePlans(append, maxFields)
         writer.write("\n== Whole Stage Codegen ==\n")
-        org.apache.spark.sql.execution.debug.writeCodegen(writer, executedPlan)
+        org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
       } finally {
         writer.close()
       }

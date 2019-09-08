@@ -135,7 +135,13 @@ abstract class CentralMomentAgg(child: Expression)
 // Compute the population standard deviation of a column
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the population standard deviation calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the population standard deviation calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       0.816496580927726
+  """,
+  since = "1.6.0")
 // scalastyle:on line.size.limit
 case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 
@@ -151,7 +157,13 @@ case class StddevPop(child: Expression) extends CentralMomentAgg(child) {
 // Compute the sample standard deviation of a column
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the sample standard deviation calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       1.0
+  """,
+  since = "1.6.0")
 // scalastyle:on line.size.limit
 case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
@@ -167,7 +179,13 @@ case class StddevSamp(child: Expression) extends CentralMomentAgg(child) {
 
 // Compute the population variance of a column
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the population variance calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the population variance calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       0.6666666666666666
+  """,
+  since = "1.6.0")
 case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -181,7 +199,13 @@ case class VariancePop(child: Expression) extends CentralMomentAgg(child) {
 
 // Compute the sample variance of a column
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the sample variance calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the sample variance calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (1), (2), (3) AS tab(col);
+       1.0
+  """,
+  since = "1.6.0")
 case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 2
@@ -195,7 +219,15 @@ case class VarianceSamp(child: Expression) extends CentralMomentAgg(child) {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the skewness value calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the skewness value calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
+       1.1135657469022013
+      > SELECT _FUNC_(col) FROM VALUES (-1000), (-100), (10), (20) AS tab(col);
+       -1.1135657469022011
+  """,
+  since = "1.6.0")
 case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 
   override def prettyName: String = "skewness"
@@ -209,7 +241,15 @@ case class Skewness(child: Expression) extends CentralMomentAgg(child) {
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the kurtosis value calculated from values of a group.")
+  usage = "_FUNC_(expr) - Returns the kurtosis value calculated from values of a group.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (-10), (-20), (100), (1000) AS tab(col);
+       -0.7014368047529618
+      > SELECT _FUNC_(col) FROM VALUES (1), (10), (100), (10), (1) as tab(col);
+       0.19432323191698986
+  """,
+  since = "1.6.0")
 case class Kurtosis(child: Expression) extends CentralMomentAgg(child) {
 
   override protected def momentOrder = 4

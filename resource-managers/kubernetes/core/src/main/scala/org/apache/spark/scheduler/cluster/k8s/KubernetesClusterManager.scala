@@ -65,6 +65,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       apiServerUri,
       Some(sc.conf.get(KUBERNETES_NAMESPACE)),
       authConfPrefix,
+      SparkKubernetesClientFactory.ClientType.Driver,
       sc.conf,
       defaultServiceAccountToken,
       defaultServiceAccountCaCrt)
@@ -76,8 +77,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sc.conf.get(KUBERNETES_EXECUTOR_PODTEMPLATE_CONTAINER_NAME))
     }
 
-    val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
-      "kubernetes-executor-requests")
+    val schedulerExecutorService = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "kubernetes-executor-maintenance")
 
     val subscribersExecutor = ThreadUtils
       .newDaemonThreadPoolScheduledExecutor(
@@ -94,7 +95,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     val executorPodsAllocator = new ExecutorPodsAllocator(
       sc.conf,
-      KubernetesExecutorBuilder(kubernetesClient, sc.conf),
+      sc.env.securityManager,
+      new KubernetesExecutorBuilder(),
       kubernetesClient,
       snapshotsStore,
       new SystemClock())
@@ -110,9 +112,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
-      sc.env.rpcEnv,
+      sc,
       kubernetesClient,
-      requestExecutorsService,
+      schedulerExecutorService,
       snapshotsStore,
       executorPodsAllocator,
       executorPodsLifecycleEventHandler,

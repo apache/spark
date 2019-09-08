@@ -164,7 +164,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
-    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sparkSession)
     saveImpl(path)
   }
 
@@ -624,10 +624,17 @@ private[ml] object DefaultParamsReader {
    * Load a `Params` instance from the given path, and return it.
    * This assumes the instance implements [[MLReadable]].
    */
-  def loadParamsInstance[T](path: String, sc: SparkContext): T = {
+  def loadParamsInstance[T](path: String, sc: SparkContext): T =
+    loadParamsInstanceReader(path, sc).load(path)
+
+  /**
+   * Load a `Params` instance reader from the given path, and return it.
+   * This assumes the instance implements [[MLReadable]].
+   */
+  def loadParamsInstanceReader[T](path: String, sc: SparkContext): MLReader[T] = {
     val metadata = DefaultParamsReader.loadMetadata(path, sc)
     val cls = Utils.classForName(metadata.className)
-    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]].load(path)
+    cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }
 }
 
@@ -666,8 +673,8 @@ private[ml] object MetaAlgorithmReadWrite {
 
 private[ml] class FileSystemOverwrite extends Logging {
 
-  def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
-    val hadoopConf = sc.hadoopConfiguration
+  def handleOverwrite(path: String, shouldOverwrite: Boolean, session: SparkSession): Unit = {
+    val hadoopConf = session.sessionState.newHadoopConf()
     val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)

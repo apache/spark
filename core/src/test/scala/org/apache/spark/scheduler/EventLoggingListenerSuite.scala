@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
+import java.util.Arrays
 
 import scala.collection.immutable.Map
 import scala.collection.mutable
@@ -33,6 +34,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.io._
 import org.apache.spark.metrics.{ExecutorMetricType, MetricsSystem}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -86,6 +88,20 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     testEventLogging()
   }
 
+  test("spark.eventLog.compression.codec overrides spark.io.compression.codec") {
+    val conf = new SparkConf
+    conf.set(EVENT_LOG_COMPRESS, true)
+
+    // The default value is `spark.io.compression.codec`.
+    val e = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    assert(e.compressionCodecName.contains("lz4"))
+
+    // `spark.eventLog.compression.codec` overrides `spark.io.compression.codec`.
+    conf.set(EVENT_LOG_COMPRESSION_CODEC, "zstd")
+    val e2 = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    assert(e2.compressionCodecName.contains("zstd"))
+  }
+
   test("Basic event logging with compression") {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testEventLogging(compressionCodec = Some(CompressionCodec.getShortName(codec)))
@@ -107,8 +123,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val secretPassword = "secret_password"
     val conf = getLoggingConf(testDirPath, None)
       .set(key, secretPassword)
+    val hadoopconf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
     val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
-    val envDetails = SparkEnv.environmentDetails(conf, "FIFO", Seq.empty, Seq.empty)
+    val envDetails = SparkEnv.environmentDetails(conf, hadoopconf, "FIFO", Seq.empty, Seq.empty)
     val event = SparkListenerEnvironmentUpdate(envDetails)
     val redactedProps = eventLogger.redactEvent(event).environmentDetails("Spark Properties").toMap
     assert(redactedProps(key) == "*********(redacted)")
@@ -122,7 +139,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // Expected IOException, since we haven't enabled log overwrite.
     intercept[IOException] { testEventLogging() }
     // Try again, but enable overwriting.
-    testEventLogging(extraConf = Map("spark.eventLog.overwrite" -> "true"))
+    testEventLogging(extraConf = Map(EVENT_LOG_OVERWRITE.key -> "true"))
   }
 
   test("Event log name") {
@@ -263,7 +280,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
   /**
    * Test stage executor metrics logging functionality. This checks that peak
-   * values from SparkListenerExecutorMetricsUpdate events during a stage are
+   * values from SparkListenerExecutorMetricsUpdate events during a stage and
+   * from SparkListenerTaskEnd events for tasks belonging to the stage are
    * logged in a StageExecutorMetrics event for each executor at stage completion.
    */
   private def testStageExecutorMetricsEventLogging() {
@@ -271,6 +289,93 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val logName = "stageExecutorMetrics-test"
     val eventLogger = new EventLoggingListener(logName, None, testDirPath.toUri(), conf)
     val listenerBus = new LiveListenerBus(conf)
+
+    // Executor metrics
+    // driver
+    val md_1 = Array(4000L, 50L, 0L, 0L, 40L, 0L, 40L, 0L, 70L, 0L, 7500L, 3500L,
+      0L, 0L, 0L, 0L, 10L, 90L, 2L, 20L)
+    val md_2 = Array(4500L, 50L, 0L, 0L, 40L, 0L, 40L, 0L, 70L, 0L, 8000L, 3500L,
+      0L, 0L, 0L, 0L, 10L, 90L, 3L, 20L)
+    val md_3 = Array(4200L, 50L, 0L, 0L, 40L, 0L, 40L, 0L, 70L, 0L, 7800L, 3500L,
+      0L, 0L, 0L, 0L, 15L, 100L, 5L, 20L)
+
+    // executors 1 and 2
+    val m1_1 = Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L, 7500L, 3500L,
+      6500L, 2500L, 5500L, 1500L, 10L, 90L, 2L, 20L)
+    val m2_1 = Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L, 8500L, 3500L,
+      7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L)
+    val m1_2 = Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L, 8000L, 4000L,
+      7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+    val m2_2 = Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L, 9000L, 4000L,
+      8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+    val m1_3 = Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L, 8000L, 3500L,
+      7000L, 2500L, 6000L, 1500L, 10L, 90L, 2L, 20L)
+    val m2_3 = Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L, 8500L, 3500L,
+      7500L, 2500L, 6500L, 1500L, 10L, 90L, 2L, 20L)
+    val m1_4 = Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L,
+      0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+    val m2_4 = Array(7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L,
+      40L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+    val m1_5 = Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L, 5000L, 3000L,
+      4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+    val m2_5 = Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L,
+      20L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
+    val m1_6 = Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L, 3000L, 2500L,
+      2000L, 1500L, 1000L, 500L, 10L, 90L, 2L, 20L)
+    val m2_6 = Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L,
+      20L, 7000L, 3000L, 6000L, 2000L, 5000L, 1000L, 10L, 90L, 2L, 20L)
+    val m1_7 = Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L,
+      0L, 4000L, 2500L, 3000L, 1500L, 2000L, 500L, 10L, 90L, 2L, 20L)
+    val m2_7 = Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L, 7000L,
+      4000L, 6000L, 3000L, 5000L, 2000L, 10L, 90L, 2L, 20L)
+
+    // tasks
+    val t1 = Array(4500L, 60L, 50L, 0L, 50L, 10L, 100L, 10L, 70L, 20L,
+      8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+    val t2 = Array(3500L, 50L, 20L, 0L, 10L, 10L, 35L, 10L, 80L, 0L,
+      9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+    val t3 = Array(5000L, 60L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L,
+      8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+    val t4 = Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L,
+      9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+    val t5 = Array(7000L, 100L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L,
+      5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+    val t6 = Array(7200L, 70L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L,
+      8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
+
+    def max(a: Array[Long], b: Array[Long]): Array[Long] =
+      (a, b).zipped.map(Math.max)
+
+    // calculated metric peaks per stage per executor
+    // metrics sent during stage 0 for each executor
+    val cp0_1 = Seq(m1_1, m1_2, m1_3, t1, m1_4, t3).reduceLeft(max)
+    val cp0_2 = Seq(m2_1, m2_2, m2_3, t2, m2_4, t4).reduceLeft(max)
+    val cp0_d = Seq(md_1, md_2).reduceLeft(max)
+    // metrics sent during stage 1 for each executor
+    val cp1_1 = Seq(m1_4, m1_5, m1_6, m1_7, t5).reduceLeft(max)
+    val cp1_2 = Seq(m2_4, m2_5, m2_6, m2_7, t6).reduceLeft(max)
+    val cp1_d = Seq(md_2, md_3).reduceLeft(max)
+
+    // expected metric peaks per stage per executor
+    val p0_1 = Array(5000L, 60L, 50L, 20L, 50L, 10L, 100L, 30L,
+      70L, 20L, 8000L, 4000L, 7000L, 3000L, 6000L, 2000L, 10L, 90L, 2L, 20L)
+    val p0_2 = Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L,
+      80L, 40L, 9000L, 4000L, 8000L, 3000L, 7000L, 2000L, 10L, 90L, 2L, 20L)
+    val p0_d = Array(4500L, 50L, 0L, 0L, 40L, 0L, 40L, 0L,
+      70L, 0L, 8000L, 3500L, 0L, 0L, 0L, 0L, 10L, 90L, 3L, 20L)
+    val p1_1 = Array(7000L, 100L, 50L, 30L, 60L, 30L, 80L, 55L,
+      50L, 0L, 5000L, 3000L, 4000L, 2000L, 3000L, 1000L, 10L, 90L, 2L, 20L)
+    val p1_2 = Array(7200L, 70L, 50L, 40L, 10L, 30L, 50L, 60L,
+      40L, 40L, 8000L, 5000L, 7000L, 4000L, 6000L, 3000L, 10L, 90L, 2L, 20L)
+    val p1_d = Array(4500L, 50L, 0L, 0L, 40L, 0L, 40L, 0L,
+      70L, 0L, 8000L, 3500L, 0L, 0L, 0L, 0L, 15L, 100L, 5L, 20L)
+
+    assert(Arrays.equals(p0_1, cp0_1))
+    assert(Arrays.equals(p0_2, cp0_2))
+    assert(Arrays.equals(p0_d, cp0_d))
+    assert(Arrays.equals(p1_1, cp1_1))
+    assert(Arrays.equals(p1_2, cp1_2))
+    assert(Arrays.equals(p1_d, cp1_d))
 
     // Events to post.
     val events = Array(
@@ -281,54 +386,57 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
       createStageSubmittedEvent(0),
       // receive 3 metric updates from each executor with just stage 0 running,
       // with different peak updates for each executor
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L))),
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L))),
+      // also, receive 1 metric update from the driver
+      createExecutorMetricsUpdateEvent(List(0), "1", new ExecutorMetrics(m1_1)),
+      createExecutorMetricsUpdateEvent(List(0), "2", new ExecutorMetrics(m2_1)),
       // exec 1: new stage 0 peaks for metrics at indexes: 2, 4, 6
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L))),
+      createExecutorMetricsUpdateEvent(List(0), "1", new ExecutorMetrics(m1_2)),
       // exec 2: new stage 0 peaks for metrics at indexes: 0, 4, 6
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L))),
+      createExecutorMetricsUpdateEvent(List(0), "2", new ExecutorMetrics(m2_2)),
+      // driver
+      createExecutorMetricsUpdateEvent(List(-1), "driver", new ExecutorMetrics(md_1)),
       // exec 1: new stage 0 peaks for metrics at indexes: 5, 7
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L))),
+      createExecutorMetricsUpdateEvent(List(0), "1", new ExecutorMetrics(m1_3)),
       // exec 2: new stage 0 peaks for metrics at indexes: 0, 5, 6, 7, 8
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L))),
+      createExecutorMetricsUpdateEvent(List(0), "2", new ExecutorMetrics(m2_3)),
+      // stage 0: task 1 (on exec 1) and task 2 (on exec 2) end
+      createTaskEndEvent(1L, 0, "1", 0, "ShuffleMapTask", new ExecutorMetrics(t1)),
+      createTaskEndEvent(2L, 0, "2", 0, "ShuffleMapTask", new ExecutorMetrics(t2)),
       // now start stage 1, one more metric update for each executor, and new
       // peaks for some stage 1 metrics (as listed), initialize stage 1 peaks
       createStageSubmittedEvent(1),
       // exec 1: new stage 0 peaks for metrics at indexes: 0, 3, 7; initialize stage 1 peaks
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L))),
-      // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 2, 3, 6, 7, 9;
+      createExecutorMetricsUpdateEvent(List(0, 1), "1", new ExecutorMetrics(m1_4)),
+      // exec 2: new stage 0 peaks for metrics at indexes: 0, 1, 3, 6, 7, 9;
       // initialize stage 1 peaks
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L))),
+      createExecutorMetricsUpdateEvent(List(0, 1), "2", new ExecutorMetrics(m2_4)),
+      // driver
+      createExecutorMetricsUpdateEvent(List(-1), "driver", new ExecutorMetrics(md_2)),
+      // stage 0: task 3 (on exec 1) and task 4 (on exec 2) end
+      createTaskEndEvent(3L, 1, "1", 0, "ShuffleMapTask", new ExecutorMetrics(t3)),
+      createTaskEndEvent(4L, 1, "2", 0, "ShuffleMapTask", new ExecutorMetrics(t4)),
       // complete stage 0, and 3 more updates for each executor with just
       // stage 1 running
       createStageCompletedEvent(0),
       // exec 1: new stage 1 peaks for metrics at indexes: 0, 1, 3
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L))),
-      // enew ExecutorMetrics(xec 2: new stage 1 peaks for metrics at indexes: 3, 4, 7, 8
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L))),
+      createExecutorMetricsUpdateEvent(List(1), "1", new ExecutorMetrics(m1_5)),
+      // exec 2: new stage 1 peaks for metrics at indexes: 3, 4, 7, 8
+      createExecutorMetricsUpdateEvent(List(1), "2", new ExecutorMetrics(m2_5)),
       // exec 1: new stage 1 peaks for metrics at indexes: 0, 4, 5, 7
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L))),
+      createExecutorMetricsUpdateEvent(List(1), "1", new ExecutorMetrics(m1_6)),
       // exec 2: new stage 1 peak for metrics at index: 7
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L))),
+      createExecutorMetricsUpdateEvent(List(1), "2", new ExecutorMetrics(m2_6)),
+      // driver
+      createExecutorMetricsUpdateEvent(List(-1), "driver", new ExecutorMetrics(md_3)),
       // exec 1: no new stage 1 peaks
-      createExecutorMetricsUpdateEvent(1,
-        new ExecutorMetrics(Array(5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L))),
+      createExecutorMetricsUpdateEvent(List(1), "1", new ExecutorMetrics(m1_7)),
+      // stage 1: task 5 (on exec 1) end; new stage 1 peaks at index: 1
+      createTaskEndEvent(5L, 2, "1", 1, "ResultTask", new ExecutorMetrics(t5)),
       createExecutorRemovedEvent(1),
       // exec 2: new stage 1 peak for metrics at index: 6
-      createExecutorMetricsUpdateEvent(2,
-        new ExecutorMetrics(Array(4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L))),
+      createExecutorMetricsUpdateEvent(List(1), "2", new ExecutorMetrics(m2_7)),
+      // stage 1: task 6 (on exec 2) end; new stage 2 peaks at index: 0
+      createTaskEndEvent(6L, 2, "2", 1, "ResultTask", new ExecutorMetrics(t6)),
       createStageCompletedEvent(1),
       SparkListenerApplicationEnd(1000L))
 
@@ -342,20 +450,19 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
 
     // expected StageExecutorMetrics, for the given stage id and executor id
     val expectedMetricsEvents: Map[(Int, String), SparkListenerStageExecutorMetrics] =
-      Map(
-        ((0, "1"),
-          new SparkListenerStageExecutorMetrics("1", 0, 0,
-            new ExecutorMetrics(Array(5000L, 50L, 50L, 20L, 50L, 10L, 100L, 30L, 70L, 20L)))),
-        ((0, "2"),
-          new SparkListenerStageExecutorMetrics("2", 0, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 50L, 20L, 10L, 10L, 50L, 30L, 80L, 40L)))),
-        ((1, "1"),
-          new SparkListenerStageExecutorMetrics("1", 1, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 50L, 30L, 60L, 30L, 80L, 55L, 50L, 0L)))),
-        ((1, "2"),
-          new SparkListenerStageExecutorMetrics("2", 1, 0,
-            new ExecutorMetrics(Array(7000L, 70L, 50L, 40L, 10L, 30L, 50L, 60L, 40L, 40L)))))
-
+    Map(
+      ((0, "1"),
+        new SparkListenerStageExecutorMetrics("1", 0, 0, new ExecutorMetrics(p0_1))),
+      ((0, "2"),
+        new SparkListenerStageExecutorMetrics("2", 0, 0, new ExecutorMetrics(p0_2))),
+      ((0, "driver"),
+        new SparkListenerStageExecutorMetrics("driver", 0, 0, new ExecutorMetrics(p0_d))),
+      ((1, "1"),
+        new SparkListenerStageExecutorMetrics("1", 1, 0, new ExecutorMetrics(p1_1))),
+      ((1, "2"),
+        new SparkListenerStageExecutorMetrics("2", 1, 0, new ExecutorMetrics(p1_2))),
+      ((1, "driver"),
+        new SparkListenerStageExecutorMetrics("driver", 1, 0, new ExecutorMetrics(p1_d))))
     // Verify the log file contains the expected events.
     // Posted events should be logged, except for ExecutorMetricsUpdate events -- these
     // are consolidated, and the peak values for each stage are logged at stage end.
@@ -363,28 +470,28 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     try {
       val lines = readLines(logData)
       val logStart = SparkListenerLogStart(SPARK_VERSION)
-      assert(lines.size === 14)
+      assert(lines.size === 22)
       assert(lines(0).contains("SparkListenerLogStart"))
       assert(lines(1).contains("SparkListenerApplicationStart"))
       assert(JsonProtocol.sparkEventFromJson(parse(lines(0))) === logStart)
       var logIdx = 1
-      events.foreach {event =>
+      events.foreach { event =>
         event match {
           case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
           case stageCompleted: SparkListenerStageCompleted =>
             val execIds = Set[String]()
-            (1 to 2).foreach { _ =>
+            (1 to 3).foreach { _ =>
               val execId = checkStageExecutorMetrics(lines(logIdx),
                 stageCompleted.stageInfo.stageId, expectedMetricsEvents)
               execIds += execId
               logIdx += 1
             }
-            assert(execIds.size == 2) // check that each executor was logged
+            assert(execIds.size == 3) // check that each executor/driver was logged
             checkEvent(lines(logIdx), event)
             logIdx += 1
-        case _ =>
-          checkEvent(lines(logIdx), event)
-          logIdx += 1
+          case _ =>
+            checkEvent(lines(logIdx), event)
+            logIdx += 1
         }
       }
     } finally {
@@ -403,21 +510,51 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   private def createExecutorAddedEvent(executorId: Int) = {
-    SparkListenerExecutorAdded(0L, executorId.toString, new ExecutorInfo("host1", 1, Map.empty))
+    SparkListenerExecutorAdded(0L, executorId.toString,
+      new ExecutorInfo("host1", 1, Map.empty, Map.empty))
   }
 
   private def createExecutorRemovedEvent(executorId: Int) = {
     SparkListenerExecutorRemoved(0L, executorId.toString, "test")
   }
 
+  /**
+   * Helper to create a SparkListenerExecutorMetricsUpdate event.
+   * For the driver (executorId == "driver"), the executorUpdates contain a single entry with
+   * the key (-1, -1). There should be a single stageId passed in stageIds, namely -1.
+   * For the executors, for each stage, we assume there is a single stage attempt (attempt 0);
+   * the executorUpdates contain an entry for each stageId passed in stageIds, with the key
+   * (stageId, 0).
+   * The same executorMetrics are associated to each key in the executorUpdates.
+   */
   private def createExecutorMetricsUpdateEvent(
-      executorId: Int,
+      stageIds: Seq[Int],
+      executorId: String,
       executorMetrics: ExecutorMetrics): SparkListenerExecutorMetricsUpdate = {
     val taskMetrics = TaskMetrics.empty
     taskMetrics.incDiskBytesSpilled(111)
     taskMetrics.incMemoryBytesSpilled(222)
     val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
-    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+    val executorUpdates =
+      if (executorId == "driver") {
+        stageIds.map(id => (id, -1) -> executorMetrics).toMap
+      } else {
+        stageIds.map(id => (id, 0) -> executorMetrics).toMap
+      }
+    SparkListenerExecutorMetricsUpdate(executorId, accum, executorUpdates)
+  }
+
+  private def createTaskEndEvent(
+      taskId: Long,
+      taskIndex: Int,
+      executorId: String,
+      stageId: Int,
+      taskType: String,
+      executorMetrics: ExecutorMetrics): SparkListenerTaskEnd = {
+    val taskInfo = new TaskInfo(taskId, taskIndex, 0, 1553291556000L, executorId, "executor",
+      TaskLocality.NODE_LOCAL, false)
+    val taskMetrics = TaskMetrics.empty
+    SparkListenerTaskEnd(stageId, 0, taskType, Success, taskInfo, executorMetrics, taskMetrics)
   }
 
   /** Check that the Spark history log line matches the expected event. */
@@ -428,10 +565,12 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     (event, parsed) match {
       case (expected: SparkListenerStageSubmitted, actual: SparkListenerStageSubmitted) =>
         // accumulables can be different, so only check the stage Id
-        assert(expected.stageInfo.stageId == actual.stageInfo.stageId)
+        assert(expected.stageInfo.stageId === actual.stageInfo.stageId)
       case (expected: SparkListenerStageCompleted, actual: SparkListenerStageCompleted) =>
         // accumulables can be different, so only check the stage Id
-        assert(expected.stageInfo.stageId == actual.stageInfo.stageId)
+        assert(expected.stageInfo.stageId === actual.stageInfo.stageId)
+      case (expected: SparkListenerTaskEnd, actual: SparkListenerTaskEnd) =>
+        assert(expected.stageId === actual.stageId)
       case (expected: SparkListenerEvent, actual: SparkListenerEvent) =>
         assert(expected === actual)
     }
@@ -456,9 +595,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
               assert(executorMetrics.execId === expectedMetrics.execId)
               assert(executorMetrics.stageId === expectedMetrics.stageId)
               assert(executorMetrics.stageAttemptId === expectedMetrics.stageAttemptId)
-              ExecutorMetricType.values.foreach { metricType =>
-                assert(executorMetrics.executorMetrics.getMetricValue(metricType) ===
-                  expectedMetrics.executorMetrics.getMetricValue(metricType))
+              ExecutorMetricType.metricToOffset.foreach { metric =>
+                assert(executorMetrics.executorMetrics.getMetricValue(metric._1) ===
+                  expectedMetrics.executorMetrics.getMetricValue(metric._1))
               }
             case None =>
               assert(false)
@@ -509,15 +648,15 @@ object EventLoggingListenerSuite {
   /** Get a SparkConf with event logging enabled. */
   def getLoggingConf(logDir: Path, compressionCodec: Option[String] = None): SparkConf = {
     val conf = new SparkConf
-    conf.set("spark.eventLog.enabled", "true")
-    conf.set("spark.eventLog.logBlockUpdates.enabled", "true")
-    conf.set("spark.eventLog.testing", "true")
-    conf.set("spark.eventLog.dir", logDir.toString)
+    conf.set(EVENT_LOG_ENABLED, true)
+    conf.set(EVENT_LOG_BLOCK_UPDATES, true)
+    conf.set(EVENT_LOG_TESTING, true)
+    conf.set(EVENT_LOG_DIR, logDir.toString)
     compressionCodec.foreach { codec =>
-      conf.set("spark.eventLog.compress", "true")
-      conf.set("spark.io.compression.codec", codec)
+      conf.set(EVENT_LOG_COMPRESS, true)
+      conf.set(EVENT_LOG_COMPRESSION_CODEC, codec)
     }
-    conf.set("spark.eventLog.logStageExecutorMetrics.enabled", "true")
+    conf.set(EVENT_LOG_STAGE_EXECUTOR_METRICS, true)
     conf
   }
 

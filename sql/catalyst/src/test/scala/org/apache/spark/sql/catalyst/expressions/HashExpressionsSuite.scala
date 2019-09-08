@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.util.TimeZone
+import java.time.{ZoneId, ZoneOffset}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -183,7 +183,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkHiveHashForDateType("2017-01-01", 17167)
 
     // boundary cases
-    checkHiveHashForDateType("0000-01-01", -719530)
+    checkHiveHashForDateType("0000-01-01", -719528)
     checkHiveHashForDateType("9999-12-31", 2932896)
 
     // epoch
@@ -208,9 +208,9 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     def checkHiveHashForTimestampType(
         timestamp: String,
         expected: Long,
-        timeZone: TimeZone = TimeZone.getTimeZone("UTC")): Unit = {
+        zoneId: ZoneId = ZoneOffset.UTC): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), timeZone).get,
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), zoneId).get,
         TimestampType,
         expected)
     }
@@ -223,10 +223,10 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // with different timezone
     checkHiveHashForTimestampType("2017-02-24 10:56:29", 1445732471,
-      TimeZone.getTimeZone("US/Pacific"))
+      DateTimeUtils.getZoneId("US/Pacific"))
 
     // boundary cases
-    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645926784)
+    checkHiveHashForTimestampType("0001-01-01 00:00:00", 1645969984)
     checkHiveHashForTimestampType("9999-01-01 00:00:00", -1081818240)
 
     // epoch
@@ -629,6 +629,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val murmur3HashPlan = GenerateMutableProjection.generate(Seq(murmur3HashExpr))
       val murmursHashEval = Murmur3Hash(exprs, 42).eval(input)
       assert(murmur3HashPlan(input).getInt(0) == murmursHashEval)
+
+      val xxHash64Expr = XxHash64(exprs, 42)
+      val xxHash64Plan = GenerateMutableProjection.generate(Seq(xxHash64Expr))
+      val xxHash64Eval = XxHash64(exprs, 42).eval(input)
+      assert(xxHash64Plan(input).getLong(0) == xxHash64Eval)
 
       val hiveHashExpr = HiveHash(exprs)
       val hiveHashPlan = GenerateMutableProjection.generate(Seq(hiveHashExpr))

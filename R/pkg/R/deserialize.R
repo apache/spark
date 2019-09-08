@@ -231,6 +231,44 @@ readMultipleObjectsWithKeys <- function(inputCon) {
   list(keys = keys, data = data) # this is a list of keys and corresponding data
 }
 
+readDeserializeInArrow <- function(inputCon) {
+  # This is a hack to avoid CRAN check. Arrow is not uploaded into CRAN now. See ARROW-3204.
+  requireNamespace1 <- requireNamespace
+  if (requireNamespace1("arrow", quietly = TRUE)) {
+    RecordBatchStreamReader <- get(
+      "RecordBatchStreamReader", envir = asNamespace("arrow"), inherits = FALSE)
+    # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
+    useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
+
+
+    # Currently, there looks no way to read batch by batch by socket connection in R side,
+    # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
+    # for now.
+    dataLen <- readInt(inputCon)
+    arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
+    batches <- RecordBatchStreamReader(arrowData)$batches()
+
+    if (useAsTibble) {
+      as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
+      # Read all groupped batches. Tibble -> data.frame is cheap.
+      lapply(batches, function(batch) as.data.frame(as_tibble(batch)))
+    } else {
+      lapply(batches, function(batch) as.data.frame(batch))
+    }
+  } else {
+    stop("'arrow' package should be installed.")
+  }
+}
+
+readDeserializeWithKeysInArrow <- function(inputCon) {
+  data <- readDeserializeInArrow(inputCon)
+
+  keys <- readMultipleObjects(inputCon)
+
+  # Read keys to map with each groupped batch later.
+  list(keys = keys, data = data)
+}
+
 readRowList <- function(obj) {
   # readRowList is meant for use inside an lapply. As a result, it is
   # necessary to open a standalone connection for the row and consume

@@ -322,7 +322,7 @@ class BlockMatrix @Since("1.3.0") (
     val m = numRows().toInt
     val n = numCols().toInt
     val mem = m * n / 125000
-    if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
+    if (mem > 500) logWarning(s"Storing this matrix will require $mem MiB of memory!")
     val localBlocks = blocks.collect()
     val values = new Array[Double](m * n)
     localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>

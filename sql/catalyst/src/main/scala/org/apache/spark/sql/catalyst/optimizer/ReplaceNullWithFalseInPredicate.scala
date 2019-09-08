@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{LambdaFunction, Literal, MapFi
 import org.apache.spark.sql.catalyst.expressions.Literal.FalseLiteral
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.Utils
 
@@ -52,7 +53,7 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(cond, _) => f.copy(condition = replaceNullWithFalse(cond))
-    case j @ Join(_, _, _, Some(cond)) => j.copy(condition = Some(replaceNullWithFalse(cond)))
+    case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(replaceNullWithFalse(cond)))
     case p: LogicalPlan => p transformExpressions {
       case i @ If(pred, _, _) => i.copy(predicate = replaceNullWithFalse(pred))
       case cw @ CaseWhen(branches, _) =>
@@ -63,7 +64,8 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       case af @ ArrayFilter(_, lf @ LambdaFunction(func, _, _)) =>
         val newLambda = lf.copy(function = replaceNullWithFalse(func))
         af.copy(function = newLambda)
-      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _)) =>
+      case ae @ ArrayExists(_, lf @ LambdaFunction(func, _, _))
+          if !SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC) =>
         val newLambda = lf.copy(function = replaceNullWithFalse(func))
         ae.copy(function = newLambda)
       case mf @ MapFilter(_, lf @ LambdaFunction(func, _, _)) =>

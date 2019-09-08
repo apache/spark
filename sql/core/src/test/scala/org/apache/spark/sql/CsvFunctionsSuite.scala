@@ -25,10 +25,10 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
+class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("from_csv with empty options") {
@@ -53,7 +53,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSQLContext {
   test("checking the columnNameOfCorruptRecord option") {
     val columnNameOfCorruptRecord = "_unparsed"
     val df = Seq("0,2013-111-11 12:13:14", "1,1983-08-04").toDS()
-    val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
+    val schema = new StructType().add("a", IntegerType).add("b", DateType)
     val schemaWithCorrField1 = schema.add(columnNameOfCorruptRecord, StringType)
     val df2 = df
       .select(from_csv($"value", schemaWithCorrField1, Map(

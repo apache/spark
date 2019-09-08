@@ -129,7 +129,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
         (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
     this.writeMetrics = writeMetrics;
     this.inMemSorter = new ShuffleInMemorySorter(
-      this, initialSize, conf.getBoolean("spark.shuffle.sort.useRadixSort", true));
+      this, initialSize, (boolean) conf.get(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT()));
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
@@ -145,6 +145,15 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    */
   private void writeSortedFile(boolean isLastFile) {
 
+    // This call performs the actual sort.
+    final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
+      inMemSorter.getSortedIterator();
+
+    // If there are no sorted records, so we don't need to create an empty spill file.
+    if (!sortedRecords.hasNext()) {
+      return;
+    }
+
     final ShuffleWriteMetricsReporter writeMetricsToUse;
 
     if (isLastFile) {
@@ -156,10 +165,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       // them towards shuffle bytes written.
       writeMetricsToUse = new ShuffleWriteMetrics();
     }
-
-    // This call performs the actual sort.
-    final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
-      inMemSorter.getSortedIterator();
 
     // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer

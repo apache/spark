@@ -23,7 +23,6 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -32,7 +31,7 @@ import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
 import org.codehaus.janino.util.ClassFile
 
-import org.apache.spark.{SparkEnv, TaskContext, TaskKilledException}
+import org.apache.spark.{TaskContext, TaskKilledException}
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -40,10 +39,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
@@ -1352,7 +1351,11 @@ object CodeGenerator extends Logging {
       }
     }.flatten
 
-    codeSizes.max
+    if (codeSizes.nonEmpty) {
+      codeSizes.max
+    } else {
+      0
+    }
   }
 
   /**
@@ -1372,7 +1375,7 @@ object CodeGenerator extends Logging {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()
-          def timeMs: Double = (endTime - startTime).toDouble / 1000000
+          def timeMs: Double = (endTime - startTime).toDouble / NANOS_PER_MILLIS
           CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
           CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
           logInfo(s"Code generated in $timeMs ms")
@@ -1610,6 +1613,48 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Extracts all the input variables from references and subexpression elimination states
+   * for a given `expr`. This result will be used to split the generated code of
+   * expressions into multiple functions.
+   */
+  def getLocalInputVariableValues(
+      ctx: CodegenContext,
+      expr: Expression,
+      subExprs: Map[Expression, SubExprEliminationState]): Set[VariableValue] = {
+    val argSet = mutable.Set[VariableValue]()
+    if (ctx.INPUT_ROW != null) {
+      argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
+    }
+
+    // Collects local variables from a given `expr` tree
+    val collectLocalVariable = (ev: ExprValue) => ev match {
+      case vv: VariableValue => argSet += vv
+      case _ =>
+    }
+
+    val stack = mutable.Stack[Expression](expr)
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case e if subExprs.contains(e) =>
+          val SubExprEliminationState(isNull, value) = subExprs(e)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
+
+        case ref: BoundReference if ctx.currentVars != null &&
+            ctx.currentVars(ref.ordinal) != null =>
+          val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
+
+        case e =>
+          stack.pushAll(e.children)
+      }
+    }
+
+    argSet.toSet
+  }
+
+  /**
    * Returns the name used in accessor and setter for a Java primitive type.
    */
   def primitiveTypeName(jt: String): String = jt match {
@@ -1711,6 +1756,15 @@ object CodeGenerator extends Logging {
       }
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaParamLength
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr).sum
+  }
+
+  def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int = {
+    def paramLengthForExpr(input: ExprValue): Int = input.javaType match {
+      case java.lang.Long.TYPE | java.lang.Double.TYPE => 2
+      case _ => 1
     }
     // Initial value is 1 for `this`.
     1 + params.map(paramLengthForExpr).sum
