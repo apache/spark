@@ -855,8 +855,7 @@ object DateTimeUtils {
 
   def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
 
-  private val specialValue =
-    """(EPOCH|NOW|TODAY|TOMORROW|YESTERDAY)\p{Blank}*(\p{Graph}*)\p{Blank}*""".r
+  private val specialValue = """(EPOCH|NOW|TODAY|TOMORROW|YESTERDAY)\p{Blank}*(.*)""".r
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.

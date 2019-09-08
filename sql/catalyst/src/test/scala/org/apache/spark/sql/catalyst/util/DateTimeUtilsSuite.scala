@@ -574,7 +574,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       assert(toDate("YESTERDAY", zoneId).get === today - 1)
       assert(toDate(" Now ", zoneId).get === today)
       assert(toDate("today", zoneId).get === today)
-      assert(toDate("tomorrow cet ", zoneId).get === today + 1)
+      assert(toDate("tomorrow cet", zoneId).get === today + 1)
     }
   }
 }
