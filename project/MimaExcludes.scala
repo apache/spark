@@ -436,7 +436,13 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleIndexBlockId.mapId"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleDataBlockId.mapId"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.storage.ShuffleBlockId.mapId"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.mapId")
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.mapId"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.FetchFailed$"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.apply"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.FetchFailed.copy$default$5"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.copy"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.FetchFailed.copy$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.this"),
   )
 
   // Exclude rules for 2.4.x
