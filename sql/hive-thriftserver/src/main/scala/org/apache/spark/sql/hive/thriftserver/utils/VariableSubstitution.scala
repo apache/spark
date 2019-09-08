@@ -37,7 +37,7 @@ class VariableSubstitution(hiveVariableSource: util.Map[String, String])
       if (variable.startsWith(HIVEVAR_PREFIX)) {
         value = hiveVariableSource.get(variable.substring(HIVEVAR_PREFIX.length))
       } else {
-        value = hiveVariableSource.get(variable, null)
+        value = hiveVariableSource.get(variable)
       }
     }
     value
