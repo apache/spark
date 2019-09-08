@@ -31,8 +31,10 @@ import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 /**
  * Base functionality for plans which execute grouped python udfs.
  */
-abstract class BasePandasGroupExec(func: Expression,
-                                   output: Seq[Attribute]) extends SparkPlan {
+abstract class BasePandasGroupExec(
+    func: Expression,
+    output: Seq[Attribute])
+  extends SparkPlan {
 
   protected val sessionLocalTimeZone = conf.sessionLocalTimeZone
 

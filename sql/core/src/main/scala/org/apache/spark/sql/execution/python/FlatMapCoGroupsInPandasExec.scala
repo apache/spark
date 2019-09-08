@@ -52,7 +52,7 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends BasePandasGroupExec(func, output) with BinaryExecNode{
+  extends BasePandasGroupExec(func, output) with BinaryExecNode {
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
@@ -72,23 +72,26 @@ case class FlatMapCoGroupsInPandasExec(
     val (leftDedup, leftArgOffsets) = resolveArgOffsets(left, leftGroup)
     val (rightDedup, rightArgOffsets) = resolveArgOffsets(right, rightGroup)
 
+    // Map cogrouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     left.execute().zipPartitions(right.execute())  { (leftData, rightData) =>
+      if (leftData.isEmpty && rightData.isEmpty) Iterator.empty else {
 
-      val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
-      val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)
-      val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
-        .map{case (_, l, r) => (l, r)}
+        val leftGrouped = groupAndProject(leftData, leftGroup, left.output, leftDedup)
+        val rightGrouped = groupAndProject(rightData, rightGroup, right.output, rightDedup)
+        val data = new CoGroupedIterator(leftGrouped, rightGrouped, leftGroup)
+          .map { case (_, l, r) => (l, r) }
 
-      val runner = new CogroupedArrowPythonRunner(
-        chainedFunc,
-        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        Array(leftArgOffsets ++ rightArgOffsets),
-        StructType.fromAttributes(leftDedup),
-        StructType.fromAttributes(rightDedup),
-        sessionLocalTimeZone,
-        pythonRunnerConf)
+        val runner = new CogroupedArrowPythonRunner(
+          chainedFunc,
+          PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+          Array(leftArgOffsets ++ rightArgOffsets),
+          StructType.fromAttributes(leftDedup),
+          StructType.fromAttributes(rightDedup),
+          sessionLocalTimeZone,
+          pythonRunnerConf)
 
-      executePython(data, runner)
+        executePython(data, runner)
+      }
     }
   }
 }

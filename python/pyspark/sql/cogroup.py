@@ -23,14 +23,13 @@ from pyspark.sql.dataframe import DataFrame
 
 class CoGroupedData(object):
     """
-       A logical grouping of two :class:`GroupedData`,
-       created by :func:`GroupedData.cogroup`.
+    A logical grouping of two :class:`GroupedData`,
+    created by :func:`GroupedData.cogroup`.
 
-       .. note:: Experimental
+    .. note:: Experimental
 
-       .. versionadded:: 3.0
-
-       """
+    .. versionadded:: 3.0
+    """
 
     def __init__(self, gd1, gd2):
         self._gd1 = gd1
@@ -53,7 +52,7 @@ class CoGroupedData(object):
 
         .. note:: This function requires a full shuffle. All the data of a cogroup will be loaded
             into memory, so the user should be aware of the potential OOM risk if data is skewed
-            and certain goroups are too large to fit in memory.
+            and certain groups are too large to fit in memory.
 
         .. note:: Experimental
 

@@ -15,16 +15,11 @@
 # limitations under the License.
 #
 
-import datetime
 import unittest
 import sys
 
-from collections import OrderedDict
-from decimal import Decimal
-
-from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
-from pyspark.sql.types import *
+from pyspark.sql.types import DoubleType, StructType, StructField
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest

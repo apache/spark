@@ -40,7 +40,6 @@ abstract class BaseArrowPythonRunner[T](
     argOffsets: Array[Array[Int]])
   extends BasePythonRunner[T, ColumnarBatch](funcs, evalType, argOffsets) {
 
-
   protected override def newReaderIterator(
       stream: DataInputStream,
       writerThread: WriterThread,
@@ -111,5 +110,3 @@ abstract class BaseArrowPythonRunner[T](
     }
   }
 }
-
-

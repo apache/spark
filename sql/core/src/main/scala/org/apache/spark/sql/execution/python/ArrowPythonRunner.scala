@@ -19,12 +19,9 @@ package org.apache.spark.sql.execution.python
 
 import java.io._
 import java.net._
-import java.util.concurrent.atomic.AtomicBoolean
-
-import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector.VectorSchemaRoot
-import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
+import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark._
 import org.apache.spark.api.python._
@@ -33,7 +30,6 @@ import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
 /**

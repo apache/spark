@@ -52,7 +52,7 @@ case class MapInPandas(
 }
 
 /**
- * Flatmap cogroups  using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
+ * Flatmap cogroups using a udf: pandas.Dataframe, pandas.Dataframe -> pandas.Dataframe
  * This is used by DataFrame.groupby().cogroup().apply().
  */
 case class FlatMapCoGroupsInPandas(
@@ -65,7 +65,6 @@ case class FlatMapCoGroupsInPandas(
 
   override val producedAttributes = AttributeSet(output)
 }
-
 
 trait BaseEvalPython extends UnaryNode {
 

@@ -311,11 +311,11 @@ def read_udfs(pickleSer, infile, eval_type):
             "spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName", "true")\
             .lower() == "true"
 
-        # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
-        # pandas Series. See SPARK-27240.
         if eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
             ser = CogroupUDFSerializer(timezone, safecheck, assign_cols_by_name)
         else:
+            # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
+            # pandas Series. See SPARK-27240.
             df_for_struct = (eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF or
                              eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF or
                              eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF)
@@ -377,28 +377,30 @@ def read_udfs(pickleSer, infile, eval_type):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
-    # Helper function to extract the key and value indexs from arg_offsets
-    # arg_offsets is a List containing the key and value
-    # indexes of columns of the DataFrames to be passed to the udf.
-    # It consists of n repeating groups where n is the number of
-    # DataFrames.  Each group has the following format.
-    # group[0]: length of group
-    # group[1]: length of key indexes
-    # group[2.. group[1] +2]: key attributes
-    # group[group[1] +3 group[0]]: value attributes
-    # See BasePandasGroupExec.resolveArgOffsets for equivalent scala code
-    def extract_key_value_indexes():
+    def extract_key_value_indexes(grouped_arg_offsets):
+        """
+        Helper function to extract the key and value indexes from arg_offsets for the grouped and
+        cogrouped pandas udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
+
+        :param grouped_arg_offsets:  List containing the key and value indexes of columns of the
+            DataFrames to be passed to the udf. It consists of n repeating groups where n is the
+            number of DataFrames.  Each group has the following format:
+                group[0]: length of group
+                group[1]: length of key indexes
+                group[2.. group[1] +2]: key attributes
+                group[group[1] +3 group[0]]: value attributes
+        """
         parsed = []
-        i = 0
-        while i < len(arg_offsets):
-            offsets_len = arg_offsets[i]
-            i += 1
-            offsets = arg_offsets[i: i + offsets_len]
+        idx = 0
+        while idx < len(grouped_arg_offsets):
+            offsets_len = grouped_arg_offsets[idx]
+            idx += 1
+            offsets = grouped_arg_offsets[idx: idx + offsets_len]
             split_index = offsets[0] + 1
-            keys = offsets[1: split_index]
-            values = offsets[split_index:]
-            parsed.append([keys, values])
-            i += offsets_len
+            offset_keys = offsets[1: split_index]
+            offset_values = offsets[split_index:]
+            parsed.append([offset_keys, offset_values])
+            idx += offsets_len
         return parsed
 
     udfs = {}
@@ -417,7 +419,7 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
-        parsed_offsets = extract_key_value_indexes()
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
         keys = ["a[%d]" % (o,) for o in parsed_offsets[0][0]]
         vals = ["a[%d]" % (o, ) for o in parsed_offsets[0][1]]
         mapper_str = "lambda a: f([%s], [%s])" % (", ".join(keys), ", ".join(vals))
@@ -428,9 +430,9 @@ def read_udfs(pickleSer, infile, eval_type):
         arg_offsets, udf = read_single_udf(
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
         udfs['f'] = udf
-        parsed_offsets = extract_key_value_indexes()
+        parsed_offsets = extract_key_value_indexes(arg_offsets)
         df1_keys = ["a[0][%d]" % (o, ) for o in parsed_offsets[0][0]]
-        df1_vals = ["a[0][%d]" % (o, )for o in parsed_offsets[0][1]]
+        df1_vals = ["a[0][%d]" % (o, ) for o in parsed_offsets[0][1]]
         df2_keys = ["a[1][%d]" % (o, ) for o in parsed_offsets[1][0]]
         df2_vals = ["a[1][%d]" % (o, ) for o in parsed_offsets[1][1]]
         mapper_str = "lambda a: f([%s], [%s], [%s], [%s])" % (

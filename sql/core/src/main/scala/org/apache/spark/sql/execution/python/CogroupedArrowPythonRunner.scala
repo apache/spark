@@ -81,8 +81,11 @@ class CogroupedArrowPythonRunner(
         dataOut.writeInt(0)
       }
 
-      def writeGroup(group: Iterator[InternalRow], schema: StructType, dataOut: DataOutputStream,
-                    name: String) = {
+      def writeGroup(
+          group: Iterator[InternalRow],
+          schema: StructType,
+          dataOut: DataOutputStream,
+          name: String) = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
