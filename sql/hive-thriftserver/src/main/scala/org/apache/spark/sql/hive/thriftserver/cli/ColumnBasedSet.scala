@@ -20,16 +20,18 @@ package org.apache.spark.sql.hive.thriftserver.cli
 import java.nio.ByteBuffer
 import java.util.BitSet
 
-import org.apache.hive.service.cli.thrift._
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.service.cli.thrift._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.thriftserver.utils.SparkSQLUtils
 import org.apache.spark.sql.types.{BinaryType, _}
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
-
-case class ColumnBasedSet(types: StructType, rows: ArrayBuffer[Row], initStartOffset: Long) extends RowSet {
+case class ColumnBasedSet(types: StructType,
+                          rows: ArrayBuffer[Row],
+                          initStartOffset: Long)
+  extends RowSet {
 
   var startOffset: Long = initStartOffset
 

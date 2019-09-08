@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver.cli
 import java.nio.ByteBuffer
 import java.util.UUID
 
-import org.apache.hive.service.cli.thrift.THandleIdentifier
+import org.apache.spark.service.cli.thrift.THandleIdentifier
 
 class HandleIdentifier(val publicId: UUID, val secretId: UUID) {
 

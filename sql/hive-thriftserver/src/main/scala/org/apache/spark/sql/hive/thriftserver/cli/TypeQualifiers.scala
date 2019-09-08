@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.{TCLIServiceConstants, TTypeQualifierValue, TTypeQualifiers}
-
-import org.apache.spark.sql.types.{DataType, DecimalType}
-
 import scala.collection.JavaConverters._
+
+import org.apache.spark.service.cli.thrift.{TCLIServiceConstants, TTypeQualifiers, TTypeQualifierValue}
+import org.apache.spark.sql.types.{DataType, DecimalType}
 
 class TypeQualifiers private() {
   private[this] var precision: Option[Int] = None

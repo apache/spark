@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
-import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
@@ -35,10 +31,12 @@ import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.sql.hive.thriftserver.server.SparkThriftServer
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
+
+
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -75,13 +73,13 @@ object HiveThriftServer2 extends Logging {
   def main(args: Array[String]) {
     // If the arguments contains "-h" or "--help", print out the usage and exit.
     if (args.contains("-h") || args.contains("--help")) {
-      HiveServer2.main(args)
+      SparkThriftServer.main(args)
       // The following code should not be reachable. It is added to ensure the main function exits.
       return
     }
 
     Utils.initDaemon(log)
-    val optionsProcessor = new HiveServer2.ServerOptionsProcessor("HiveThriftServer2")
+    val optionsProcessor = new  SparkThriftServer.ServerOptionsProcessor("HiveThriftServer2")
     optionsProcessor.parse(args)
 
     logInfo("Starting SparkContext")
@@ -122,12 +120,13 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] class SessionInfo(
-      val sessionId: String,
-      val startTimestamp: Long,
-      val ip: String,
-      val userName: String) {
+                                           val sessionId: String,
+                                           val startTimestamp: Long,
+                                           val ip: String,
+                                           val userName: String) {
     var finishTimestamp: Long = 0L
     var totalExecution: Int = 0
+
     def totalTime: Long = {
       if (finishTimestamp == 0L) {
         System.currentTimeMillis - startTimestamp
@@ -143,10 +142,10 @@ object HiveThriftServer2 extends Logging {
   }
 
   private[thriftserver] class ExecutionInfo(
-      val statement: String,
-      val sessionId: String,
-      val startTimestamp: Long,
-      val userName: String) {
+                                             val statement: String,
+                                             val sessionId: String,
+                                             val startTimestamp: Long,
+                                             val userName: String) {
     var finishTimestamp: Long = 0L
     var closeTimestamp: Long = 0L
     var executePlan: String = ""
@@ -154,6 +153,7 @@ object HiveThriftServer2 extends Logging {
     var state: ExecutionState.Value = ExecutionState.STARTED
     val jobId: ArrayBuffer[String] = ArrayBuffer[String]()
     var groupId: String = ""
+
     def totalTime(endTime: Long): Long = {
       if (endTime == 0L) {
         System.currentTimeMillis - startTimestamp
@@ -167,13 +167,13 @@ object HiveThriftServer2 extends Logging {
   /**
    * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
    */
-  private[thriftserver] class HiveThriftServer2Listener(
-      val server: HiveServer2,
-      val conf: SQLConf) extends SparkListener {
+  private[thriftserver] class HiveThriftServer2Listener(val server: SparkThriftServer,
+                                                        val conf: SQLConf) extends SparkListener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
+
     private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
@@ -181,17 +181,25 @@ object HiveThriftServer2 extends Logging {
     private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
     private var totalRunning = 0
 
-    def getOnlineSessionNum: Int = synchronized { onlineSessionNum }
+    def getOnlineSessionNum: Int = synchronized {
+      onlineSessionNum
+    }
 
-    def getTotalRunning: Int = synchronized { totalRunning }
+    def getTotalRunning: Int = synchronized {
+      totalRunning
+    }
 
-    def getSessionList: Seq[SessionInfo] = synchronized { sessionList.values.toSeq }
+    def getSessionList: Seq[SessionInfo] = synchronized {
+      sessionList.values.toSeq
+    }
 
     def getSession(sessionId: String): Option[SessionInfo] = synchronized {
       sessionList.get(sessionId)
     }
 
-    def getExecutionList: Seq[ExecutionInfo] = synchronized { executionList.values.toSeq }
+    def getExecutionList: Seq[ExecutionInfo] = synchronized {
+      executionList.values.toSeq
+    }
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
       for {
@@ -220,11 +228,11 @@ object HiveThriftServer2 extends Logging {
     }
 
     def onStatementStart(
-        id: String,
-        sessionId: String,
-        statement: String,
-        groupId: String,
-        userName: String = "UNKNOWN"): Unit = synchronized {
+                          id: String,
+                          sessionId: String,
+                          statement: String,
+                          groupId: String,
+                          userName: String = "UNKNOWN"): Unit = synchronized {
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
       info.state = ExecutionState.STARTED
       executionList.put(id, info)
@@ -280,36 +288,18 @@ object HiveThriftServer2 extends Logging {
 
     }
   }
+
 }
 
 private[hive] class HiveThriftServer2(sqlContext: SQLContext)
-  extends HiveServer2
-  with ReflectedCompositeService {
+  extends SparkThriftServer(sqlContext) {
   // state is tracked internally so that the server only attempts to shut down if it successfully
   // started, and then once only.
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(this, sqlContext)
-    setSuperField(this, "cliService", sparkSqlCliService)
-    addService(sparkSqlCliService)
-
-    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
-      new ThriftHttpCLIService(sparkSqlCliService)
-    } else {
-      new ThriftBinaryCLIService(sparkSqlCliService)
-    }
-
-    setSuperField(this, "thriftCLIService", thriftCliService)
-    addService(thriftCliService)
-    initCompositeService(hiveConf)
+    super.init(hiveConf)
   }
-
-  private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
-    val transportMode = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.toLowerCase(Locale.ROOT).equals("http")
-  }
-
 
   override def start(): Unit = {
     super.start()
@@ -318,7 +308,7 @@ private[hive] class HiveThriftServer2(sqlContext: SQLContext)
 
   override def stop(): Unit = {
     if (started.getAndSet(false)) {
-       super.stop()
+      super.stop()
     }
   }
 }

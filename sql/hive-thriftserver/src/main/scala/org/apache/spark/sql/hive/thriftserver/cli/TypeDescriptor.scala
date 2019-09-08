@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.{TPrimitiveTypeEntry, TTypeDesc, TTypeEntry}
-
+import org.apache.spark.service.cli.thrift.{TPrimitiveTypeEntry, TTypeDesc, TTypeEntry}
 import org.apache.spark.sql.types.{DataType, DecimalType}
 
 /**
-  * A wrapper class of Spark's [[DataType]] with [[TypeQualifiers]] for [[DecimalType]]s, and could
-  * be transformed to [[TTypeDesc]].
-  */
+ * A wrapper class of Spark's [[DataType]] with [[TypeQualifiers]] for [[DecimalType]]s, and could
+ * be transformed to [[TTypeDesc]].
+ */
 case class TypeDescriptor(typ: DataType) {
   private[this] val typeQualifiers: Option[TypeQualifiers] = typ match {
     case d: DecimalType => Some(TypeQualifiers.fromTypeInfo(d))

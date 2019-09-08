@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift._
-
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.thriftserver.utils.SparkSQLUtils
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.service.cli.thrift._
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.hive.thriftserver.utils.SparkSQLUtils
+import org.apache.spark.sql.types._
+
 /**
- * A result set of Spark's [[Row]]s with its [[StructType]] as its schema, with the ability of
+ * A result set of Spark's [[Row]]s with its [[StructType]] as its schema,
+ * with the ability of
  * transform to [[TRowSet]].
  */
-case class RowBasedSet(types: StructType, rows: ArrayBuffer[Row], initStartOffset: Long) extends RowSet {
+case class RowBasedSet(types: StructType,
+                       rows: ArrayBuffer[Row], initStartOffset: Long)
+  extends RowSet {
 
   var startOffset: Long = initStartOffset
 

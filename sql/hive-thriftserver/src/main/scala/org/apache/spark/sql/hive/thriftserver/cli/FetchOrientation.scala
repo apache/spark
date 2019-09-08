@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.TFetchOrientation
+import org.apache.spark.service.cli.thrift.TFetchOrientation
 
 trait FetchOrientation {
   def toTFetchOrientation: TFetchOrientation
@@ -29,8 +29,24 @@ object FetchOrientation {
     override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_NEXT
   }
 
+  case object FETCH_PRIOR extends FetchOrientation {
+    override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_PRIOR
+  }
+
+  case object FETCH_RELATIVE extends FetchOrientation {
+    override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_RELATIVE
+  }
+
+  case object FETCH_ABSOLUTE extends FetchOrientation {
+    override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_ABSOLUTE
+  }
+
   case object FETCH_FIRST extends FetchOrientation {
     override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_FIRST
+  }
+
+  case object FETCH_LAST extends FetchOrientation {
+    override val toTFetchOrientation: TFetchOrientation = TFetchOrientation.FETCH_LAST
   }
 
   def getFetchOrientation(tFetchOrientation: TFetchOrientation): FetchOrientation =

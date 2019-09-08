@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.{TTableSchema, TTypeId}
-
+import org.apache.spark.service.cli.thrift.{TTableSchema, TTypeId}
 import org.apache.spark.sql.types._
 
 object SchemaMapper {
@@ -50,8 +49,13 @@ object SchemaMapper {
     case _: ArrayType => TTypeId.ARRAY_TYPE
     case _: MapType => TTypeId.MAP_TYPE
     case _: StructType => TTypeId.STRUCT_TYPE
+    case _: UserDefinedType[_] => TTypeId.USER_DEFINED_TYPE
     case other =>
-      val catalogString = if (other != null) other.catalogString else null
+      val catalogString = if (other != null) {
+        other.catalogString
+      } else {
+        null
+      }
       throw new IllegalArgumentException("Unrecognized type name: " + catalogString)
   }
 }

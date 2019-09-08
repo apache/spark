@@ -23,30 +23,30 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, DriverManager, SQLException, Statement}
 import java.util.{Locale, UUID}
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.concurrent.duration._
-import scala.io.Source
-import scala.util.{Random, Try}
-
 import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
-import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType}
-import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.test.HiveTestUtils
+import org.apache.spark.sql.hive.thriftserver.auth.PlainSaslHelper
+import org.apache.spark.sql.hive.thriftserver.cli.{FetchOrientation, FetchType, GetInfoType}
+import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
+import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
+import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.{SparkException, SparkFunSuite}
+
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.test.HiveTestUtils
-import org.apache.spark.sql.internal.StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION
-import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.{ThreadUtils, Utils}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.io.Source
+import scala.util.{Random, Try}
 
 object TestData {
   def getTestDataFilePath(name: String): URL = {
@@ -60,89 +60,90 @@ object TestData {
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   override def mode: ServerMode.Value = ServerMode.binary
 
-  private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
-    // Transport creation logic below mimics HiveConnection.createBinaryTransport
-    val rawTransport = new TSocket("localhost", serverPort)
-    val user = System.getProperty("user.name")
-    val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
-    val protocol = new TBinaryProtocol(transport)
-    val client = new ThriftCLIServiceClient(new ThriftserverShimUtils.Client(protocol))
-
-    transport.open()
-    try f(client) finally transport.close()
-  }
-
-  test("GetInfo Thrift API") {
-    withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
-      val sessionHandle = client.openSession(user, "")
-
-      assertResult("Spark SQL", "Wrong GetInfo(CLI_DBMS_NAME) result") {
-        client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_NAME).getStringValue
-      }
-
-      assertResult("Spark SQL", "Wrong GetInfo(CLI_SERVER_NAME) result") {
-        client.getInfo(sessionHandle, GetInfoType.CLI_SERVER_NAME).getStringValue
-      }
-
-      assertResult(true, "Spark version shouldn't be \"Unknown\"") {
-        val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
-        logInfo(s"Spark version: $version")
-        version != "Unknown"
-      }
-    }
-  }
-
-  test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
-    withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
-      val sessionHandle = client.openSession(user, "")
-
-      withJdbcStatement("test_16563") { statement =>
-        val queries = Seq(
-          "CREATE TABLE test_16563(key INT, val STRING)",
-          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563")
-
-        queries.foreach(statement.execute)
-        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
-        val operationHandle = client.executeStatement(
-          sessionHandle,
-          "SELECT * FROM test_16563",
-          confOverlay)
-
-        // Fetch result first time
-        assertResult(5, "Fetching result first time from next row") {
-
-          val rows_next = client.fetchResults(
-            operationHandle,
-            FetchOrientation.FETCH_NEXT,
-            1000,
-            FetchType.QUERY_OUTPUT)
-
-          rows_next.numRows()
-        }
-
-        // Fetch result second time from first row
-        assertResult(5, "Repeat fetching result from first row") {
-
-          val rows_first = client.fetchResults(
-            operationHandle,
-            FetchOrientation.FETCH_FIRST,
-            1000,
-            FetchType.QUERY_OUTPUT)
-
-          rows_first.numRows()
-        }
-      }
-    }
-  }
+  //  private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
+  //    // Transport creation logic below mimics HiveConnection.createBinaryTransport
+  //    val rawTransport = new TSocket("localhost", serverPort)
+  //    val user = System.getProperty("user.name")
+  //    val transport = PlainSaslHelper.getPlainTransport(user, "anonymous", rawTransport)
+  //    val protocol = new TBinaryProtocol(transport)
+  //    val client = new ThriftCLIServiceClient(new ThriftserverShimUtils.Client(protocol))
+  //
+  //    transport.open()
+  //    try f(client) finally transport.close()
+  //  }
+  //
+  //  test("GetInfo Thrift API") {
+  //    withCLIServiceClient { client =>
+  //      val user = System.getProperty("user.name")
+  //      val sessionHandle = client.openSession(user, "")
+  //
+  //      assertResult("Spark SQL", "Wrong GetInfo(CLI_DBMS_NAME) result") {
+  //        client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_NAME).getStringValue
+  //      }
+  //
+  //      assertResult("Spark SQL", "Wrong GetInfo(CLI_SERVER_NAME) result") {
+  //        client.getInfo(sessionHandle, GetInfoType.CLI_SERVER_NAME).getStringValue
+  //      }
+  //
+  //      assertResult(true, "Spark version shouldn't be \"Unknown\"") {
+  //        val version = client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
+  //        logInfo(s"Spark version: $version")
+  //        version != "Unknown"
+  //      }
+  //    }
+  //  }
+  //
+  //  test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
+  //    withCLIServiceClient { client =>
+  //      val user = System.getProperty("user.name")
+  //      val sessionHandle = client.openSession(user, "")
+  //
+  //      withJdbcStatement("test_16563") { statement =>
+  //        val queries = Seq(
+  //          "CREATE TABLE test_16563(key INT, val STRING)",
+  //          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_16563")
+  //
+  //        queries.foreach(statement.execute)
+  //        val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+  //        val operationHandle = client.executeStatement(
+  //          sessionHandle,
+  //          "SELECT * FROM test_16563",
+  //          confOverlay)
+  //
+  //        // Fetch result first time
+  //        assertResult(5, "Fetching result first time from next row") {
+  //
+  //          val rows_next = client.fetchResults(
+  //            operationHandle,
+  //            FetchOrientation.FETCH_NEXT,
+  //            1000,
+  //            FetchType.QUERY_OUTPUT)
+  //
+  //          rows_next.numRows()
+  //        }
+  //
+  //        // Fetch result second time from first row
+  //        assertResult(5, "Repeat fetching result from first row") {
+  //
+  //          val rows_first = client.fetchResults(
+  //            operationHandle,
+  //            FetchOrientation.FETCH_FIRST,
+  //            1000,
+  //            FetchType.QUERY_OUTPUT)
+  //
+  //          rows_first.numRows()
+  //        }
+  //      }
+  //    }
+  //  }
 
   test("Support beeline --hiveconf and --hivevar") {
     withJdbcStatement() { statement =>
       executeTest(hiveConfList)
       executeTest(hiveVarList)
+
       def executeTest(hiveList: String): Unit = {
-        hiveList.split(";").foreach{ m =>
+        hiveList.split(";").foreach { m =>
           val kv = m.split("=")
           // select "${a}"; ---> avalue
           val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
@@ -286,10 +287,10 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       { statement =>
 
         val queries = Seq(
-            "CREATE TABLE test_map(key INT, value STRING)",
-            s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map",
-            "CACHE TABLE test_table AS SELECT key FROM test_map ORDER BY key DESC",
-            "CREATE DATABASE db1")
+          "CREATE TABLE test_map(key INT, value STRING)",
+          s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map",
+          "CACHE TABLE test_table AS SELECT key FROM test_map ORDER BY key DESC",
+          "CREATE DATABASE db1")
 
         queries.foreach(statement.execute)
 
@@ -338,9 +339,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       { statement =>
 
         val queries = Seq(
-            s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=291",
-            "SET hive.cli.print.header=true"
-            )
+          s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}=291",
+          "SET hive.cli.print.header=true"
+        )
 
         queries.map(statement.execute)
         val rs1 = statement.executeQuery(s"SET ${SQLConf.SHUFFLE_PARTITIONS.key}")
@@ -437,7 +438,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         val f = Future {
           statement.executeQuery(
             "SELECT COUNT(*) FROM test_map " +
-            List.fill(10)("join test_map").mkString(" "))
+              List.fill(10)("join test_map").mkString(" "))
         }
         // Note that this is slightly race-prone: if the cancel is issued before the statement
         // begins executing then we'll fail with a timeout. As a result, this fixed delay is set
@@ -621,31 +622,31 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
-  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
-    def pipeoutFileList(sessionID: UUID): Array[File] = {
-      lScratchDir.listFiles(new FilenameFilter {
-        override def accept(dir: File, name: String): Boolean = {
-          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
-        }
-      })
-    }
-
-    withCLIServiceClient { client =>
-      val user = System.getProperty("user.name")
-      val sessionHandle = client.openSession(user, "")
-      val sessionID = sessionHandle.getSessionId
-
-      if (HiveUtils.isHive23) {
-        assert(pipeoutFileList(sessionID).length == 2)
-      } else {
-        assert(pipeoutFileList(sessionID).length == 1)
-      }
-
-      client.closeSession(sessionHandle)
-
-      assert(pipeoutFileList(sessionID).length == 0)
-    }
-  }
+  //  test("SPARK-23547 Cleanup the .pipeout file when the Hive Session closed") {
+  //    def pipeoutFileList(sessionID: UUID): Array[File] = {
+  //      lScratchDir.listFiles(new FilenameFilter {
+  //        override def accept(dir: File, name: String): Boolean = {
+  //          name.startsWith(sessionID.toString) && name.endsWith(".pipeout")
+  //        }
+  //      })
+  //    }
+  //
+  //    withCLIServiceClient { client =>
+  //      val user = System.getProperty("user.name")
+  //      val sessionHandle = client.openSession(user, "")
+  //      val sessionID = sessionHandle.getSessionId
+  //
+  //      if (HiveUtils.isHive23) {
+  //        assert(pipeoutFileList(sessionID).length == 2)
+  //      } else {
+  //        assert(pipeoutFileList(sessionID).length == 1)
+  //      }
+  //
+  //      client.closeSession(sessionHandle)
+  //
+  //      assert(pipeoutFileList(sessionID).length == 0)
+  //    }
+  //  }
 
   test("SPARK-24829 Checks cast as float") {
     withJdbcStatement() { statement =>
@@ -682,7 +683,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
           "SET foo=bar",
           s"ADD JAR $jarURL",
           s"""CREATE TEMPORARY FUNCTION udtf_count2
-              |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+             |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
            """.stripMargin
         ).foreach(statement.execute)
       },
@@ -872,14 +873,17 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   protected val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
 
   private var listeningPort: Int = _
+
   protected def serverPort: Int = listeningPort
 
   protected val hiveConfList = "a=avalue;b=bvalue"
   protected val hiveVarList = "c=cvalue;d=dvalue"
+
   protected def user = System.getProperty("user.name")
 
   protected var warehousePath: File = _
   protected var metastorePath: File = _
+
   protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
   private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
@@ -1012,7 +1016,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         }
       }
 
-        val process = builder.start()
+      val process = builder.start()
 
       new ProcessOutputCapturer(process.getInputStream, captureOutput).start()
       new ProcessOutputCapturer(process.getErrorStream, captureOutput).start()

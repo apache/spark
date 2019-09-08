@@ -37,6 +37,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -44,7 +45,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.security.HiveDelegationTokenProvider
+import org.apache.spark.sql.hive.thriftserver.utils.LogHelper
 import org.apache.spark.util.ShutdownHookManager
+
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -111,6 +114,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Set all properties specified via command line.
     val conf: HiveConf = sessionState.getConf
+    // Hive 2.0.0 onwards HiveConf.getClassLoader returns the UDFClassLoader (created by Hive).
+    // Because of this spark cannot find the jars as class loader got changed
+    // Hive changed the class loader because of HIVE-11878, so it is required to use old
+    // classLoader as sparks loaded all the jars in this classLoader
+    conf.setClassLoader(Thread.currentThread().getContextClassLoader)
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
@@ -133,23 +141,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Clean up after we exit
     ShutdownHookManager.addShutdownHook { () => SparkSQLEnv.stop() }
 
-    val remoteMode = isRemoteMode(sessionState)
-    // "-h" option has been passed, so connect to Hive thrift server.
-    if (!remoteMode) {
-      // Hadoop-20 and above - we need to augment classpath using hiveconf
-      // components.
-      // See also: code in ExecDriver.java
-      var loader = conf.getClassLoader
-      val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
-      if (StringUtils.isNotBlank(auxJars)) {
-        loader = ThriftserverShimUtils.addToClassPath(loader, StringUtils.split(auxJars, ","))
-      }
-      conf.setClassLoader(loader)
-      Thread.currentThread().setContextClassLoader(loader)
-    } else {
+    if (isRemoteMode(sessionState)) {
       // Hive 1.2 + not supported in CLI
       throw new RuntimeException("Remote operations not supported")
     }
+
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
     val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
@@ -163,6 +159,15 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
+
+    // In SparkSQL CLI, we may want to use jars augmented by hiveconf
+    // hive.aux.jars.path, here we add jars augmented by hiveconf to
+    // Spark's SessionResourceLoader to obtain these jars.
+    val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
+    if (StringUtils.isNotBlank(auxJars)) {
+      val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
+      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
+    }
 
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
@@ -296,7 +301,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val console = ThriftserverShimUtils.getConsole
+  private val console =
+    new LogHelper(LoggerFactory.getLogger(classOf[SparkSQLCLIDriver]), false)
+
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)

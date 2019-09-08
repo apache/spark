@@ -21,18 +21,17 @@ import java.io.File
 import java.sql.{DriverManager, SQLException, Statement, Timestamp}
 import java.util.Locale
 
-import scala.util.{Random, Try}
-import scala.util.control.NonFatal
-
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.HiveSQLException
-import org.scalatest.Ignore
-
-import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{AnalysisException, SQLQueryTestSuite}
+import org.scalatest.Ignore
+
+import scala.util.control.NonFatal
+import scala.util.{Random, Try}
 
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
@@ -177,7 +176,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite {
                 s"expected: ${expected.output}, but got: ${output.output}")
           // HiveSQLException is usually a feature that our ThriftServer cannot support.
           // Please add SQL to blackList.
-          case _ if output.output.startsWith(classOf[HiveSQLException].getName) =>
+          case _ if output.output.startsWith(classOf[SparkThriftServerSQLException].getName) =>
             assert(false, s"${output.output} for query #$i\n${expected.sql}")
           case _ =>
             assertResult(expected.output, s"Result did not match for query #$i\n${expected.sql}") {

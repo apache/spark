@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.hive.service.cli.thrift.TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6
+import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.service.cli.thrift.TProtocolVersion
+import org.apache.spark.service.cli.thrift.TProtocolVersion._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
-
-import scala.collection.mutable.ArrayBuffer
 
 object RowSetFactory {
   def create(types: StructType, rows: Seq[Row], version: TProtocolVersion): RowSet = {

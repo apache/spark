@@ -21,31 +21,38 @@ import java.util.UUID
 import java.util.regex.Pattern
 
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetSchemasOperation
-import org.apache.hive.service.cli.operation.MetadataOperation.DEFAULT_HIVE_CATALOG
-import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.cli.thrift.CLIServiceUtils
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetSchemasOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. null if not applicable.
- * @param schemaName database name, null or a concrete database name
+ * @param catalogName   catalog name. null if not applicable.
+ * @param schemaName    database name, null or a concrete database name
  */
-private[hive] class SparkGetSchemasOperation(
-    sqlContext: SQLContext,
-    parentSession: HiveSession,
-    catalogName: String,
-    schemaName: String)
-  extends GetSchemasOperation(parentSession, catalogName, schemaName) with Logging {
+private[hive] class SparkGetSchemasOperation(sqlContext: SQLContext,
+                                             parentSession: ThriftSession,
+                                             catalogName: String,
+                                             schemaName: String)
+  extends SparkMetadataOperation(parentSession, GET_SCHEMAS) with Logging {
 
   private var statementId: String = _
+  RESULT_SET_SCHEMA = new StructType()
+    .add(StructField("TABLE_SCHEM", StringType))
+    .add(StructField("TABLE_CATALOG", StringType))
+
+
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
   override def close(): Unit = {
     super.close()
@@ -58,7 +65,7 @@ private[hive] class SparkGetSchemasOperation(
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val logMsg = s"Listing databases '$cmdStr'"
     logInfo(s"$logMsg with $statementId")
-    setState(OperationState.RUNNING)
+    setState(RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -77,22 +84,36 @@ private[hive] class SparkGetSchemasOperation(
     try {
       val schemaPattern = convertSchemaPattern(schemaName)
       sqlContext.sessionState.catalog.listDatabases(schemaPattern).foreach { dbName =>
-        rowSet.addRow(Array[AnyRef](dbName, DEFAULT_HIVE_CATALOG))
+        rowSet.addRow(Row(dbName, DEFAULT_HIVE_CATALOG))
       }
 
       val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
-        rowSet.addRow(Array[AnyRef](globalTempViewDb, DEFAULT_HIVE_CATALOG))
+        rowSet.addRow(Row(globalTempViewDb, DEFAULT_HIVE_CATALOG))
       }
-      setState(OperationState.FINISHED)
+      setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
-        setState(OperationState.ERROR)
+      case e: SparkThriftServerSQLException =>
+        setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
     HiveThriftServer2.listener.onStatementFinish(statementId)
+  }
+
+  override def getResultSetSchema: StructType = {
+    assertState(FINISHED)
+    RESULT_SET_SCHEMA
+  }
+
+  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
+    assertState(FINISHED)
+    validateDefaultFetchOrientation(orientation)
+    if (orientation == FetchOrientation.FETCH_FIRST) {
+      rowSet.setStartOffset(0)
+    }
+    rowSet.extractSubset(maxRows.toInt)
   }
 }

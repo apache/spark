@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli
 
-import org.apache.hive.service.cli.thrift.TOperationState
+import org.apache.spark.service.cli.thrift.TOperationState
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 
 trait OperationState {
   def toTOperationState(): TOperationState
@@ -99,6 +100,21 @@ case object PENDING extends OperationState {
   override def validateTransition(newState: OperationState): Unit = newState match {
     case RUNNING | FINISHED | CANCELED | ERROR | CLOSED =>
     case _ => ex(newState)
+  }
+}
+
+object OperationState {
+  def getOperationState(tOperationState: TOperationState): OperationState = {
+    tOperationState match {
+      case TOperationState.INITIALIZED_STATE => INITIALIZED
+      case TOperationState.PENDING_STATE => PENDING
+      case TOperationState.RUNNING_STATE => RUNNING
+      case TOperationState.CANCELED_STATE => CANCELED
+      case TOperationState.ERROR_STATE => ERROR
+      case TOperationState.CLOSED_STATE => CLOSED
+      case TOperationState.FINISHED_STATE => FINISHED
+      case TOperationState.UKNOWN_STATE => UNKNOWN
+    }
   }
 }
 

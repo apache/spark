@@ -20,45 +20,72 @@ package org.apache.spark.sql.hive.thriftserver.cli.operation
 import java.util.UUID
 import java.util.regex.Pattern
 
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
+import scala.collection.JavaConverters.seqAsJavaListConverter
+
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObject}
-import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.GetColumnsOperation
-import org.apache.hive.service.cli.session.HiveSession
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
-import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.hive.thriftserver.cli._
+import org.apache.spark.sql.hive.thriftserver.cli.session.ThriftSession
+import org.apache.spark.sql.hive.thriftserver.cli.thrift.CLIServiceUtils
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
+import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
 
-import scala.collection.JavaConverters.seqAsJavaListConverter
 
 /**
  * Spark's own SparkGetColumnsOperation
  *
- * @param sqlContext SQLContext to use
+ * @param sqlContext    SQLContext to use
  * @param parentSession a HiveSession from SessionManager
- * @param catalogName catalog name. NULL if not applicable.
- * @param schemaName database name, NULL or a concrete database name
- * @param tableName table name
- * @param columnName column name
+ * @param catalogName   catalog name. NULL if not applicable.
+ * @param schemaName    database name, NULL or a concrete database name
+ * @param tableName     table name
+ * @param columnName    column name
  */
-private[hive] class SparkGetColumnsOperation(
-    sqlContext: SQLContext,
-    parentSession: HiveSession,
-    catalogName: String,
-    schemaName: String,
-    tableName: String,
-    columnName: String)
-  extends GetColumnsOperation(parentSession, catalogName, schemaName, tableName, columnName)
+private[hive] class SparkGetColumnsOperation(sqlContext: SQLContext,
+                                             parentSession: ThriftSession,
+                                             catalogName: String,
+                                             schemaName: String,
+                                             tableName: String,
+                                             columnName: String)
+  extends SparkMetadataOperation(parentSession, GET_COLUMNS)
     with Logging {
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
   private var statementId: String = _
+  RESULT_SET_SCHEMA = new StructType()
+    .add(StructField("TABLE_CAT", StringType))
+    .add(StructField("TABLE_SCHEM", StringType))
+    .add(StructField("TABLE_NAME", StringType))
+    .add(StructField("COLUMN_NAME", StringType))
+    .add(StructField("DATA_TYPE", IntegerType))
+    .add(StructField("TYPE_NAME", StringType))
+    .add(StructField("COLUMN_SIZE", IntegerType))
+    .add(StructField("BUFFER_LENGTH", ShortType))
+    .add(StructField("DECIMAL_DIGITS", IntegerType))
+    .add(StructField("NUM_PREC_RADIX", IntegerType))
+    .add(StructField("NULLABLE", IntegerType))
+    .add(StructField("REMARKS", StringType))
+    .add(StructField("COLUMN_DEF", StringType))
+    .add(StructField("SQL_DATA_TYPE", IntegerType))
+    .add(StructField("SQL_DATETIME_SUB", IntegerType))
+    .add(StructField("CHAR_OCTET_LENGTH", IntegerType))
+    .add(StructField("ORDINAL_POSITION", IntegerType))
+    .add(StructField("IS_NULLABLE", StringType))
+    .add(StructField("SCOPE_CATALOG", StringType))
+    .add(StructField("SCOPE_SCHEMA", StringType))
+    .add(StructField("SCOPE_TABLE", StringType))
+    .add(StructField("SOURCE_DATA_TYPE", ShortType))
+    .add(StructField("IS_AUTO_INCREMENT", StringType))
+
+  private val rowSet: RowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion)
 
   override def close(): Unit = {
     super.close()
@@ -72,7 +99,7 @@ private[hive] class SparkGetColumnsOperation(
     val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
     logInfo(s"$logMsg with $statementId")
 
-    setState(OperationState.RUNNING)
+    setState(RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
@@ -127,10 +154,10 @@ private[hive] class SparkGetColumnsOperation(
           addToRowSet(columnPattern, null, localTempView.table, plan.schema)
         }
       }
-      setState(OperationState.FINISHED)
+      setState(FINISHED)
     } catch {
-      case e: HiveSQLException =>
-        setState(OperationState.ERROR)
+      case e: SparkThriftServerSQLException =>
+        setState(ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
@@ -139,25 +166,25 @@ private[hive] class SparkGetColumnsOperation(
   }
 
   private def addToRowSet(
-      columnPattern: Pattern,
-      dbName: String,
-      tableName: String,
-      schema: StructType): Unit = {
+                           columnPattern: Pattern,
+                           dbName: String,
+                           tableName: String,
+                           schema: StructType): Unit = {
     schema.foreach { column =>
       if (columnPattern != null && !columnPattern.matcher(column.name).matches()) {
       } else {
-        val rowData = Array[AnyRef](
+        val rowData = Row(
           null, // TABLE_CAT
           dbName, // TABLE_SCHEM
           tableName, // TABLE_NAME
           column.name, // COLUMN_NAME
-          toJavaSQLType(column.dataType.sql).asInstanceOf[AnyRef], // DATA_TYPE
+          Type.getType(column.dataType.sql).getName, // DATA_TYPE
           column.dataType.sql, // TYPE_NAME
           null, // COLUMN_SIZE
           null, // BUFFER_LENGTH, unused
           null, // DECIMAL_DIGITS
           null, // NUM_PREC_RADIX
-          (if (column.nullable) 1 else 0).asInstanceOf[AnyRef], // NULLABLE
+          (if (column.nullable) 1 else 0), // NULLABLE
           column.getComment().getOrElse(""), // REMARKS
           null, // COLUMN_DEF
           null, // SQL_DATA_TYPE
@@ -182,5 +209,19 @@ private[hive] class SparkGetColumnsOperation(
         new HivePrivilegeObject(HivePrivilegeObjectType.TABLE_OR_VIEW, dbName, tableId.table)
       }
     })
+  }
+
+  override def getResultSetSchema: StructType = {
+    assertState(FINISHED)
+    RESULT_SET_SCHEMA
+  }
+
+  override def getNextRowSet(orientation: FetchOrientation, maxRows: Long): RowSet = {
+    assertState(FINISHED)
+    validateDefaultFetchOrientation(orientation)
+    if (orientation == FetchOrientation.FETCH_FIRST) {
+      rowSet.setStartOffset(0)
+    }
+    rowSet.extractSubset(maxRows.toInt)
   }
 }

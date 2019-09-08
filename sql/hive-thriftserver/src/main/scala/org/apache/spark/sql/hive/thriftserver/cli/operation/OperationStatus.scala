@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver.cli.operation
 
-import org.apache.spark.sql.hive.thriftserver.cli.{OperationState, SparkThriftServerSQLException}
+import org.apache.spark.sql.hive.thriftserver.cli.OperationState
+import org.apache.spark.sql.hive.thriftserver.server.cli.SparkThriftServerSQLException
 
 
 class OperationStatus(state: OperationState, operationException: SparkThriftServerSQLException) {
