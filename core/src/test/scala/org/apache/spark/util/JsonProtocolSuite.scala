@@ -179,7 +179,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
       "Some exception")
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskFailedReason
@@ -296,12 +296,12 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("FetchFailed backwards compatibility") {
     // FetchFailed in Spark 1.1.0 does not have a "Message" property.
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L, 18, 19,
       "ignored")
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
       .removeField({ _._1 == "Message" })
-    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
-      "Unknown reason")
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 16L,
+      18, 19, "Unknown reason")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
 
@@ -731,6 +731,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (Resubmitted, Resubmitted) =>
       case (r1: FetchFailed, r2: FetchFailed) =>
         assert(r1.shuffleId === r2.shuffleId)
+        assert(r1.mapTaskId === r2.mapTaskId)
         assert(r1.mapIndex === r2.mapIndex)
         assert(r1.reduceId === r2.reduceId)
         assert(r1.bmAddress === r2.bmAddress)

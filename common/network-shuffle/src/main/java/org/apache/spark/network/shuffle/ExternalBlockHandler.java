@@ -337,6 +337,7 @@ public class ExternalBlockHandler extends RpcHandler {
       // mapTaskIds.length must equal to reduceIds.length, and the passed in FetchShuffleBlocks
       // must have non-empty mapTaskIds and reduceIds, see the checking logic in
       // OneForOneBlockFetcher.
+      assert(mapTaskIds.length != 0 && mapTaskIds.length == reduceIds.length);
       return mapIdx < mapTaskIds.length && reduceIdx < reduceIds[mapIdx].length;
     }
 

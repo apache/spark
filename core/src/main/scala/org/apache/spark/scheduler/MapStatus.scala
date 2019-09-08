@@ -108,19 +108,19 @@ private[spark] object MapStatus {
  *
  * @param loc location where the task is being executed.
  * @param compressedSizes size of the blocks, indexed by reduce partition id.
- * @param mapTId unique task id for the task
+ * @param _mapTaskId unique task id for the task
  */
 private[spark] class CompressedMapStatus(
     private[this] var loc: BlockManagerId,
     private[this] var compressedSizes: Array[Byte],
-    private[this] var mapTId: Long)
+    private[this] var _mapTaskId: Long)
   extends MapStatus with Externalizable {
 
   // For deserialization only
   protected def this() = this(null, null.asInstanceOf[Array[Byte]], -1)
 
-  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], taskAttemptId: Long) {
-    this(loc, uncompressedSizes.map(MapStatus.compressSize), taskAttemptId)
+  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) {
+    this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId)
   }
 
   override def location: BlockManagerId = loc
@@ -129,13 +129,13 @@ private[spark] class CompressedMapStatus(
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
 
-  override def mapTaskId: Long = mapTId
+  override def mapTaskId: Long = _mapTaskId
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
-    out.writeLong(mapTId)
+    out.writeLong(_mapTaskId)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -143,7 +143,7 @@ private[spark] class CompressedMapStatus(
     val len = in.readInt()
     compressedSizes = new Array[Byte](len)
     in.readFully(compressedSizes)
-    mapTId = in.readLong()
+    _mapTaskId = in.readLong()
   }
 }
 
@@ -157,7 +157,7 @@ private[spark] class CompressedMapStatus(
  * @param emptyBlocks a bitmap tracking which blocks are empty
  * @param avgSize average size of the non-empty and non-huge blocks
  * @param hugeBlockSizes sizes of huge blocks by their reduceId.
- * @param mapTId unique task id for the task
+ * @param _mapTaskId unique task id for the task
  */
 private[spark] class HighlyCompressedMapStatus private (
     private[this] var loc: BlockManagerId,
@@ -165,12 +165,12 @@ private[spark] class HighlyCompressedMapStatus private (
     private[this] var emptyBlocks: RoaringBitmap,
     private[this] var avgSize: Long,
     private[this] var hugeBlockSizes: scala.collection.Map[Int, Byte],
-    private[this] var mapTId: Long)
+    private[this] var _mapTaskId: Long)
   extends MapStatus with Externalizable {
 
   // loc could be null when the default constructor is called during deserialization
   require(loc == null || avgSize > 0 || hugeBlockSizes.size > 0
-    || numNonEmptyBlocks == 0 || mapTId > 0,
+    || numNonEmptyBlocks == 0 || _mapTaskId > 0,
     "Average size can only be zero for map stages that produced no output")
 
   protected def this() = this(null, -1, null, -1, null, -1)  // For deserialization only
@@ -189,7 +189,7 @@ private[spark] class HighlyCompressedMapStatus private (
     }
   }
 
-  override def mapTaskId: Long = mapTId
+  override def mapTaskId: Long = _mapTaskId
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
@@ -200,7 +200,7 @@ private[spark] class HighlyCompressedMapStatus private (
       out.writeInt(kv._1)
       out.writeByte(kv._2)
     }
-    out.writeLong(mapTId)
+    out.writeLong(_mapTaskId)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -216,7 +216,7 @@ private[spark] class HighlyCompressedMapStatus private (
       hugeBlockSizesImpl(block) = size
     }
     hugeBlockSizes = hugeBlockSizesImpl
-    mapTId = in.readLong()
+    _mapTaskId = in.readLong()
   }
 }
 

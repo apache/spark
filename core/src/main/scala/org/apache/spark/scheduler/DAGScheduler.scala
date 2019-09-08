@@ -1507,7 +1507,7 @@ private[spark] class DAGScheduler(
             }
         }
 
-      case FetchFailed(bmAddress, shuffleId, mapIndex, _, failureMessage) =>
+      case FetchFailed(bmAddress, shuffleId, _, mapIndex, _, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 

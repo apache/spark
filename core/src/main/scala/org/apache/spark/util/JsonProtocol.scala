@@ -419,7 +419,8 @@ private[spark] object JsonProtocol {
           map(blockManagerIdToJson).getOrElse(JNothing)
         ("Block Manager Address" -> blockManagerAddress) ~
         ("Shuffle ID" -> fetchFailed.shuffleId) ~
-        ("Map ID" -> fetchFailed.mapIndex) ~
+        ("Map Task ID" -> fetchFailed.mapTaskId) ~
+        ("Map Index" -> fetchFailed.mapIndex) ~
         ("Reduce ID" -> fetchFailed.reduceId) ~
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
@@ -974,11 +975,12 @@ private[spark] object JsonProtocol {
       case `fetchFailed` =>
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")
         val shuffleId = (json \ "Shuffle ID").extract[Int]
-        val mapId = (json \ "Map ID").extract[Int]
+        val mapTaskId = (json \ "Map Task ID").extract[Long]
+        val mapIndex = (json \ "Map Index").extract[Int]
         val reduceId = (json \ "Reduce ID").extract[Int]
         val message = jsonOption(json \ "Message").map(_.extract[String])
-        new FetchFailed(blockManagerAddress, shuffleId, mapId, reduceId,
-          message.getOrElse("Unknown reason"))
+        new FetchFailed(blockManagerAddress, shuffleId, mapTaskId, mapIndex,
+          reduceId, message.getOrElse("Unknown reason"))
       case `exceptionFailure` =>
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
