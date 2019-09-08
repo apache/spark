@@ -30,17 +30,17 @@ import org.apache.spark.internal.Logging
 
 class VariableSubstitution(hiveVariableSource: util.Map[String, String])
   extends SystemVariables with Logging {
-
-  override protected def getSubstitute(conf: Configuration, `var`: String): String = {
-    var `val`: String = super.getSubstitute(conf, `var`)
-    if (`val` == null && SessionState.get != null) {
-      if (`var`.startsWith(HIVEVAR_PREFIX)) {
-        `val` = hiveVariableSource.get(`var`.substring(HIVEVAR_PREFIX.length))
+  
+  override protected def getSubstitute(conf: Configuration, variable: String): String = {
+    var value: String = super.getSubstitute(conf, variable)
+    if (value == null && SessionState.get != null) {
+      if (variable.startsWith(HIVEVAR_PREFIX)) {
+        value = hiveVariableSource.get(variable.substring(HIVEVAR_PREFIX.length))
       } else {
-        `val` = hiveVariableSource.get(`var`, null)
+        value = hiveVariableSource.get(variable, null)
       }
     }
-    `val`
+    value
   }
 
   def substitute(conf: HiveConf, expr: String): String = {
