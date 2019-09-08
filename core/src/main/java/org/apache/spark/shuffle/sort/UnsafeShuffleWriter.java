@@ -447,7 +447,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
       }
       for (int partition = 0; partition < numPartitions; partition++) {
-        boolean copyThrewExecption = true;
+        boolean copyThrewException = true;
         ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
         WritableByteChannelWrapper resolvedChannel = writer.openChannelWrapper()
             .orElseGet(() -> new StreamFallbackChannelWrapper(openStreamUnchecked(writer)));
@@ -461,12 +461,12 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
                 resolvedChannel.channel(),
                 spillInputChannelPositions[i],
                 partitionLengthInSpill);
-            copyThrewExecption = false;
+            copyThrewException = false;
             spillInputChannelPositions[i] += partitionLengthInSpill;
             writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           }
         } finally {
-          Closeables.close(resolvedChannel, copyThrewExecption);
+          Closeables.close(resolvedChannel, copyThrewException);
         }
         long numBytes = writer.getNumBytesWritten();
         writeMetrics.incBytesWritten(numBytes);
