@@ -28,10 +28,10 @@ import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream, MapWithStateDStream, MapWithStateDStreamImpl}
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.{ManualClock, Utils}
 
-class MapWithStateSuite extends SparkFunSuite
+class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
   with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {
 
   private var sc: SparkContext = null
@@ -39,29 +39,16 @@ class MapWithStateSuite extends SparkFunSuite
   protected val batchDuration = Seconds(1)
 
   before {
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
+    val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
+    conf.set("spark.streaming.clock", classOf[ManualClock].getName())
+    sc = new SparkContext(conf)
+
     checkpointDir = Utils.createTempDir(namePrefix = "checkpoint")
   }
 
   after {
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
     if (checkpointDir != null) {
       Utils.deleteRecursively(checkpointDir)
-    }
-  }
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
-    conf.set("spark.streaming.clock", classOf[ManualClock].getName())
-    sc = new SparkContext(conf)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      ensureNoActiveSparkContext(sc)
-    } finally {
-      super.afterAll()
     }
   }
 

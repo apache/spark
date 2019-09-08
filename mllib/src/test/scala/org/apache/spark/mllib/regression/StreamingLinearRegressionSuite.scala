@@ -22,24 +22,17 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streamingtest.LocalStreamingContext
 
-class StreamingLinearRegressionSuite extends SparkFunSuite with TestSuiteBase {
+class StreamingLinearRegressionSuite
+  extends SparkFunSuite
+  with LocalStreamingContext
+  with TestSuiteBase {
 
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 20000
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    try {
-      ensureNoActiveSparkContext(ssc)
-    } finally {
-      super.afterFunction()
-    }
-  }
 
   // Assert that two values are equal within tolerance epsilon
   def assertEqual(v1: Double, v2: Double, epsilon: Double) {

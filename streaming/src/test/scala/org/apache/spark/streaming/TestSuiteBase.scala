@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream, InputDStream}
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streaming.testutil.StreamingTestUtils
 import org.apache.spark.util.{ManualClock, Utils}
 
 /**
@@ -270,6 +270,14 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
 
   before(beforeFunction)
   after(afterFunction)
+
+  /**
+   * Run a block of code with the given StreamingContext and automatically
+   * stop the context when the block completes or when an exception is thrown.
+   */
+  def withStreamingContext[R](ssc: StreamingContext)(block: StreamingContext => R): R = {
+    StreamingTestUtils.withStreamingContext(ssc)(block)
+  }
 
   /**
    * Run a block of code with the given TestServer and automatically

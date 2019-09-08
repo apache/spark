@@ -24,28 +24,22 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{HashPartitioner, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.ReturnStatementInClosureException
 
 /**
  * Test that closures passed to DStream operations are actually cleaned.
  */
-class DStreamClosureSuite extends SparkFunSuite with BeforeAndAfterAll {
-  private var ssc: StreamingContext = null
-
+class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val sc = new SparkContext("local", "test")
-    ssc = new StreamingContext(sc, Seconds(1))
   }
 
-  override def afterAll(): Unit = {
-    try {
-      ensureNoActiveSparkContext(ssc)
-      ssc = null
-    } finally {
-      super.afterAll()
-    }
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+
+    val sc = new SparkContext("local", "test")
+    ssc = new StreamingContext(sc, Seconds(1))
   }
 
   test("user provided closures are actually cleaned") {

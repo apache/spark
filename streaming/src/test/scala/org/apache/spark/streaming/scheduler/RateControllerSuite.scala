@@ -22,7 +22,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 class RateControllerSuite extends TestSuiteBase {
 

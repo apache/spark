@@ -24,34 +24,27 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.ManualClock
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
  */
-class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterAll {
-  private var ssc: StreamingContext = null
-  private val batchDuration: Duration = Seconds(1)
+class DStreamScopeSuite
+  extends SparkFunSuite
+  with LocalStreamingContext
+  with BeforeAndAfter
+  with BeforeAndAfterAll {
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  before {
     val conf = new SparkConf().setMaster("local").setAppName("test")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
+    val batchDuration: Duration = Seconds(1)
     ssc = new StreamingContext(new SparkContext(conf), batchDuration)
-  }
 
-  override def afterAll(): Unit = {
-    try {
-      ensureNoActiveSparkContext(ssc)
-    } finally {
-      super.afterAll()
-    }
+    assertPropertiesNotSet()
   }
-
-  before { assertPropertiesNotSet() }
-  after { assertPropertiesNotSet() }
 
   test("dstream without scope") {
     val dummyStream = new DummyDStream(ssc)

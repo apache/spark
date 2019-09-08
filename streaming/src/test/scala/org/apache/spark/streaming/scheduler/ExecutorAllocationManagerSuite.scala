@@ -24,15 +24,14 @@ import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
-import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
-import org.apache.spark.streaming.testutil.StreamingTestUtils
+import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
 
-class ExecutorAllocationManagerSuite extends SparkFunSuite
+class ExecutorAllocationManagerSuite extends TestSuiteBase
   with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
@@ -393,7 +392,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
-    StreamingTestUtils.withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       new DummyInputDStream(ssc).foreachRDD(_ => { })
       body(ssc)
     }

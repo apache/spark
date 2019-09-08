@@ -28,7 +28,6 @@ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.{ConstantInputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.receiver._
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
 
 /** Testsuite for receiver scheduling */
 class ReceiverTrackerSuite extends TestSuiteBase {

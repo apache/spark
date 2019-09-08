@@ -25,7 +25,6 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.util.{ManualClock, Utils}
 
 class JobGeneratorSuite extends TestSuiteBase {
@@ -56,6 +55,7 @@ class JobGeneratorSuite extends TestSuiteBase {
   // 4. allow subsequent batches to be generated (to allow premature deletion of 3rd batch metadata)
   // 5. verify whether 3rd batch's block metadata still exists
   //
+
   test("SPARK-6222: Do not clear received block data too soon") {
     import JobGeneratorSuite._
     val checkpointDir = Utils.createTempDir()

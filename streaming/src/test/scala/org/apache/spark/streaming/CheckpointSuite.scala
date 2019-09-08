@@ -39,7 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties, Utils}
 
 /**
@@ -206,10 +206,8 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
-class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
+class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStreamCheckpointTester
   with ResetSystemProperties {
-
-  var ssc: StreamingContext = null
 
   override def batchDuration: Duration = Milliseconds(500)
 
@@ -220,7 +218,6 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
 
   override def afterFunction() {
     try {
-      ensureNoActiveSparkContext(ssc)
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
       super.afterFunction()

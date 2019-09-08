@@ -25,19 +25,15 @@ import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streamingtest.LocalStreamingContext
 
-class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
+class StreamingJobProgressListenerSuite
+  extends TestSuiteBase
+  with LocalStreamingContext
+  with Matchers {
 
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    ensureNoActiveSparkContext(ssc)
-  }
 
   private def createJobStart(
       batchTime: Time, outputOpId: Int, jobId: Int): SparkListenerJobStart = {

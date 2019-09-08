@@ -28,19 +28,13 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{BlockManagerBasedStoreResult, Receiver, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
 import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
+import org.apache.spark.streamingtest.LocalStreamingContext
 
-class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
-
-  override def afterAll(): Unit = {
-    try {
-      StreamingContext.getActive().foreach(_.stop())
-    } finally {
-      ensureNoActiveSparkContext()
-      super.afterAll()
-    }
-  }
+class ReceiverInputDStreamSuite
+  extends TestSuiteBase
+  with LocalStreamingContext
+  with BeforeAndAfterAll {
 
   testWithoutWAL("createBlockRDD creates empty BlockRDD when no block info") { receiverStream =>
     val rdd = receiverStream.createBlockRDD(Time(0), Seq.empty)
@@ -129,7 +123,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
     conf.setMaster("local[4]").setAppName("ReceiverInputDStreamSuite")
     conf.set(WriteAheadLogUtils.RECEIVER_WAL_ENABLE_CONF_KEY, enableWAL.toString)
     require(WriteAheadLogUtils.enableReceiverLog(conf) === enableWAL)
-    val ssc = new StreamingContext(conf, Seconds(1))
+    ssc = new StreamingContext(conf, Seconds(1))
     val receiverStream = new ReceiverInputDStream[Int](ssc) {
       override def getReceiver(): Receiver[Int] = null
     }

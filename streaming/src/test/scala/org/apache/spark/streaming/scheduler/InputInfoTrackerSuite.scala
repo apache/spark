@@ -21,22 +21,13 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
-import org.apache.spark.streaming.testutil.StreamingTestUtils._
+import org.apache.spark.streamingtest.LocalStreamingContext
 
-class InputInfoTrackerSuite extends SparkFunSuite with BeforeAndAfter {
-
-  private var ssc: StreamingContext = _
+class InputInfoTrackerSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfter {
 
   before {
     val conf = new SparkConf().setMaster("local[2]").setAppName("DirectStreamTacker")
-    if (ssc == null) {
-      ssc = new StreamingContext(conf, Duration(1000))
-    }
-  }
-
-  after {
-    ensureNoActiveSparkContext(ssc)
-    if (ssc != null) ssc = null
+    ssc = new StreamingContext(conf, Duration(1000))
   }
 
   test("test report and get InputInfo from InputInfoTracker") {
