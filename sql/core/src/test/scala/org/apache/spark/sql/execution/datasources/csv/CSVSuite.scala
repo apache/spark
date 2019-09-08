@@ -2063,7 +2063,7 @@ class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
 
   test("SPARK-27873: disabling enforceSchema should not fail columnNameOfCorruptRecord") {
     Seq("csv", "").foreach { reader =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> reader) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> reader) {
         withTempPath { path =>
           val df = Seq(("0", "2013-111-11")).toDF("a", "b")
           df.write

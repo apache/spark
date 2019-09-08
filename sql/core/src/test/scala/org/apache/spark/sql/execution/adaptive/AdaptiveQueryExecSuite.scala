@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.Exchange
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -152,17 +153,17 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
       val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
         """
           |WITH t4 AS (
-          |  SELECT * FROM lowercaseData t2 JOIN testData3 t3 ON t2.n = t3.a
+          |  SELECT * FROM lowercaseData t2 JOIN testData3 t3 ON t2.n = t3.a where t2.n = '1'
           |)
           |SELECT * FROM testData
           |JOIN testData2 t2 ON key = t2.a
-          |JOIN t4 ON key = t4.a
+          |JOIN t4 ON t2.b = t4.a
           |WHERE value = 1
         """.stripMargin)
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-      assert(bhj.size == 2)
+      assert(bhj.size == 3)
     }
   }
 
@@ -175,17 +176,17 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
           |WITH t4 AS (
           |  SELECT * FROM lowercaseData t2 JOIN (
           |    select a, sum(b) from testData3 group by a
-          |  ) t3 ON t2.n = t3.a
+          |  ) t3 ON t2.n = t3.a where t2.n = '1'
           |)
           |SELECT * FROM testData
           |JOIN testData2 t2 ON key = t2.a
-          |JOIN t4 ON key = t4.a
+          |JOIN t4 ON t2.b = t4.a
           |WHERE value = 1
         """.stripMargin)
       val smj = findTopLevelSortMergeJoin(plan)
       assert(smj.size == 3)
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
-      assert(bhj.size == 2)
+      assert(bhj.size == 3)
     }
   }
 
@@ -335,6 +336,51 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
             |  SELECT id, num, 'b' as source FROM b
             |) AS c WHERE c.id IN (SELECT id FROM b WHERE num = 2)
           """.stripMargin)
+      }
+    }
+  }
+
+  test("Avoid plan change if cost is greater") {
+    val origPlan = sql("SELECT * FROM testData " +
+      "join testData2 t2 ON key = t2.a " +
+      "join testData2 t3 on t2.a = t3.a where t2.b = 1").queryExecution.executedPlan
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT * FROM testData " +
+          "join testData2 t2 ON key = t2.a " +
+          "join testData2 t3 on t2.a = t3.a where t2.b = 1")
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.size == 2)
+      val smj2 = findTopLevelSortMergeJoin(adaptivePlan)
+      assert(smj2.size == 2, origPlan.toString)
+    }
+  }
+
+  test("Avoid changing merge join to broadcast join if too many empty partitions on build plan") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN.key -> "0.5") {
+      // `testData` is small enough to be broadcast but has empty partition ratio over the config.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.isEmpty)
+      }
+      // It is still possible to broadcast `testData2`.
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
+          "SELECT * FROM testData join testData2 ON key = a where value = '1'")
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 1)
+        assert(bhj.head.buildSide == BuildRight)
       }
     }
   }

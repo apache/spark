@@ -918,6 +918,38 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     checkRecommendations(itemSubsetRecs, allItemRecs, "user")
   }
 
+  test("ALS should not introduce unnecessary shuffle") {
+    def getShuffledDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
+      rdd.dependencies.flatMap {
+        case s: ShuffleDependency[_, _, _] =>
+          Seq(s) ++ getShuffledDependencies(s.rdd)
+        case o =>
+          Seq.empty ++ getShuffledDependencies(o.rdd)
+      }
+    }
+
+    val spark = this.spark
+    import spark.implicits._
+    val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+    val data = ratings.toDF
+    val model = new ALS()
+      .setMaxIter(2)
+      .setImplicitPrefs(true)
+      .setCheckpointInterval(-1)
+      .fit(data)
+
+    val userFactors = model.userFactors
+    val itemFactors = model.itemFactors
+    val shuffledUserFactors = getShuffledDependencies(userFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("userFactors")
+    }
+    val shuffledItemFactors = getShuffledDependencies(itemFactors.rdd).filter { dep =>
+      dep.rdd.name != null && dep.rdd.name.contains("itemFactors")
+    }
+    assert(shuffledUserFactors.size == 0)
+    assert(shuffledItemFactors.size == 0)
+  }
+
   private def checkRecommendations(
       topK: DataFrame,
       expected: Map[Int, Seq[(Int, Float)]],

@@ -281,13 +281,14 @@ class HasOutputCols(Params):
 
 class HasNumFeatures(Params):
     """
-    Mixin for param numFeatures: number of features.
+    Mixin for param numFeatures: Number of features. Should be greater than 0.
     """
 
-    numFeatures = Param(Params._dummy(), "numFeatures", "number of features.", typeConverter=TypeConverters.toInt)
+    numFeatures = Param(Params._dummy(), "numFeatures", "Number of features. Should be greater than 0.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
+        self._setDefault(numFeatures=262144)
 
     def setNumFeatures(self, value):
         """

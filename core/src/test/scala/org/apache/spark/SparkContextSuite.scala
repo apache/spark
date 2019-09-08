@@ -783,8 +783,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(DRIVER_RESOURCES_FILE, resourcesFile)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      conf.set(DRIVER_GPU_ID.amountConf, "3")
-      conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(DRIVER_GPU_ID.amountConf, "3")
+        .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
@@ -855,10 +856,11 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val conf = new SparkConf()
         .setMaster("local-cluster[3, 3, 1024]")
         .setAppName("test-cluster")
-      conf.set(WORKER_GPU_ID.amountConf, "3")
-      conf.set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
-      conf.set(TASK_GPU_ID.amountConf, "3")
-      conf.set(EXECUTOR_GPU_ID.amountConf, "3")
+        .set(WORKER_GPU_ID.amountConf, "3")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(TASK_GPU_ID.amountConf, "3")
+        .set(EXECUTOR_GPU_ID.amountConf, "3")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 

@@ -19,13 +19,28 @@ package org.apache.spark.sql.execution
 
 import scala.util.Random
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.vectorized.ColumnarBatch
+
+class RanColumnar extends RuntimeException
+class RanRowBased extends RuntimeException
+
+case class ColumnarExchange(child: SparkPlan) extends Exchange {
+
+  override def supportsColumnar: Boolean = true
+
+  override protected def doExecute(): RDD[InternalRow] = throw new RanRowBased
+
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = throw new RanColumnar
+}
 
 class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
@@ -103,6 +118,15 @@ class ExchangeSuite extends SparkPlanTest with SharedSparkSession {
     assert(!exchange3.sameResult(exchange4))
     assert(exchange4.sameResult(exchange5))
     assert(exchange5 sameResult exchange4)
+  }
+
+  test("Columnar exchange works") {
+    val df = spark.range(10)
+    val plan = df.queryExecution.executedPlan
+    val exchange = ColumnarExchange(plan)
+    val reused = ReusedExchangeExec(plan.output, exchange)
+
+    assertThrows[RanColumnar](reused.executeColumnar())
   }
 
   test("SPARK-23207: Make repartition() generate consistent output") {

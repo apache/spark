@@ -83,6 +83,7 @@ app-20161115172038-0000
 app-20161116163331-0000
 application_1516285256255_0012
 application_1553914137147_0018
+application_1555004656427_0144
 stat
 local-1422981759269
 local-1422981780767
@@ -113,6 +114,7 @@ spark-warehouse
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin
 kafka-source-initial-offset-future-version.bin
+announce.tmpl
 vote.tmpl
 SessionManager.java
 SessionHandler.java

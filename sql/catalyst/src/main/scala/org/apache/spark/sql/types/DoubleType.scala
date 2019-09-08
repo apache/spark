@@ -42,6 +42,8 @@ class DoubleType private() extends FractionalType {
     (x: Double, y: Double) => Utils.nanSafeCompareDoubles(x, y)
   private[sql] val asIntegral = DoubleAsIfIntegral
 
+  override private[sql] def exactNumeric = DoubleExactNumeric
+
   /**
    * The default size of a value of the DoubleType is 8 bytes.
    */

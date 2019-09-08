@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.adaptive.InsertAdaptiveSparkPlan
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
@@ -119,6 +120,7 @@ class QueryExecution(
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     InsertAdaptiveSparkPlan(sparkSession, this),
+    PlanDynamicPruningFilters(sparkSession),
     PlanSubqueries(sparkSession),
     EnsureRequirements(sparkSession.sessionState.conf),
     ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
@@ -127,10 +129,16 @@ class QueryExecution(
     ReuseExchange(sparkSession.sessionState.conf),
     ReuseSubquery(sparkSession.sessionState.conf))
 
-  def simpleString: String = withRedaction {
+  def simpleString: String = simpleString(false)
+
+  def simpleString(formatted: Boolean): String = withRedaction {
     val concat = new PlanStringConcat()
     concat.append("== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    if (formatted) {
+      ExplainUtils.processPlan(executedPlan, concat.append)
+    } else {
+      QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+    }
     concat.append("\n")
     concat.toString
   }

@@ -46,7 +46,7 @@ abstract class KafkaRelationSuiteBase extends QueryTest with SharedSparkSession 
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "kafka")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
@@ -385,7 +385,7 @@ class KafkaRelationSuiteV1 extends KafkaRelationSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "kafka")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   test("V1 Source is used when set through SQLConf") {
     val topic = newTopic()
@@ -400,7 +400,7 @@ class KafkaRelationSuiteV2 extends KafkaRelationSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_READER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("V2 Source is used when set through SQLConf") {
     val topic = newTopic()
