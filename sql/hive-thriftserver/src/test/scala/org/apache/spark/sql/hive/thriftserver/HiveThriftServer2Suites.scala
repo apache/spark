@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io.{File, FilenameFilter}
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.sql.{Date, DriverManager, ResultSet, SQLException, Statement}
+import java.sql.{Date, DriverManager, SQLException, Statement}
 import java.util.{Locale, UUID}
 
 import scala.collection.mutable
@@ -39,8 +39,8 @@ import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
-import org.apache.spark.{SparkException, SparkFunSuite}
 
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.HiveTestUtils
@@ -90,31 +90,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         logInfo(s"Spark version: $version")
         version != "Unknown"
       }
-    }
-  }
-
-  test("GetTypeInfo Thrift API") {
-//    withCLIServiceClient { client =>
-//      val user = System.getProperty("user.name")
-//      val sessionHandle = client.openSession(user, "")
-//      val operationHandle = client.getTypeInfo(sessionHandle)
-//      client.fetchResults(operationHandle)
-//
-//
-//    }
-
-    def checkResult(rs: ResultSet, typeNames: Seq[String]): Unit = {
-      for (i <- typeNames.indices) {
-        assert(rs.next())
-        assert(rs.getString("TYPE_NAME") === typeNames(i))
-      }
-      // Make sure there are no more elements
-      assert(!rs.next())
-    }
-
-    withJdbcStatement() { statement =>
-      val metaData = statement.getConnection.getMetaData
-      checkResult(metaData.getTypeInfo, ThriftserverShimUtils.supportedType().map(_.getName))
     }
   }
 
