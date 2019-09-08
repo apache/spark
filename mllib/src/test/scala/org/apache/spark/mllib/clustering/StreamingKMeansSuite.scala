@@ -29,10 +29,6 @@ class StreamingKMeansSuite extends SparkFunSuite with LocalStreamingContext with
 
   override def maxWaitTimeMillis: Int = 30000
 
-  override def afterFunction() {
-    super.afterFunction()
-  }
-
   test("accuracy for single center and equivalence to grand average") {
     // set parameters
     val numBatches = 10

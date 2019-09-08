@@ -51,47 +51,4 @@ object StreamingTestUtils extends Logging {
       ensureNoActiveSparkContext()
     }
   }
-
-  def ensureNoActiveSparkContext(ssc: StreamingContext, sc: SparkContext): Unit = {
-    try {
-      if (ssc != null) {
-        ssc.stop()
-      }
-      if (sc != null) {
-        sc.stop()
-      }
-    } finally {
-      ensureNoActiveSparkContext()
-    }
-  }
-
-  def ensureNoActiveSparkContext(sc: SparkContext): Unit = {
-    try {
-      if (sc != null) {
-        sc.stop()
-      }
-    } finally {
-      ensureNoActiveSparkContext()
-    }
-  }
-
-  /**
-   * Run a block of code with the given StreamingContext and automatically
-   * stop the context when the block completes or when an exception is thrown.
-   */
-  def withStreamingContext[R](ssc: StreamingContext)(block: StreamingContext => R): R = {
-    try {
-      block(ssc)
-    } finally {
-      try {
-        ssc.stop(stopSparkContext = true)
-      } catch {
-        case e: Exception =>
-          logError("Error stopping StreamingContext", e)
-      } finally {
-        // This is safe as we called StreamingContext.stop(stopSparkContext = true) before.
-        ensureNoActiveSparkContext()
-      }
-    }
-  }
 }

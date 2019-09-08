@@ -55,7 +55,6 @@ class JobGeneratorSuite extends TestSuiteBase {
   // 4. allow subsequent batches to be generated (to allow premature deletion of 3rd batch metadata)
   // 5. verify whether 3rd batch's block metadata still exists
   //
-
   test("SPARK-6222: Do not clear received block data too soon") {
     import JobGeneratorSuite._
     val checkpointDir = Utils.createTempDir()

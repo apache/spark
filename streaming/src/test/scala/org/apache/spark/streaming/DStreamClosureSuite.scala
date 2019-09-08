@@ -31,10 +31,6 @@ import org.apache.spark.util.ReturnStatementInClosureException
  * Test that closures passed to DStream operations are actually cleaned.
  */
 class DStreamClosureSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfterAll {
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-  }
-
   override protected def beforeEach(): Unit = {
     super.beforeEach()
 

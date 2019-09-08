@@ -35,10 +35,6 @@ class StreamingLogisticRegressionSuite
   // use longer wait time to ensure job completion
   override def maxWaitTimeMillis: Int = 30000
 
-  override def afterFunction() {
-    super.afterFunction()
-  }
-
   // Test if we can accurately learn B for Y = logistic(BX) on streaming data
   test("parameter accuracy") {
 

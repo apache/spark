@@ -276,7 +276,19 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
    * stop the context when the block completes or when an exception is thrown.
    */
   def withStreamingContext[R](ssc: StreamingContext)(block: StreamingContext => R): R = {
-    StreamingTestUtils.withStreamingContext(ssc)(block)
+    try {
+      block(ssc)
+    } finally {
+      try {
+        ssc.stop(stopSparkContext = true)
+      } catch {
+        case e: Exception =>
+          logError("Error stopping StreamingContext", e)
+      } finally {
+        // This is safe as we called StreamingContext.stop(stopSparkContext = true) before.
+        StreamingTestUtils.ensureNoActiveSparkContext()
+      }
+    }
   }
 
   /**
