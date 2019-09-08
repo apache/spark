@@ -464,7 +464,6 @@ case class AlterTableAddPartitionCommand(
         catalog.alterTableStats(table.identifier, None)
       }
     }
-    catalog.refreshTable(table.identifier)
     Seq.empty[Row]
   }
 
@@ -550,7 +549,6 @@ case class AlterTableDropPartitionCommand(
       retainData = retainData)
 
     CommandUtils.updateTableStats(sparkSession, table)
-    catalog.refreshTable(table.identifier)
 
     Seq.empty[Row]
   }
@@ -801,7 +799,6 @@ case class AlterTableSetLocationCommand(
     }
 
     CommandUtils.updateTableStats(sparkSession, table)
-    catalog.refreshTable(table.identifier)
     Seq.empty[Row]
   }
 }

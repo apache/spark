@@ -57,7 +57,6 @@ case class AnalyzeTableCommand(
       val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
       if (newStats.isDefined) {
         sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
-        sessionState.catalog.refreshTable(tableIdentWithDB)
       }
     }
 

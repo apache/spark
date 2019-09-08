@@ -189,7 +189,6 @@ case class InsertIntoHadoopFsRelationCommand(
       sparkSession.catalog.refreshByPath(outputPath.toString)
 
       if (catalogTable.nonEmpty) {
-        sparkSession.sessionState.catalog.refreshTable(catalogTable.get.identifier)
         CommandUtils.updateTableStats(sparkSession, catalogTable.get)
       }
 
