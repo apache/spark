@@ -58,10 +58,11 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
   private[thriftserver] def supportedType(): Seq[Type] = {
-    Array(NULL_TYPE, BOOLEAN_TYPE, TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE,
-      BIGINT_TYPE, FLOAT_TYPE, DOUBLE_TYPE, STRING_TYPE, DATE_TYPE,
-      TIMESTAMP_TYPE, DECIMAL_TYPE, BINARY_TYPE, ARRAY_TYPE, MAP_TYPE,
-      STRUCT_TYPE, USER_DEFINED_TYPE)
+    Seq(NULL_TYPE, BOOLEAN_TYPE, STRING_TYPE, BINARY_TYPE,
+      TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE, BIGINT_TYPE,
+      FLOAT_TYPE, DOUBLE_TYPE, DECIMAL_TYPE,
+      DATE_TYPE, TIMESTAMP_TYPE,
+      ARRAY_TYPE, MAP_TYPE, STRUCT_TYPE, USER_DEFINED_TYPE)
   }
 
   private[thriftserver] def addToClassPath(
