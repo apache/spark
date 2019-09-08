@@ -817,7 +817,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = HiveTestJars.getHiveHcatalogCoreJar.getCanonicalPath
+    val testJar = HiveTestJars.getHiveHcatalogCoreJar.toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
     sql(
