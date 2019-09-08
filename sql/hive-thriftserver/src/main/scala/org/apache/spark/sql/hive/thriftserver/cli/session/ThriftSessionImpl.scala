@@ -113,9 +113,7 @@ class ThriftSessionImpl(_protocol: TProtocolVersion,
       val propName = varname.substring(HIVEVAR_PREFIX.length)
       ss.getHiveVariables.put(propName, substitution.substitute(ss.getConf, value))
     } else if (varname.startsWith(METACONF_PREFIX)) {
-      val propName = varname.substring(METACONF_PREFIX.length)
-      val hive = Hive.get(ss.getConf)
-      hive.setMetaConf(propName, substitution.substitute(ss.getConf, value))
+      logWarning("Won't set HiveMetaStoreConf here")
     } else {
       setConf(varname, varname, value, true)
     }
