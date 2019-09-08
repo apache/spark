@@ -21,6 +21,7 @@ import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema, Type}
+import org.apache.hive.service.cli.Type._
 import org.apache.hive.service.cli.thrift.TProtocolVersion._
 
 /**
@@ -52,9 +53,10 @@ private[thriftserver] object ThriftserverShimUtils {
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
   private[thriftserver] def supportedType(): Seq[Type] = {
-    Array(Type.NULL_TYPE, Type.BOOLEAN_TYPE, Type.TINYINT_TYPE, Type.SMALLINT_TYPE, Type.INT_TYPE,
-      Type.BIGINT_TYPE, Type.FLOAT_TYPE, Type.DOUBLE_TYPE, Type.STRING_TYPE, Type.DATE_TYPE,
-      Type.TIMESTAMP_TYPE, Type.DECIMAL_TYPE, Type.BINARY_TYPE)
+    Array(NULL_TYPE, BOOLEAN_TYPE, TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE,
+      BIGINT_TYPE, FLOAT_TYPE, DOUBLE_TYPE, STRING_TYPE, DATE_TYPE,
+      TIMESTAMP_TYPE, DECIMAL_TYPE, BINARY_TYPE, ARRAY_TYPE, MAP_TYPE,
+      STRUCT_TYPE, USER_DEFINED_TYPE)
   }
 
   private[thriftserver] def addToClassPath(
