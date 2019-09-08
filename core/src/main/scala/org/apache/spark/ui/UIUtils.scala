@@ -311,7 +311,9 @@ private[spark] object UIUtils extends Logging {
       id: Option[String] = None,
       headerClasses: Seq[String] = Seq.empty,
       stripeRowsWithCss: Boolean = true,
-      sortable: Boolean = true): Seq[Node] = {
+      sortable: Boolean = true,
+      // The tooltip information could be None, which indicates header does not have a tooltip.
+      tooltipHeaders: Seq[Option[String]] = Seq.empty): Seq[Node] = {
 
     val listingTableClass = {
       val _tableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
@@ -332,6 +334,14 @@ private[spark] object UIUtils extends Logging {
       }
     }
 
+    def getTooltip(index: Int): Option[String] = {
+      if (index < tooltipHeaders.size) {
+        tooltipHeaders(index)
+      } else {
+        None
+      }
+    }
+
     val newlinesInHeader = headers.exists(_.contains("\n"))
     def getHeaderContent(header: String): Seq[Node] = {
       if (newlinesInHeader) {
@@ -345,7 +355,15 @@ private[spark] object UIUtils extends Logging {
 
     val headerRow: Seq[Node] = {
       headers.view.zipWithIndex.map { x =>
-        <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        getTooltip(x._2) match {
+          case Some(tooltip) =>
+            <th width={colWidthAttr} class={getClass(x._2)}>
+              <span data-toggle="tooltip" title={tooltip}>
+                {getHeaderContent(x._1)}
+              </span>
+            </th>
+          case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
+        }
       }
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
