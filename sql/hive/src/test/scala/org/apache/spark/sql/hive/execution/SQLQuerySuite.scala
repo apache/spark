@@ -1106,7 +1106,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       override def run() {
         // To make sure this test works, this jar should not be loaded in another place.
         sql(
-          s"ADD JAR ${HiveTestJars.getHiveContribJar}")
+          s"ADD JAR ${HiveTestJars.getHiveContribJar.getCanonicalPath}")
         try {
           sql(
             """

@@ -650,19 +650,16 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  val HIVE_CONTRIB_JAR: String =
-    s"org.apache.hive_hive-contrib-${HiveUtils.builtinHiveVersion}.jar"
-  val HIVE_HCATALOG_CORE_JAR: String =
-    s"org.apache.hive.hcatalog_hive-hcatalog-core-${HiveUtils.builtinHiveVersion}.jar"
+  def getHiveContribJar: File = getJarFile("org.apache.hive:hive-contrib")
+  def getHiveHcatalogCoreJar: File = getJarFile("org.apache.hive.hcatalog:hive-hcatalog-core")
 
-  def getHiveContribJar: String = getJarPath("org.apache.hive:hive-contrib")
-  def getHiveHcatalogCoreJar: String = getJarPath("org.apache.hive.hcatalog:hive-hcatalog-core")
-
-  private def getJarPath(filename: String): String = {
-    SparkSubmitUtils.resolveMavenCoordinates(
-      s"$filename:${HiveUtils.builtinHiveVersion}",
+  private def getJarFile(coordinate: String): File = {
+    // isTransitive = false: Only direct dependencies should be resolved
+    val filePath = SparkSubmitUtils.resolveMavenCoordinates(
+      s"$coordinate:${HiveUtils.builtinHiveVersion}",
       SparkSubmitUtils.buildIvySettings(
         Some("https://repository.apache.org/content/repositories/releases"), None),
       isTransitive = false)
+    new File(filePath)
   }
 }
