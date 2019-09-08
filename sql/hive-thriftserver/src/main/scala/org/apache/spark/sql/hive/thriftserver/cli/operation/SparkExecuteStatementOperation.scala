@@ -79,9 +79,8 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    logDebug(s"CLOSING $statementId")
+    logInfo(s"Close statement with $statementId")
     cleanup(CLOSED)
-    sqlContext.sparkContext.clearJobGroup()
     HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
@@ -163,6 +162,14 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(PENDING)
+    statementId = UUID.randomUUID().toString
+    logInfo(s"Submitting query '$statement' with $statementId")
+    HiveThriftServer2.listener.onStatementStart(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      statement,
+      statementId,
+      parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
@@ -205,33 +212,36 @@ private[hive] class SparkExecuteStatementOperation(
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
+          logError("Error submitting query in background, query rejected", rejected)
           setState(ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
           throw new SparkThriftServerSQLException("The background threadpool cannot accept" +
             " new task for execution, please retry the operation", rejected)
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw new SparkThriftServerSQLException(e)
       }
     }
   }
 
   private def execute(): Unit = withSchedulerPool {
-    statementId = UUID.randomUUID().toString
-    logInfo(s"Running query '$statement' with $statementId")
-    setState(RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      statement,
-      statementId,
-      parentSession.getUsername)
-    sqlContext.sparkContext.setJobGroup(statementId, statement)
     try {
+      synchronized {
+        if (getStatus.getState.isTerminal) {
+          logInfo(s"Query with $statementId in terminal state before it started running")
+          return
+        } else {
+          logInfo(s"Running query with $statementId")
+          setState(RUNNING)
+        }
+      }
+      // Always use the latest class loader provided by executionHive's state.
+      val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+      Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
@@ -253,32 +263,43 @@ private[hive] class SparkExecuteStatementOperation(
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
-      case e: SparkThriftServerSQLException =>
-        if (getStatus.getState == CANCELED) {
-          return
-        } else {
-          setState(ERROR)
-          HiveThriftServer2.listener.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e))
-          throw e
-        }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
         val currentState = getStatus.getState
-        logError(s"Error executing query, currentState $currentState, ", e)
-        setState(ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw new SparkThriftServerSQLException(e.toString)
+        if (currentState.isTerminal) {
+          // This may happen if the execution was cancelled, and then closed from another thread.
+          logWarning(s"Ignore exception in terminal state with $statementId: $e")
+        } else {
+          logError(s"Error executing query with $statementId, currentState $currentState, ", e)
+          setState(ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
+          if (e.isInstanceOf[SparkThriftServerSQLException]) {
+            throw e.asInstanceOf[SparkThriftServerSQLException]
+          } else {
+            throw new SparkThriftServerSQLException("Error running query: " + e.toString, e)
+          }
+        }
+    } finally {
+      synchronized {
+        if (!getStatus.getState.isTerminal) {
+          setState(FINISHED)
+          HiveThriftServer2.listener.onStatementFinish(statementId)
+        }
+      }
+      sqlContext.sparkContext.clearJobGroup()
     }
-    setState(FINISHED)
-    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 
   override def cancel(): Unit = {
-    logInfo(s"Cancel '$statement' with $statementId")
-    cleanup(CANCELED)
+    synchronized {
+      if (!getStatus.getState.isTerminal) {
+        logInfo(s"Cancel query with $statementId")
+        cleanup(CANCELED)
+        HiveThriftServer2.listener.onStatementCanceled(statementId)
+      }
+    }
   }
 
   private def cleanup(state: cli.OperationState) {
