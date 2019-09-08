@@ -31,7 +31,8 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
@@ -122,6 +123,7 @@ private[hive] class TestHiveSharedState(
 class TestHiveContext(
     @transient override val sparkSession: TestHiveSparkSession)
   extends SQLContext(sparkSession) {
+
   /**
    * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
    * when running in the JVM, i.e. it needs to be false when calling from Python.
@@ -648,37 +650,19 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  val HIVE_CONTRIB_JAR: String = s"hive-contrib-${HiveUtils.builtinHiveVersion}.jar"
-  val HIVE_HCATALOG_CORE_JAR: String = s"hive-hcatalog-core-${HiveUtils.builtinHiveVersion}.jar"
+  val HIVE_CONTRIB_JAR: String =
+    s"org.apache.hive_hive-contrib-${HiveUtils.builtinHiveVersion}.jar"
+  val HIVE_HCATALOG_CORE_JAR: String =
+    s"org.apache.hive.hcatalog_hive-hcatalog-core-${HiveUtils.builtinHiveVersion}.jar"
 
-  private val repository = "https://repository.apache.org/content/repositories/releases/"
-  private val hiveContribUrl = s"${repository}org/apache/hive/hive-contrib/" +
-    s"${HiveUtils.builtinHiveVersion}/${HIVE_CONTRIB_JAR}"
-  private val hiveHcatalogCoreUrl = s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
-    s"${HiveUtils.builtinHiveVersion}/${HIVE_HCATALOG_CORE_JAR}"
+  def getHiveContribJar: String = getJarPath("org.apache.hive:hive-contrib")
+  def getHiveHcatalogCoreJar: String = getJarPath("org.apache.hive.hcatalog:hive-hcatalog-core")
 
-  def getHiveContribJar: String = synchronized {
-    getFileFromUrl(hiveContribUrl, HIVE_CONTRIB_JAR)
-  }
-
-  def getHiveHcatalogCoreJar: String = synchronized {
-    getFileFromUrl(hiveHcatalogCoreUrl, HIVE_HCATALOG_CORE_JAR)
-  }
-
-  private def getFileFromUrl(urlString: String, filename: String): String = {
-    val hiveTestJars = new File("/tmp/test-spark/hiveTestJars")
-    if (!hiveTestJars.exists()) {
-      hiveTestJars.mkdirs()
-    }
-    val targetFile = new File(hiveTestJars, filename)
-    if (!targetFile.exists() || !(targetFile.length() > 0)) {
-      val conf = new SparkConf
-      val securityManager = new SecurityManager(conf)
-      val hadoopConf = new Configuration
-
-      // propagate exceptions up to the caller of getFileFromUrl
-      Utils.doFetchFile(urlString, hiveTestJars, filename, conf, securityManager, hadoopConf)
-    }
-    targetFile.getCanonicalPath
+  private def getJarPath(filename: String): String = {
+    SparkSubmitUtils.resolveMavenCoordinates(
+      s"$filename:${HiveUtils.builtinHiveVersion}",
+      SparkSubmitUtils.buildIvySettings(
+        Some("https://repository.apache.org/content/repositories/releases"), None),
+      isTransitive = false)
   }
 }
