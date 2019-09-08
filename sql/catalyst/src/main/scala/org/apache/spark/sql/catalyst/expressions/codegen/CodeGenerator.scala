@@ -1044,27 +1044,37 @@ class CodegenContext extends Logging {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
           val expr = exprs.head
           val eval = commonExprVals(i)
-          val inputVars = getLocalInputVariableValues(this, expr).toSeq
-          val fnName = freshName("subExpr")
-          val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
-          val value = addMutableState(javaType(expr.dataType), "subExprValue")
+
+          val isNullLiteral = eval.isNull match {
+            case TrueLiteral | FalseLiteral => true
+            case _ => false
+          }
+          val (isNull, isNullEvalCode) = if (!isNullLiteral) {
+            val v = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+            (JavaCode.isNullGlobal(v), s"$v = ${eval.isNull};")
+          } else {
+            (eval.isNull, "")
+          }
 
           // Generate the code for this expression tree and wrap it in a function.
+          val fnName = freshName("subExpr")
+          val inputVars = getLocalInputVariableValues(this, expr).toSeq
           val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
+          val returnType = javaType(expr.dataType)
           val fn =
             s"""
-               |private void $fnName(${argList.mkString(", ")}) {
+               |private $returnType $fnName(${argList.mkString(", ")}) {
                |  ${eval.code}
-               |  $isNull = ${eval.isNull};
-               |  $value = ${eval.value};
+               |  $isNullEvalCode
+               |  return ${eval.value};
                |}
                """.stripMargin
 
-          val state = SubExprEliminationState(
-            JavaCode.isNullGlobal(isNull), JavaCode.global(value, expr.dataType))
+          val value = freshName("subExprValue")
+          val state = SubExprEliminationState(isNull, JavaCode.variable(value, expr.dataType))
           exprs.foreach(localSubExprEliminationExprs.put(_, state))
           val inputVariables = inputVars.map(_.variableName).mkString(", ")
-          s"${addNewFunction(fnName, fn)}($inputVariables);"
+          s"$returnType $value = ${addNewFunction(fnName, fn)}($inputVariables);"
         }
       } else {
         val errMsg = "Failed to split subexpression code into small functions because the " +
