@@ -40,6 +40,27 @@ assists users migrating to a new version.
 
 ## Airflow Master
 
+### Changes to Google PubSub Operators, Hook and Sensor
+In the `PubSubPublishOperator` and `PubSubHook.publsh` method the data field in a message should be bytestring (utf-8 encoded) rather than base64 encoded string.
+
+Due to the normalization of the parameters within GCP operators and hooks a parameters like `project` or `topic_project`
+are deprecated and will be substituted by parameter `project_id`. 
+In `PubSubHook.create_subscription` hook method in the parameter `subscription_project` is replaced by `subscription_project_id`. 
+Template fields are updated accordingly and old ones may not work.
+
+It is required now to pass key-word only arguments to `PubSub` hook.
+
+These changes are not backward compatible.
+
+Affected components:
+ * airflow.gcp.hooks.pubsub.PubSubHook
+ * airflow.gcp.operators.pubsub.PubSubTopicCreateOperator
+ * airflow.gcp.operators.pubsub.PubSubSubscriptionCreateOperator
+ * airflow.gcp.operators.pubsub.PubSubTopicDeleteOperator
+ * airflow.gcp.operators.pubsub.PubSubSubscriptionDeleteOperator
+ * airflow.gcp.operators.pubsub.PubSubPublishOperator
+ * airflow.gcp.sensors.pubsub.PubSubPullSensor
+
 ### Changes to `aws_default` Connection's default region
 
 The region of Airflow's default connection to AWS (`aws_default`) was previously
