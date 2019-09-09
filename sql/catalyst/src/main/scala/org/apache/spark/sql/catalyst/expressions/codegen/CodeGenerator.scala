@@ -403,13 +403,14 @@ class CodegenContext {
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
    *  be evaluated once.
    */
-  val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+  private val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
+  // Visible for testing.
+  private[expressions] var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
-  val subexprFunctions = mutable.ArrayBuffer.empty[String]
+  private val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   val outerClassName = "OuterClass"
 
@@ -991,6 +992,15 @@ class CodegenContext {
           orderedFunctions.map(f => s"$innerClassInstance.$f($argInvocationString)")
         }
     }
+  }
+
+  /**
+   * Returns the code for subexpression elimination after splitting it if necessary.
+   */
+  def subexprFunctionsCode: String = {
+    // Whole-stage codegen's subexpression elimination is handled in another code path
+    assert(currentVars == null || subexprFunctions.isEmpty)
+    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
   /**
