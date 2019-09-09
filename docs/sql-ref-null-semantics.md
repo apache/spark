@@ -384,12 +384,12 @@ SELECT max(age) FROM person where 1 = 0;
 ### Condition expressions in WHERE, HAVING and JOIN clauses. <a name="condition-expressions"></a>
 `WHERE`, `HAVING` operators filter rows based on the user specified condition.
 A `JOIN` operator is used to combine rows from two tables based on a join condition.
-For the all the three operators, a condition expression is a boolean expression and can return
- <code>True, False or Unknown (NULL) </code>. They are "satisfied" if the result of the condition is `True`.
+For all the three operators, a condition expression is a boolean expression and can return
+ <code>True, False or Unknown (NULL)</code>. They are "satisfied" if the result of the condition is `True`.
 
 #### Examples
 {% highlight sql %}
--- Persons who age is unknown or `NULL` are filtered out from result set.
+-- Persons whose age is unknown (`NULL`) are filtered out from the result set.
 SELECT * FROM person WHERE age > 0;
   +--------+---+
   |name    |age|
@@ -460,8 +460,8 @@ WHERE p1.age <=> p2.age
 {% endhighlight %}
 
 ### Aggregate operator (GROUP BY, DISTINCT) <a name="aggregate-operator"></a>
-As discussed in the previous section [comparison operator](sql-ref-null-semantics.html#comparision-operators)
-two null values are not equal. However, for the purpose of grouping and distinct processing, the two or more
+As discussed in the previous section [comparison operator](sql-ref-null-semantics.html#comparision-operators),
+two `NULL` values are not equal. However, for the purpose of grouping and distinct processing, the two or more
 values with `NULL data`are grouped together into the same bucket. This behaviour is conformant with SQL
 standard and with other enterprise database management systems.
 
@@ -493,7 +493,7 @@ SELECT DISTINCT age FROM person;
 
 ### Sort operator (ORDER BY Clause) <a name="order-by"></a>
 Spark SQL supports null ordering specification in `ORDER BY` clause. Spark processes the `ORDER BY` clause by
-placing the all the `NULL` values at first or at last depending on the null ordering specification. By default all
+placing all the `NULL` values at first or at last depending on the null ordering specification. By default, all
 the `NULL` values are placed at first.
 
 #### Examples
@@ -554,8 +554,8 @@ equal unlike the regular `EqualTo`(`=`) operator.
 CREATE VIEW unknown_age SELECT * FROM person WHERE age IS NULL;
 
 -- Only common rows between two legs of `INTERSECT` are in the 
--- resultset. The comparison between columns of the row are done
--- in null-safe manner.
+-- result set. The comparison between columns of the row are done
+-- in a null-safe manner.
 SELECT name, age FROM person
 INTERSECT
 SELECT name, age from unknown_age;
@@ -567,7 +567,7 @@ SELECT name, age from unknown_age;
   +------+----+
 
 -- `NULL` values from two legs of the `EXCEPT` are not in output. 
--- This basically shows that the comparison happens in null-safe manner.
+-- This basically shows that the comparison happens in a null-safe manner.
 SELECT age, name FROM person
 EXCEPT
 SELECT age FROM unknown_age;
@@ -605,8 +605,8 @@ SELECT name, age FROM unknown_age;
 In Spark, EXISTS and NOT EXISTS expressions are allowed inside a WHERE clause. 
 These are boolean expressions which return either `TRUE` or
 `FALSE`. In otherwords, EXISTS is a membership condition and returns `TRUE`
-when the subquery it refers to return one or more rows. Similary NOT EXISTS
-is a non-membership condition and return TRUE when no rows or zero rows are
+when the subquery it refers to returns one or more rows. Similary, NOT EXISTS
+is a non-membership condition and returns TRUE when no rows or zero rows are
 returned from the subquery.
 
 These two expressions are not affected by presence of NULL in the result of
@@ -637,6 +637,7 @@ SELECT * FROM person WHERE NOT EXISTS (SELECT null);
   +----+---+
   +----+---+
 
+-- `NOT EXISTS` expression returns `TRUE`.
 SELECT * FROM person WHERE NOT EXISTS (SELECT 1 WHERE 1 = 0);
   +--------+----+
   |name    |age |
@@ -659,8 +660,8 @@ equivalent to a set of equality condition separated by a disjunctive operator (`
 For example, c1 IN (1, 2, 3) is semantically equivalent to `(C1 = 1 OR c1 = 2 OR c1 = 3)`.
 
 As far as handling `NULL` values are concerned, the semantics can be deduced from
-the `NULL` values handling in comparison operators(`=`) and logical operators(`OR`).
-To summarize, below are the rules for computing the result of a `IN` expression.
+the `NULL` value handling in comparison operators(`=`) and logical operators(`OR`).
+To summarize, below are the rules for computing the result of an `IN` expression.
 
 - TRUE is returned when the non-NULL value in question is found in the list
 - FALSE is returned when the non-NULL value is not found in the list and the
@@ -670,7 +671,7 @@ To summarize, below are the rules for computing the result of a `IN` expression.
  
 #### Examples
 {% highlight sql %}
--- The subquery has only `NULL` value in its resultset. Therefore
+-- The subquery has only `NULL` value in its result set. Therefore,
 -- the result of `IN` predicate is UNKNOWN.
 SELECT * FROM person WHERE age IN (SELECT null);
   +----+---+
@@ -678,7 +679,7 @@ SELECT * FROM person WHERE age IN (SELECT null);
   +----+---+
   +----+---+
 
--- The subquery has `NULL` value in the resultset as well as a valid 
+-- The subquery has `NULL` value in the result set as well as a valid 
 -- value `50`. Rows with age = 50 are returned. 
 SELECT * FROM person
 WHERE age IN (SELECT age FROM VALUES (50), (null) sub(age));
@@ -689,21 +690,14 @@ WHERE age IN (SELECT age FROM VALUES (50), (null) sub(age));
   |Dan |50 |
   +----+---+
 
--- The subquery has only `NULL` value in its resultset. Therefore
--- the result of `NOT IN` predicate is UNKNOWN.
-SELECT * FROM person WHERE age IN (SELECT null);
-  +----+---+
-  |name|age|
-  +----+---+
-  +----+---+
-
--- Since subquery has `NULL` value in result set, the `NOT IN`
+-- Since subquery has `NULL` value in the result set, the `NOT IN`
 -- predicate would return UNKNOWN. Hence, no rows are
 -- qualified for this query.
 SELECT * FROM person
 WHERE age NOT IN (SELECT age FROM VALUES (50), (null) sub(age));
   +----+---+
   |name|age|
+  +----+---+
   +----+---+
 
 {% endhighlight %}
