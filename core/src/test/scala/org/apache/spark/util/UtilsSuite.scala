@@ -31,7 +31,6 @@ import java.util.zip.GZIPOutputStream
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
-import scala.util.control.NonFatal
 
 import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
@@ -39,7 +38,6 @@ import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -918,7 +916,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   }
 
   test("Set Spark CallerContext") {
-    SparkHadoopUtil.get.conf.setBoolean("hadoop.caller.context.enabled", true);
     val context = "test"
     new CallerContext(context).setCurrentContext()
     if (CallerContext.callerContextSupported) {
