@@ -1316,7 +1316,15 @@ setGeneric("degrees", function(x) { standardGeneric("degrees") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("toDegrees", function(x) { standardGeneric("toDegrees") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("radians", function(x) { standardGeneric("radians") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("toRadians", function(x) { standardGeneric("toRadians") })
 
 #' @rdname column_datetime_functions
 #' @name NULL
