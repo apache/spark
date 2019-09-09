@@ -362,13 +362,19 @@ class RFormulaModel private[feature](
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {
 
+  private val foldExprs = (df: DataFrame) => resolvedFormula.evalExprs.foldLeft(df) _
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
-    val withExprs = transformSelectExprs(dataset.toDF)
+    val withExprs = foldExprs(dataset.toDF) {
+      case(df, colname) => df.withColumn(colname, expr(colname))
+    }
     val withFeatures = pipelineModel.transform(withExprs)
     val withLabel = transformLabel(withFeatures)
-    transformDropExprs(withLabel)
+    foldExprs(withLabel) {
+      case(df, colname) => df.drop(col(s"`$colname`"))
+    }
   }
 
   @Since("1.5.0")
@@ -433,24 +439,13 @@ class RFormulaModel private[feature](
       s"Label column already exists and is not of type ${NumericType.simpleString}.")
   }
 
-  private def foldExprs(dataframe: DataFrame)(f: (DataFrame, String) => DataFrame): DataFrame = {
-    val folded = resolvedFormula.evalExprs.foldLeft(dataframe)(f)
-    folded
-  }
-
-  private def transformSelectExprs(dataframe: DataFrame): DataFrame = foldExprs(dataframe) {
-    case(df, colname) => df.withColumn(colname, expr(colname))
-  }
-
-  private def transformDropExprs(dataframe: DataFrame): DataFrame = foldExprs(dataframe) {
-    case(df, colname) => df.drop(col(s"`$colname`"))
-  }
-
   private def transformSelectExprsSchema(schema: StructType): StructType = {
     val spark = SparkSession.builder().getOrCreate()
     val dummyRDD = spark.sparkContext.emptyRDD[Row]
     val dummyDF = spark.createDataFrame(dummyRDD, schema)
-    transformSelectExprs(dummyDF).schema
+    foldExprs(dummyDF) {
+      case(df, colname) => df.withColumn(colname, expr(colname))
+    }.schema
   }
 
   private def transformDropExprsSchema(schema: StructType): StructType = {
