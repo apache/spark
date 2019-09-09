@@ -1054,14 +1054,6 @@ class CodegenContext {
   }
 
   /**
-   * Returns the code for subexpression elimination after splitting it if necessary.
-   */
-  def subexprFunctionsCode: String = {
-    // Whole-stage codegen's subexpression elimination is handled in another code path
-    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
-  }
-
-  /**
    * This is for sub-expression elimination targeting structurally equivalent expressions.
    * This is only supported in non whole-stage codegen.
    *
