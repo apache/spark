@@ -44,11 +44,8 @@ other `SQL` constructs.
 9. [Null handling in IN and NOT IN subquery](#in-not-in)
 
 <style type="text/css">
-.tclass {font-size:12px;color:#333333;width:70%;border-width: 1px;border-color: #729ea5;border-collapse: collapse;}
 .tsclass {font-size:12px;color:#333333;width:40%;border-width: 2px;border-color: #729ea5;border-collapse: collapse;}
 .tsclass th {text-align: left;}
-<!-- .tclass tr {background-color:#D3D3D3;} -->
-.tclass th {text-align: left;}
 </style>
 
 The following illustrates the schema layout and data of a table named `person`. The data contains `NULL` values in
