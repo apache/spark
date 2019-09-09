@@ -20,15 +20,19 @@ license: |
 ---
 
 ### Description
-Clears all cached RDDs and DataFrames associated with a `SparkSession`.
+`CLEAR CACHE` removes the entries and associated data from the in-memory and/or on-disk cache for all cached tables  and views.
 
 ### Syntax
 {% highlight sql %}
 CLEAR CACHE
 {% endhighlight %}
 
-### Example
+### Examples
 {% highlight sql %}
-CLEAR CACHE
+CLEAR CACHE;
 {% endhighlight %}
+
+### Related Statements
+ * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+ * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 
