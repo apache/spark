@@ -132,13 +132,13 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   test("string overlay function") {
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    val df = Seq(("Spark SQL", "Spark的SQL", "_", "CORE", "ANSI ", "tructured")).
-      toDF("a", "b", "c", "d", "e", "f")
-    checkAnswer(df.select(overlay($"a", $"c", 6)), Row("Spark_SQL"))
-    checkAnswer(df.select(overlay($"a", $"d", 7)), Row("Spark CORE"))
-    checkAnswer(df.select(overlay($"a", $"e", 7, 0)), Row("Spark ANSI SQL"))
-    checkAnswer(df.select(overlay($"a", $"f", 2, 4)), Row("Structured SQL"))
-    checkAnswer(df.select(overlay($"b", $"c", 6)), Row("Spark_SQL"))
+    val df = Seq(("Spark SQL", "Spark的SQL", "_", "CORE", "ANSI ", "tructured", 6, 7, 0, 2, 4)).
+      toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k")
+    checkAnswer(df.select(overlay($"a", $"c", $"g")), Row("Spark_SQL"))
+    checkAnswer(df.select(overlay($"a", $"d", $"h")), Row("Spark CORE"))
+    checkAnswer(df.select(overlay($"a", $"e", $"h", $"i")), Row("Spark ANSI SQL"))
+    checkAnswer(df.select(overlay($"a", $"f", $"j", $"k")), Row("Structured SQL"))
+    checkAnswer(df.select(overlay($"b", $"c", $"g")), Row("Spark_SQL"))
     // scalastyle:on
   }
 
@@ -149,13 +149,14 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Array[Byte](-1),
       Array[Byte](-1, -1, -1, -1),
       Array[Byte](-1, -1),
-      Array[Byte](-1, -1, -1, -1, -1))).toDF("a", "b", "c", "d", "e")
-    checkAnswer(df.select(overlay($"a", $"b", 6)), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
-    checkAnswer(df.select(overlay($"a", $"c", 7)),
+      Array[Byte](-1, -1, -1, -1, -1),
+      6, 7, 0, 2, 4)).toDF("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
+    checkAnswer(df.select(overlay($"a", $"b", $"f")), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
+    checkAnswer(df.select(overlay($"a", $"c", $"g")),
       Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1)))
-    checkAnswer(df.select(overlay($"a", $"d", 7, 0)),
+    checkAnswer(df.select(overlay($"a", $"d", $"g", $"h")),
       Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, 7, 8, 9)))
-    checkAnswer(df.select(overlay($"a", $"e", 2, 4)),
+    checkAnswer(df.select(overlay($"a", $"e", $"i", $"j")),
       Row(Array[Byte](1, -1, -1, -1, -1, -1, 6, 7, 8, 9)))
   }
 

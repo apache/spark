@@ -2523,8 +2523,8 @@ object functions {
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replace: Column, pos: Int, len: Int): Column = withExpr {
-    Overlay(src.expr, replace.expr, lit(pos).expr, lit(len).expr)
+  def overlay(src: Column, replace: Column, pos: Column, len: Column): Column = withExpr {
+    Overlay(src.expr, replace.expr, pos.expr, len.expr)
   }
 
   /**
@@ -2534,8 +2534,8 @@ object functions {
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replace: Column, pos: Int): Column = withExpr {
-    new Overlay(src.expr, replace.expr, lit(pos).expr)
+  def overlay(src: Column, replace: Column, pos: Column): Column = withExpr {
+    new Overlay(src.expr, replace.expr, pos.expr)
   }
 
   /**
