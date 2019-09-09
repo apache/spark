@@ -72,9 +72,9 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Close Time",
         "Execution Time", "Duration", "Statement", "State", "Detail")
-      val tooltips = Seq(None,None,None,None,Some(ToolTips.THRIFT_SERVER_FINISH_TIME),
+      val tooltips = Seq(None, None, None, None, Some(ToolTips.THRIFT_SERVER_FINISH_TIME),
         Some(ToolTips.THRIFT_SERVER_CLOSE_TIME), Some(ToolTips.THRIFT_SERVER_EXECUTION),
-        Some(ToolTips.THRIFT_SERVER_DURATION), None,None,None)
+        Some(ToolTips.THRIFT_SERVER_DURATION), None, None, None)
       val dataRows = listener.getExecutionList.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
