@@ -442,7 +442,7 @@ object MimaExcludes {
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.FetchFailed.copy$default$5"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.copy"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.FetchFailed.copy$default$3"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.this"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.this")
   )
 
   // Exclude rules for 2.4.x
