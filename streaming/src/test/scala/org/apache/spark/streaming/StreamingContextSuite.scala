@@ -368,6 +368,9 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     }
     ssc.start()
     ssc.awaitTerminationOrTimeout(500)
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      assert(SlowTestReceiver.initialized)
+    }
     ssc.stop(stopSparkContext = false, stopGracefully = true)
     logInfo("Running count = " + runningCount)
     assert(runningCount > 0)
@@ -974,6 +977,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
     }
     receivingThreadOption = Some(thread)
     thread.start()
+    SlowTestReceiver.initialized = true
   }
 
   def onStop() {
@@ -986,6 +990,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 }
 
 object SlowTestReceiver {
+  var initialized = false
   var receivedAllRecords = false
 }
 
