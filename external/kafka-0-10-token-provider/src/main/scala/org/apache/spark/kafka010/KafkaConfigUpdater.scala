@@ -70,6 +70,7 @@ private[spark] case class KafkaConfigUpdater(module: String, kafkaParams: Map[St
         map.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
       clusterConfig.foreach { clusterConf =>
         logDebug("Delegation token detected, using it for login.")
+        setIfUnset(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, clusterConf.securityProtocol)
         val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
         set(SaslConfigs.SASL_JAAS_CONFIG, jaasParams)
         require(clusterConf.tokenMechanism.startsWith("SCRAM"),
