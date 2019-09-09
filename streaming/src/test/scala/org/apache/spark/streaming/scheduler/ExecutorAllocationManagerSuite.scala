@@ -19,7 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
@@ -30,15 +30,14 @@ import org.apache.spark.internal.config.Streaming._
 import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
-
 class ExecutorAllocationManagerSuite extends TestSuiteBase
-  with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
+  with BeforeAndAfterEach with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
   private var clock: StreamManualClock = null
 
-  before {
+  override protected def beforeEach(): Unit = {
     allocationClient = mock[ExecutorAllocationClient]
     clock = new StreamManualClock()
   }
