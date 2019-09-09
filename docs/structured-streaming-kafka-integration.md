@@ -771,8 +771,8 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>SASL_SSL</td>
     <td>
       Protocol used to communicate with brokers. For further details please see Kafka documentation. Protocol is applied on all the sources and sinks as default where
-      <code>bootstrap.servers</code> config matches (for further details please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code>)
-      , and can be overridden by setting <code>kafka.security.protocol</code> on the source or sink.
+      <code>bootstrap.servers</code> config matches (for further details please see <code>spark.kafka.clusters.${cluster}.target.bootstrap.servers.regex</code>),
+      and can be overridden by setting <code>kafka.security.protocol</code> on the source or sink.
     </td>
   </tr>
   <tr>
