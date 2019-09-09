@@ -20,11 +20,10 @@ license: |
 ---
 
 ### Description
-In relational database, a table represents a collection of data that are
-related to each other. It consists of set of rows and each row contains
-a set of columns. A column is associated with a data type and represents
-a specific attribute of an entity (for example, `age` is column of an
-entity called `person`). Some times, the value of a column
+A table consists of a set of rows and each row contains a set of columns.
+A column is associated with a data type and represents
+a specific attribute of an entity (for example, `age` is a column of an
+entity called `person`). Sometimes, the value of a column
 specific to a row is not known at the time the row comes into existence.
 In `SQL`, such values are represnted as `NULL`. This section details the
 semantics of `NULL` values handling in various operators, expressions and
@@ -65,11 +64,11 @@ the `age` column and this table will be used in various examples in the sections
 ### Comparision operators <a name="comp-operators"></a>
 
 Apache spark supports the standard comparison operators such as '>', '>=', '=', '<' and '<='.
-The result of these operators are unknown or `NULL` when one of the operarands or both the operands are
-unknown or `NULL`. In order to compare the `NULL` values for equality, spark provides a null-safe
-equal operator ('<=>') which returns `False` when one of the operand is `NULL` and returns 'True` when
+The result of these operators is unknown or `NULL` when one of the operarands or both the operands are
+unknown or `NULL`. In order to compare the `NULL` values for equality, Spark provides a null-safe
+equal operator ('<=>'), which returns `False` when one of the operand is `NULL` and returns 'True` when
 both the operands are `NULL`. The following table illustrates the behaviour of comparison operators when
-one of more operands are `NULL`:
+one or both operands are `NULL`:
 
 <table class="tsclass" border="1">
   <tr>
@@ -153,7 +152,7 @@ SELECT NULL <=> NULL;
 Spark supports standard logical operators such as `AND`, `OR` and `NOT`. These operators take `Boolean` expressions
 as the arguments and return a `Boolean` value.  
 
-The following tables illustrates the behavior of logical opeators when one or both opearands are `NULL`.
+The following tables illustrate the behavior of logical opeators when one or both operands are `NULL`.
 
 <table class="tsclass" border="1">
   <tr>
@@ -207,7 +206,7 @@ The following tables illustrates the behavior of logical opeators when one or bo
 
 ### Examples
 {% highlight sql %}
--- Normal comparison operators return `NULL` when one of the operand is `NULL`.
+-- Normal comparison operators return `NULL` when one of the operands is `NULL`.
 SELECT (true OR null) AS expression_output;
   +-----------------+
   |expression_output|
@@ -223,7 +222,7 @@ SELECT (null OR false) AS expression_output
   |null             |
   +-----------------+
 
--- Null-safe equal operator return `False` when one of the operand is `NULL`
+-- Null-safe equal operator returns `False` when one of the operands is `NULL`
 SELECT NOT(null) AS expression_output;
   +-----------------+
   |expression_output|
@@ -234,16 +233,16 @@ SELECT NOT(null) AS expression_output;
 
 ### Expressions <a name="expressions"></a>
 The comparison operators and logical operators are treated as expressions in
-spark. Other than these two kinds of expressions, spark supports other form of
-expressions such as function expressions, cast expressions etc. The expressions
- in spark can be broadly classified as :
+Spark. Other than these two kinds of expressions, Spark supports other form of
+expressions such as function expressions, cast expressions, etc. The expressions
+in Spark can be broadly classified as :
 - Null in-tolerent expressions
-- Expressions that can process null value operands
-  - The result of these expressions depend on the expression itself.
+- Expressions that can process `NULL` value operands
+  - The result of these expressions depends on the expression itself.
 
 #### Null in-tolerant expressions <a name="null-in-tolerant"></a>
-Null in-tolerant expressions return null when one or more arguments of 
-expression are null and most of the expressions fall in this category.
+Null in-tolerant expressions return `NULL` when one or more arguments of 
+expression are `NULL` and most of the expressions fall in this category.
 
 ##### Examples
 {% highlight sql %}
@@ -271,11 +270,11 @@ SELECT to_date(null) as expression_output;
 
 #### Expressions that can process null value operands. <a name="can-process-null"></a>
 
-This class of expressions are designed to handle null operands. The result of the 
-expressions depend on the expression itself. As an example, function expression `isnull`
+This class of expressions are designed to handle `NULL` values. The result of the 
+expressions depends on the expression itself. As an example, function expression `isnull`
 returns a `true` on null input and `false` on non null input where as function `coalesce`
-returns the first non `NULL` value in its list of operands. However `coalesce` returns
-`NULL` when all its operands are `NULL`. Below are the list of expressions of this category.
+returns the first non `NULL` value in its list of operands. However, `coalesce` returns
+`NULL` when all its operands are `NULL`. Below is an incomplete list of expressions of this category.
   - COALESCE
   - NULLIF
   - IFNULL
@@ -314,7 +313,7 @@ SELECT coalesce(null, null, null, null) AS expression_output;
   |null             |
   +-----------------+
 
-SELECT  isnan(null) as expression_output;
+SELECT isnan(null) as expression_output;
   +-----------------+
   |expression_output|
   +-----------------+
@@ -327,8 +326,8 @@ Aggregate functions compute a single result by processing a set of input rows. B
 the rules of how `NULL` values are handled by aggregate functions.
 - `NULL` values are ignored from processing by all the aggregate functions.
   - Only exception to this rule is COUNT(*) function.
-- Some aggregate functions return `NULL` when all input values are `NULL` or input data set
-  is empty.<br> The list of these functions are :
+- Some aggregate functions return `NULL` when all input values are `NULL` or the input data set
+  is empty.<br> The list of these functions is:
   - MAX
   - MIN
   - SUM
@@ -355,8 +354,8 @@ SELECT count(age) FROM person;
   |5         |
   +----------+
 
--- `count(*)` on a empty inputset return 0. This is unlike other
--- aggregate functions such as `max` which return `NULL`.
+-- `count(*)` on an empty input set returns 0. This is unlike the other
+-- aggregate functions, such as `max`, which return `NULL`.
 SELECT count(*) FROM person where 1 = 0;
   +--------+
   |count(1)|
@@ -372,7 +371,7 @@ SELECT max(age) FROM person;
   |50      |
   +--------+
 
--- `max` returns `NULL` on empty input set.
+-- `max` returns `NULL` on an empty input set.
 SELECT max(age) FROM person where 1 = 0;
   +--------+
   |max(age)|
@@ -386,7 +385,7 @@ SELECT max(age) FROM person where 1 = 0;
 `WHERE`, `HAVING` operators filter rows based on the user specified condition.
 A `JOIN` operator is used to combine rows from two tables based on a join condition.
 For the all the three operators, a condition expression is a boolean expression and can return
- <code>True, False or Unknown (NULL) </code>
+ <code>True, False or Unknown (NULL) </code>. They are "satisfied" if the result of the condition is `True`.
 
 #### Examples
 {% highlight sql %}
