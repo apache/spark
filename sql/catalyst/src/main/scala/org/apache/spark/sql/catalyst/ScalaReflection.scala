@@ -926,8 +926,8 @@ trait ScalaReflection extends Logging {
         primaryConstructorSymbol.get.asMethod.paramLists
       }
     } else {
-      throw new UnsupportedOperationException(s"Unable to find constructor for ${tpe}. " +
-        s"This could happen if ${tpe} is a trait / interface.")
+      throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
+        s"This could happen if $tpe is a trait / interface.")
     }
     params.flatten
   }
