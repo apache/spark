@@ -109,7 +109,7 @@ object KubernetesTestConf {
       val (vtype, configs) = spec.volumeConf match {
         case KubernetesHostPathVolumeConf(path) =>
           (KUBERNETES_VOLUMES_HOSTPATH_TYPE,
-            Map(KUBERNETES_VOLUMES_OPTIONS_PATH_KEY -> path))
+            Map(KUBERNETES_VOLUMES_MOUNT_PATH_KEY -> path))
 
         case KubernetesPVCVolumeConf(claimName) =>
           (KUBERNETES_VOLUMES_PVC_TYPE,

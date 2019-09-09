@@ -66,7 +66,7 @@ private[spark] object KubernetesVolumeUtils {
       volumeName: String): KubernetesVolumeSpecificConf = {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
-        val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
+        val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_MOUNT_PATH_KEY"
         KubernetesHostPathVolumeConf(options(pathKey))
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
