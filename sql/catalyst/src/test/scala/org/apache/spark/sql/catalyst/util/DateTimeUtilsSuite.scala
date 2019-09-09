@@ -582,7 +582,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
         .atZone(zoneId).toInstant)
       toTimestamp(" Yesterday", zoneId).get should be (today - MICROS_PER_DAY +- tolerance)
       toTimestamp("Today ", zoneId).get should be (today +- tolerance)
-      toTimestamp(" tomorrow UTC", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
+      toTimestamp(" tomorrow CET ", zoneId).get should be (today + MICROS_PER_DAY +- tolerance)
     }
   }
 }

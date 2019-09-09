@@ -863,7 +863,7 @@ object DateTimeUtils {
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
-   * @param input - left trimmed string
+   * @param input - a trimmed string
    * @param zoneId - zone identifier used to get the current date.
    * @return some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
