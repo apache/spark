@@ -144,8 +144,12 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
 
   test("binary overlay function") {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    val df = Seq((Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9), Array[Byte](-1), Array[Byte](-1, -1, -1, -1),
-      Array[Byte](-1, -1), Array[Byte](-1, -1, -1, -1, -1))).toDF("a", "b", "c", "d", "e")
+    val df = Seq((
+      Array[Byte](1, 2, 3, 4, 5, 6, 7, 8, 9),
+      Array[Byte](-1),
+      Array[Byte](-1, -1, -1, -1),
+      Array[Byte](-1, -1),
+      Array[Byte](-1, -1, -1, -1, -1))).toDF("a", "b", "c", "d", "e")
     checkAnswer(df.select(overlay($"a", $"b", 6)), Row(Array[Byte](1, 2, 3, 4, 5, -1, 7, 8, 9)))
     checkAnswer(df.select(overlay($"a", $"c", 7)),
       Row(Array[Byte](1, 2, 3, 4, 5, 6, -1, -1, -1, -1)))
