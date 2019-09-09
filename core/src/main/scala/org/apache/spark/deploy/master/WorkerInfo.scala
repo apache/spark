@@ -26,12 +26,15 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 private[spark] case class WorkerResourceInfo(name: String, addresses: Seq[String])
-  extends ResourceAllocator(name, addresses) {
+  extends ResourceAllocator {
+
+  override protected def resourceName = this.name
+  override protected def resourceAddresses = this.addresses
 
   def acquire(amount: Int): ResourceInformation = {
     val allocated = availableAddrs.take(amount)
     acquire(allocated)
-    new ResourceInformation(name, allocated.toArray)
+    new ResourceInformation(resourceName, allocated.toArray)
   }
 }
 

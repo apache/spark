@@ -415,6 +415,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
+   * Returns a thread safe iterator that iterates of the entries of this map.
+   */
+  public MapIterator safeIterator() {
+    return new MapIterator(numValues, new Location(), false);
+  }
+
+  /**
    * Returns a destructive iterator for iterating over the entries of this map. It frees each page
    * as it moves onto next one. Notice: it is illegal to call any method on the map after
    * `destructiveIterator()` has been called.

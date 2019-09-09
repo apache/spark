@@ -74,6 +74,16 @@ private[spark] object ResourceInformation {
           s"Here is a correct example: $exampleJson.", e)
     }
   }
+
+  def parseJson(json: JValue): ResourceInformation = {
+    implicit val formats = DefaultFormats
+    try {
+      json.extract[ResourceInformationJson].toResourceInformation
+    } catch {
+      case NonFatal(e) =>
+        throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
+    }
+  }
 }
 
 /** A case class to simplify JSON serialization of [[ResourceInformation]]. */

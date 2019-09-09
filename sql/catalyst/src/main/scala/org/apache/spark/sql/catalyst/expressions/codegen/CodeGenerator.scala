@@ -403,13 +403,14 @@ class CodegenContext {
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
    *  be evaluated once.
    */
-  val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+  private val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
+  // Visible for testing.
+  private[expressions] var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
-  val subexprFunctions = mutable.ArrayBuffer.empty[String]
+  private val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   val outerClassName = "OuterClass"
 
@@ -991,6 +992,15 @@ class CodegenContext {
           orderedFunctions.map(f => s"$innerClassInstance.$f($argInvocationString)")
         }
     }
+  }
+
+  /**
+   * Returns the code for subexpression elimination after splitting it if necessary.
+   */
+  def subexprFunctionsCode: String = {
+    // Whole-stage codegen's subexpression elimination is handled in another code path
+    assert(currentVars == null || subexprFunctions.isEmpty)
+    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
   }
 
   /**
@@ -1613,6 +1623,48 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Extracts all the input variables from references and subexpression elimination states
+   * for a given `expr`. This result will be used to split the generated code of
+   * expressions into multiple functions.
+   */
+  def getLocalInputVariableValues(
+      ctx: CodegenContext,
+      expr: Expression,
+      subExprs: Map[Expression, SubExprEliminationState]): Set[VariableValue] = {
+    val argSet = mutable.Set[VariableValue]()
+    if (ctx.INPUT_ROW != null) {
+      argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
+    }
+
+    // Collects local variables from a given `expr` tree
+    val collectLocalVariable = (ev: ExprValue) => ev match {
+      case vv: VariableValue => argSet += vv
+      case _ =>
+    }
+
+    val stack = mutable.Stack[Expression](expr)
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case e if subExprs.contains(e) =>
+          val SubExprEliminationState(isNull, value) = subExprs(e)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
+
+        case ref: BoundReference if ctx.currentVars != null &&
+            ctx.currentVars(ref.ordinal) != null =>
+          val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
+
+        case e =>
+          stack.pushAll(e.children)
+      }
+    }
+
+    argSet.toSet
+  }
+
+  /**
    * Returns the name used in accessor and setter for a Java primitive type.
    */
   def primitiveTypeName(jt: String): String = jt match {
@@ -1714,6 +1766,15 @@ object CodeGenerator extends Logging {
       }
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaParamLength
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr).sum
+  }
+
+  def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int = {
+    def paramLengthForExpr(input: ExprValue): Int = input.javaType match {
+      case java.lang.Long.TYPE | java.lang.Double.TYPE => 2
+      case _ => 1
     }
     // Initial value is 1 for `this`.
     1 + params.map(paramLengthForExpr).sum
