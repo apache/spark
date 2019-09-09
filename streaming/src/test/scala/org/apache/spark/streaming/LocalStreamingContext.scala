@@ -52,10 +52,17 @@ trait LocalStreamingContext extends BeforeAndAfterEach with BeforeAndAfterAll { 
 
 object LocalStreamingContext extends Logging {
   def stop(ssc: StreamingContext, stopSparkContext: Boolean): Unit = {
-    if (stopSparkContext) {
-      ensureNoActiveSparkContext(ssc)
-    } else if (ssc != null) {
-      ssc.stop(stopSparkContext = false)
+    try {
+      if (ssc != null) {
+        ssc.stop(stopSparkContext = stopSparkContext)
+      }
+    } catch {
+      case e: Exception =>
+        logError("Error stopping StreamingContext", e)
+    } finally {
+      if (stopSparkContext) {
+        ensureNoActiveSparkContext()
+      }
     }
   }
 
@@ -79,13 +86,4 @@ object LocalStreamingContext extends Logging {
     }
   }
 
-  def ensureNoActiveSparkContext(ssc: StreamingContext): Unit = {
-    try {
-      if (ssc != null) {
-        ssc.stop(stopSparkContext = true)
-      }
-    } finally {
-      ensureNoActiveSparkContext()
-    }
   }
-}

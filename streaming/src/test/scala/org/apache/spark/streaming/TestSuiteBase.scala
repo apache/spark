@@ -278,15 +278,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     try {
       block(ssc)
     } finally {
-      try {
-        ssc.stop(stopSparkContext = true)
-      } catch {
-        case e: Exception =>
-          logError("Error stopping StreamingContext", e)
-      } finally {
-        // This is safe as we called StreamingContext.stop(stopSparkContext = true) before.
-        LocalStreamingContext.ensureNoActiveSparkContext()
-      }
+      LocalStreamingContext.stop(ssc, stopSparkContext = true)
     }
   }
 
