@@ -27,12 +27,16 @@ import org.apache.spark.sql.internal.SQLConf
  * A thread-safe manager for [[CatalogPlugin]]s. It tracks all the registered catalogs, and allow
  * the caller to look up a catalog by name.
  */
-class CatalogManager(conf: SQLConf) extends Logging {
+class CatalogManager(conf: SQLConf, defaultSessionCatalog: TableCatalog) extends Logging {
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
   def catalog(name: String): CatalogPlugin = synchronized {
-    catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+    if (name.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
+      v2SessionCatalog
+    } else {
+      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+    }
   }
 
   def defaultCatalog: Option[CatalogPlugin] = {
@@ -47,14 +51,28 @@ class CatalogManager(conf: SQLConf) extends Logging {
     }
   }
 
-  def v2SessionCatalog: Option[CatalogPlugin] = {
-    try {
-      Some(catalog(CatalogManager.SESSION_CATALOG_NAME))
-    } catch {
-      case NonFatal(e) =>
-        logError("Cannot load v2 session catalog", e)
-        None
+  private def loadV2SessionCatalog(): CatalogPlugin = {
+    Catalogs.load(CatalogManager.SESSION_CATALOG_NAME, conf) match {
+      case extension: CatalogExtension =>
+        extension.setDelegateCatalog(defaultSessionCatalog)
+        extension
+      case other => other
     }
+  }
+
+  // If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
+  // session catalog. Otherwise, return the default session catalog.
+  def v2SessionCatalog: CatalogPlugin = {
+    conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
+      try {
+        catalogs.getOrElseUpdate(CatalogManager.SESSION_CATALOG_NAME, loadV2SessionCatalog())
+      } catch {
+        case NonFatal(_) =>
+          logError(
+            "Fail to instantiate the custom v2 session catalog: " + customV2SessionCatalog)
+          defaultSessionCatalog
+      }
+    }.getOrElse(defaultSessionCatalog)
   }
 
   private def getDefaultNamespace(c: CatalogPlugin) = c match {
