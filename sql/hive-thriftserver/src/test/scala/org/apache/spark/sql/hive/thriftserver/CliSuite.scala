@@ -27,7 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax
+import org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -301,8 +301,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(
       1.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      s"CREATE TEMPORARY FUNCTION example_max AS '${classOf[UDAFExampleMax].getName}';" -> "",
-      "SELECT example_max(1);" -> "1"
+      s"CREATE TEMPORARY FUNCTION example_format AS '${classOf[UDFExampleFormat].getName}';" -> "",
+      "SELECT example_format('%o', 93);" -> "135"
     )
   }
 }
