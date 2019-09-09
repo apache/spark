@@ -63,15 +63,16 @@ class CatalogManager(conf: SQLConf, defaultSessionCatalog: TableCatalog) extends
   // If the V2_SESSION_CATALOG config is specified, we try to instantiate the user-specified v2
   // session catalog. Otherwise, return the default session catalog.
   def v2SessionCatalog: CatalogPlugin = {
-    if (conf.getConf(SQLConf.V2_SESSION_CATALOG).isDefined) {
+    conf.getConf(SQLConf.V2_SESSION_CATALOG).map { customV2SessionCatalog =>
       try {
         catalogs.getOrElseUpdate(CatalogManager.SESSION_CATALOG_NAME, loadV2SessionCatalog())
       } catch {
-        case NonFatal(_) => defaultSessionCatalog
+        case NonFatal(_) =>
+          logError(
+            "Fail to instantiate the custom v2 session catalog: " + customV2SessionCatalog)
+          defaultSessionCatalog
       }
-    } else {
-      defaultSessionCatalog
-    }
+    }.getOrElse(defaultSessionCatalog)
   }
 
   private def getDefaultNamespace(c: CatalogPlugin) = c match {
