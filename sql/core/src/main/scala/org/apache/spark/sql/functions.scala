@@ -2517,47 +2517,25 @@ object functions {
   }
 
   /**
-   * Overlay the specified portion of `src` with `replaceString`,
-   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src` and proceeding for `len` bytes.
    *
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
-    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  def overlay(src: Column, replace: Column, pos: Int, len: Int): Column = withExpr {
+    Overlay(src.expr, replace.expr, lit(pos).expr, lit(len).expr)
   }
 
   /**
-   * Overlay the specified portion of `src` with `replaceArray`,
-   *  starting from byte position `pos` of input byte array and proceeding for `len` bytes.
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src`.
    *
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replaceArray: Array[Byte], pos: Int, len: Int): Column = withExpr {
-    Overlay(src.expr, lit(replaceArray).expr, lit(pos).expr, lit(len).expr)
-  }
-
-  /**
-   * Overlay the specified portion of `src` with `replaceString`,
-   *  starting from byte position `pos` of `inputString`.
-   *
-   * @group string_funcs
-   * @since 3.0.0
-   */
-  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
-    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
-  }
-
-  /**
-   * Overlay the specified portion of `src` with `replaceArray`,
-   *  starting from byte position `pos` of input byte array.
-   *
-   * @group string_funcs
-   * @since 3.0.0
-   */
-  def overlay(src: Column, replaceArray: Array[Byte], pos: Int): Column = withExpr {
-    new Overlay(src.expr, lit(replaceArray).expr, lit(pos).expr)
+  def overlay(src: Column, replace: Column, pos: Int): Column = withExpr {
+    new Overlay(src.expr, replace.expr, lit(pos).expr)
   }
 
   /**
