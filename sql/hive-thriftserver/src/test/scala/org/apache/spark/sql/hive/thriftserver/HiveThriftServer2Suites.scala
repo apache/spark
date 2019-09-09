@@ -662,6 +662,21 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       assert(rs.getBigDecimal(1) === new java.math.BigDecimal("1.000000000000000000"))
     }
   }
+
+  test("Support interval type") {
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "interval 3 months 1 hours")
+    }
+    // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 3 months 1 hou")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
+  }
 }
 
 class SingleSessionSuite extends HiveThriftJdbcTest {
