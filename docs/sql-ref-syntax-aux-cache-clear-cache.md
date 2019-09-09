@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-`CLEAR CACHE` removes the entries and associated data from the in-memory and/or on-disk cache for all cached tables  and views.
+`CLEAR CACHE` removes the entries and associated data from the in-memory and/or on-disk cache for all cached tables and views.
 
 ### Syntax
 {% highlight sql %}
