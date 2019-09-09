@@ -22,9 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.LinearDataGenerator
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streamingtest.LocalStreamingContext
 
 class StreamingLinearRegressionSuite
   extends SparkFunSuite

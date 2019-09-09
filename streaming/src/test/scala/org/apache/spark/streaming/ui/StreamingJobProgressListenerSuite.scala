@@ -22,10 +22,9 @@ import java.util.Properties
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.SparkListenerJobStart
-import org.apache.spark.streaming._
+import org.apache.spark.streaming.{LocalStreamingContext, _}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streamingtest.LocalStreamingContext
 
 class StreamingJobProgressListenerSuite
   extends TestSuiteBase

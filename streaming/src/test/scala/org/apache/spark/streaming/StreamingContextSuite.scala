@@ -41,7 +41,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.{ManualClock, Utils}
 
 

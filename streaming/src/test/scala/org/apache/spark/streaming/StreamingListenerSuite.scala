@@ -35,7 +35,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streamingtest.LocalStreamingContext
 
 class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext with Matchers {
 

@@ -20,8 +20,7 @@ package org.apache.spark.streaming.scheduler
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.streaming.{Duration, StreamingContext, Time}
-import org.apache.spark.streamingtest.LocalStreamingContext
+import org.apache.spark.streaming.{Duration, LocalStreamingContext, StreamingContext, Time}
 
 class InputInfoTrackerSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfter {
 

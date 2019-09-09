@@ -34,7 +34,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream, InputDStream}
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.streaming.testutil.StreamingTestUtils
 import org.apache.spark.util.{ManualClock, Utils}
 
 /**
@@ -286,7 +285,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
           logError("Error stopping StreamingContext", e)
       } finally {
         // This is safe as we called StreamingContext.stop(stopSparkContext = true) before.
-        StreamingTestUtils.ensureNoActiveSparkContext()
+        LocalStreamingContext.ensureNoActiveSparkContext()
       }
     }
   }

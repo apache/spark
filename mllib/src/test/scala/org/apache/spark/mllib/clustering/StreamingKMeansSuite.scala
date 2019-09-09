@@ -20,9 +20,8 @@ package org.apache.spark.mllib.clustering
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.random.XORShiftRandom
 
 class StreamingKMeansSuite extends SparkFunSuite with LocalStreamingContext with TestSuiteBase {

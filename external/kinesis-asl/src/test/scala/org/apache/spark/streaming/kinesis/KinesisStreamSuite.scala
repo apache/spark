@@ -31,14 +31,13 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming._
+import org.apache.spark.streaming.{LocalStreamingContext, _}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.kinesis.KinesisInitialPositions.Latest
 import org.apache.spark.streaming.kinesis.KinesisReadConfigurations._
 import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
-import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.Utils
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite

@@ -15,13 +15,50 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.testutil
+package org.apache.spark.streaming
+
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.streaming.StreamingContext
 
-object StreamingTestUtils extends Logging {
+/**
+ * Manages a local `ssc` `StreamingContext` variable, correctly stopping it after each test.
+ * Note that it also stops active SparkContext if `stopSparkContext` is set to true (default).
+ * In most cases you may want to leave it, to isolate environment for SparkContext in each test.
+ */
+trait LocalStreamingContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+
+  @transient var ssc: StreamingContext = _
+  @transient var stopSparkContext: Boolean = true
+
+  override def beforeAll() {
+    super.beforeAll()
+  }
+
+  override def afterEach() {
+    try {
+      resetStreamingContext()
+    } finally {
+      super.afterEach()
+    }
+  }
+
+  def resetStreamingContext(): Unit = {
+    LocalStreamingContext.stop(ssc, stopSparkContext)
+    ssc = null
+  }
+}
+
+object LocalStreamingContext extends Logging {
+  def stop(ssc: StreamingContext, stopSparkContext: Boolean): Unit = {
+    if (stopSparkContext) {
+      ensureNoActiveSparkContext(ssc)
+    } else if (ssc != null) {
+      ssc.stop(stopSparkContext = false)
+    }
+  }
+
   /**
    * Clean up active SparkContext: try to stop first if there's an active SparkContext.
    * If it fails to stop, log warning message and clear active SparkContext to avoid

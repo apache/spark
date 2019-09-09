@@ -36,11 +36,10 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
+import org.apache.spark.streaming.{LocalStreamingContext, Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.Utils
 
 class DirectKafkaStreamSuite

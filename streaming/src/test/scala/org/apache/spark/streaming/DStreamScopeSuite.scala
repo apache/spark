@@ -25,7 +25,6 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.streamingtest.LocalStreamingContext
 import org.apache.spark.util.ManualClock
 
 /**

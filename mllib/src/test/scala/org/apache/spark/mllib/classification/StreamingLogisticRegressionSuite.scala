@@ -23,9 +23,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.streaming.TestSuiteBase
+import org.apache.spark.streaming.{LocalStreamingContext, TestSuiteBase}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streamingtest.LocalStreamingContext
 
 class StreamingLogisticRegressionSuite
   extends SparkFunSuite
