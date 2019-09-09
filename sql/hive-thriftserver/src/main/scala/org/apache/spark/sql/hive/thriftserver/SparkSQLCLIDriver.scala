@@ -155,6 +155,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
+    SessionState.get().getConf.setClassLoader(SparkSQLEnv.sqlContext.sharedState.jarClassLoader)
 
     // In SparkSQL CLI, we may want to use jars augmented by hiveconf
     // hive.aux.jars.path, here we add jars augmented by hiveconf to
