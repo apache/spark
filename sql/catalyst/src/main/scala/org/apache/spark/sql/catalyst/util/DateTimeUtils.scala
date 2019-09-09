@@ -855,7 +855,7 @@ object DateTimeUtils {
 
   def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
 
-  private val specialValue = """(EPOCH|NOW|TODAY|TOMORROW|YESTERDAY)\p{Blank}*(.*)""".r
+  private val specialValue = """(\p{Alpha}+)\p{Blank}*(.*)""".r
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
@@ -864,20 +864,19 @@ object DateTimeUtils {
    * @return some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
-    def isValidZoneId(z: String): Boolean = {
-      z == "" || Try { getZoneId(z) }.isSuccess
-    }
-
     if (input.length < 3 || !input(0).isLetter) return None
-    input.toUpperCase(Locale.US) match {
-      case specialValue("EPOCH", z) if isValidZoneId(z) => Some(0)
-      case specialValue("NOW", "") => Some(currentDate(zoneId))
-      case specialValue("TODAY", z) if isValidZoneId(z) =>
-        Some(currentDate(zoneId))
-      case specialValue("TOMORROW", z) if isValidZoneId(z) =>
-        Some(Math.addExact(currentDate(zoneId), 1))
-      case specialValue("YESTERDAY", z) if isValidZoneId(z) =>
-        Some(Math.subtractExact(currentDate(zoneId), 1))
+    val key = input match {
+      // NOW does not accept time zones
+      case specialValue(v, z) if !z.isEmpty && v.toLowerCase(Locale.US) == "now" => None
+      case specialValue(v, z) if z.isEmpty || Try { getZoneId(z) }.isSuccess =>
+        Some(v.toLowerCase(Locale.US))
+      case _ => None
+    }
+    key.flatMap {
+      case "epoch" => Some(0)
+      case "now" | "today" => Some(currentDate(zoneId))
+      case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
+      case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
       case _ => None
     }
   }

@@ -573,6 +573,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       val today = localDateToDays(LocalDate.now(zoneId))
       assert(toDate("YESTERDAY", zoneId).get === today - 1)
       assert(toDate(" Now ", zoneId).get === today)
+      assert(toDate("now UTC", zoneId) === None) // "now" does not accept time zones
       assert(toDate("today", zoneId).get === today)
       assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
