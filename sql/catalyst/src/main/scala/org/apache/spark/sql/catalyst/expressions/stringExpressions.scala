@@ -500,6 +500,14 @@ object Overlay {
        Spark ANSI SQL
       > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
        Structured SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('_', 'utf-8') FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('CORE', 'utf-8') FROM 7);
+       Spark CORE
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('ANSI ', 'utf-8') FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
+       Structured SQL
   """)
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
