@@ -916,7 +916,7 @@ trait ScalaReflection extends Logging {
     }
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramLists
-    } else {
+    } else if (constructorSymbol.isTerm) {
       // Find the primary constructor, and use its parameter ordering.
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
         s => s.isMethod && s.asMethod.isPrimaryConstructor)
@@ -925,6 +925,9 @@ trait ScalaReflection extends Logging {
       } else {
         primaryConstructorSymbol.get.asMethod.paramLists
       }
+    } else {
+      throw new UnsupportedOperationException(s"Unable to find constructor for ${tpe}. " +
+        s"This could happen if ${tpe} is a trait / interface.")
     }
     params.flatten
   }
