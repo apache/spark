@@ -45,10 +45,10 @@ case class BatchScanExec(
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsBatch)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)
   }
 
   override def doCanonicalize(): BatchScanExec = {
-    this.copy(output = output.map(QueryPlan.normalizeExprId(_, output)))
+    this.copy(output = output.map(QueryPlan.normalizeExpressions(_, output)))
   }
 }

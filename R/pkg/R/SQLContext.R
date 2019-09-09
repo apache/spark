@@ -259,7 +259,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
 createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
                             numPartitions = NULL) {
   sparkSession <- getSparkSession()
-  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.enabled")[[1]] == "true"
+  arrowEnabled <- sparkR.conf("spark.sql.execution.arrow.sparkr.enabled")[[1]] == "true"
   useArrow <- FALSE
   firstRow <- NULL
 
@@ -302,7 +302,7 @@ createDataFrame <- function(data, schema = NULL, samplingRatio = 1.0,
       },
       error = function(e) {
         warning(paste0("createDataFrame attempted Arrow optimization because ",
-                       "'spark.sql.execution.arrow.enabled' is set to true; however, ",
+                       "'spark.sql.execution.arrow.sparkr.enabled' is set to true; however, ",
                        "failed, attempting non-optimization. Reason: ",
                        e))
         FALSE
@@ -624,7 +624,8 @@ loadDF <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #'
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}
 #' @param tableName the name of the table in the external database
-#' @param partitionColumn the name of a column of integral type that will be used for partitioning
+#' @param partitionColumn the name of a column of numeric, date, or timestamp type
+#'                        that will be used for partitioning.
 #' @param lowerBound the minimum value of \code{partitionColumn} used to decide partition stride
 #' @param upperBound the maximum value of \code{partitionColumn} used to decide partition stride
 #' @param numPartitions the number of partitions, This, along with \code{lowerBound} (inclusive),

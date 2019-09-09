@@ -23,7 +23,7 @@ import java.lang.{Double => JDouble, Float => JFloat}
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
-import java.nio.charset.StandardCharsets
+import java.nio.charset.StandardCharsets.UTF_8
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -351,7 +351,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     withTempDir { tmpDir2 =>
       val suffix = getSuffix(isCompressed)
       val f1Path = tmpDir2 + "/f1" + suffix
-      writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(f1Path, "1\n2\n3\n4\n5\n6\n7\n8\n9\n".getBytes(UTF_8))
       val f1Length = Utils.getFileLength(new File(f1Path), workerConf)
 
       // Read first few bytes
@@ -387,10 +387,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val suffix = getSuffix(isCompressed)
       val files = (1 to 3).map(i =>
         new File(tmpDir, i.toString + suffix)) :+ new File(tmpDir, "4")
-      writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(StandardCharsets.UTF_8))
-      writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(StandardCharsets.UTF_8))
-      writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(StandardCharsets.UTF_8))
-      writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(StandardCharsets.UTF_8))
+      writeLogFile(files(0).getAbsolutePath, "0123456789".getBytes(UTF_8))
+      writeLogFile(files(1).getAbsolutePath, "abcdefghij".getBytes(UTF_8))
+      writeLogFile(files(2).getAbsolutePath, "ABCDEFGHIJ".getBytes(UTF_8))
+      writeLogFile(files(3).getAbsolutePath, "9876543210".getBytes(UTF_8))
       val fileLengths = files.map(Utils.getFileLength(_, workerConf))
 
       // Read first few bytes in the 1st file
@@ -665,7 +665,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val outFile = File.createTempFile("test-load-spark-properties", "test", tmpDir)
       System.setProperty("spark.test.fileNameLoadB", "2")
       Files.write("spark.test.fileNameLoadA true\n" +
-        "spark.test.fileNameLoadB 1\n", outFile, StandardCharsets.UTF_8)
+        "spark.test.fileNameLoadB 1\n", outFile, UTF_8)
       val properties = Utils.getPropertiesFromFile(outFile.getAbsolutePath)
       properties
         .filter { case (k, v) => k.startsWith("spark.")}
@@ -694,7 +694,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       val innerSourceDir = Utils.createTempDir(root = sourceDir.getPath)
       val sourceFile = File.createTempFile("someprefix", "somesuffix", innerSourceDir)
       val targetDir = new File(tempDir, "target-dir")
-      Files.write("some text", sourceFile, StandardCharsets.UTF_8)
+      Files.write("some text", sourceFile, UTF_8)
 
       val path =
         if (Utils.isWindows) {
@@ -823,14 +823,14 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("circular buffer: if the buffer isn't full, print only the contents written") {
     val buffer = new CircularBuffer(10)
-    val stream = new PrintStream(buffer, true, "UTF-8")
+    val stream = new PrintStream(buffer, true, UTF_8.name())
     stream.print("test")
     assert(buffer.toString === "test")
   }
 
   test("circular buffer: data written == size of the buffer") {
     val buffer = new CircularBuffer(4)
-    val stream = new PrintStream(buffer, true, "UTF-8")
+    val stream = new PrintStream(buffer, true, UTF_8.name())
 
     // fill the buffer to its exact size so that it just hits overflow
     stream.print("test")
@@ -843,7 +843,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("circular buffer: multiple overflow") {
     val buffer = new CircularBuffer(25)
-    val stream = new PrintStream(buffer, true, "UTF-8")
+    val stream = new PrintStream(buffer, true, UTF_8.name())
 
     stream.print("test circular test circular test circular test circular test circular")
     assert(buffer.toString === "st circular test circular")
@@ -987,7 +987,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
              |trap "" SIGTERM
              |sleep 10
            """.stripMargin
-        Files.write(cmd.getBytes(StandardCharsets.UTF_8), file)
+        Files.write(cmd.getBytes(UTF_8), file)
         file.getAbsoluteFile.setExecutable(true)
 
         val process = new ProcessBuilder(file.getAbsolutePath).start()
@@ -1118,6 +1118,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
     assert(redactedCmdArgMap("spark.regular.property") === "regular_value")
     assert(redactedCmdArgMap("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
+  }
+
+  test("redact sensitive information in sequence of key value pairs") {
+    val secretKeys = Some("my.password".r)
+    assert(Utils.redact(secretKeys, Seq(("spark.my.password", "12345"))) ===
+      Seq(("spark.my.password", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(Utils.redact(secretKeys, Seq(("anything", "spark.my.password=12345"))) ===
+      Seq(("anything", Utils.REDACTION_REPLACEMENT_TEXT)))
+    assert(Utils.redact(secretKeys, Seq((999, "spark.my.password=12345"))) ===
+      Seq((999, Utils.REDACTION_REPLACEMENT_TEXT)))
+    // Do not redact when value type is not string
+    assert(Utils.redact(secretKeys, Seq(("my.password", 12345))) ===
+      Seq(("my.password", 12345)))
   }
 
   test("tryWithSafeFinally") {

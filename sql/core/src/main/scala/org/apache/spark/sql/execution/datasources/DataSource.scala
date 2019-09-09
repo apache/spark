@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.TableProvider
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -105,6 +106,9 @@ case class DataSource(
       case _ => cls
     }
   }
+
+  private def providingInstance() = providingClass.getConstructor().newInstance()
+
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
@@ -210,7 +214,7 @@ case class DataSource(
 
   /** Returns the name and schema of the source that can be used to continually read data. */
   private def sourceSchema(): SourceInfo = {
-    providingClass.getConstructor().newInstance() match {
+    providingInstance() match {
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
           sparkSession.sqlContext, userSpecifiedSchema, className, caseInsensitiveOptions)
@@ -251,9 +255,12 @@ case class DataSource(
             checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
           createInMemoryFileIndex(globbedPaths)
         })
+        val forceNullable =
+          sparkSession.sessionState.conf.getConf(SQLConf.FILE_SOURCE_SCHEMA_FORCE_NULLABLE)
+        val sourceDataSchema = if (forceNullable) dataSchema.asNullable else dataSchema
         SourceInfo(
           s"FileSource[$path]",
-          StructType(dataSchema ++ partitionSchema),
+          StructType(sourceDataSchema ++ partitionSchema),
           partitionSchema.fieldNames)
 
       case _ =>
@@ -264,7 +271,7 @@ case class DataSource(
 
   /** Returns a source that can be used to continually read data. */
   def createSource(metadataPath: String): Source = {
-    providingClass.getConstructor().newInstance() match {
+    providingInstance() match {
       case s: StreamSourceProvider =>
         s.createSource(
           sparkSession.sqlContext,
@@ -293,7 +300,7 @@ case class DataSource(
 
   /** Returns a sink that can be used to continually write data. */
   def createSink(outputMode: OutputMode): Sink = {
-    providingClass.getConstructor().newInstance() match {
+    providingInstance() match {
       case s: StreamSinkProvider =>
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
@@ -324,7 +331,7 @@ case class DataSource(
    *                        that files already exist, we don't need to check them again.
    */
   def resolveRelation(checkFilesExist: Boolean = true): BaseRelation = {
-    val relation = (providingClass.getConstructor().newInstance(), userSpecifiedSchema) match {
+    val relation = (providingInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
@@ -348,7 +355,8 @@ case class DataSource(
             sparkSession.sessionState.newHadoopConf(),
             sparkSession.sessionState.conf) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath, userSpecifiedSchema)
+        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath,
+          caseInsensitiveOptions, userSpecifiedSchema)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -494,7 +502,7 @@ case class DataSource(
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
-    providingClass.getConstructor().newInstance() match {
+    providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
@@ -531,7 +539,7 @@ case class DataSource(
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
-    providingClass.getConstructor().newInstance() match {
+    providingInstance() match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
@@ -701,6 +709,24 @@ object DataSource extends Logging {
         } else {
           throw e
         }
+    }
+  }
+
+  /**
+   * Returns an optional [[TableProvider]] instance for the given provider. It returns None if
+   * there is no corresponding Data Source V2 implementation, or the provider is configured to
+   * fallback to Data Source V1 code path.
+   */
+  def lookupDataSourceV2(provider: String, conf: SQLConf): Option[TableProvider] = {
+    val useV1Sources = conf.getConf(SQLConf.USE_V1_SOURCE_LIST).toLowerCase(Locale.ROOT)
+      .split(",").map(_.trim)
+    val cls = lookupDataSource(provider, conf)
+    cls.newInstance() match {
+      case d: DataSourceRegister if useV1Sources.contains(d.shortName()) => None
+      case t: TableProvider
+          if !useV1Sources.contains(cls.getCanonicalName.toLowerCase(Locale.ROOT)) =>
+        Some(t)
+      case _ => None
     }
   }
 

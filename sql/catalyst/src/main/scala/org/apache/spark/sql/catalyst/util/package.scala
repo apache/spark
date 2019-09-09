@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst
 
 import java.io._
-import java.nio.charset.StandardCharsets
+import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
@@ -45,7 +46,7 @@ package object util extends Logging {
     }
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8"): String = {
+  def fileToString(file: File, encoding: Charset = UTF_8): String = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
@@ -87,15 +88,15 @@ package object util extends Logging {
 
   def resourceToString(
       resource: String,
-      encoding: String = "UTF-8",
+      encoding: String = UTF_8.name(),
       classLoader: ClassLoader = Utils.getSparkClassLoader): String = {
     new String(resourceToBytes(resource, classLoader), encoding)
   }
 
   def stringToFile(file: File, str: String): File = {
-    val out = new PrintWriter(file)
-    out.write(str)
-    out.close()
+    Utils.tryWithResource(new PrintWriter(file)) { out =>
+      out.write(str)
+    }
     file
   }
 
@@ -115,10 +116,11 @@ package object util extends Logging {
 
   def stackTraceToString(t: Throwable): String = {
     val out = new java.io.ByteArrayOutputStream
-    val writer = new PrintWriter(out)
-    t.printStackTrace(writer)
-    writer.flush()
-    new String(out.toByteArray, StandardCharsets.UTF_8)
+    Utils.tryWithResource(new PrintWriter(out)) { writer =>
+      t.printStackTrace(writer)
+      writer.flush()
+    }
+    new String(out.toByteArray, UTF_8)
   }
 
   // Replaces attributes, string literals, complex type extractors with their pretty form so that

@@ -114,7 +114,7 @@ object RowEncoder {
         d,
         "fromDecimal",
         inputObject :: Nil,
-        returnNullable = false), d)
+        returnNullable = false), d, SQLConf.get.decimalOperationsNullOnOverflow)
 
     case StringType => createSerializerForString(inputObject)
 

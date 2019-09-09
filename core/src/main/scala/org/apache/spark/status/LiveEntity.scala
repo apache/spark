@@ -27,6 +27,7 @@ import com.google.common.collect.Interners
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage.RDDInfo
@@ -259,6 +260,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
 
   var executorLogs = Map[String, String]()
   var attributes = Map[String, String]()
+  var resources = Map[String, ResourceInformation]()
 
   // Memory metrics. They may not be recorded (e.g. old event logs) so if totalOnHeap is not
   // initialized, the store will not contain this information.
@@ -308,7 +310,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       memoryMetrics,
       blacklistedInStages,
       Some(peakExecutorMetrics).filter(_.isSet),
-      attributes)
+      attributes,
+      resources)
     new ExecutorSummaryWrapper(info)
   }
 }
@@ -394,45 +397,59 @@ private class LiveStage extends LiveEntity {
 
   def toApi(): v1.StageData = {
     new v1.StageData(
-      status,
-      info.stageId,
-      info.attemptNumber,
+      status = status,
+      stageId = info.stageId,
+      attemptId = info.attemptNumber,
+      numTasks = info.numTasks,
+      numActiveTasks = activeTasks,
+      numCompleteTasks = completedTasks,
+      numFailedTasks = failedTasks,
+      numKilledTasks = killedTasks,
+      numCompletedIndices = completedIndices.size,
 
-      info.numTasks,
-      activeTasks,
-      completedTasks,
-      failedTasks,
-      killedTasks,
-      completedIndices.size,
+      submissionTime = info.submissionTime.map(new Date(_)),
+      firstTaskLaunchedTime =
+        if (firstLaunchTime < Long.MaxValue) Some(new Date(firstLaunchTime)) else None,
+      completionTime = info.completionTime.map(new Date(_)),
+      failureReason = info.failureReason,
 
-      metrics.executorRunTime,
-      metrics.executorCpuTime,
-      info.submissionTime.map(new Date(_)),
-      if (firstLaunchTime < Long.MaxValue) Some(new Date(firstLaunchTime)) else None,
-      info.completionTime.map(new Date(_)),
-      info.failureReason,
+      executorDeserializeTime = metrics.executorDeserializeTime,
+      executorDeserializeCpuTime = metrics.executorDeserializeCpuTime,
+      executorRunTime = metrics.executorRunTime,
+      executorCpuTime = metrics.executorCpuTime,
+      resultSize = metrics.resultSize,
+      jvmGcTime = metrics.jvmGcTime,
+      resultSerializationTime = metrics.resultSerializationTime,
+      memoryBytesSpilled = metrics.memoryBytesSpilled,
+      diskBytesSpilled = metrics.diskBytesSpilled,
+      peakExecutionMemory = metrics.peakExecutionMemory,
+      inputBytes = metrics.inputMetrics.bytesRead,
+      inputRecords = metrics.inputMetrics.recordsRead,
+      outputBytes = metrics.outputMetrics.bytesWritten,
+      outputRecords = metrics.outputMetrics.recordsWritten,
+      shuffleRemoteBlocksFetched = metrics.shuffleReadMetrics.remoteBlocksFetched,
+      shuffleLocalBlocksFetched = metrics.shuffleReadMetrics.localBlocksFetched,
+      shuffleFetchWaitTime = metrics.shuffleReadMetrics.fetchWaitTime,
+      shuffleRemoteBytesRead = metrics.shuffleReadMetrics.remoteBytesRead,
+      shuffleRemoteBytesReadToDisk = metrics.shuffleReadMetrics.remoteBytesReadToDisk,
+      shuffleLocalBytesRead = metrics.shuffleReadMetrics.localBytesRead,
+      shuffleReadBytes =
+        metrics.shuffleReadMetrics.localBytesRead + metrics.shuffleReadMetrics.remoteBytesRead,
+      shuffleReadRecords = metrics.shuffleReadMetrics.recordsRead,
+      shuffleWriteBytes = metrics.shuffleWriteMetrics.bytesWritten,
+      shuffleWriteTime = metrics.shuffleWriteMetrics.writeTime,
+      shuffleWriteRecords = metrics.shuffleWriteMetrics.recordsWritten,
 
-      metrics.inputMetrics.bytesRead,
-      metrics.inputMetrics.recordsRead,
-      metrics.outputMetrics.bytesWritten,
-      metrics.outputMetrics.recordsWritten,
-      metrics.shuffleReadMetrics.localBytesRead + metrics.shuffleReadMetrics.remoteBytesRead,
-      metrics.shuffleReadMetrics.recordsRead,
-      metrics.shuffleWriteMetrics.bytesWritten,
-      metrics.shuffleWriteMetrics.recordsWritten,
-      metrics.memoryBytesSpilled,
-      metrics.diskBytesSpilled,
+      name = info.name,
+      description = description,
+      details = info.details,
+      schedulingPool = schedulingPool,
 
-      info.name,
-      description,
-      info.details,
-      schedulingPool,
-
-      info.rddInfos.map(_.id),
-      newAccumulatorInfos(info.accumulables.values),
-      None,
-      None,
-      killedSummary)
+      rddIds = info.rddInfos.map(_.id),
+      accumulatorUpdates = newAccumulatorInfos(info.accumulables.values),
+      tasks = None,
+      executorSummary = None,
+      killedTasksSummary = killedSummary)
   }
 
   override protected def doUpdate(): Any = {

@@ -18,55 +18,117 @@
 package org.apache.spark.sql.catalog.v2
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 
 /**
  * A trait to encapsulate catalog lookup function and helpful extractors.
  */
 @Experimental
-trait LookupCatalog {
+trait LookupCatalog extends Logging {
 
-  def lookupCatalog: Option[(String) => CatalogPlugin] = None
+  protected val catalogManager: CatalogManager
+
+  /**
+   * Returns the default catalog. When set, this catalog is used for all identifiers that do not
+   * set a specific catalog. When this is None, the session catalog is responsible for the
+   * identifier.
+   *
+   * If this is None and a table's provider (source) is a v2 provider, the v2 session catalog will
+   * be used.
+   */
+  def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
+
+  /**
+   * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
+   * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
+   * This happens when the source implementation extends the v2 TableProvider API and is not listed
+   * in the fallback configuration, spark.sql.sources.write.useV1SourceList
+   */
+  def sessionCatalog: CatalogPlugin = catalogManager.v2SessionCatalog
+
+  /**
+   * Extract catalog plugin and remaining identifier names.
+   *
+   * This does not substitute the default catalog if no catalog is set in the identifier.
+   */
+  private object CatalogAndIdentifier {
+    def unapply(parts: Seq[String]): Some[(Option[CatalogPlugin], Seq[String])] = parts match {
+      case Seq(_) =>
+        Some((None, parts))
+      case Seq(catalogName, tail @ _*) =>
+        try {
+          Some((Some(catalogManager.catalog(catalogName)), tail))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((None, parts))
+        }
+    }
+  }
 
   type CatalogObjectIdentifier = (Option[CatalogPlugin], Identifier)
 
   /**
-   * Extract catalog plugin and identifier from a multi-part identifier.
+   * Extract catalog and identifier from a multi-part identifier with the default catalog if needed.
    */
   object CatalogObjectIdentifier {
-    def unapply(parts: Seq[String]): Option[CatalogObjectIdentifier] = lookupCatalog.map { lookup =>
-      parts match {
-        case Seq(name) =>
-          (None, Identifier.of(Array.empty, name))
-        case Seq(catalogName, tail @ _*) =>
-          try {
-            val catalog = lookup(catalogName)
-            (Some(catalog), Identifier.of(tail.init.toArray, tail.last))
-          } catch {
-            case _: CatalogNotFoundException =>
-              (None, Identifier.of(parts.init.toArray, parts.last))
-          }
-      }
+    def unapply(parts: Seq[String]): Some[CatalogObjectIdentifier] = parts match {
+      case CatalogAndIdentifier(maybeCatalog, nameParts) =>
+        Some((
+            maybeCatalog.orElse(defaultCatalog),
+            Identifier.of(nameParts.init.toArray, nameParts.last)
+        ))
+    }
+  }
+
+  type CatalogNamespace = (Option[CatalogPlugin], Seq[String])
+
+  /**
+   * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
+   * Catalog name takes precedence over namespaces.
+   */
+  object CatalogNamespace {
+    def unapply(parts: Seq[String]): Some[CatalogNamespace] = parts match {
+      case Seq(catalogName, tail @ _*) =>
+        try {
+          Some((Some(catalogManager.catalog(catalogName)), tail))
+        } catch {
+          case _: CatalogNotFoundException =>
+            Some((defaultCatalog, parts))
+        }
     }
   }
 
   /**
    * Extract legacy table identifier from a multi-part identifier.
    *
-   * For legacy support only. Please use
-   * [[org.apache.spark.sql.catalog.v2.LookupCatalog.CatalogObjectIdentifier]] in DSv2 code paths.
+   * For legacy support only. Please use [[CatalogObjectIdentifier]] instead on DSv2 code paths.
    */
   object AsTableIdentifier {
     def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogObjectIdentifier(None, ident) =>
-        ident.namespace match {
-          case Array() =>
-            Some(TableIdentifier(ident.name))
-          case Array(database) =>
-            Some(TableIdentifier(ident.name, Some(database)))
+      case CatalogAndIdentifier(None, names) if defaultCatalog.isEmpty =>
+        names match {
+          case Seq(name) =>
+            Some(TableIdentifier(name))
+          case Seq(database, name) =>
+            Some(TableIdentifier(name, Some(database)))
           case _ =>
             None
         }
+      case _ =>
+        None
+    }
+  }
+
+  /**
+   * For temp views, extract a table identifier from a multi-part identifier if it has no catalog.
+   */
+  object AsTemporaryViewIdentifier {
+    def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
+      case CatalogAndIdentifier(None, Seq(table)) =>
+        Some(TableIdentifier(table))
+      case CatalogAndIdentifier(None, Seq(database, table)) =>
+        Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
     }

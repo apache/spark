@@ -143,7 +143,7 @@ struct<>
 -- !query 14 output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-mismatched input 'insert' expecting {<EOF>, '(', ',', 'ANTI', 'CLUSTER', 'CROSS', 'DISTRIBUTE', 'EXCEPT', 'FULL', 'GROUP', 'HAVING', 'INNER', 'INTERSECT', 'JOIN', 'LATERAL', 'LEFT', 'LIMIT', 'NATURAL', 'ORDER', 'PIVOT', 'RIGHT', 'SELECT', 'SEMI', 'MINUS', 'SORT', 'UNION', 'WHERE', 'WINDOW'}(line 3, pos 5)
+mismatched input 'insert' expecting {'MAP', 'REDUCE', 'SELECT'}(line 3, pos 5)
 
 == SQL ==
 DESCRIBE

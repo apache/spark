@@ -27,8 +27,11 @@ import com.google.common.io.Files
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.deploy.StandaloneResourceUtils.prepareResourcesFile
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SPARK_EXECUTOR_PREFIX
 import org.apache.spark.internal.config.UI._
+import org.apache.spark.resource.{ResourceInformation, ResourceUtils}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
@@ -54,7 +57,8 @@ private[deploy] class ExecutorRunner(
     val workerUrl: String,
     conf: SparkConf,
     val appLocalDirs: Seq[String],
-    @volatile var state: ExecutorState.Value)
+    @volatile var state: ExecutorState.Value,
+    val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
 
   private val fullId = appId + "/" + execId
@@ -78,8 +82,8 @@ private[deploy] class ExecutorRunner(
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
       // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
-      // be `ExecutorState.RUNNING`. In this case, we should set `state` to `FAILED`.
-      if (state == ExecutorState.RUNNING) {
+      // be `ExecutorState.LAUNCHING`. In this case, we should set `state` to `FAILED`.
+      if (state == ExecutorState.LAUNCHING) {
         state = ExecutorState.FAILED
       }
       killProcess(Some("Worker shutting down")) }
@@ -143,11 +147,14 @@ private[deploy] class ExecutorRunner(
    */
   private def fetchAndRunExecutor() {
     try {
+      val resourceFileOpt = prepareResourcesFile(SPARK_EXECUTOR_PREFIX, resources, executorDir)
       // Launch the process
+      val arguments = appDesc.command.arguments ++ resourceFileOpt.map(f =>
+        Seq("--resourcesFile", f.getAbsolutePath)).getOrElse(Seq.empty)
       val subsOpts = appDesc.command.javaOpts.map {
         Utils.substituteAppNExecIds(_, appId, execId.toString)
       }
-      val subsCommand = appDesc.command.copy(javaOpts = subsOpts)
+      val subsCommand = appDesc.command.copy(arguments = arguments, javaOpts = subsOpts)
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
@@ -183,6 +190,8 @@ private[deploy] class ExecutorRunner(
       Files.write(header, stderr, StandardCharsets.UTF_8)
       stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
 
+      state = ExecutorState.RUNNING
+      worker.send(ExecutorStateChanged(appId, execId, state, None, None))
       // Wait for it to exit; executor may exit with code 0 (when driver instructs it to shutdown)
       // or with nonzero exit code
       val exitCode = process.waitFor()

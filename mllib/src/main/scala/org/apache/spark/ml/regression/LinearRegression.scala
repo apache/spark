@@ -25,7 +25,7 @@ import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{PipelineStage, PredictorParams}
 import org.apache.spark.ml.feature.Instance
@@ -109,12 +109,13 @@ private[regression] trait LinearRegressionParams extends PredictorParams
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
-    if ($(loss) == Huber) {
-      require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
-        "normal solver, please change solver to auto or l-bfgs.")
-      require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
-        s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
-
+    if (fitting) {
+      if ($(loss) == Huber) {
+        require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
+          "normal solver, please change solver to auto or l-bfgs.")
+        require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
+          s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+      }
     }
     super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
@@ -796,7 +797,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 }
 
 /**
- * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
  * training weights except for the objective trace.
  *
@@ -804,7 +804,6 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionTrainingSummary private[regression] (
     predictions: DataFrame,
     predictionCol: String,
@@ -834,7 +833,6 @@ class LinearRegressionTrainingSummary private[regression] (
 }
 
 /**
- * :: Experimental ::
  * Linear regression results evaluated on a dataset.
  *
  * @param predictions predictions output by the model's `transform` method.
@@ -844,7 +842,6 @@ class LinearRegressionTrainingSummary private[regression] (
  * @param featuresCol Field in "predictions" which gives the features of each instance as a vector.
  */
 @Since("1.5.0")
-@Experimental
 class LinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,

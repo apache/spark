@@ -29,6 +29,7 @@ import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.Utils
 
 private case class ReviveOffers()
 
@@ -54,7 +55,7 @@ private[spark] class LocalEndpoint(
   private var freeCores = totalCores
 
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
-  val localExecutorHostname = "localhost"
+  val localExecutorHostname = Utils.localCanonicalHostName()
 
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
@@ -81,6 +82,7 @@ private[spark] class LocalEndpoint(
   }
 
   def reviveOffers() {
+    // local mode doesn't support extra resources like GPUs right now
     val offers = IndexedSeq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores,
       Some(rpcEnv.address.hostPort)))
     for (task <- scheduler.resourceOffers(offers).flatten) {

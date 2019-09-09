@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousStream, MicroBatchStream, Offset => OffsetV2, SparkDataStream}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -49,7 +49,7 @@ object MemoryStream {
 /**
  * A base class for memory stream implementations. Supports adding data and resetting.
  */
-abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends SparkDataStream {
   val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
 
@@ -61,9 +61,11 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
     Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
   }
 
-  def addData(data: A*): Offset = {
+  def addData(data: A*): OffsetV2 = {
     addData(data.toTraversable)
   }
+
+  def addData(data: TraversableOnce[A]): OffsetV2
 
   def fullSchema(): StructType = encoder.schema
 
@@ -77,7 +79,17 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
       None)(sqlContext.sparkSession)
   }
 
-  def addData(data: TraversableOnce[A]): Offset
+  override def initialOffset(): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def deserializeOffset(json: String): OffsetV2 = {
+    throw new IllegalStateException("should not be called.")
+  }
+
+  override def commit(end: OffsetV2): Unit = {
+    throw new IllegalStateException("should not be called.")
+  }
 }
 
 // This class is used to indicate the memory stream data source. We don't actually use it, as
@@ -214,22 +226,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   override def commit(end: OffsetV2): Unit = synchronized {
-    def check(newOffset: LongOffset): Unit = {
-      val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
+    val newOffset = end.asInstanceOf[LongOffset]
+    val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
-      if (offsetDiff < 0) {
-        sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
-      }
-
-      batches.trimStart(offsetDiff)
-      lastOffsetCommitted = newOffset
+    if (offsetDiff < 0) {
+      sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
-    LongOffset.convert(end) match {
-      case Some(lo) => check(lo)
-      case None => sys.error(s"MemoryStream.commit() received an offset ($end) " +
-        "that did not originate with an instance of this class")
-    }
+    batches.trimStart(offsetDiff)
+    lastOffsetCommitted = newOffset
   }
 
   override def stop() {}
@@ -263,12 +268,4 @@ object MemoryStreamReaderFactory extends PartitionReaderFactory {
       override def close(): Unit = {}
     }
   }
-}
-
-/** A common trait for MemorySinks with methods used for testing */
-trait MemorySinkBase extends BaseStreamingSink {
-  def allData: Seq[Row]
-  def latestBatchData: Seq[Row]
-  def dataSinceBatch(sinceBatchId: Long): Seq[Row]
-  def latestBatchId: Option[Long]
 }

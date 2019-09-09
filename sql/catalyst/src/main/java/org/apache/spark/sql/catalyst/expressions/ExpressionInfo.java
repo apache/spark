@@ -37,7 +37,7 @@ public class ExpressionInfo {
     }
 
     public String getUsage() {
-        return usage;
+        return replaceFunctionName(usage);
     }
 
     public String getName() {
@@ -45,7 +45,7 @@ public class ExpressionInfo {
     }
 
     public String getExtended() {
-        return extended;
+        return replaceFunctionName(extended);
     }
 
     public String getSince() {
@@ -57,7 +57,7 @@ public class ExpressionInfo {
     }
 
     public String getExamples() {
-        return examples;
+        return replaceFunctionName(examples);
     }
 
     public String getNote() {
@@ -140,10 +140,22 @@ public class ExpressionInfo {
         this(className, db, name, null, "", "", "", "", "");
     }
 
-    // This is to keep the original constructor just in case.
+    /**
+     * @deprecated This constructor is deprecated as of Spark 3.0. Use other constructors to fully
+     *   specify each argument for extended usage.
+     */
+    @Deprecated
     public ExpressionInfo(String className, String db, String name, String usage, String extended) {
         // `arguments` and `examples` are concatenated for the extended description. So, here
         // simply pass the `extended` as `arguments` and an empty string for `examples`.
         this(className, db, name, usage, extended, "", "", "", "");
+    }
+
+    private String replaceFunctionName(String usage) {
+        if (usage == null) {
+            return "N/A.";
+        } else {
+            return usage.replaceAll("_FUNC_", name);
+        }
     }
 }

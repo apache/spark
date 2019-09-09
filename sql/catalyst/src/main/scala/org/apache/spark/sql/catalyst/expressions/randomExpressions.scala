@@ -80,7 +80,8 @@ trait ExpressionWithRandomSeed {
   """,
   note = """
     The function is non-deterministic in general case.
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
@@ -122,7 +123,8 @@ object Rand {
   """,
   note = """
     The function is non-deterministic in general case.
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
 
