@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.deploy.SparkSubmitUtils
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
 import org.apache.spark.internal.config.UI._
@@ -650,16 +649,27 @@ private[sql] class TestHiveSessionStateBuilder(
 }
 
 private[hive] object HiveTestJars {
-  def getHiveContribJar: File = getJarFile("org.apache.hive:hive-contrib")
-  def getHiveHcatalogCoreJar: File = getJarFile("org.apache.hive.hcatalog:hive-hcatalog-core")
+  private val repository = "https://repository.apache.org/content/repositories/releases/"
 
-  private def getJarFile(coordinate: String): File = {
-    // isTransitive = false: Only direct dependencies should be resolved
-    val filePath = SparkSubmitUtils.resolveMavenCoordinates(
-      s"$coordinate:${HiveUtils.builtinHiveVersion}",
-      SparkSubmitUtils.buildIvySettings(
-        Some("https://repository.apache.org/content/repositories/releases"), None),
-      isTransitive = false)
-    new File(filePath)
+  def getHiveContribJar: File =
+    getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
+      s"${HiveUtils.builtinHiveVersion}/hive-contrib-${HiveUtils.builtinHiveVersion}.jar")
+  def getHiveHcatalogCoreJar: File =
+    getJarFromUrl(s"${repository}org/apache/hive/hcatalog/hive-hcatalog-core/" +
+      s"${HiveUtils.builtinHiveVersion}/hive-hcatalog-core-${HiveUtils.builtinHiveVersion}.jar")
+
+  private def getJarFromUrl(urlString: String): File = {
+    val fileName = urlString.split("/").last
+    val hiveTestJarsDir = new File("/tmp/test-spark/hiveTestJars")
+    if (!hiveTestJarsDir.exists()) {
+      hiveTestJarsDir.mkdirs()
+    }
+    val targetFile = new File(hiveTestJarsDir, fileName)
+    if (!targetFile.exists() || !(targetFile.length() > 0)) {
+      val conf = new SparkConf
+      conf.set("spark.files.overwrite", "true")
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, conf, null, null)
+    }
+    targetFile
   }
 }

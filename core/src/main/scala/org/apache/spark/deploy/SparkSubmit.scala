@@ -1321,7 +1321,6 @@ private[spark] object SparkSubmitUtils {
    * @param coordinates Comma-delimited string of maven coordinates
    * @param ivySettings An IvySettings containing resolvers to use
    * @param exclusions Exclusions to apply when resolving transitive dependencies
-   * @param isTransitive If the dependencies should be resolved transitively
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
@@ -1329,7 +1328,6 @@ private[spark] object SparkSubmitUtils {
       coordinates: String,
       ivySettings: IvySettings,
       exclusions: Seq[String] = Nil,
-      isTransitive: Boolean = true,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
@@ -1351,7 +1349,7 @@ private[spark] object SparkSubmitUtils {
         val ivy = Ivy.newInstance(ivySettings)
         // Set resolve options to download transitive dependencies as well
         val resolveOptions = new ResolveOptions
-        resolveOptions.setTransitive(isTransitive)
+        resolveOptions.setTransitive(true)
         val retrieveOptions = new RetrieveOptions
         // Turn downloading and logging off for testing
         if (isTest) {
