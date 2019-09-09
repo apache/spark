@@ -368,6 +368,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
+
+    checkAnswer(
+      df.select(array_sort($"a", false), array_sort($"b", false)),
+      Seq(
+        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+
     checkAnswer(
       df.selectExpr("array_sort(a)", "array_sort(b)"),
       Seq(
@@ -377,8 +386,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
+      df.selectExpr("array_sort(a, false)", "array_sort(b, false)"),
+      Seq(
+        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
+        Row(Seq.empty[Int], Seq.empty[String]),
+        Row(null, null))
+    )
+
+    checkAnswer(
       df2.selectExpr("array_sort(a)"),
-      Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
+      Seq(Row(Seq[Seq[Int]](null, Seq(1), Seq(2), Seq(2, 4))))
+    )
+
+    checkAnswer(
+      df2.selectExpr("array_sort(a, false)"),
+      Seq(Row(Seq[Seq[Int]](Seq(2, 4), Seq(2), Seq(1), null)))
     )
 
     assert(intercept[AnalysisException] {

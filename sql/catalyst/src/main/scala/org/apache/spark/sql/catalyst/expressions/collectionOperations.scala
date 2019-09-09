@@ -902,33 +902,45 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 
 
 /**
- * Sorts the input array in ascending order according to the natural ordering of
+ * Sorts the input array in ascending / descending order according to the natural ordering of
  * the array elements and returns it.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array.
+      be orderable. Null elements will be placed at the beginning of the returned array in ascending
+       order or at the end of the returned array in descending order.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       ["a","b","c","d",null]
+       [null,"a","b","c","d"]
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLike {
+case class ArraySort(base: Expression, ascendingOrder: Expression)
+  extends BinaryExpression with ArraySortLike {
 
-  override def dataType: DataType = child.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+  def this(e: Expression) = this(e, Literal(true))
 
-  override def arrayExpression: Expression = child
-  override def nullOrder: NullOrder = NullOrder.Greatest
+  override def left: Expression = base
+  override def right: Expression = ascendingOrder
+  override def dataType: DataType = base.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
-  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+  override def arrayExpression: Expression = base
+  override def nullOrder: NullOrder = NullOrder.Least
+
+  override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      TypeCheckResult.TypeCheckSuccess
+      ascendingOrder match {
+        case Literal(_: Boolean, BooleanType) =>
+          TypeCheckResult.TypeCheckSuccess
+        case _ =>
+          TypeCheckResult.TypeCheckFailure(
+            "Sort order in second argument requires a boolean literal.")
+      }
     case ArrayType(dt, _) =>
       val dtSimple = dt.catalogString
       TypeCheckResult.TypeCheckFailure(
@@ -937,12 +949,12 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLi
       TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
   }
 
-  override def nullSafeEval(array: Any): Any = {
-    sortEval(array, true)
+  override def nullSafeEval(array: Any, ascending: Any): Any = {
+    sortEval(array, ascending.asInstanceOf[Boolean])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => sortCodegen(ctx, ev, c, "true"))
+    nullSafeCodeGen(ctx, ev, (c, order) => sortCodegen(ctx, ev, c, order))
   }
 
   override def prettyName: String = "array_sort"
