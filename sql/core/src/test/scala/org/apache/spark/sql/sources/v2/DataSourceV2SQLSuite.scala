@@ -19,16 +19,14 @@ package org.apache.spark.sql.sources.v2
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog, StagingInMemoryTableCatalog}
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
-import org.apache.spark.sql.sources.v2.internal.UnresolvedTable
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, IntegerType, LongType, MapType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.sources.v2.internal.V1Table
+import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2SQLSuite
@@ -512,7 +510,8 @@ class DataSourceV2SQLSuite
   }
 
   test("CreateTableAsSelect: v2 session catalog can load v1 source table") {
-    spark.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
+    // unset this config to use the default v2 session catalog.
+    spark.conf.unset(V2_SESSION_CATALOG.key)
 
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -524,7 +523,7 @@ class DataSourceV2SQLSuite
     // can load the table.
     val t = catalog("session").asTableCatalog
       .loadTable(Identifier.of(Array.empty, "table_name"))
-    assert(t.isInstanceOf[UnresolvedTable], "V1 table wasn't returned as an unresolved table")
+    assert(t.isInstanceOf[V1Table], "V1 table wasn't returned as an unresolved table")
   }
 
   test("CreateTableAsSelect: nullable schema") {

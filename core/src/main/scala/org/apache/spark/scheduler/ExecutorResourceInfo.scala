@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.resource.ResourceAllocator
+import org.apache.spark.resource.{ResourceAllocator, ResourceInformation}
 
 /**
  * Class to hold information about a type of Resource on an Executor. This information is managed
@@ -27,4 +27,8 @@ import org.apache.spark.resource.ResourceAllocator
  * @param addresses Resource addresses provided by the executor
  */
 private[spark] class ExecutorResourceInfo(name: String, addresses: Seq[String])
-  extends ResourceAllocator(name, addresses)
+  extends ResourceInformation(name, addresses.toArray) with ResourceAllocator {
+
+  override protected def resourceName = this.name
+  override protected def resourceAddresses = this.addresses
+}

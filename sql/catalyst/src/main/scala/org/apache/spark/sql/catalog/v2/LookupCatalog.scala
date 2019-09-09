@@ -45,7 +45,7 @@ trait LookupCatalog extends Logging {
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  def sessionCatalog: Option[CatalogPlugin] = catalogManager.v2SessionCatalog
+  def sessionCatalog: CatalogPlugin = catalogManager.v2SessionCatalog
 
   /**
    * Extract catalog plugin and remaining identifier names.
