@@ -231,7 +231,7 @@ private[hive] class HiveClientImpl(
     ugi.getShortUserName
   } catch {
     case e: Exception =>
-      logWarning("Can not get login user.")
+      logError("Can not get login user.")
       throw e
   }
 
