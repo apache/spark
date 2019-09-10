@@ -224,12 +224,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer
-      .setStepSize(10.0)
-      .setRegParam(0.0)
-      .setNumIterations(20)
-      .setConvergenceTol(0.0005)
+    val lr = new LogisticRegressionWithSGD(10.0, 20, 0.0, 1.0).setIntercept(true)
+    lr.optimizer.setConvergenceTol(0.0005)
 
     val model = lr.run(testRDD)
 
@@ -300,11 +296,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer
-      .setStepSize(10.0)
-      .setRegParam(0.0)
-      .setNumIterations(10)
+    val lr = new LogisticRegressionWithSGD(10.0, 10, 0.0, 1.0).setIntercept(true)
 
     val model = lr.run(testRDD, initialWeights)
 
@@ -335,11 +327,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     testRDD.cache()
 
     // Use half as many iterations as the previous test.
-    val lr = new LogisticRegressionWithSGD().setIntercept(true)
-    lr.optimizer.
-      setStepSize(1.0).
-      setNumIterations(10).
-      setRegParam(1.0)
+    val lr = new LogisticRegressionWithSGD(1.0, 10, 1.0, 1.0).setIntercept(true)
 
     val model = lr.run(testRDD, initialWeights)
 
@@ -916,7 +904,7 @@ class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSpar
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = LogisticRegressionWithSGD.train(points, 2)
+    val model = new LogisticRegressionWithSGD(1.0, 2, 0.0, 1.0).run(points)
 
     val predictions = model.predict(points.map(_.features))
 

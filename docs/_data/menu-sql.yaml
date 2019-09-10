@@ -78,6 +78,8 @@
   subitems:
     - text: Data Types
       url: sql-ref-datatypes.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
     - text: NaN Semantics
       url: sql-ref-nan-semantics.html
     - text: SQL Syntax
