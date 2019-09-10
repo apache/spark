@@ -115,7 +115,9 @@ object SQLConf {
    * Returns the active config object within the current scope. If there is an active SparkSession,
    * the proper SQLConf associated with the thread's active session is used. If it's called from
    * tasks in the executor side, a SQLConf will be created from job local properties, which are set
-   * and propagated from the driver side.
+   * and propagated from the driver side, unless a `SQLConf` has been set in the scope by
+   * `withExistingConf` as done for propagating SQLConf for operations performed on RDDs created
+   * from DataFrames.
    *
    * The way this works is a little bit convoluted, due to the fact that config was added initially
    * only for physical plans (and as a result not in sql/catalyst module).
@@ -129,7 +131,12 @@ object SQLConf {
    */
   def get: SQLConf = {
     if (TaskContext.get != null) {
-      new ReadOnlySQLConf(TaskContext.get())
+      val conf = existingConf.get()
+      if (conf != null) {
+        conf
+      } else {
+        new ReadOnlySQLConf(TaskContext.get())
+      }
     } else {
       val isSchedulerEventLoopThread = SparkContext.getActive
         .map(_.dagScheduler.eventProcessLoop.eventThread)
@@ -1965,9 +1972,12 @@ object SQLConf {
     .createOptional
 
   val V2_SESSION_CATALOG = buildConf("spark.sql.catalog.session")
-      .doc("Name of the default v2 catalog, used when a catalog is not identified in queries")
+      .doc("A catalog implementation that will be used in place of the Spark built-in session " +
+        "catalog for v2 operations. The implementation may extend `CatalogExtension` to be " +
+        "passed the Spark built-in session catalog, so that it may delegate calls to the " +
+        "built-in session catalog.")
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog")
+      .createOptional
 
   val LEGACY_LOOSE_UPCAST = buildConf("spark.sql.legacy.looseUpcast")
     .doc("When true, the upcast will be loose and allows string to atomic types.")

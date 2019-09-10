@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util
 import java.util.Locale
 
 import scala.collection.mutable
@@ -25,7 +26,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.v2._
-import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform}
+import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
@@ -45,6 +46,7 @@ import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssig
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
@@ -59,6 +61,24 @@ object SimpleAnalyzer extends Analyzer(
     override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
   },
   new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+
+object FakeV2SessionCatalog extends TableCatalog {
+  private def fail() = throw new UnsupportedOperationException
+  override def listTables(namespace: Array[String]): Array[Identifier] = fail()
+  override def loadTable(ident: Identifier): Table = {
+    throw new NoSuchTableException(ident.toString)
+  }
+  override def createTable(
+      ident: Identifier,
+      schema: StructType,
+      partitions: Array[Transform],
+      properties: util.Map[String, String]): Table = fail()
+  override def alterTable(ident: Identifier, changes: TableChange*): Table = fail()
+  override def dropTable(ident: Identifier): Boolean = fail()
+  override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
+  override def name(): String = fail()
+}
 
 /**
  * Provides a way to keep state during the analysis, this enables us to decouple the concerns
@@ -101,15 +121,21 @@ object AnalysisContext {
  */
 class Analyzer(
     catalog: SessionCatalog,
+    v2SessionCatalog: TableCatalog,
     conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
+  // Only for tests.
   def this(catalog: SessionCatalog, conf: SQLConf) = {
-    this(catalog, conf, conf.optimizerMaxIterations)
+    this(catalog, FakeV2SessionCatalog, conf, conf.optimizerMaxIterations)
   }
 
-  override val catalogManager: CatalogManager = new CatalogManager(conf)
+  def this(catalog: SessionCatalog, v2SessionCatalog: TableCatalog, conf: SQLConf) = {
+    this(catalog, v2SessionCatalog, conf, conf.optimizerMaxIterations)
+  }
+
+  override val catalogManager: CatalogManager = new CatalogManager(conf, v2SessionCatalog)
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
     AnalysisHelper.markInAnalyzer {
@@ -954,7 +980,7 @@ class Analyzer(
         case scala.Right(tableOpt) =>
           tableOpt.map { table =>
             AlterTable(
-              sessionCatalog.get.asTableCatalog, // table being resolved means this exists
+              sessionCatalog.asTableCatalog,
               Identifier.of(tableName.init.toArray, tableName.last),
               DataSourceV2Relation.create(table),
               changes
@@ -2837,7 +2863,7 @@ class Analyzer(
       case CatalogObjectIdentifier(Some(v2Catalog), ident) =>
         scala.Left((v2Catalog, ident, loadTable(v2Catalog, ident)))
       case CatalogObjectIdentifier(None, ident) =>
-        catalogManager.v2SessionCatalog.flatMap(loadTable(_, ident)) match {
+        loadTable(catalogManager.v2SessionCatalog, ident) match {
           case Some(_: V1Table) => scala.Right(None)
           case other => scala.Right(other)
         }

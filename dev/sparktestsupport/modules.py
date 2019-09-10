@@ -362,7 +362,6 @@ pyspark_sql = Module(
         "pyspark.sql.window",
         "pyspark.sql.avro.functions",
         # unittests
-        "pyspark.sql.tests.test_appsubmit",
         "pyspark.sql.tests.test_arrow",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",

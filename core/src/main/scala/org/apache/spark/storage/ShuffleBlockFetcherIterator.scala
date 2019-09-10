@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{InputStream, IOException}
+import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
@@ -349,9 +350,16 @@ final class ShuffleBlockFetcherIterator(
         results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId,
           buf.size(), buf, false))
       } catch {
+        // If we see an exception, stop immediately.
         case e: Exception =>
-          // If we see an exception, stop immediately.
-          logError(s"Error occurred while fetching local blocks", e)
+          e match {
+            // ClosedByInterruptException is an excepted exception when kill task,
+            // don't log the exception stack trace to avoid confusing users.
+            // See: SPARK-28340
+            case ce: ClosedByInterruptException =>
+              logError("Error occurred while fetching local blocks, " + ce.getMessage)
+            case ex: Exception => logError("Error occurred while fetching local blocks", ex)
+          }
           results.put(new FailureFetchResult(blockId, blockManager.blockManagerId, e))
           return
       }
@@ -454,7 +462,12 @@ final class ShuffleBlockFetcherIterator(
             // The exception could only be throwed by local shuffle block
             case e: IOException =>
               assert(buf.isInstanceOf[FileSegmentManagedBuffer])
-              logError("Failed to create input stream from local block", e)
+              e match {
+                case ce: ClosedByInterruptException =>
+                  logError("Failed to create input stream from local block, " +
+                    ce.getMessage)
+                case e: IOException => logError("Failed to create input stream from local block", e)
+              }
               buf.release()
               throwFetchFailedException(blockId, address, e)
           }
