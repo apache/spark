@@ -231,7 +231,9 @@ private[hive] class HiveClientImpl(
     }
     ugi.getShortUserName
   } catch {
-    case _: LoginException => throw new LoginException("Can not get login user.")
+    case e: Exception =>
+      logWarning("Can not get login user.")
+      throw e
   }
 
   override def getConf(key: String, defaultValue: String): String = {
