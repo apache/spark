@@ -29,6 +29,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -85,11 +86,13 @@ class HadoopMapReduceCommitProtocol(
    */
   @transient private var partitionPaths: mutable.Set[String] = null
 
+  private val appId = SparkEnv.get.conf.getAppId
+
   /**
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  private def stagingDir = new Path(path, ".spark-staging-" + jobId)
+  private def stagingDir = new Path(path, s".spark-staging-${appId}-${jobId}")
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
