@@ -362,6 +362,8 @@ private[ml] trait EvalExprParser extends RegexParsers {
   /* Characters followed by any number of numeric characters. */
   private def functionIdentifier: Parser[String] = """[a-zA-Z_]\w*""".r
 
+  private val space = "[ \\n]*".r
+
   private def string: Parser[String] = rep(char) ^^ {_.mkString}
 
   private def nonEmptyString: Parser[String] = rep1(char) ^^ {_.mkString}
@@ -379,8 +381,9 @@ private[ml] trait EvalExprParser extends RegexParsers {
 
   private def balancedParenProduct: Parser[String] = (products ||| string)
 
-  private def parsedExpr: Parser[String] = "I(" ~> balancedParenProduct <~ ")" | (
-    functionIdentifier ~ "(" ~ balancedParenProduct ~ ")") ^^ {
+  private def parsedExpr: Parser[String] =
+    "I" ~ ( space ~> "(") ~> balancedParenProduct <~ ")" | (
+      functionIdentifier ~ ( space ~> "(") ~ balancedParenProduct ~ ")") ^^ {
     case f ~ l ~ m ~ r => f + l + m + r}
 
   def evalExpr: Parser[Label] = parsedExpr ^^ {case expr => EvalExpr(expr)}

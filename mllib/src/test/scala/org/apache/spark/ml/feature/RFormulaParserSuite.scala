@@ -267,8 +267,11 @@ class RFormulaParserSuite extends SparkFunSuite {
     checkParse("y ~ (I( (a+b)) + c)^2", "y", Seq(" (a+b)", "c", " (a+b):c"))
     checkParse("y ~ (I(( a +  b ) ) + c )^2", "y", Seq("( a +  b ) ", "c", "( a +  b ) :c"))
     checkParse("y ~ I( log(a) *  (log(a)*2)) + b", "y", Seq(" log(a) *  (log(a)*2)", "b"))
+    checkParse("y ~ I ( log(a) *  (log(a)*2)) + b", "y", Seq(" log(a) *  (log(a)*2)", "b"))
     checkParse("y ~ I( log(a) *(  log( a )* 2)) + b", "y", Seq(" log(a) *(  log( a )* 2)", "b"))
     checkParse("y ~ exp( a ) + ( b +c)", "y", Seq("exp( a )", "b", "c"))
+    checkParse("y ~ exp  ( a ) + ( b +c)", "y", Seq("exp( a )", "b", "c"))
+    checkParse("log (y) ~ exp      (a) + ( b +c)", "log(y)", Seq("exp(a)", "b", "c"))
     checkParse("y ~ percentile_approx(a, 0.5, 100) + (b + c)", "y",
                Seq("percentile_approx(a, 0.5, 100)", "b", "c"))
     checkParse("y ~ map_values(map(1, 2, 3, 4)) + (b + c)", "y",
