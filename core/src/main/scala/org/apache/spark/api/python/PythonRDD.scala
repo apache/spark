@@ -208,7 +208,7 @@ private[spark] object PythonRDD extends Logging {
 
             // Client requested more data, attempt to collect the next partition
             val partitionFuture = prefetchIter.next()
-            // Cause the next job to be submitted if prefecthPartitions is enabled.
+            // Cause the next job to be submitted if prefetchPartitions is enabled.
             if (prefetchPartitions) {
               prefetchIter.headOption
             }
