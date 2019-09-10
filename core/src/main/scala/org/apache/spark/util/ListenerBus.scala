@@ -25,7 +25,8 @@ import scala.util.control.NonFatal
 
 import com.codahale.metrics.Timer
 
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.{config, Logging}
 
 /**
  * An event bus which posts events to its listeners.
@@ -36,6 +37,12 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
 
   // Marked `private[spark]` for access in tests.
   private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
+
+  private lazy val logSlowEventEnabled =
+    SparkEnv.get.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_ENABLED)
+
+  private lazy val logSlowEventThreshold =
+    SparkEnv.get.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD)
 
   /**
    * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
@@ -111,7 +118,10 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
           logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
       } finally {
         if (maybeTimerContext != null) {
-          maybeTimerContext.stop()
+          val elapsed = maybeTimerContext.stop()
+          if (logSlowEventEnabled && elapsed > logSlowEventThreshold) {
+            logError(s"Process of event ${event} took ${elapsed / 1000000000d}s.")
+          }
         }
       }
     }
