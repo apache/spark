@@ -25,7 +25,7 @@ import java.time.temporal.TemporalQueries
 import java.util.Locale
 import java.util.concurrent.TimeUnit.SECONDS
 
-import DateTimeUtils.{convertSpecialTimestamp}
+import DateTimeUtils.convertSpecialTimestamp
 
 sealed trait TimestampFormatter extends Serializable {
   /**
