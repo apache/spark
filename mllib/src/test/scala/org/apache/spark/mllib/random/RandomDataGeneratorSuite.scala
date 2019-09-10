@@ -89,7 +89,7 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
         val expectedMean = math.exp(mean + 0.5 * vari)
 
         // variance of log normal = (e^var - 1) * e^(2 * mean + var)
-        val expectedStd = math.sqrt((math.exp(vari) - 1.0) * math.exp(2.0 * mean + vari))
+        val expectedStd = math.sqrt(math.expm1(vari) * math.exp(2.0 * mean + vari))
 
         // since sampling error increases with variance, let's set
         // the absolute tolerance as a percentage

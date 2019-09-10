@@ -553,12 +553,9 @@ For example, suppose you would like to point log url link to Job History Server 
 
 Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
 
-In YARN mode, when accessing Hadoop filesystems, Spark will automatically obtain delegation tokens
-for:
-
-- the filesystem hosting the staging directory of the Spark application (which is the default
-  filesystem if `spark.yarn.stagingDir` is not set);
-- if Hadoop federation is enabled, all the federated filesystems in the configuration.
+In YARN mode, when accessing Hadoop file systems, aside from the default file system in the hadoop
+configuration, Spark will also automatically obtain delegation tokens for the service hosting the
+staging directory of the Spark application.
 
 ## YARN-specific Kerberos Configuration
 

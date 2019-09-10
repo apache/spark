@@ -92,6 +92,8 @@ statement
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
+    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+        (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |
@@ -183,7 +185,7 @@ statement
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
-    | SHOW TABLES ((FROM | IN) db=errorCapturingIdentifier)?
+    | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=errorCapturingIdentifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
@@ -198,7 +200,7 @@ statement
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) database EXTENDED? db=errorCapturingIdentifier #describeDatabase
     | (DESC | DESCRIBE) TABLE? option=(EXTENDED | FORMATTED)?
-        tableIdentifier partitionSpec? describeColName?                #describeTable
+        multipartIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) QUERY? query                                   #describeQuery
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | REFRESH (STRING | .*?)                                           #refreshResource
@@ -214,6 +216,7 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
+    | DELETE FROM multipartIdentifier tableAlias whereClause           #deleteFromTable
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -672,6 +675,7 @@ predicate
     | NOT? kind=IN '(' query ')'
     | NOT? kind=(RLIKE | LIKE) pattern=valueExpression
     | IS NOT? kind=NULL
+    | IS NOT? kind=(TRUE | FALSE | UNKNOWN)
     | IS NOT? kind=DISTINCT FROM right=valueExpression
     ;
 
@@ -1004,6 +1008,7 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
+    | NAMESPACES
     | NO
     | NULLS
     | OF
@@ -1253,6 +1258,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
+    | NAMESPACES
     | NO
     | NOT
     | NULL
@@ -1346,6 +1352,7 @@ nonReserved
     | UNBOUNDED
     | UNCACHE
     | UNIQUE
+    | UNKNOWN
     | UNLOCK
     | UNSET
     | USE
@@ -1512,6 +1519,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
+NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';
 NOT: 'NOT' | '!';
@@ -1611,6 +1619,7 @@ UNBOUNDED: 'UNBOUNDED';
 UNCACHE: 'UNCACHE';
 UNION: 'UNION';
 UNIQUE: 'UNIQUE';
+UNKNOWN: 'UNKNOWN';
 UNLOCK: 'UNLOCK';
 UNSET: 'UNSET';
 USE: 'USE';

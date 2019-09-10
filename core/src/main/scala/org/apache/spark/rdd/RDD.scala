@@ -372,7 +372,7 @@ abstract class RDD[T: ClassTag](
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+    new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.map(cleanF))
   }
 
   /**
@@ -381,7 +381,7 @@ abstract class RDD[T: ClassTag](
    */
   def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = withScope {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
+    new MapPartitionsRDD[U, T](this, (_, _, iter) => iter.flatMap(cleanF))
   }
 
   /**
@@ -391,7 +391,7 @@ abstract class RDD[T: ClassTag](
     val cleanF = sc.clean(f)
     new MapPartitionsRDD[T, T](
       this,
-      (context, pid, iter) => iter.filter(cleanF),
+      (_, _, iter) => iter.filter(cleanF),
       preservesPartitioning = true)
   }
 
@@ -402,16 +402,16 @@ abstract class RDD[T: ClassTag](
     def removeDuplicatesInPartition(partition: Iterator[T]): Iterator[T] = {
       // Create an instance of external append only map which ignores values.
       val map = new ExternalAppendOnlyMap[T, Null, Null](
-        createCombiner = value => null,
+        createCombiner = _ => null,
         mergeValue = (a, b) => a,
         mergeCombiners = (a, b) => a)
       map.insertAll(partition.map(_ -> null))
       map.iterator.map(_._1)
     }
     partitioner match {
-      case Some(p) if numPartitions == partitions.length =>
+      case Some(_) if numPartitions == partitions.length =>
         mapPartitions(removeDuplicatesInPartition, preservesPartitioning = true)
-      case _ => map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
+      case _ => map(x => (x, null)).reduceByKey((x, _) => x, numPartitions).map(_._1)
     }
   }
 
@@ -684,7 +684,7 @@ abstract class RDD[T: ClassTag](
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): RDD[Array[T]] = withScope {
-    new MapPartitionsRDD[Array[T], T](this, (context, pid, iter) => Iterator(iter.toArray))
+    new MapPartitionsRDD[Array[T], T](this, (_, _, iter) => Iterator(iter.toArray))
   }
 
   /**
@@ -814,7 +814,7 @@ abstract class RDD[T: ClassTag](
     val cleanedF = sc.clean(f)
     new MapPartitionsRDD(
       this,
-      (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(iter),
+      (_: TaskContext, _: Int, iter: Iterator[T]) => cleanedF(iter),
       preservesPartitioning)
   }
 
@@ -836,7 +836,7 @@ abstract class RDD[T: ClassTag](
       isOrderSensitive: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
-      (context: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
+      (_: TaskContext, index: Int, iter: Iterator[T]) => f(index, iter),
       preservesPartitioning = preservesPartitioning,
       isOrderSensitive = isOrderSensitive)
   }
@@ -849,7 +849,7 @@ abstract class RDD[T: ClassTag](
       preservesPartitioning: Boolean = false): RDD[U] = withScope {
     new MapPartitionsRDD(
       this,
-      (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
+      (_: TaskContext, _: Int, iter: Iterator[T]) => f(iter),
       preservesPartitioning)
   }
 
@@ -866,7 +866,7 @@ abstract class RDD[T: ClassTag](
     val cleanedF = sc.clean(f)
     new MapPartitionsRDD(
       this,
-      (context: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
+      (_: TaskContext, index: Int, iter: Iterator[T]) => cleanedF(index, iter),
       preservesPartitioning)
   }
 
@@ -1040,7 +1040,7 @@ abstract class RDD[T: ClassTag](
       }
     }
     var jobResult: Option[T] = None
-    val mergeResult = (index: Int, taskResult: Option[T]) => {
+    val mergeResult = (_: Int, taskResult: Option[T]) => {
       if (taskResult.isDefined) {
         jobResult = jobResult match {
           case Some(value) => Some(f(value, taskResult.get))
@@ -1110,7 +1110,7 @@ abstract class RDD[T: ClassTag](
     var jobResult = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
     val cleanOp = sc.clean(op)
     val foldPartition = (iter: Iterator[T]) => iter.fold(zeroValue)(cleanOp)
-    val mergeResult = (index: Int, taskResult: T) => jobResult = op(jobResult, taskResult)
+    val mergeResult = (_: Int, taskResult: T) => jobResult = op(jobResult, taskResult)
     sc.runJob(this, foldPartition, mergeResult)
     jobResult
   }
@@ -1136,7 +1136,7 @@ abstract class RDD[T: ClassTag](
     val cleanSeqOp = sc.clean(seqOp)
     val cleanCombOp = sc.clean(combOp)
     val aggregatePartition = (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
-    val mergeResult = (index: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
+    val mergeResult = (_: Int, taskResult: U) => jobResult = combOp(jobResult, taskResult)
     sc.runJob(this, aggregatePartition, mergeResult)
     jobResult
   }
@@ -1201,7 +1201,7 @@ abstract class RDD[T: ClassTag](
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = withScope {
     require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
-    val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
+    val countElements: (TaskContext, Iterator[T]) => Long = { (_, iter) =>
       var result = 0L
       while (iter.hasNext) {
         result += 1L
@@ -1244,7 +1244,7 @@ abstract class RDD[T: ClassTag](
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }
-    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (ctx, iter) =>
+    val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (_, iter) =>
       val map = new OpenHashMap[T, Long]
       iter.foreach {
         t => map.changeValue(t, 1L, _ + 1L)

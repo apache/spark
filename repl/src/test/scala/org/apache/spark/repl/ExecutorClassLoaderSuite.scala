@@ -164,7 +164,7 @@ class ExecutorClassLoaderSuite
     val is = classLoader.getResourceAsStream(resourceName)
     assert(is != null, s"Resource $resourceName not found")
 
-    val bufferedSource = Source.fromInputStream(is, "UTF-8")
+    val bufferedSource = Source.fromInputStream(is, StandardCharsets.UTF_8.name())
     Utils.tryWithSafeFinally {
       val content = bufferedSource.getLines().next()
       assert(content.contains("resource"), "File doesn't contain 'resource'")

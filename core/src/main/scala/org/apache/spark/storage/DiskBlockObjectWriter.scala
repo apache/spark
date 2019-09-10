@@ -18,12 +18,13 @@
 package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
-import java.nio.channels.FileChannel
+import java.nio.channels.{ClosedByInterruptException, FileChannel}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.PairsWriter
 
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
@@ -46,7 +47,8 @@ private[spark] class DiskBlockObjectWriter(
     writeMetrics: ShuffleWriteMetricsReporter,
     val blockId: BlockId = null)
   extends OutputStream
-  with Logging {
+  with Logging
+  with PairsWriter {
 
   /**
    * Guards against close calls, e.g. from a wrapping stream.
@@ -217,6 +219,12 @@ private[spark] class DiskBlockObjectWriter(
         truncateStream = new FileOutputStream(file, true)
         truncateStream.getChannel.truncate(committedPosition)
       } catch {
+        // ClosedByInterruptException is an excepted exception when kill task,
+        // don't log the exception stack trace to avoid confusing users.
+        // See: SPARK-28340
+        case ce: ClosedByInterruptException =>
+          logError("Exception occurred while reverting partial writes to file "
+            + file + ", " + ce.getMessage)
         case e: Exception =>
           logError("Uncaught exception while reverting partial writes to file " + file, e)
       } finally {
@@ -232,7 +240,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Writes a key-value pair.
    */
-  def write(key: Any, value: Any) {
+  override def write(key: Any, value: Any) {
     if (!streamOpen) {
       open()
     }

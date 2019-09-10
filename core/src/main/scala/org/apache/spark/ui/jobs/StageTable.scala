@@ -18,6 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
@@ -160,7 +161,7 @@ private[ui] class StagePagedTable(
   )
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     parameterPath +
       s"&$pageNumberFormField=$page" +
       s"&$stageTag.sort=$encodedSortColumn" +
@@ -170,7 +171,7 @@ private[ui] class StagePagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$parameterPath&$stageTag.sort=$encodedSortColumn&$stageTag.desc=$desc#$tableHeaderId"
   }
 
@@ -217,7 +218,7 @@ private[ui] class StagePagedTable(
         if (header == sortColumn) {
           val headerLink = Unparsed(
             parameterPath +
-              s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&$stageTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
               s"&$stageTag.desc=${!desc}" +
               s"&$stageTag.pageSize=$pageSize") +
               s"#$tableHeaderId"
@@ -234,7 +235,7 @@ private[ui] class StagePagedTable(
           if (sortable) {
             val headerLink = Unparsed(
               parameterPath +
-                s"&$stageTag.sort=${URLEncoder.encode(header, "UTF-8")}" +
+                s"&$stageTag.sort=${URLEncoder.encode(header, UTF_8.name())}" +
                 s"&$stageTag.pageSize=$pageSize") +
                 s"#$tableHeaderId"
 

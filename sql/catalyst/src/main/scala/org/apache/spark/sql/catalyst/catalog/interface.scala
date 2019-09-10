@@ -74,7 +74,7 @@ case class CatalogStorageFormat(
     inputFormat.foreach(map.put("InputFormat", _))
     outputFormat.foreach(map.put("OutputFormat", _))
     if (compressed) map.put("Compressed", "")
-    CatalogUtils.maskCredentials(properties) match {
+    SQLConf.get.redactOptions(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
         map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
@@ -606,7 +606,8 @@ case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
 case class HiveTableRelation(
     tableMeta: CatalogTable,
     dataCols: Seq[AttributeReference],
-    partitionCols: Seq[AttributeReference]) extends LeafNode with MultiInstanceRelation {
+    partitionCols: Seq[AttributeReference],
+    tableStats: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
   assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
@@ -630,7 +631,9 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled))
+      .orElse(tableStats)
+      .getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }

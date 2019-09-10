@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalog.v2.expressions.{ApplyTransform, BucketTransf
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -617,6 +617,47 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
+  test("describe table column") {
+    comparePlans(parsePlan("DESCRIBE t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("abc.xyz"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t abc.xyz"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("abc", "xyz"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("a.b", "x.y"), isExtended = false))
+
+    comparePlans(parsePlan("DESCRIBE TABLE t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = false))
+    comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = true))
+    comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
+      DescribeColumnStatement(
+        Seq("t"), Seq("col"), isExtended = true))
+
+    val caught = intercept[AnalysisException](
+      parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
+    assert(caught.getMessage.contains(
+        "DESC TABLE COLUMN for a specific partition is not supported"))
+  }
+
+  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
+    comparePlans(parsePlan("describe t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = false))
+    comparePlans(parsePlan("describe table extended t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+    comparePlans(parsePlan("describe table formatted t"),
+      DescribeTableStatement(Seq("t"), Map.empty, isExtended = true))
+  }
+
   test("insert table: basic append") {
     Seq(
       "INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM source",
@@ -721,6 +762,36 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("INSERT INTO ... IF NOT EXISTS"))
+  }
+
+  test("show tables") {
+    comparePlans(
+      parsePlan("SHOW TABLES"),
+      ShowTablesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW TABLES FROM testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN testcat.ns1.ns2.tbl"),
+      ShowTablesStatement(Some(Seq("testcat", "ns1", "ns2", "tbl")), None))
+    comparePlans(
+      parsePlan("SHOW TABLES IN tbl LIKE '*dog*'"),
+      ShowTablesStatement(Some(Seq("tbl")), Some("*dog*")))
+  }
+
+  test("show namespaces") {
+    comparePlans(
+      parsePlan("SHOW NAMESPACES"),
+      ShowNamespacesStatement(None, None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1", "ns2")), None))
+    comparePlans(
+      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
+      ShowNamespacesStatement(Some(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   private case class TableSpec(

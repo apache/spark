@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -336,6 +336,20 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+  }
+
+  override def visitDeleteFromTable(
+      ctx: DeleteFromTableContext): LogicalPlan = withOrigin(ctx) {
+
+    val tableId = visitMultipartIdentifier(ctx.multipartIdentifier)
+    val tableAlias = if (ctx.tableAlias() != null) {
+      val ident = ctx.tableAlias().strictIdentifier()
+      if (ident != null) { Some(ident.getText) } else { None }
+    } else {
+      None
+    }
+
+    DeleteFromStatement(tableId, tableAlias, expression(ctx.whereClause().booleanExpression()))
   }
 
   /**
@@ -1229,6 +1243,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * - (NOT) LIKE
    * - (NOT) RLIKE
    * - IS (NOT) NULL.
+   * - IS (NOT) (TRUE | FALSE | UNKNOWN)
    * - IS (NOT) DISTINCT FROM
    */
   private def withPredicate(e: Expression, ctx: PredicateContext): Expression = withOrigin(ctx) {
@@ -1262,6 +1277,18 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         IsNotNull(e)
       case SqlBaseParser.NULL =>
         IsNull(e)
+      case SqlBaseParser.TRUE => ctx.NOT match {
+        case null => IsTrue(e)
+        case _ => IsNotTrue(e)
+      }
+      case SqlBaseParser.FALSE => ctx.NOT match {
+        case null => IsFalse(e)
+        case _ => IsNotFalse(e)
+      }
+      case SqlBaseParser.UNKNOWN => ctx.NOT match {
+        case null => IsUnknown(e)
+        case _ => IsNotUnknown(e)
+      }
       case SqlBaseParser.DISTINCT if ctx.NOT != null =>
         EqualNullSafe(e, expression(ctx.right))
       case SqlBaseParser.DISTINCT =>
@@ -1382,28 +1409,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Create a Extract expression.
    */
   override def visitExtract(ctx: ExtractContext): Expression = withOrigin(ctx) {
-    ctx.field.getText.toUpperCase(Locale.ROOT) match {
-      case "YEAR" =>
-        Year(expression(ctx.source))
-      case "QUARTER" =>
-        Quarter(expression(ctx.source))
-      case "MONTH" =>
-        Month(expression(ctx.source))
-      case "WEEK" =>
-        WeekOfYear(expression(ctx.source))
-      case "DAY" =>
-        DayOfMonth(expression(ctx.source))
-      case "DAYOFWEEK" =>
-        DayOfWeek(expression(ctx.source))
-      case "HOUR" =>
-        Hour(expression(ctx.source))
-      case "MINUTE" =>
-        Minute(expression(ctx.source))
-      case "SECOND" =>
-        Second(expression(ctx.source))
-      case other =>
-        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
-    }
+    val fieldStr = ctx.field.getText
+    val source = expression(ctx.source)
+    val extractField = DatePart.parseExtractField(fieldStr, source, {
+      throw new ParseException(s"Literals of type '$fieldStr' are currently not supported.", ctx)
+    })
+    new DatePart(Literal(fieldStr), expression(ctx.source), extractField)
   }
 
   /**
@@ -2250,6 +2261,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[ShowNamespacesStatement]] command.
+   */
+  override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
+    ShowNamespacesStatement(
+      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+      Option(ctx.pattern).map(string))
+  }
+
+  /**
    * Create a table, returning a [[CreateTableStatement]] logical plan.
    *
    * Expected format:
@@ -2403,6 +2423,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a [[ShowTablesStatement]] command.
+   */
+  override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    ShowTablesStatement(
+      Option(ctx.multipartIdentifier).map(visitMultipartIdentifier),
+      Option(ctx.pattern).map(string))
+  }
+
+  /**
    * Parse new column info from ADD COLUMN into a QualifiedColType.
    */
   override def visitQualifiedColTypeWithPosition(
@@ -2547,5 +2576,37 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     AlterTableSetLocationStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       visitLocationSpec(ctx.locationSpec))
+  }
+
+  /**
+   * Create a [[DescribeColumnStatement]] or [[DescribeTableStatement]] commands.
+   */
+  override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
+    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
+    if (ctx.describeColName != null) {
+      if (ctx.partitionSpec != null) {
+        throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
+      } else {
+        DescribeColumnStatement(
+          visitMultipartIdentifier(ctx.multipartIdentifier()),
+          ctx.describeColName.nameParts.asScala.map(_.getText),
+          isExtended)
+      }
+    } else {
+      val partitionSpec = if (ctx.partitionSpec != null) {
+        // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
+        visitPartitionSpec(ctx.partitionSpec).map {
+          case (key, Some(value)) => key -> value
+          case (key, _) =>
+            throw new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
+        }
+      } else {
+        Map.empty[String, String]
+      }
+      DescribeTableStatement(
+        visitMultipartIdentifier(ctx.multipartIdentifier()),
+        partitionSpec,
+        isExtended)
+    }
   }
 }

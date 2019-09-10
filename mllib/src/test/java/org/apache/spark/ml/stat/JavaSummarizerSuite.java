@@ -40,7 +40,7 @@ public class JavaSummarizerSuite extends SharedSparkSession {
   @Override
   public void setUp() throws IOException {
     super.setUp();
-    List<LabeledPoint> points = new ArrayList<LabeledPoint>();
+    List<LabeledPoint> points = new ArrayList<>();
     points.add(new LabeledPoint(0.0, Vectors.dense(1.0, 2.0)));
     points.add(new LabeledPoint(0.0, Vectors.dense(3.0, 4.0)));
 

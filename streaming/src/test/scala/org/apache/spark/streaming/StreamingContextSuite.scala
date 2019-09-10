@@ -34,12 +34,14 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.dstream.{DStream, InputDStream}
 import org.apache.spark.streaming.receiver.Receiver
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ManualClock, Utils}
 
 
 class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
@@ -390,6 +392,29 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     val streamingSourceAfterStop = StreamingContextSuite.getStreamingSource(ssc)
     assert(ssc.getState() === StreamingContextState.STOPPED)
     assert(!sourcesAfterStop.contains(streamingSourceAfterStop))
+  }
+
+  test("SPARK-28709 registering and de-registering of progressListener") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set(UI_ENABLED, true)
+
+    ssc = new StreamingContext(conf, batchDuration)
+
+    assert(ssc.sc.ui.isDefined, "Spark UI is not started!")
+    val sparkUI = ssc.sc.ui.get
+
+    addInputStream(ssc).register()
+    ssc.start()
+
+    assert(ssc.scheduler.listenerBus.listeners.contains(ssc.progressListener))
+    assert(ssc.sc.listenerBus.listeners.contains(ssc.progressListener))
+    assert(sparkUI.getStreamingJobProgressListener.get == ssc.progressListener)
+
+    ssc.stop()
+
+    assert(!ssc.scheduler.listenerBus.listeners.contains(ssc.progressListener))
+    assert(!ssc.sc.listenerBus.listeners.contains(ssc.progressListener))
+    assert(sparkUI.getStreamingJobProgressListener.isEmpty)
   }
 
   test("awaitTermination") {
@@ -839,6 +864,31 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
     // is running.
     assert(latch.await(60, TimeUnit.SECONDS))
+  }
+
+  test("SPARK-22955 graceful shutdown shouldn't lead to job generation error") {
+    val conf = new SparkConf().setMaster(master).setAppName(appName)
+    conf.set("spark.streaming.clock", classOf[ManualClock].getName)
+    conf.set("spark.streaming.gracefulStopTimeout", "60s")
+
+    ssc = new StreamingContext(conf, Milliseconds(100))
+
+    new InputDStream[Int](ssc) {
+      @volatile private var stopped = false
+      override def start(): Unit = {}
+      override def stop(): Unit = stopped = true
+      override def compute(validTime: Time): Option[RDD[Int]] = {
+        if (stopped) throw new IllegalStateException("Already stopped")
+        Some(ssc.sc.emptyRDD[Int])
+      }
+    }.register()
+
+    ssc.start()
+    // start generating of batches constantly without any delay
+    ssc.scheduler.clock.asInstanceOf[ManualClock].setTime(Long.MaxValue)
+    ssc.stop(stopSparkContext = true, stopGracefully = true)
+    // exception shouldn't be thrown
+    ssc.awaitTermination()
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {

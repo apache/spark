@@ -27,6 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
@@ -217,8 +218,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
-      "SELECT count(key) FROM t1;"
-        -> "5",
+      "SELECT collect_list(array(val)) FROM t1;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
@@ -290,8 +291,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val tmpDir = Utils.createTempDir(namePrefix = "SPARK-21451")
     runCliWithin(
       1.minute,
-      Seq(s"--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
+      Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
       "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
     tmpDir.delete()
+  }
+
+  test("Support hive.aux.jars.path") {
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      s"CREATE TEMPORARY FUNCTION example_format AS '${classOf[UDFExampleFormat].getName}';" -> "",
+      "SELECT example_format('%o', 93);" -> "135"
+    )
   }
 }

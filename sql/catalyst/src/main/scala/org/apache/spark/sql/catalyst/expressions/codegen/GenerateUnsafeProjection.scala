@@ -299,7 +299,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       v => s"$v = new $rowWriterClass(${expressions.length}, ${numVarLenFields * 32});")
 
     // Evaluate all the subexpression.
-    val evalSubexpr = ctx.subexprFunctions.mkString("\n")
+    val evalSubexpr = ctx.subexprFunctionsCode
 
     val writeExpressions = writeExpressionsToBuffer(
       ctx, ctx.INPUT_ROW, exprEvals, exprSchemas, rowWriter, isTopLevel = true)

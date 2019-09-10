@@ -200,8 +200,9 @@ class UDFTests(ReusedSQLTestCase):
         # The udf uses attributes from both sides of join, so it is pulled out as Filter +
         # Cross join.
         df = left.join(right, f("a", "b"))
-        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
-            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+                df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
@@ -615,6 +616,18 @@ class UDFTests(ReusedSQLTestCase):
             assert "itertools" not in str(map)
 
         self.spark.range(1).select(f()).collect()
+
+    def test_worker_original_stdin_closed(self):
+        # Test if it closes the original standard input of worker inherited from the daemon,
+        # and replaces it with '/dev/null'.  See SPARK-26175.
+        def task(iterator):
+            import sys
+            res = sys.stdin.read()
+            # Because the standard input is '/dev/null', it reaches to EOF.
+            assert res == '', "Expect read EOF from stdin."
+            return iterator
+
+        self.sc.parallelize(range(1), 1).mapPartitions(task).count()
 
 
 class UDFInitializationTests(unittest.TestCase):

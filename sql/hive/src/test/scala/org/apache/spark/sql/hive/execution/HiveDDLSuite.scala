@@ -548,6 +548,14 @@ class HiveDDLSuite
     assert(e.message == "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
   }
 
+  test("create partitioned table without specifying data type for the partition columns") {
+    val e = intercept[AnalysisException] {
+      sql("CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet")
+    }
+    assert(e.message.contains("Must specify a data type for each partition column while creating " +
+      "Hive partitioned table."))
+  }
+
   test("add/drop partition with location - managed table") {
     val tab = "tab_with_partitions"
     withTempDir { tmpDir =>
@@ -1741,7 +1749,7 @@ class HiveDDLSuite
   test("create hive serde table with Catalog") {
     withTable("t") {
       withTempDir { dir =>
-        val df = spark.catalog.createExternalTable(
+        val df = spark.catalog.createTable(
           "t",
           "hive",
           new StructType().add("i", "int"),
