@@ -387,8 +387,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         insertInto(catalog, ident)
 
-      case CatalogObjectIdentifier(None, ident)
-        if canUseV2 && sessionCatalogOpt.isDefined && ident.namespace().length <= 1 =>
+      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
         insertInto(sessionCatalogOpt.get, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
