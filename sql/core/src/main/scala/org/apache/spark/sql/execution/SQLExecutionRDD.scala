@@ -16,10 +16,6 @@
  */
 package org.apache.spark.sql.execution
 
-import java.util.Properties
-
-import scala.collection.JavaConverters._
-
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,10 +34,8 @@ class SQLExecutionRDD(
     var sqlRDD: RDD[InternalRow], @transient conf: SQLConf) extends RDD[InternalRow](sqlRDD) {
   private val sqlConfigs = conf.getAllConfs
   private lazy val sqlConfExecutorSide = {
-    val props = new Properties()
-    sqlConfigs.foreach { case (k, v) => props.setProperty(k, v) }
     val newConf = new SQLConf()
-    newConf.setConf(props)
+    sqlConfigs.foreach { case (k, v) => newConf.setConfString(k, v) }
     newConf
   }
 
