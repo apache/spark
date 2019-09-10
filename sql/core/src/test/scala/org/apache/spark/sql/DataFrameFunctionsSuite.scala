@@ -370,7 +370,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df.select(array_sort($"a", false), array_sort($"b", false)),
+      df.select(array_sort($"a", lit(false)), array_sort($"b", lit(false))),
       Seq(
         Row(Seq(3, 2, 1), Seq("c", "b", "a")),
         Row(Seq.empty[Int], Seq.empty[String]),

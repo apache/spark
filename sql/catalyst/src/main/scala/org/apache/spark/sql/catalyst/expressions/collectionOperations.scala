@@ -908,9 +908,10 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the beginning of the returned array in ascending
-       order or at the end of the returned array in descending order.
+    _FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order
+      according to the natural ordering of the array elements. The elements of the input array must
+      be orderable. Null elements will be placed at the end of the returned array
+      in descending / ascending order
   """,
   examples = """
     Examples:
@@ -931,7 +932,7 @@ case class ArraySort(base: Expression, ascendingOrder: Expression)
 
   override def arrayExpression: Expression = base
   override def nullOrder: NullOrder = {
-    if(ascendingOrder == Literal(true)) NullOrder.Greatest else NullOrder.Least
+    if (ascendingOrder == Literal(true)) NullOrder.Greatest else NullOrder.Least
   }
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {

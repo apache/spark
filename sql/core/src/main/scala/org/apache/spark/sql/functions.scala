@@ -3335,16 +3335,16 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def array_sort(e: Column): Column = array_sort(e, asc = true)
+  def array_sort(e: Column): Column = array_sort(e, asc = lit(true))
 
   /**
     * Sorts the input array for the given column in ascending or descending order,
     * according to the natural ordering of the array elements.
     * Null elements will be placed at the end of the returned array in descending / ascending order
     * @group collection_funcs
-    * @since 2.4.0
+    * @since 3.0.0
     */
-  def array_sort(e: Column, asc: Boolean): Column = withExpr { ArraySort(e.expr, lit(asc).expr) }
+  def array_sort(e: Column, asc: Column): Column = withExpr { ArraySort(e.expr, asc.expr) }
 
   /**
    * Remove all elements that equal to element from the given array.
