@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.{Assertions, PrivateMethodTester}
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
@@ -47,7 +47,6 @@ import org.apache.spark.util.{ManualClock, Utils}
 class StreamingContextSuite
   extends SparkFunSuite
   with LocalStreamingContext
-  with BeforeAndAfter
   with TimeLimits
   with Logging {
 

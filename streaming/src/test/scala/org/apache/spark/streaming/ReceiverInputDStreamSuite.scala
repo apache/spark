@@ -19,8 +19,6 @@ package org.apache.spark.streaming
 
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -32,8 +30,7 @@ import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLog
 
 class ReceiverInputDStreamSuite
   extends TestSuiteBase
-  with LocalStreamingContext
-  with BeforeAndAfterAll {
+  with LocalStreamingContext {
 
   testWithoutWAL("createBlockRDD creates empty BlockRDD when no block info") { receiverStream =>
     val rdd = receiverStream.createBlockRDD(Time(0), Seq.empty)

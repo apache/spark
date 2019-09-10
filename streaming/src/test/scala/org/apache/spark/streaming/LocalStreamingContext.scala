@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
+import org.scalatest.{BeforeAndAfterEach, Suite}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
@@ -27,14 +27,10 @@ import org.apache.spark.internal.Logging
  * Note that it also stops active SparkContext if `stopSparkContext` is set to true (default).
  * In most cases you may want to leave it, to isolate environment for SparkContext in each test.
  */
-trait LocalStreamingContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>
+trait LocalStreamingContext extends BeforeAndAfterEach { self: Suite =>
 
   @transient var ssc: StreamingContext = _
   @transient var stopSparkContext: Boolean = true
-
-  override def beforeAll() {
-    super.beforeAll()
-  }
 
   override def afterEach() {
     try {
@@ -56,9 +52,6 @@ object LocalStreamingContext extends Logging {
       if (ssc != null) {
         ssc.stop(stopSparkContext = stopSparkContext)
       }
-    } catch {
-      case e: Exception =>
-        logError("Error stopping StreamingContext", e)
     } finally {
       if (stopSparkContext) {
         ensureNoActiveSparkContext()
@@ -79,11 +72,12 @@ object LocalStreamingContext extends Logging {
           sc.stop()
         } catch {
           case e: Throwable =>
-            logWarning("Exception trying to stop SparkContext, clear active SparkContext...", e)
+            logError("Exception trying to stop SparkContext, clear active SparkContext...", e)
             SparkContext.clearActiveContext()
+            throw e
         }
       case _ =>
     }
   }
 
-  }
+}

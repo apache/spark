@@ -76,7 +76,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     }
   }
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     val conf = new SparkConf()
       .setMaster("local[4]")
       .setAppName("KinesisStreamSuite") // Setting Spark app name to Kinesis app name
@@ -84,9 +85,13 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc = new StreamingContext(sc, batchDuration)
   }
 
-  after {
-    if (testUtils != null) {
-      testUtils.deleteDynamoDBTable(appName)
+  override def afterEach(): Unit = {
+    try {
+      if (testUtils != null) {
+        testUtils.deleteDynamoDBTable(appName)
+      }
+    } finally {
+      super.afterEach()
     }
   }
 

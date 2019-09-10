@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.PrivateMethodTester._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
@@ -31,13 +30,15 @@ import org.apache.spark.streaming.dstream.{DStream, InternalMapWithStateDStream,
 import org.apache.spark.util.{ManualClock, Utils}
 
 class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
-  with DStreamCheckpointTester with BeforeAndAfterAll with BeforeAndAfter {
+  with DStreamCheckpointTester {
 
   private var sc: SparkContext = null
   protected var checkpointDir: File = null
   protected val batchDuration = Seconds(1)
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+
     val conf = new SparkConf().setMaster("local").setAppName("MapWithStateSuite")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     sc = new SparkContext(conf)
@@ -45,9 +46,13 @@ class MapWithStateSuite extends SparkFunSuite with LocalStreamingContext
     checkpointDir = Utils.createTempDir(namePrefix = "checkpoint")
   }
 
-  after {
-    if (checkpointDir != null) {
-      Utils.deleteRecursively(checkpointDir)
+  override def afterEach(): Unit = {
+    try {
+      if (checkpointDir != null) {
+        Utils.deleteRecursively(checkpointDir)
+      }
+    } finally {
+      super.afterEach()
     }
   }
 

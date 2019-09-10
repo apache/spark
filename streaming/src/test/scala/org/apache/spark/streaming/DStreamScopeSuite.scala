@@ -36,7 +36,9 @@ class DStreamScopeSuite
   with BeforeAndAfter
   with BeforeAndAfterAll {
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+
     val conf = new SparkConf().setMaster("local").setAppName("test")
     conf.set("spark.streaming.clock", classOf[ManualClock].getName())
     val batchDuration: Duration = Seconds(1)

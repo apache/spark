@@ -17,14 +17,13 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.streaming.{Duration, LocalStreamingContext, StreamingContext, Time}
 
-class InputInfoTrackerSuite extends SparkFunSuite with LocalStreamingContext with BeforeAndAfter {
+class InputInfoTrackerSuite extends SparkFunSuite with LocalStreamingContext {
 
-  before {
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     val conf = new SparkConf().setMaster("local[2]").setAppName("DirectStreamTacker")
     ssc = new StreamingContext(conf, Duration(1000))
   }
