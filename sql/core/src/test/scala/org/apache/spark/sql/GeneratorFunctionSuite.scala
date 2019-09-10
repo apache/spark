@@ -308,6 +308,40 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
   }
+
+  test("generator in aggregate expression") {
+    withTempView("t1") {
+      Seq((1, 1), (1, 2), (2, 3)).toDF("c1", "c2").createTempView("t1")
+      checkAnswer(
+        sql("select explode(array(min(c2), max(c2))) from t1"),
+        Row(1) :: Row(3) :: Nil
+      )
+      checkAnswer(
+        sql("select posexplode(array(min(c2), max(c2))) from t1 group by c1"),
+        Row(0, 1) :: Row(1, 2) :: Row(0, 3) :: Row(1, 3) :: Nil
+      )
+      // test generator "stack" which require foldable argument
+      checkAnswer(
+        sql("select stack(2, min(c1), max(c1), min(c2), max(c2)) from t1"),
+        Row(1, 2) :: Row(1, 3) :: Nil
+      )
+
+      val msg1 = intercept[AnalysisException] {
+        sql("select 1 + explode(array(min(c2), max(c2))) from t1 group by c1")
+      }.getMessage
+      assert(msg1.contains("Generators are not supported when it's nested in expressions"))
+
+      val msg2 = intercept[AnalysisException] {
+        sql(
+          """select
+            |  explode(array(min(c2), max(c2))),
+            |  posexplode(array(min(c2), max(c2)))
+            |from t1 group by c1
+          """.stripMargin)
+      }.getMessage
+      assert(msg2.contains("Only one generator allowed per aggregate clause"))
+    }
+  }
 }
 
 case class EmptyGenerator() extends Generator {
