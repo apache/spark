@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{LocalDate, ZoneId}
 import java.util.Locale
 
-import DateTimeUtils._
+import DateTimeUtils.{convertSpecialDate, localDateToDays}
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
