@@ -472,6 +472,19 @@ object Overlay {
     builder.append(input.substringSQL(pos + length, Int.MaxValue))
     builder.build()
   }
+
+  def calculate(input: Array[Byte], replace: Array[Byte], pos: Int, len: Int): Array[Byte] = {
+    // If you specify length, it must be a positive whole number or zero.
+    // Otherwise it will be ignored.
+    // The default value for length is the length of replace.
+    val length = if (len >= 0) {
+      len
+    } else {
+      replace.length
+    }
+    ByteArray.concat(ByteArray.subStringSQL(input, 1, pos - 1),
+      replace, ByteArray.subStringSQL(input, pos + length, Int.MaxValue))
+  }
 }
 
 // scalastyle:off line.size.limit
@@ -487,6 +500,14 @@ object Overlay {
        Spark ANSI SQL
       > SELECT _FUNC_('Spark SQL' PLACING 'tructured' FROM 2 FOR 4);
        Structured SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('_', 'utf-8') FROM 6);
+       Spark_SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('CORE', 'utf-8') FROM 7);
+       Spark CORE
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('ANSI ', 'utf-8') FROM 7 FOR 0);
+       Spark ANSI SQL
+      > SELECT _FUNC_(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
+       Structured SQL
   """)
 // scalastyle:on line.size.limit
 case class Overlay(input: Expression, replace: Expression, pos: Expression, len: Expression)
@@ -496,19 +517,42 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
     this(str, replace, pos, Literal.create(-1, IntegerType))
   }
 
-  override def dataType: DataType = StringType
+  override def dataType: DataType = input.dataType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringType, StringType, IntegerType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType),
+    TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 
   override def children: Seq[Expression] = input :: replace :: pos :: len :: Nil
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      TypeUtils.checkForSameTypeInputExpr(
+        input.dataType :: replace.dataType :: Nil, s"function $prettyName")
+    } else {
+      inputTypeCheck
+    }
+  }
+
+  private lazy val replaceFunc = input.dataType match {
+    case StringType =>
+      (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
+        Overlay.calculate(
+          inputEval.asInstanceOf[UTF8String],
+          replaceEval.asInstanceOf[UTF8String],
+          posEval, lenEval)
+      }
+    case BinaryType =>
+      (inputEval: Any, replaceEval: Any, posEval: Int, lenEval: Int) => {
+        Overlay.calculate(
+          inputEval.asInstanceOf[Array[Byte]],
+          replaceEval.asInstanceOf[Array[Byte]],
+          posEval, lenEval)
+      }
+  }
+
   override def nullSafeEval(inputEval: Any, replaceEval: Any, posEval: Any, lenEval: Any): Any = {
-    val inputStr = inputEval.asInstanceOf[UTF8String]
-    val replaceStr = replaceEval.asInstanceOf[UTF8String]
-    val position = posEval.asInstanceOf[Int]
-    val length = lenEval.asInstanceOf[Int]
-    Overlay.calculate(inputStr, replaceStr, position, length)
+    replaceFunc(inputEval, replaceEval, posEval.asInstanceOf[Int], lenEval.asInstanceOf[Int])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

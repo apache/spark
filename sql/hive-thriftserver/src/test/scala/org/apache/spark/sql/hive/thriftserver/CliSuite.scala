@@ -217,8 +217,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
-      "SELECT count(key) FROM t1;"
-        -> "5",
+      "SELECT collect_list(array(val)) FROM t1;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
@@ -300,9 +300,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(
       1.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      "CREATE TEMPORARY FUNCTION example_max AS " +
-        "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
-      "SELECT example_max(1);" -> "1"
+      "CREATE TEMPORARY FUNCTION example_format AS " +
+        "'org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat';" -> "",
+      "SELECT example_format('%o', 93);" -> "135"
     )
   }
 }

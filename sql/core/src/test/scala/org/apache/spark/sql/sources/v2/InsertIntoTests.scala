@@ -220,7 +220,7 @@ private[v2] trait InsertIntoSQLOnlyTests
         }
       } catch {
         case a: AnalysisException if !supportsDynamicOverwrite =>
-          assert(a.getMessage.contains("Table does not support dynamic overwrite"))
+          assert(a.getMessage.contains("does not support dynamic overwrite"))
       }
     }
   }

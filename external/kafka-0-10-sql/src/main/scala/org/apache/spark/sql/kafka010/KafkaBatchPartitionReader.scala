@@ -30,14 +30,13 @@ private[kafka010] case class KafkaBatchInputPartition(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends InputPartition
+    failOnDataLoss: Boolean) extends InputPartition
 
 private[kafka010] object KafkaBatchReaderFactory extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val p = partition.asInstanceOf[KafkaBatchInputPartition]
     KafkaBatchPartitionReader(p.offsetRange, p.executorKafkaParams, p.pollTimeoutMs,
-      p.failOnDataLoss, p.reuseKafkaConsumer)
+      p.failOnDataLoss)
   }
 }
 
@@ -46,11 +45,9 @@ private case class KafkaBatchPartitionReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends PartitionReader[InternalRow] with Logging {
+    failOnDataLoss: Boolean) extends PartitionReader[InternalRow] with Logging {
 
-  private val consumer = KafkaDataConsumer.acquire(
-    offsetRange.topicPartition, executorKafkaParams, reuseKafkaConsumer)
+  private val consumer = KafkaDataConsumer.acquire(offsetRange.topicPartition, executorKafkaParams)
 
   private val rangeToRead = resolveRange(offsetRange)
   private val converter = new KafkaRecordToUnsafeRowConverter

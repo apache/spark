@@ -118,7 +118,7 @@
     <java.version>1.8</java.version>
     <maven.compiler.source>${java.version}</maven.compiler.source>
     <maven.compiler.target>${java.version}</maven.compiler.target>
-    <maven.version>3.6.1</maven.version>
+    <maven.version>3.6.2</maven.version>
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -180,6 +180,8 @@
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.8.1</commons-lang3.version>
+    <!-- org.apache.commons/commons-pool2/-->
+    <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>3.2.10</datanucleus-core.version>
     <janino.version>3.0.15</janino.version>
     <jersey.version>2.29</jersey.version>
@@ -656,7 +658,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.1.30.Final</version>
+        <version>4.1.39.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>

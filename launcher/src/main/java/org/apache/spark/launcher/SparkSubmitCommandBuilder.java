@@ -392,7 +392,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // Default master is "local[*]", so assume client mode in that case
     return userMaster == null ||
       "client".equals(userDeployMode) ||
-      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
+      (!userMaster.equals("yarn") && userDeployMode == null);
   }
 
   /**

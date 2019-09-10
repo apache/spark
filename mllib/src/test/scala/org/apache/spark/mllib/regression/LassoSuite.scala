@@ -55,8 +55,7 @@ class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     val testRDD = sc.parallelize(testData, 2).cache()
 
-    val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
+    val ls = new LassoWithSGD(1.0, 40, 0.01, 1.0)
 
     val model = ls.run(testRDD)
     val weight0 = model.weights(0)
@@ -99,8 +98,8 @@ class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val testRDD = sc.parallelize(testData, 2).cache()
 
-    val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40).setConvergenceTol(0.0005)
+    val ls = new LassoWithSGD(1.0, 40, 0.01, 1.0)
+    ls.optimizer.setConvergenceTol(0.0005)
 
     val model = ls.run(testRDD, initialWeights)
     val weight0 = model.weights(0)
@@ -153,7 +152,7 @@ class LassoClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
     }.cache()
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = LassoWithSGD.train(points, 2)
+    val model = new LassoWithSGD(1.0, 2, 0.01, 1.0).run(points)
     val predictions = model.predict(points.map(_.features))
   }
 }

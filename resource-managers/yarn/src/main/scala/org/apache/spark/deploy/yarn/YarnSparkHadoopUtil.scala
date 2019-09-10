@@ -26,9 +26,8 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
-import org.apache.spark.resource.ResourceID
-import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
@@ -184,4 +183,17 @@ object YarnSparkHadoopUtil {
     ConverterUtils.toContainerId(containerIdString)
   }
 
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+      require(sizeInMB > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      sizeInMB
+    } else {
+      0
+    }
+  }
 }

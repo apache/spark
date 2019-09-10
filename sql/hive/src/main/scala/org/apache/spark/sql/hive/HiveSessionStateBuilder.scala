@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
+import org.apache.spark.sql.execution.datasources.v2.TableCapabilityCheck
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
@@ -67,7 +67,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   /**
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
-  override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+  override protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
@@ -89,8 +89,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
         PreReadCheck +:
-        V2WriteSupportCheck +:
-        V2StreamingScanSupportCheck +:
+        TableCapabilityCheck +:
         customCheckRules
   }
 

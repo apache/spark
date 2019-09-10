@@ -21,7 +21,6 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.Random
 
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.Matchers._
@@ -102,20 +101,17 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     }
   }
 
-  test("KinesisUtils API") {
-    val kinesisStream1 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
-      dummyEndpointUrl, dummyRegionName,
-      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2)
-    val kinesisStream2 = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
-      dummyEndpointUrl, dummyRegionName,
-      InitialPositionInStream.LATEST, Seconds(2), StorageLevel.MEMORY_AND_DISK_2,
-      dummyAWSAccessKey, dummyAWSSecretKey)
-  }
-
   test("RDD generation") {
-    val inputStream = KinesisUtils.createStream(ssc, appName, "dummyStream",
-      dummyEndpointUrl, dummyRegionName, InitialPositionInStream.LATEST, Seconds(2),
-      StorageLevel.MEMORY_AND_DISK_2, dummyAWSAccessKey, dummyAWSSecretKey)
+    val inputStream = KinesisInputDStream.builder.
+      streamingContext(ssc).
+      checkpointAppName(appName).
+      streamName("dummyStream").
+      endpointUrl(dummyEndpointUrl).
+      regionName(dummyRegionName).initialPosition(new Latest()).
+      checkpointInterval(Seconds(2)).
+      storageLevel(StorageLevel.MEMORY_AND_DISK_2).
+      kinesisCredentials(BasicCredentials(dummyAWSAccessKey, dummyAWSSecretKey)).
+      build()
     assert(inputStream.isInstanceOf[KinesisInputDStream[Array[Byte]]])
 
     val kinesisStream = inputStream.asInstanceOf[KinesisInputDStream[Array[Byte]]]

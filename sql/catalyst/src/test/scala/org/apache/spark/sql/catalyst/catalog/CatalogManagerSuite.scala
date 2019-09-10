@@ -21,6 +21,7 @@ import java.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalog.v2.{CatalogManager, NamespaceChange, SupportsNamespaces}
+import org.apache.spark.sql.catalyst.analysis.FakeV2SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -28,7 +29,7 @@ class CatalogManagerSuite extends SparkFunSuite {
 
   test("CatalogManager should reflect the changes of default catalog") {
     val conf = new SQLConf
-    val catalogManager = new CatalogManager(conf)
+    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
     assert(catalogManager.currentCatalog.isEmpty)
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
@@ -42,7 +43,7 @@ class CatalogManagerSuite extends SparkFunSuite {
 
   test("CatalogManager should keep the current catalog once set") {
     val conf = new SQLConf
-    val catalogManager = new CatalogManager(conf)
+    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
     assert(catalogManager.currentCatalog.isEmpty)
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     catalogManager.setCurrentCatalog("dummy")
@@ -57,7 +58,7 @@ class CatalogManagerSuite extends SparkFunSuite {
 
   test("current namespace should be updated when switching current catalog") {
     val conf = new SQLConf
-    val catalogManager = new CatalogManager(conf)
+    val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
     catalogManager.setCurrentNamespace(Array("abc"))
     assert(catalogManager.currentNamespace.sameElements(Array("abc")))
 
