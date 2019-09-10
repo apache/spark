@@ -101,10 +101,10 @@ private[spark] object ToolTips {
     """
 
   val THRIFT_SERVER_FINISH_TIME =
-    "Finish time of the execution, before fetching the results"
+    "Execution finish time, before fetching the results"
 
   val THRIFT_SERVER_CLOSE_TIME =
-    "Close time of the operation after fetching the results"
+    "Operation close time after fetching the results"
 
   val THRIFT_SERVER_EXECUTION =
     "Difference between start time and finish time"
