@@ -372,13 +372,13 @@ for troubleshooting the streaming application.
 ## JDBC/ODBC Server Tab
 We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and SQL jobs submitted.
 
-The second section contains information about active and finished sessions.
+The first section of the page displays general information about the JDBC/ODBC server: start time and uptime.
 
 <p style="text-align: center;">
   <img src="img/JDBCServer1.png" width="40%" title="JDBC/ODBC Header" alt="JDBC/ODBC Header">
 </p>
 
-The first section contains information of active and finished sessions with some information.
+The second section contains information about active and finished sessions.
 * User and IP of the connection.
 * Session id link to access to session info.
 * Start time, finish time and duration of the session.
@@ -388,7 +388,7 @@ The first section contains information of active and finished sessions with some
   <img src="img/JDBCServer2.png" title="JDBC/ODBC sessions" alt="JDBC/ODBC sessions">
 </p>
 
-The second section has the SQL statistics of the submitted jobs.
+The third section has the SQL statistics of the submitted jobs.
 * **User** that submit the job.
 * **Job id** link to [jobs tab](web-ui.html#jobs-tab).
 * **Group id** of the query that group all jobs together. An application can cancel all running jobs using this group id.
@@ -397,7 +397,7 @@ The second section has the SQL statistics of the submitted jobs.
 * **Close time** of the operation after fetching the results.
 * **Execution time** is the difference between finish time and start time.
 * **Duration time** is the difference between close time and start time.
-* **Statement** is the opetation being executed.
+* **Statement** is the operation being executed.
 * **State** of the process.
 	* _Started_, first state, when the process begins.
 	* _Compiled_, execution plan generated.
