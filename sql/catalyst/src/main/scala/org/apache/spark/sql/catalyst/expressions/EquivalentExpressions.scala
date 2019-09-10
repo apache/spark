@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ParameterizedBoundReference}
 import org.apache.spark.sql.catalyst.expressions.objects.LambdaVariable
 
 /**
@@ -47,7 +47,7 @@ class EquivalentExpressions {
     def normalized(expr: Expression): Expression = {
       expr.transformUp {
         case b: ParameterizedBoundReference =>
-          b.copy(parameter = "")
+          b.copy(ordinalParam = "")
       }
     }
     override def equals(o: Any): Boolean = o match {
@@ -90,20 +90,20 @@ class EquivalentExpressions {
 
   /**
    * Adds each expression to structural expression data structure, grouping them with existing
-   * structurally equivalent expressions. Non-recursive.
+   * structurally equivalent expressions. Non-recursive. Returns false if this doesn't add input
+   * expression actually.
    */
-  def addStructExpr(ctx: CodegenContext, expr: Expression): Unit = {
+  def addStructExpr(ctx: CodegenContext, expr: Expression): Boolean = {
     if (expr.deterministic) {
-      val refs = expr.collect {
-        case b: BoundReference => b
-      }
-
       // For structural equivalent expressions, we need to pass in int type ordinals into
       // split functions. If the number of ordinals is more than JVM function limit, we skip
       // this expression.
       // We calculate function parameter length by the number of ints plus `INPUT_ROW` plus
       // a int type result array index.
-      val parameterLength = CodeGenerator.calculateParamLength(refs.map(_ => Literal(0))) + 2
+      val refs = expr.collect {
+        case _: BoundReference => Literal(0)
+      }
+      val parameterLength = CodeGenerator.calculateParamLength(refs) + 2
       if (CodeGenerator.isValidParamLength(parameterLength)) {
         val parameterizedExpr = parameterizedBoundReferences(ctx, expr)
 
@@ -116,7 +116,12 @@ class EquivalentExpressions {
           addExpr(expr, exprMap)
           structEquivalenceMap.put(e, exprMap)
         }
+        true
+      } else {
+        false
       }
+    } else {
+      false
     }
   }
 
@@ -126,7 +131,7 @@ class EquivalentExpressions {
   private def parameterizedBoundReferences(ctx: CodegenContext, expr: Expression): Expression = {
     expr.transformUp {
       case b: BoundReference =>
-        val param = ctx.freshName("boundInput")
+        val param = ctx.freshName("ordinal")
         ParameterizedBoundReference(param, b.dataType, b.nullable)
     }
   }
@@ -176,15 +181,17 @@ class EquivalentExpressions {
   }
 
   /**
-   * Adds the expression to structural data structure recursively.  Stops if a matching expression
-   * is found.
+   * Adds the expression to structural data structure recursively. Returns false if this doesn't add
+   * the input expression actually.
    */
-  def addStructuralExprTree(ctx: CodegenContext, expr: Expression): Unit = {
+  def addStructuralExprTree(ctx: CodegenContext, expr: Expression): Boolean = {
     val skip = skipExpr(expr) || expr.isInstanceOf[CodegenFallback]
 
-    if (!skip) {
-      addStructExpr(ctx, expr)
+    if (!skip && addStructExpr(ctx, expr)) {
       childrenToRecurse(expr).foreach(addStructuralExprTree(ctx, _))
+      true
+    } else {
+      false
     }
   }
 

@@ -168,10 +168,10 @@ abstract class Expression extends TreeNode[Expression] {
       }
 
       // Appends necessary parameters from sub-expression elimination.
-      val arguments = (ctx.subExprEliminationParameters.map(_.parameter) ++
+      val arguments = (ctx.subExprEliminationParameters.map(_.ordinalParam) ++
         Seq(ctx.INPUT_ROW)).mkString(", ")
 
-      val parameterString = (ctx.subExprEliminationParameters.map(p => s"int ${p.parameter}") ++
+      val parameterString = (ctx.subExprEliminationParameters.map(p => s"int ${p.ordinalParam}") ++
         Seq(s"InternalRow ${ctx.INPUT_ROW}")).mkString(", ")
 
       val javaType = CodeGenerator.javaType(dataType)

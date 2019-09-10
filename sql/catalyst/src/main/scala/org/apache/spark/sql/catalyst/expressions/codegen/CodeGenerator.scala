@@ -402,8 +402,10 @@ class CodegenContext {
    *
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
    *  be evaluated once.
+   *
+   *  Visible for testing.
    */
-  private val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+  private[expressions] val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
   // Visible for testing.
@@ -829,7 +831,7 @@ class CodegenContext {
     if (INPUT_ROW == null || currentVars != null) {
       expressions.mkString("\n")
     } else {
-      val structuralSubExpressionsArgs = subExprEliminationParameters.map("int" -> _.parameter)
+      val structuralSubExpressionsArgs = subExprEliminationParameters.map("int" -> _.ordinalParam)
       splitExpressions(
         expressions,
         funcName,
@@ -1068,9 +1070,12 @@ class CodegenContext {
    * Among the set, the expressions with same semantics are replaced with a function call to the
    * generated function, by passing in input slots of current processing row.
    */
-  private def structuralSubexpressionElimination(expressions: Seq[Expression]): Unit = {
+  private def structuralSubexpressionElimination(expressions: Seq[Expression]): Seq[Expression] = {
     // Add each expression tree and compute the structurally common subexpressions.
-    expressions.foreach(equivalentExpressions.addStructuralExprTree(this, _))
+    // Those expressions are not added into structurally common subexpressions, defer them to
+    // semantically common subexpression.
+    val exprsOut =
+      expressions.filterNot(equivalentExpressions.addStructuralExprTree(this, _))
 
     val structuralExprs = equivalentExpressions.getAllStructuralExpressions
 
@@ -1089,7 +1094,7 @@ class CodegenContext {
         case b: ParameterizedBoundReference => b
       }
       val resultIndex = freshName("resultIndex")
-      val parameterString = (parameters.map(p => s"int ${p.parameter}") ++
+      val parameterString = (parameters.map(p => s"int ${p.ordinalParam}") ++
         Seq(s"InternalRow $INPUT_ROW", s"int $resultIndex")).mkString(", ")
 
       val fnName = freshName("subExpr")
@@ -1140,6 +1145,8 @@ class CodegenContext {
       }
     }
     subExprEliminationParameters = Seq.empty
+
+    exprsOut
   }
 
   private def semanticSubexpressionElimination(expressions: Seq[Expression]): Unit = {
@@ -1194,11 +1201,12 @@ class CodegenContext {
    * the mapping of common subexpressions to the generated functions.
    */
   private def subexpressionElimination(expressions: Seq[Expression]): Unit = {
-    if (SQLConf.get.structuralSubexpressionEliminationEnabled) {
+    val exprs = if (SQLConf.get.structuralSubexpressionEliminationEnabled) {
       structuralSubexpressionElimination(expressions)
     } else {
-      semanticSubexpressionElimination(expressions)
+      expressions
     }
+    semanticSubexpressionElimination(exprs)
   }
 
   /**

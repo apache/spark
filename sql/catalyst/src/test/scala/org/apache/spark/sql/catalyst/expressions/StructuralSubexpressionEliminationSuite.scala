@@ -18,7 +18,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.types.{DataType, IntegerType}
 
 class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
   private val ctx = new CodegenContext
@@ -108,5 +107,15 @@ class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
     // only ifExpr and its predicate expression
     assert(equivalence.getAllStructuralExpressions.values
       .map(_.values.count(_.size == 1)).sum == 2)
+  }
+
+  test("Expressions not for structural expr elimination can go non-structural mode") {
+    val fallback1 = CodegenFallbackExpression(Literal(1))
+    val fallback2 = CodegenFallbackExpression(Literal(1))
+
+    val ctx = new CodegenContext()
+    ctx.generateExpressions(Seq(fallback1, fallback2), doSubexpressionElimination = true)
+    assert(ctx.equivalentExpressions.getAllStructuralExpressions.isEmpty)
+    assert(ctx.equivalentExpressions.getEquivalentExprs(fallback1).length == 2)
   }
 }
