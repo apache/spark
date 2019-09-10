@@ -27,8 +27,8 @@ INSERT INTO TIMESTAMP_TBL VALUES ('yesterday');
 INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow');
 -- time zone should be ignored by this data type
 INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow EST');
--- [SPARK-29024] Support the `zulu` time zone
--- INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow zulu');
+-- [SPARK-29024] Ignore case while resolving time zones
+INSERT INTO TIMESTAMP_TBL VALUES ('tomorrow Zulu');
 
 SELECT count(*) AS One FROM TIMESTAMP_TBL WHERE d1 = timestamp 'today';
 SELECT count(*) AS Three FROM TIMESTAMP_TBL WHERE d1 = timestamp 'tomorrow';
