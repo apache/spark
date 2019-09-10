@@ -389,7 +389,7 @@ The second section contains information about active and finished sessions.
 </p>
 
 The third section has the SQL statistics of the submitted operations.
-* **User** that submit the job.
+* **User** that submit the operation.
 * **Job id** link to [jobs tab](web-ui.html#jobs-tab).
 * **Group id** of the query that group all jobs together. An application can cancel all running jobs using this group id.
 * **Start time** of the operation.
