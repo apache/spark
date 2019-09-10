@@ -144,10 +144,17 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       def executeTest(hiveList: String): Unit = {
         hiveList.split(";").foreach{ m =>
           val kv = m.split("=")
-          // select "${a}"; ---> avalue
-          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          val k = kv(0)
+          val v = kv(1)
+          val modValue = s"${v}_MOD_VALUE"
+          // select '${a}'; ---> avalue
+          val resultSet = statement.executeQuery(s"select '$${$k}'")
           resultSet.next()
-          assert(resultSet.getString(1) === kv(1))
+          assert(resultSet.getString(1) === v)
+          statement.executeQuery(s"set $k=$modValue")
+          val modResultSet = statement.executeQuery(s"select '$${$k}'")
+          modResultSet.next()
+          assert(modResultSet.getString(1) === s"$modValue")
         }
       }
     }
