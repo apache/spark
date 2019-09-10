@@ -878,6 +878,7 @@ object DateTimeUtils {
       }
     }
 
+    assert(input.trim.length == input.length)
     if (input.length < 3 || !input(0).isLetter) return None
     input match {
       case specialValueRe(v, z) if isValid(v, z) => Some(v.toLowerCase(Locale.US))
