@@ -65,6 +65,9 @@ class EquivalentExpressions {
   private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
 
   // For each expression, the set of structurally equivalent expressions.
+  // Among expressions with same structure, there are different sub-set of expressions
+  // which are semantically different to each others. Thus, under each key, the value is
+  // the map structure used to do semantically sub-expression elimination.
   private val structEquivalenceMap = mutable.HashMap.empty[StructuralExpr, EquivalenceMap]
 
   /**
