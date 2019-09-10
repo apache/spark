@@ -55,7 +55,8 @@ class SQLHadoopMapReduceCommitProtocol(
         // The specified output committer is a FileOutputCommitter.
         // So, we will use the FileOutputCommitter-specified constructor.
         val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        committer = ctor.newInstance(new Path(path), context)
+        val outputPath = getOutputPath(context)
+        committer = ctor.newInstance(outputPath, context)
       } else {
         // The specified output committer is just an OutputCommitter.
         // So, we will use the no-argument constructor.

@@ -26,7 +26,7 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
@@ -91,7 +91,31 @@ class HadoopMapReduceCommitProtocol(
    */
   private def stagingDir = new Path(path, ".spark-staging-" + jobId)
 
+  /**
+   * Get the desired output path for the job. The output will be [[path]] when
+   * dynamicPartitionOverwrite is disabled, otherwise, it will be [[stagingDir]]. We choose
+   * [[stagingDir]] over [[path]] to avoid potential collision of concurrent write jobs as the same
+   * output will be specified when writing to the same table dynamically.
+   *
+   * @return Path the desired output path.
+   */
+  protected def getOutputPath(context: TaskAttemptContext): Path = {
+    if (dynamicPartitionOverwrite) {
+      val conf = context.getConfiguration
+      val outputPath = stagingDir.getFileSystem(conf).makeQualified(stagingDir)
+      outputPath
+    } else {
+      new Path(path)
+    }
+  }
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
+    // set output path to stagingDir to avoid potential collision of multiple concurrent write tasks
+    if (dynamicPartitionOverwrite) {
+      val newOutputPath = getOutputPath(context)
+      context.getConfiguration.set(FileOutputFormat.OUTDIR, newOutputPath.toString)
+    }
+
     val format = context.getOutputFormatClass.getConstructor().newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
     format match {
