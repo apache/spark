@@ -393,7 +393,7 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
     val df = spark.createDataFrame(
       spark.sparkContext.parallelize(data),
       StructType(Seq(StructField("topic", StringType), StructField("value", StringType),
-        StructField("headers", KafkaOffsetReader.headersType)))
+        StructField("headers", KafkaRecordToRowConverter.headersType)))
     )
 
     df.write

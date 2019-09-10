@@ -49,7 +49,9 @@ private[kafka010] class KafkaRelation(
     (sqlContext.sparkContext.conf.get(NETWORK_TIMEOUT) * 1000L).toString
   ).toLong
 
-  override def schema: StructType = KafkaOffsetReader.kafkaSchema(includeHeaders)
+  private val converter = new KafkaRecordToRowConverter()
+
+  override def schema: StructType = KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
 
   override def buildScan(): RDD[Row] = {
     // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -101,10 +103,9 @@ private[kafka010] class KafkaRelation(
     val executorKafkaParams =
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
     val toInternalRow = if (includeHeaders) {
-      KafkaOffsetReader.toInternalRowWithHeaders
-    }
-    else {
-      KafkaOffsetReader.toInternalRowWithoutHeaders
+      converter.toInternalRowWithHeaders
+    } else {
+      converter.toInternalRowWithoutHeaders
     }
     val rdd = new KafkaSourceRDD(
       sqlContext.sparkContext, executorKafkaParams, offsetRanges,

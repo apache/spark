@@ -147,10 +147,11 @@ private[kafka010] abstract class KafkaRowWriter(
     }
     val headersExpression = inputSchema
       .find(_.name == KafkaWriter.HEADERS_ATTRIBUTE_NAME).getOrElse(
-      Literal(CatalystTypeConverters.convertToCatalyst(null), KafkaOffsetReader.headersType)
+      Literal(CatalystTypeConverters.convertToCatalyst(null),
+        KafkaRecordToRowConverter.headersType)
     )
     headersExpression.dataType match {
-      case KafkaOffsetReader.headersType => // good
+      case KafkaRecordToRowConverter.headersType => // good
       case t =>
         throw new IllegalStateException(s"${KafkaWriter.HEADERS_ATTRIBUTE_NAME} " +
           s"attribute unsupported type ${t.catalogString}")

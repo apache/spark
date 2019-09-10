@@ -78,12 +78,13 @@ private[kafka010] object KafkaWriter extends Logging {
           s"must be a ${StringType.catalogString} or ${BinaryType.catalogString}")
     }
     schema.find(_.name == HEADERS_ATTRIBUTE_NAME).getOrElse(
-      Literal(CatalystTypeConverters.convertToCatalyst(null), KafkaOffsetReader.headersType)
+      Literal(CatalystTypeConverters.convertToCatalyst(null),
+        KafkaRecordToRowConverter.headersType)
     ).dataType match {
-      case KafkaOffsetReader.headersType => // good
+      case KafkaRecordToRowConverter.headersType => // good
       case _ =>
         throw new AnalysisException(s"$HEADERS_ATTRIBUTE_NAME attribute type " +
-          s"must be a ${KafkaOffsetReader.headersType.catalogString}")
+          s"must be a ${KafkaRecordToRowConverter.headersType.catalogString}")
     }
   }
 

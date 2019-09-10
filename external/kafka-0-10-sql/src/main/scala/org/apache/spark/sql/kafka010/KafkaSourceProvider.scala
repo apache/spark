@@ -70,7 +70,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     validateStreamOptions(caseInsensitiveParameters)
     require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
     val includeHeaders = caseInsensitiveParameters.getOrElse(INCLUDE_HEADERS, "false").toBoolean
-    (shortName(), KafkaOffsetReader.kafkaSchema(includeHeaders))
+    (shortName(), KafkaRecordToRowConverter.kafkaSchema(includeHeaders))
   }
 
   override def createSource(
@@ -368,7 +368,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     override def name(): String = "KafkaTable"
 
-    override def schema(): StructType = KafkaOffsetReader.kafkaSchema(includeHeaders)
+    override def schema(): StructType = KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
 
     override def capabilities(): ju.Set[TableCapability] = {
       import TableCapability._
@@ -411,7 +411,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     val includeHeaders = options.getBoolean(INCLUDE_HEADERS, false)
 
     override def readSchema(): StructType = {
-      KafkaOffsetReader.kafkaSchema(includeHeaders)
+      KafkaRecordToRowConverter.kafkaSchema(includeHeaders)
     }
 
     override def toBatch(): Batch = {

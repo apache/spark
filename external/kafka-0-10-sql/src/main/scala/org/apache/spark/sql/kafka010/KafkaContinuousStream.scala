@@ -191,7 +191,8 @@ class KafkaContinuousPartitionReader(
     failOnDataLoss: Boolean,
     includeHeaders: Boolean) extends ContinuousPartitionReader[InternalRow] {
   private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams)
-  private val converter = KafkaOffsetReader.toUnsafeRowProjector(includeHeaders)
+  private val unsafeRowProjector = new KafkaRecordToRowConverter()
+    .toUnsafeRowProjector(includeHeaders)
 
   private var nextKafkaOffset = startOffset
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
@@ -230,7 +231,7 @@ class KafkaContinuousPartitionReader(
   }
 
   override def get(): UnsafeRow = {
-    converter(currentRecord)
+    unsafeRowProjector(currentRecord)
   }
 
   override def getOffset(): KafkaSourcePartitionOffset = {
