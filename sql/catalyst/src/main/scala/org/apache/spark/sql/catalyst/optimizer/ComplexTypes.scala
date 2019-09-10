@@ -37,8 +37,8 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
     case a: Aggregate => a
     case p => p.transformExpressionsUp {
       // Remove redundant field extraction.
-      case GetStructField(createNamedStructLike: CreateNamedStructLike, ordinal, _) =>
-        createNamedStructLike.valExprs(ordinal)
+      case GetStructField(createNameStruct: CreateNamedStruct, ordinal, _) =>
+        createNameStruct.valExprs(ordinal)
 
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems), field, ordinal, _, _) =>
