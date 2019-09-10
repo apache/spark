@@ -370,7 +370,7 @@ scheduling delay and processing time for each micro-batch in the data stream, wh
 for troubleshooting the streaming application.
 
 ## JDBC/ODBC Server Tab
-We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and SQL jobs submitted.
+We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and SQL operations submitted.
 
 The first section of the page displays general information about the JDBC/ODBC server: start time and uptime.
 
@@ -382,13 +382,13 @@ The second section contains information about active and finished sessions.
 * User and IP of the connection.
 * Session id link to access to session info.
 * Start time, finish time and duration of the session.
-* Total jobs submitted in this session.
+* Number of operations submitted in this session.
 
 <p style="text-align: center;">
   <img src="img/JDBCServer2.png" title="JDBC/ODBC sessions" alt="JDBC/ODBC sessions">
 </p>
 
-The third section has the SQL statistics of the submitted jobs.
+The third section has the SQL statistics of the submitted operations.
 * **User** that submit the job.
 * **Job id** link to [jobs tab](web-ui.html#jobs-tab).
 * **Group id** of the query that group all jobs together. An application can cancel all running jobs using this group id.
