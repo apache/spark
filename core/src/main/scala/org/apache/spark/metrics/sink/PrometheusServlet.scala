@@ -39,7 +39,7 @@ private[spark] class PrometheusServlet(
   def getHandlers(conf: SparkConf): Array[ServletContextHandler] = {
     Array[ServletContextHandler](
       createServletHandler(servletPath,
-        new ServletParams(request => getMetricsSnapshot(request), "text/plain;charset=UTF-8"), conf)
+        new ServletParams(request => getMetricsSnapshot(request), "text/plain"), conf)
     )
   }
 

@@ -17,6 +17,7 @@
 package org.apache.spark.status.api.v1
 
 import javax.ws.rs._
+import javax.ws.rs.core.MediaType
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.glassfish.jersey.server.ServerProperties
@@ -28,6 +29,7 @@ import org.apache.spark.ui.SparkUI
 private[v1] class PrometheusResource extends ApiRequestContext {
   @GET
   @Path("prometheus")
+  @Produces(Array(MediaType.TEXT_PLAIN))
   def activeExecutorsAndStages(): String = {
     val sb = new StringBuilder
     val store = uiRoot.asInstanceOf[SparkUI].store
