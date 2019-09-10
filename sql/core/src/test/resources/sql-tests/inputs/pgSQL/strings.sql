@@ -653,8 +653,9 @@ SELECT trim(binary('\\000') from binary('\\000Tom\\000'));
 -- SELECT btrim(E'\\000trim\\000'::bytea, ''::bytea);
 -- [SPARK-28121] decode can not accept 'escape' as charset
 -- [SPARK-28412][SQL] ANSI SQL: OVERLAY function support byte array
-SELECT encode(overlay(E'Th\\000omas'::bytea placing E'Th\\001omas'::bytea from 2),'escape');
-SELECT encode(overlay(E'Th\\000omas'::bytea placing E'\\002\\003'::bytea from 8),'escape');
-SELECT encode(overlay(E'Th\\000omas'::bytea placing E'\\002\\003'::bytea from 5 for 3),'escape');
+SELECT overlay(encode('Spark SQL', 'utf-8') PLACING encode('_', 'utf-8') FROM 6);
+SELECT overlay(encode('Spark SQL', 'utf-8') PLACING encode('CORE', 'utf-8') FROM 7);
+SELECT overlay(encode('Spark SQL', 'utf-8') PLACING encode('ANSI ', 'utf-8') FROM 7 FOR 0);
+SELECT overlay(encode('Spark SQL', 'utf-8') PLACING encode('tructured', 'utf-8') FROM 2 FOR 4);
 
 DROP TABLE toasttest;
