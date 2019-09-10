@@ -200,7 +200,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  var initThread : Thread = null
+  var initThread: Thread = null
 
   private[history] def initialize(): Thread = {
     if (!isFsInSafeMode()) {
