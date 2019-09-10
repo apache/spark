@@ -311,15 +311,6 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
-  trait NoConstructorProductTrait extends scala.Product {}
-
-  test("No constructor product") {
-    val e = intercept[UnsupportedOperationException] {
-      implicitly[ExpressionEncoder[NoConstructorProductTrait]]
-    }
-    e.getMessage.contains("Unable to find constructor")
-  }
-
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {
       assert(implicitly[ExpressionEncoder[T]].schema.map(_.nullable) === nullable.toSeq)

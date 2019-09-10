@@ -906,7 +906,13 @@ trait ScalaReflection extends Logging {
    * only defines a constructor via `apply` method.
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
-    tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
+    tpe.typeSymbol.asClass.companion match {
+      case NoSymbol =>
+        throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
+          s"This could happen if $tpe is an interface, or a trait without companion object " +
+          s"constructor.")
+      case sym => sym.asTerm.typeSignature.member(universe.TermName("apply"))
+    }
   }
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {
@@ -916,7 +922,7 @@ trait ScalaReflection extends Logging {
     }
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramLists
-    } else if (constructorSymbol.isTerm) {
+    } else {
       // Find the primary constructor, and use its parameter ordering.
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
         s => s.isMethod && s.asMethod.isPrimaryConstructor)
@@ -925,9 +931,6 @@ trait ScalaReflection extends Logging {
       } else {
         primaryConstructorSymbol.get.asMethod.paramLists
       }
-    } else {
-      throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
-        s"This could happen if $tpe is a trait / interface.")
     }
     params.flatten
   }
