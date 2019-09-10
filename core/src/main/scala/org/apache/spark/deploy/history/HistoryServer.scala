@@ -151,7 +151,6 @@ class HistoryServer(
   /** Bind to the HTTP server behind this web interface. */
   override def bind() {
     super.bind()
-    provider.start()
   }
 
   /** Stop the server and close the file system. */
@@ -298,6 +297,7 @@ object HistoryServer extends Logging {
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()
+    provider.start()
 
     ShutdownHookManager.addShutdownHook { () => server.stop() }
 
