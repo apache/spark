@@ -408,7 +408,7 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void mergeSpillsWithCompressionAndEncryptionSlowPath() throws Exception {
-    conf.set(package$.MODULE$.SHUFFLE_UNDAFE_FAST_MERGE_ENABLE(), false);
+    conf.set(package$.MODULE$.SHUFFLE_UNSAFE_FAST_MERGE_ENABLE(), false);
     testMergingSpills(false, LZ4CompressionCodec.class.getName(), true);
   }
 
