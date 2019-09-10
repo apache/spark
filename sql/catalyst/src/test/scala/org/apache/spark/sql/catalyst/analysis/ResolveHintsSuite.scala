@@ -151,7 +151,7 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
       Repartition(numPartitions = 200, shuffle = true, child = testRelation))
 
-    val errMsg = "COALESCE hint expects a partition number and columns"
+    val errMsg = "COALESCE Hint expects a partition number as a parameter"
 
     assertAnalysisError(
       UnresolvedHint("COALESCE", Seq.empty, table("TaBlE")),
@@ -163,15 +163,6 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
       Seq(errMsg))
 
-    val errMsg2 = "REPARTITION hint expects a partition number and columns"
-
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
-      Seq(errMsg2))
-    assertAnalysisError(
-      UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
-      Seq(errMsg2))
-
     checkAnalysis(
       UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
@@ -181,13 +172,27 @@ class ResolveHintsSuite extends AnalysisTest {
       RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
 
     checkAnalysis(
+      UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(
+        Seq(AttributeReference("a", IntegerType)()), testRelation, conf.numShufflePartitions))
+
+    checkAnalysis(
       UnresolvedHint(
         "REPARTITIONBYRANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
 
+    checkAnalysis(
+      UnresolvedHint(
+        "REPARTITIONBYRANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
+      RepartitionByExpression(
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
+        testRelation, conf.numShufflePartitions))
+
+    val errMsg2 = "REPARTITION Hint parameter should include columns, but"
+
     assertAnalysisError(
-      UnresolvedHint("REPARTITION", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
+      UnresolvedHint("REPARTITION", Seq(Literal(true)), table("TaBlE")),
       Seq(errMsg2))
 
     assertAnalysisError(
@@ -196,12 +201,7 @@ class ResolveHintsSuite extends AnalysisTest {
         table("TaBlE")),
       Seq(errMsg2))
 
-    val errMsg3 = "REPARTITIONBYRANGE hint expects a partition number and columns"
-
-    assertAnalysisError(
-      UnresolvedHint(
-        "REPARTITIONBYRANGE", Seq(AttributeReference("a", IntegerType)()), table("TaBlE")),
-      Seq(errMsg3))
+    val errMsg3 = "REPARTITIONBYRANGE Hint parameter should include columns, but"
 
     assertAnalysisError(
       UnresolvedHint("REPARTITIONBYRANGE",
@@ -209,20 +209,17 @@ class ResolveHintsSuite extends AnalysisTest {
         table("TaBlE")),
       Seq(errMsg3))
 
-    val errMsg4 = "Repartition hint parameter should be columns but was"
-
     assertAnalysisError(
-      UnresolvedHint("REPARTITION",
+      UnresolvedHint("REPARTITIONBYRANGE",
         Seq(Literal(10), Literal(10)),
         table("TaBlE")),
-      Seq(errMsg4))
+      Seq(errMsg3))
 
     assertAnalysisError(
-      UnresolvedHint("REPARTITION",
+      UnresolvedHint("REPARTITIONBYRANGE",
         Seq(Literal(10), Literal(10), UnresolvedAttribute("a")),
         table("TaBlE")),
-      Seq(errMsg4))
-
+      Seq(errMsg3))
   }
 
   test("log warnings for invalid hints") {

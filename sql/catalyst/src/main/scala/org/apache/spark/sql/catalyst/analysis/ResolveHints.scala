@@ -137,84 +137,94 @@ object ResolveHints {
   }
 
   /**
-   * COALESCE Hint accepts name "COALESCE" and "REPARTITION" and "REPARTITIONBYRANGE".
-   * Its parameter includes a partition number and columns.
+   * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITIONBYRANGE".
    */
-  object ResolveCoalesceHints extends Rule[LogicalPlan] {
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITIONBYRANGE")
+  class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
 
     /**
-     * same with repartition api
+     * This function handles hints for "COALESCE" and "REPARTITION".
+     * The "COALESCE" hint only has a partition number as a parameter. The "REPARTITION" hint
+     * has a partition number, columns, or both of them as parameters.
      */
     private def createRepartition(
-        shuffle: Boolean, h: UnresolvedHint): LogicalPlan = {
+        shuffle: Boolean, hint: UnresolvedHint): LogicalPlan = {
+      val hintName = hint.name.toUpperCase(Locale.ROOT)
+
       def createRepartitionByExpression(
-           numPartitions: Int, exprs: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
-        val errExprs = exprs.filter(!_.isInstanceOf[UnresolvedAttribute])
-        if (errExprs.nonEmpty) throw new AnalysisException(
-          s"Repartition hint parameter should be columns but was $errExprs")
+          numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
+        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        if (invalidParams.nonEmpty) {
+          throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
+            s"${invalidParams.mkString(", ")} found")
+        }
         RepartitionByExpression(
-          exprs.map(_.asInstanceOf[UnresolvedAttribute]), h.child, numPartitions)
+          partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
       }
 
-      h.parameters match {
+      hint.parameters match {
         case Seq(IntegerLiteral(numPartitions)) =>
-          Repartition(numPartitions, shuffle, h.child)
+          Repartition(numPartitions, shuffle, hint.child)
         case Seq(numPartitions: Int) =>
-          Repartition(numPartitions, shuffle, h.child)
+          Repartition(numPartitions, shuffle, hint.child)
+        // The "COALESCE" hint (shuffle = false) must have a partition number only
+        case _ if !shuffle =>
+          throw new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
-          createRepartitionByExpression(numPartitions, param.tail, h)
+          createRepartitionByExpression(numPartitions, param.tail)
         case param @ Seq(numPartitions: Int, _*) if shuffle =>
-          createRepartitionByExpression(numPartitions, param.tail, h)
-
-        case _ =>
-          throw new AnalysisException(s"${h.name} hint expects a partition number " +
-            "and columns")
+          createRepartitionByExpression(numPartitions, param.tail)
+        case param @ Seq(_*) if shuffle =>
+          createRepartitionByExpression(conf.numShufflePartitions, param)
       }
     }
 
     /**
-     * same with repartitionByRange api
+     * This function handles hints for "REPARTITIONBYRANGE".
+     * The "REPARTITIONBYRANGE" hint must have column names and a partition number is optional.
      */
-    private def createRepartitionByRange(
-        h: UnresolvedHint): RepartitionByExpression = {
+    private def createRepartitionByRange(hint: UnresolvedHint): RepartitionByExpression = {
+      val hintName = hint.name.toUpperCase(Locale.ROOT)
+
       def createRepartitionByExpression(
-           numPartitions: Int, exprs: Seq[Any], h: UnresolvedHint): RepartitionByExpression = {
-        val sortOrder: Seq[SortOrder] = exprs.map {
+          numPartitions: Int, partitionExprs: Seq[Any]): RepartitionByExpression = {
+        val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
+        if (invalidParams.nonEmpty) {
+          throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
+            s"${invalidParams.mkString(", ")} found")
+        }
+        val sortOrder = partitionExprs.map {
           case expr: SortOrder => expr
           case expr: Expression => SortOrder(expr, Ascending)
-          case _ => throw new AnalysisException(
-            s"RepartitionByRange hint parameter should be columns but was $exprs")
         }
-        RepartitionByExpression(sortOrder, h.child, numPartitions)
+        RepartitionByExpression(sortOrder, hint.child, numPartitions)
       }
 
-      h.parameters match {
+      hint.parameters match {
         case param @ Seq(IntegerLiteral(numPartitions), _*) =>
-          createRepartitionByExpression(numPartitions, param.tail, h)
+          createRepartitionByExpression(numPartitions, param.tail)
         case param @ Seq(numPartitions: Int, _*) =>
-          createRepartitionByExpression(numPartitions, param.tail, h)
-
-        case _ =>
-          throw new AnalysisException(s"${h.name} hint expects a partition number " +
-            "and columns")
+          createRepartitionByExpression(numPartitions, param.tail)
+        case param @ Seq(_*) =>
+          createRepartitionByExpression(conf.numShufflePartitions, param)
       }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
-      case h: UnresolvedHint if COALESCE_HINT_NAMES.contains(h.name.toUpperCase(Locale.ROOT)) =>
-        val hintName = h.name.toUpperCase(Locale.ROOT)
-
-        hintName match {
+      case hint @ UnresolvedHint(hintName, _, _) => hintName.toUpperCase(Locale.ROOT) match {
           case "REPARTITION" =>
-            createRepartition(shuffle = true, h)
+            createRepartition(shuffle = true, hint)
           case "COALESCE" =>
-            createRepartition(shuffle = false, h)
+            createRepartition(shuffle = false, hint)
           case "REPARTITIONBYRANGE" =>
-            createRepartitionByRange(h)
+            createRepartitionByRange(hint)
+          case _ => plan
         }
     }
+  }
+
+  object ResolveCoalesceHints {
+    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITIONBYRANGE")
   }
 
   /**
