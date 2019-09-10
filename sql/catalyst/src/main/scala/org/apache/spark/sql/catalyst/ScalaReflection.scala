@@ -906,12 +906,18 @@ trait ScalaReflection extends Logging {
    * only defines a constructor via `apply` method.
    */
   private def getCompanionConstructor(tpe: Type): Symbol = {
-    tpe.typeSymbol.asClass.companion match {
-      case NoSymbol =>
-        throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
-          s"This could happen if $tpe is an interface, or a trait without companion object " +
-          "constructor.")
-      case sym => sym.asTerm.typeSignature.member(universe.TermName("apply"))
+    def throwUnsupportedOperation = {
+      throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
+        s"This could happen if $tpe is an interface, or a trait without companion object " +
+        "constructor.")
+    }
+    val companionType = tpe.typeSymbol.asClass.companion match {
+      case NoSymbol => throwUnsupportedOperation
+      case sym => sym
+    }
+    companionType.asTerm.typeSignature.member(universe.TermName("apply")) match {
+      case NoSymbol => throwUnsupportedOperation
+      case sym => sym
     }
   }
 
