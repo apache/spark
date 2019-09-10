@@ -138,7 +138,7 @@ trait ScroogeLikeExample extends Product1[Int] with Serializable {
   override def hashCode: Int = x
 }
 
-/** Counter-example to [[ScroogeLikeExample]] where getting schema should fail  */
+/** Counter-example to [[ScroogeLikeExample]] as a trait without a companion object constructor */
 trait TraitProductWithoutCompanion extends Product1[Int] {}
 
 class ScalaReflectionSuite extends SparkFunSuite {
