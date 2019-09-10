@@ -911,13 +911,13 @@ trait ScalaReflection extends Logging {
         s"This could happen if $tpe is an interface, or a trait without companion object " +
         "constructor.")
     }
-    val companionType = tpe.typeSymbol.asClass.companion match {
+    val companionSym = tpe.typeSymbol.asClass.companion match {
       case NoSymbol => throwUnsupportedOperation
       case sym => sym
     }
-    companionType.asTerm.typeSignature.member(universe.TermName("apply")) match {
+    companionSym.asTerm.typeSignature.member(universe.TermName("apply")) match {
       case NoSymbol => throwUnsupportedOperation
-      case sym => sym
+      case constructorSym => constructorSym
     }
   }
 

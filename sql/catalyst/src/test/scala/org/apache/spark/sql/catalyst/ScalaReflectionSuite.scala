@@ -413,7 +413,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("x", IntegerType, nullable = false))), nullable = true))
   }
 
-  test("SPARK-29026: schemaFor for trait without companion constructor throws exception ") {
+  test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
     val e = intercept[UnsupportedOperationException] {
       schemaFor[TraitProductWithoutCompanion]
     }
