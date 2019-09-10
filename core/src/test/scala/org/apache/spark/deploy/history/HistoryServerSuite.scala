@@ -88,6 +88,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(EVENT_LOG_PROCESS_TREE_METRICS, true)
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
+    provider.start()
     provider.checkForLogs()
     val securityManager = HistoryServer.createSecurityManager(conf)
 
@@ -426,6 +427,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove(IS_TESTING)
     val provider = new FsHistoryProvider(myConf)
+    provider.start()
     val securityManager = HistoryServer.createSecurityManager(myConf)
 
     sc = new SparkContext("local", "test", myConf)
