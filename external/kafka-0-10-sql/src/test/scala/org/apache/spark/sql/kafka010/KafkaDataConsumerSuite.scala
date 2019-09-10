@@ -138,7 +138,8 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
   }
 
   test("SPARK-23623: concurrent use of KafkaDataConsumer") {
-    val data: immutable.IndexedSeq[String] = prepareTestTopicHavingTestMessages(topic)
+    val data: immutable.IndexedSeq[(String, Seq[(String, Array[Byte])])] =
+      prepareTestTopicHavingTestMessages(topic)
 
     val topicPartition = new TopicPartition(topic, 0)
     val kafkaParams = getKafkaParams()
@@ -320,9 +321,9 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
   }
 
   private def prepareTestTopicHavingTestMessages(topic: String) = {
-    val data = (1 to 1000).map(_.toString)
+    val data = (1 to 1000).map(i => (i.toString, Seq[(String, Array[Byte])]()))
     testUtils.createTopic(topic, 1)
-    testUtils.sendMessages(topic, data.toArray)
+    testUtils.sendMessages(topic, data.toArray, None)
     data
   }
 
