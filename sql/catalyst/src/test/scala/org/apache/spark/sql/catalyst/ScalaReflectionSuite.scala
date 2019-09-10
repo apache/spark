@@ -146,7 +146,6 @@ object TraitProductWithNoConstructorCompanion {}
 
 trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
 
-
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
 
