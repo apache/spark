@@ -855,7 +855,35 @@ object DateTimeUtils {
 
   def currentDate(zoneId: ZoneId): SQLDate = localDateToDays(LocalDate.now(zoneId))
 
-  private val specialValue = """(\p{Alpha}+)\p{Blank}*(.*)""".r
+  private val specialValueRe = """(\p{Alpha}+)\p{Blank}*(.*)""".r
+
+  /**
+   * Extracts special values from an input string ignoring case.
+   * @param input - a trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some special value in lower case or None.
+   */
+  private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
+    def isValid(value: String, timeZoneId: String): Boolean = {
+      // Special value can be without any time zone
+      if (timeZoneId.isEmpty) return true
+      // "now" must not have the time zone field
+      if (value.compareToIgnoreCase("now") == 0) return false
+      // If the time zone field presents in the input, it must be resolvable
+      try {
+        getZoneId(timeZoneId)
+        true
+      } catch {
+        case NonFatal(_) => false
+      }
+    }
+
+    if (input.length < 3 || !input(0).isLetter) return None
+    input match {
+      case specialValueRe(v, z) if isValid(v, z) => Some(v.toLowerCase(Locale.US))
+      case _ => None
+    }
+  }
 
   /**
    * Converts notational shorthands that are converted to ordinary dates.
@@ -864,15 +892,7 @@ object DateTimeUtils {
    * @return some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[SQLDate] = {
-    if (input.length < 3 || !input(0).isLetter) return None
-    val key = input match {
-      // NOW does not accept time zones
-      case specialValue(v, z) if !z.isEmpty && v.toLowerCase(Locale.US) == "now" => None
-      case specialValue(v, z) if z.isEmpty || Try { getZoneId(z) }.isSuccess =>
-        Some(v.toLowerCase(Locale.US))
-      case _ => None
-    }
-    key.flatMap {
+    extractSpecialValue(input, zoneId).flatMap {
       case "epoch" => Some(0)
       case "now" | "today" => Some(currentDate(zoneId))
       case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
