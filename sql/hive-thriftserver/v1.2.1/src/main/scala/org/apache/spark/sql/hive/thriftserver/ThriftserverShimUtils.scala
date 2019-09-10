@@ -57,7 +57,7 @@ private[thriftserver] object ThriftserverShimUtils {
       TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE, BIGINT_TYPE,
       FLOAT_TYPE, DOUBLE_TYPE, DECIMAL_TYPE,
       DATE_TYPE, TIMESTAMP_TYPE,
-      ARRAY_TYPE, MAP_TYPE, STRUCT_TYPE, USER_DEFINED_TYPE)
+      ARRAY_TYPE, MAP_TYPE, STRUCT_TYPE)
   }
 
   private[thriftserver] def addToClassPath(
