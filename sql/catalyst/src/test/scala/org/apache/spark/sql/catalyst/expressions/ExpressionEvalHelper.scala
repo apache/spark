@@ -138,6 +138,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks with PlanTestBa
       case (result: Float, expected: Float) =>
         if (expected.isNaN) result.isNaN else expected == result
       case (result: Row, expected: InternalRow) => result.toSeq == expected.toSeq(result.schema)
+      case (result: Seq[InternalRow], expected: Seq[InternalRow]) =>
+        result.size == expected.size && result.zip(expected).forall { case (r, e) =>
+          checkResult(r, e, exprDataType, exprNullable)
+        }
       case _ =>
         result == expected
     }
