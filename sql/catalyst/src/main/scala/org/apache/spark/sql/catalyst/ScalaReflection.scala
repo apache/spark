@@ -910,7 +910,7 @@ trait ScalaReflection extends Logging {
       case NoSymbol =>
         throw new UnsupportedOperationException(s"Unable to find constructor for $tpe. " +
           s"This could happen if $tpe is an interface, or a trait without companion object " +
-          s"constructor.")
+          "constructor.")
       case sym => sym.asTerm.typeSignature.member(universe.TermName("apply"))
     }
   }
