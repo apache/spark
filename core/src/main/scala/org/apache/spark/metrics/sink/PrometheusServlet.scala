@@ -1,0 +1,116 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.metrics.sink
+
+import java.util.Properties
+import javax.servlet.http.HttpServletRequest
+
+import com.codahale.metrics.MetricRegistry
+import org.eclipse.jetty.servlet.ServletContextHandler
+
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.ui.JettyUtils._
+
+private[spark] class PrometheusServlet(
+    val property: Properties,
+    val registry: MetricRegistry,
+    securityMgr: SecurityManager)
+  extends Sink {
+
+  val SERVLET_KEY_PATH = "path"
+
+  val servletPath = property.getProperty(SERVLET_KEY_PATH)
+
+  def getHandlers(conf: SparkConf): Array[ServletContextHandler] = {
+    Array[ServletContextHandler](
+      createServletHandler(servletPath,
+        new ServletParams(request => getMetricsSnapshot(request), "text/plain;charset=UTF-8"), conf)
+    )
+  }
+
+  // The following aims to be consistent with /metrics/json result in terms of item ordering
+  // and with Spark JMX Sink + Prometheus JMX Converter result in terms of key/value string format.
+  def getMetricsSnapshot(request: HttpServletRequest): String = {
+    import scala.collection.JavaConverters._
+
+    val sb = new StringBuilder()
+    registry.getGauges.asScala.foreach { case (k, v) =>
+      if (!v.getValue.isInstanceOf[String]) {
+        sb.append(s"${normalizeKey(k)}Value ${v.getValue}\n")
+      }
+    }
+    registry.getCounters.asScala.foreach { case (k, v) =>
+      sb.append(s"${normalizeKey(k)}Count ${v.getCount}\n")
+    }
+    registry.getHistograms.asScala.foreach { case (k, h) =>
+      val snapshot = h.getSnapshot
+      val prefix = normalizeKey(k)
+      sb.append(prefix + "Count " + h.getCount + "\n")
+      sb.append(prefix + "Max " + snapshot.getMax + "\n")
+      sb.append(prefix + "Mean " + snapshot.getMax + "\n")
+      sb.append(prefix + "Min " + snapshot.getMin + "\n")
+      sb.append(prefix + "50thPercentile " + snapshot.getMedian + "\n")
+      sb.append(prefix + "75thPercentile " + snapshot.get75thPercentile + "\n")
+      sb.append(prefix + "95thPercentile " + snapshot.get95thPercentile + "\n")
+      sb.append(prefix + "98thPercentile " + snapshot.get98thPercentile + "\n")
+      sb.append(prefix + "99thPercentile " + snapshot.get99thPercentile + "\n")
+      sb.append(prefix + "999thPercentile " + snapshot.get999thPercentile + "\n")
+      sb.append(prefix + "StdDev " + snapshot.getStdDev + "\n")
+    }
+    registry.getMeters.entrySet.iterator.asScala.foreach { kv =>
+      val prefix = normalizeKey(kv.getKey)
+      val meter = kv.getValue
+      sb.append(prefix + "Count " + meter.getCount + "\n")
+      sb.append(prefix + "MeanRate " + meter.getMeanRate + "\n")
+      sb.append(prefix + "OneMinuteRate " + meter.getOneMinuteRate + "\n")
+      sb.append(prefix + "FiveMinuteRate " + meter.getFiveMinuteRate + "\n")
+      sb.append(prefix + "FifteenMinuteRate " + meter.getFifteenMinuteRate + "\n")
+    }
+    registry.getTimers.entrySet.iterator.asScala.foreach { kv =>
+      val prefix = normalizeKey(kv.getKey)
+      val timer = kv.getValue
+      val snapshot = timer.getSnapshot
+      sb.append(prefix + "Count " + timer.getCount + "\n")
+      sb.append(prefix + "Max " + snapshot.getMax + "\n")
+      sb.append(prefix + "Mean " + snapshot.getMax + "\n")
+      sb.append(prefix + "Min " + snapshot.getMin + "\n")
+      sb.append(prefix + "50thPercentile " + snapshot.getMedian + "\n")
+      sb.append(prefix + "75thPercentile " + snapshot.get75thPercentile + "\n")
+      sb.append(prefix + "95thPercentile " + snapshot.get95thPercentile + "\n")
+      sb.append(prefix + "98thPercentile " + snapshot.get98thPercentile + "\n")
+      sb.append(prefix + "99thPercentile " + snapshot.get99thPercentile + "\n")
+      sb.append(prefix + "999thPercentile " + snapshot.get999thPercentile + "\n")
+      sb.append(prefix + "StdDev " + snapshot.getStdDev + "\n")
+      sb.append(prefix + "FifteenMinuteRate " + timer.getFifteenMinuteRate + "\n")
+      sb.append(prefix + "FiveMinuteRate " + timer.getFiveMinuteRate + "\n")
+      sb.append(prefix + "OneMinuteRate " + timer.getOneMinuteRate + "\n")
+      sb.append(prefix + "MeanRate " + timer.getMeanRate + "\n")
+    }
+    sb.toString()
+  }
+
+  private def normalizeKey(key: String): String = {
+    s"metrics_${key.replaceAll("[^a-zA-Z0-9]", "_")}_"
+  }
+
+  override def start() { }
+
+  override def stop() { }
+
+  override def report() { }
+}
