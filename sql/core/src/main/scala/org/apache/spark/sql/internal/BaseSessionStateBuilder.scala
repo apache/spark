@@ -169,7 +169,7 @@ abstract class BaseSessionStateBuilder(
   protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
     override val extendedResolutionHints: Seq[Rule[LogicalPlan]] =
       customResolutionHints
-    
+
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
