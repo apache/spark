@@ -99,7 +99,7 @@ private[spark] object ToolTips {
        dynamic allocation is enabled. The number of granted executors may exceed the limit
        ephemerally when executors are being killed.
     """
-  
+
   val THRIFT_SERVER_FINISH_TIME =
     "Finish time of the execution, before fetching the results"
 
