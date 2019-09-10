@@ -915,7 +915,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
-       [null,"a","b","c","d"]
+       ["a","b","c","d",null]
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
@@ -930,7 +930,9 @@ case class ArraySort(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def arrayExpression: Expression = base
-  override def nullOrder: NullOrder = NullOrder.Least
+  override def nullOrder: NullOrder = {
+    if(ascendingOrder == Literal(true)) NullOrder.Greatest else NullOrder.Least
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>

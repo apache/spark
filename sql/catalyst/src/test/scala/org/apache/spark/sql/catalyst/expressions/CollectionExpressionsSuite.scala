@@ -369,7 +369,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(new ArraySort(a1), Seq[Integer]())
     checkEvaluation(new ArraySort(a2), Seq("a", "b"))
     checkEvaluation(ArraySort(a2, Literal(false)), Seq("b", "a"))
-    checkEvaluation(new ArraySort(a3), Seq(null, "a", "b"))
+    checkEvaluation(new ArraySort(a3), Seq("a", "b", null))
     checkEvaluation(ArraySort(a3, Literal(false)), Seq("b", "a", null))
     checkEvaluation(new ArraySort(a4), Seq(d1, d2))
     checkEvaluation(new ArraySort(a5), Seq(null, null))

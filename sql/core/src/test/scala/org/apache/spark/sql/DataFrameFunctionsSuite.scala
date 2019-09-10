@@ -395,7 +395,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
 
     checkAnswer(
       df2.selectExpr("array_sort(a)"),
-      Seq(Row(Seq[Seq[Int]](null, Seq(1), Seq(2), Seq(2, 4))))
+      Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
     )
 
     checkAnswer(

@@ -3330,7 +3330,7 @@ object functions {
   /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
-   * Null elements will be placed at the beginning of the returned array.
+   * Null elements will be placed at the end of the returned array.
    *
    * @group collection_funcs
    * @since 2.4.0
@@ -3340,9 +3340,7 @@ object functions {
   /**
     * Sorts the input array for the given column in ascending or descending order,
     * according to the natural ordering of the array elements.
-    * Null elements will be placed at the beginning of the returned array in ascending order or
-    * at the end of the returned array in descending order.
-    *
+    * Null elements will be placed at the end of the returned array in descending / ascending order
     * @group collection_funcs
     * @since 2.4.0
     */
