@@ -267,6 +267,9 @@ private[hive] class SparkExecuteStatementOperation(
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
+        if (statementId != null) {
+          sqlContext.sparkContext.cancelJobGroup(statementId)
+        }
         val currentState = getStatus().getState()
         if (currentState.isTerminal) {
           // This may happen if the execution was cancelled, and then closed from another thread.
