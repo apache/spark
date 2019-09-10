@@ -367,50 +367,11 @@ trait CreateNamedStructLike extends Expression {
 case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStructLike {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val rowClass = classOf[GenericInternalRow].getName
-    val values = ctx.freshName("values")
-    val valCodes = valExprs.zipWithIndex.map { case (e, i) =>
-      val eval = e.genCode(ctx)
-      s"""
-         |${eval.code}
-         |if (${eval.isNull}) {
-         |  $values[$i] = null;
-         |} else {
-         |  $values[$i] = ${eval.value};
-         |}
-       """.stripMargin
-    }
-    val valuesCode = ctx.splitExpressionsWithCurrentInputs(
-      expressions = valCodes,
-      funcName = "createNamedStruct",
-      extraArguments = "Object[]" -> values :: Nil)
-
-    ev.copy(code =
-      code"""
-         |Object[] $values = new Object[${valExprs.size}];
-         |$valuesCode
-         |final InternalRow ${ev.value} = new $rowClass($values);
-         |$values = null;
-       """.stripMargin, isNull = FalseLiteral)
-  }
-
-  override def prettyName: String = "named_struct"
-}
-
-/**
- * Creates a struct with the given field names and values. This is a variant that returns
- * UnsafeRow directly. The unsafe projection operator replaces [[CreateStruct]] with
- * this expression automatically at runtime.
- *
- * @param children Seq(name1, val1, name2, val2, ...)
- */
-case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
     ExprCode(code = eval.code, isNull = FalseLiteral, value = eval.value)
   }
 
-  override def prettyName: String = "named_struct_unsafe"
+  override def prettyName: String = "named_struct"
 }
 
 /**
