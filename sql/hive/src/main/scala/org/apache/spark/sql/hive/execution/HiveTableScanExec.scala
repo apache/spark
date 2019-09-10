@@ -20,11 +20,8 @@ package org.apache.spark.sql.hive.execution
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.common.JavaUtils
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.TableDesc
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -123,36 +120,6 @@ case class HiveTableScanExec(
 
     HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
 
-    logInfo(s"Test ADD JAR  ${SessionState.get()}")
-    if (SessionState.get() != null) {
-      logInfo(s"Test ADD JAR  ${SessionState.get().getConf.getClassLoader}")
-      logInfo("Test ADD JAR with SessionState.getConf.getClassLoader")
-      // scalastyle:off
-      try {
-        Class.forName(tableDesc.getSerdeClassName(), true, SessionState.get().getConf.getClassLoader)
-      } catch {
-        case e:Exception =>
-          logInfo("Failed Test ADD JAR with SessionState.getConf.getClassLoader")
-      }
-    }
-
-    logInfo(s"JavaUtils.getClassLoader => ${JavaUtils.getClassLoader}")
-    logInfo(s"SessionState.SharedState.jarClssLoader => ${sparkSession.sharedState.jarClassLoader}")
-    logInfo("Test ADD JAR with sharedState's JarClassloader")
-    // scalastyle:off
-    try {
-      Class.forName(tableDesc.getSerdeClassName(), true, sparkSession.sharedState.jarClassLoader)
-    } catch {
-      case e: Exception =>
-        logInfo("Failed Test ADD JAR with sharedState's JarClassloader")
-    }
-    logInfo("Test ADD JAR with JavaUtils.getClassLoader")
-    try {
-      Class.forName(tableDesc.getSerdeClassName(), true, JavaUtils.getClassLoader)
-    } catch {
-      case e: Exception =>
-        logInfo("Failed Test ADD JAR with JavaUtils.getClassLoader")
-    }
     val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
 
