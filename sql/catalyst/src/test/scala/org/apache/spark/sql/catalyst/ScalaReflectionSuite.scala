@@ -417,14 +417,14 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val e = intercept[UnsupportedOperationException] {
       schemaFor[TraitProductWithoutCompanion]
     }
-    e.getMessage.contains("Unable to find constructor")
+    assert(e.getMessage.contains("Unable to find constructor"))
   }
 
   test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
     val e = intercept[UnsupportedOperationException] {
       schemaFor[TraitProductWithNoConstructorCompanion]
     }
-    e.getMessage.contains("Unable to find constructor")
+    assert(e.getMessage.contains("Unable to find constructor"))
   }
 
   test("SPARK-27625: annotated data types") {
