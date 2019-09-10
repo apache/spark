@@ -859,7 +859,35 @@ object DateTimeUtils {
     Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
   }
 
-  private val specialValue = """(EPOCH|NOW|TODAY|TOMORROW|YESTERDAY)\p{Blank}*(.*)""".r
+  private val specialValueRe = """(\p{Alpha}+)\p{Blank}*(.*)""".r
+
+  /**
+   * Extracts special values from an input string ignoring case.
+   * @param input - a trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some special value in lower case or None.
+   */
+  private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
+    def isValid(value: String, timeZoneId: String): Boolean = {
+      // Special value can be without any time zone
+      if (timeZoneId.isEmpty) return true
+      // "now" must not have the time zone field
+      if (value.compareToIgnoreCase("now") == 0) return false
+      // If the time zone field presents in the input, it must be resolvable
+      try {
+        getZoneId(timeZoneId)
+        true
+      } catch {
+        case NonFatal(_) => false
+      }
+    }
+
+    if (input.length < 3 || !input(0).isLetter) return None
+    input match {
+      case specialValueRe(v, z) if isValid(v, z) => Some(v.toLowerCase(Locale.US))
+      case _ => None
+    }
+  }
 
   /**
    * Converts notational shorthands that are converted to ordinary timestamps.
@@ -869,20 +897,12 @@ object DateTimeUtils {
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
-    def isValidZoneId(z: String): Boolean = {
-      z == "" || Try { getZoneId(z) }.isSuccess
-    }
-
-    if (input.length < 3 || !input(0).isLetter) return None
-    input.toUpperCase(Locale.US) match {
-      case specialValue("EPOCH", z) if isValidZoneId(z) => Some(0)
-      case specialValue("NOW", "") => Some(currentTimestamp())
-      case specialValue("TODAY", z) if isValidZoneId(z) =>
-        Some(instantToMicros(today(zoneId).toInstant))
-      case specialValue("TOMORROW", z) if isValidZoneId(z) =>
-        Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
-      case specialValue("YESTERDAY", z) if isValidZoneId(z) =>
-        Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+    extractSpecialValue(input, zoneId).flatMap {
+      case "epoch" => Some(0)
+      case "now" => Some(currentTimestamp())
+      case "today" => Some(instantToMicros(today(zoneId).toInstant))
+      case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
+      case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
       case _ => None
     }
   }

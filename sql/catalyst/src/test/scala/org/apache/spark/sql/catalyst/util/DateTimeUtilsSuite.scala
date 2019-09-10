@@ -577,6 +577,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers {
       assert(toTimestamp("Epoch", zoneId).get === 0)
       val now = instantToMicros(LocalDateTime.now(zoneId).atZone(zoneId).toInstant)
       toTimestamp("NOW", zoneId).get should be (now +- tolerance)
+      assert(toTimestamp("now UTC", zoneId) === None)
       val today = instantToMicros(LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
         .atZone(zoneId).toInstant)
