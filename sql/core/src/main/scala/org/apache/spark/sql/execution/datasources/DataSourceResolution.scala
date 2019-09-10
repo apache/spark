@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalog.v2.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, TableCatalog}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, Identifier, LookupCatalog, TableCatalog}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
@@ -39,9 +39,6 @@ case class DataSourceResolution(
   extends Rule[LogicalPlan] with CastSupport with LookupCatalog {
 
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
-
-  def v2SessionCatalog: CatalogPlugin = sessionCatalog.getOrElse(
-    throw new AnalysisException("No v2 session catalog implementation is available"))
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case CreateTableStatement(
@@ -64,7 +61,7 @@ case class DataSourceResolution(
         case _ =>
           // the identifier had no catalog and no default catalog is set, but the source is v2.
           // use the v2 session catalog, which delegates to the global v1 session catalog
-          convertCreateTable(v2SessionCatalog.asTableCatalog, identifier, create)
+          convertCreateTable(sessionCatalog.asTableCatalog, identifier, create)
       }
 
     case CreateTableAsSelectStatement(
@@ -87,7 +84,7 @@ case class DataSourceResolution(
         case _ =>
           // the identifier had no catalog and no default catalog is set, but the source is v2.
           // use the v2 session catalog, which delegates to the global v1 session catalog
-          convertCTAS(v2SessionCatalog.asTableCatalog, identifier, create)
+          convertCTAS(sessionCatalog.asTableCatalog, identifier, create)
       }
 
     case DescribeColumnStatement(
@@ -119,19 +116,13 @@ case class DataSourceResolution(
     case replace: ReplaceTableStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = replace.tableName
-      val catalog = maybeCatalog.orElse(sessionCatalog)
-        .getOrElse(throw new AnalysisException(
-          s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
-        .asTableCatalog
+      val catalog = maybeCatalog.getOrElse(sessionCatalog).asTableCatalog
       convertReplaceTable(catalog, identifier, replace)
 
     case rtas: ReplaceTableAsSelectStatement =>
       // the provider was not a v1 source, convert to a v2 plan
       val CatalogObjectIdentifier(maybeCatalog, identifier) = rtas.tableName
-      val catalog = maybeCatalog.orElse(sessionCatalog)
-        .getOrElse(throw new AnalysisException(
-          s"No catalog specified for table ${identifier.quoted} and no default catalog is set"))
-        .asTableCatalog
+      val catalog = maybeCatalog.getOrElse(sessionCatalog).asTableCatalog
       convertRTAS(catalog, identifier, rtas)
 
     case DropTableStatement(CatalogObjectIdentifier(Some(catalog), ident), ifExists, _) =>
