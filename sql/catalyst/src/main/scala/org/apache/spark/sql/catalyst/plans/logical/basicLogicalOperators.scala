@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
@@ -558,6 +558,17 @@ object OverwritePartitionsDynamic {
   def byPosition(table: NamedRelation, query: LogicalPlan): OverwritePartitionsDynamic = {
     OverwritePartitionsDynamic(table, query, isByName = false)
   }
+}
+
+/**
+ * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
+ */
+case class ShowNamespaces(
+    catalog: SupportsNamespaces,
+    namespace: Option[Seq[String]],
+    pattern: Option[String]) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)())
 }
 
 case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {

@@ -68,6 +68,14 @@ object CatalogV2Implicits {
       case _ =>
         throw new AnalysisException(s"Cannot use catalog ${plugin.name}: not a TableCatalog")
     }
+
+    def asNamespaceCatalog: SupportsNamespaces = plugin match {
+      case namespaceCatalog: SupportsNamespaces =>
+        namespaceCatalog
+      case _ =>
+        throw new AnalysisException(
+          s"Cannot use catalog ${plugin.name}: does not support namespaces")
+    }
   }
 
   implicit class NamespaceHelper(namespace: Array[String]) {
