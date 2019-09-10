@@ -39,7 +39,7 @@ class SQLExecutionRDD(
   private val sqlConfigs = conf.getAllConfs
   private lazy val sqlConfExecutorSide = {
     val props = new Properties()
-    props.putAll(sqlConfigs.asJava)
+    sqlConfigs.foreach { case (k, v) => props.setProperty(k, v) }
     val newConf = new SQLConf()
     newConf.setConf(props)
     newConf
