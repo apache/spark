@@ -21,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
@@ -31,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
@@ -199,6 +200,15 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     listenerBus.removeListener(listener)
   }
 
+  /**
+   * List all [[StreamingQueryListener]]s attached to this [[StreamingQueryManager]].
+   *
+   * @since 3.0.0
+   */
+  def listListeners(): Array[StreamingQueryListener] = {
+    listenerBus.listeners.asScala.toArray
+  }
+
   /** Post a listener event */
   private[sql] def postListenerEvent(event: StreamingQueryListener.Event): Unit = {
     listenerBus.post(event)
@@ -255,8 +265,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
     val operationCheckEnabled = sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled
 
-    if (sparkSession.sessionState.conf.runtimeReoptimizationEnabled) {
-      logWarning(s"${SQLConf.RUNTIME_REOPTIMIZATION_ENABLED.key} " +
+    if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
+      logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
           "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 

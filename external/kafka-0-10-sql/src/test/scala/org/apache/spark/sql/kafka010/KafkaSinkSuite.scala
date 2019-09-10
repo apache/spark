@@ -31,10 +31,10 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, DataType}
 
-abstract class KafkaSinkSuiteBase extends QueryTest with SharedSQLContext with KafkaTest {
+abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
   protected var testUtils: KafkaTestUtils = _
 
   override def beforeAll(): Unit = {
@@ -427,7 +427,7 @@ class KafkaSinkBatchSuiteV1 extends KafkaSinkBatchSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "kafka")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) => s"Save mode ${mode.name} not allowed for Kafka")
@@ -438,7 +438,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) => s"cannot be written with ${mode.name} mode")

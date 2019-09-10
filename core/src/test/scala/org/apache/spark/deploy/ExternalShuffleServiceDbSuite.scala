@@ -24,7 +24,7 @@ import com.google.common.io.CharStreams
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config._
-import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 import org.apache.spark.network.shuffle.TestShuffleDataContext
 import org.apache.spark.util.Utils
 
@@ -43,7 +43,7 @@ class ExternalShuffleServiceDbSuite extends SparkFunSuite {
 
   var securityManager: SecurityManager = _
   var externalShuffleService: ExternalShuffleService = _
-  var blockHandler: ExternalShuffleBlockHandler = _
+  var blockHandler: ExternalBlockHandler = _
   var blockResolver: ExternalShuffleBlockResolver = _
 
   override def beforeAll() {

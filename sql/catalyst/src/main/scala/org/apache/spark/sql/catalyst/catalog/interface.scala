@@ -74,7 +74,7 @@ case class CatalogStorageFormat(
     inputFormat.foreach(map.put("InputFormat", _))
     outputFormat.foreach(map.put("OutputFormat", _))
     if (compressed) map.put("Compressed", "")
-    CatalogUtils.maskCredentials(properties) match {
+    SQLConf.get.redactOptions(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
         map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
@@ -478,7 +478,7 @@ object CatalogColumnStat extends Logging {
   val VERSION = 2
 
   private def getTimestampFormatter(): TimestampFormatter = {
-    TimestampFormatter(format = "yyyy-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
+    TimestampFormatter(format = "uuuu-MM-dd HH:mm:ss.SSSSSS", zoneId = ZoneOffset.UTC)
   }
 
   /**
@@ -561,6 +561,8 @@ object CatalogTableType {
   val EXTERNAL = new CatalogTableType("EXTERNAL")
   val MANAGED = new CatalogTableType("MANAGED")
   val VIEW = new CatalogTableType("VIEW")
+
+  val tableTypes = Seq(EXTERNAL, MANAGED, VIEW)
 }
 
 
@@ -604,7 +606,8 @@ case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
 case class HiveTableRelation(
     tableMeta: CatalogTable,
     dataCols: Seq[AttributeReference],
-    partitionCols: Seq[AttributeReference]) extends LeafNode with MultiInstanceRelation {
+    partitionCols: Seq[AttributeReference],
+    tableStats: Option[Statistics] = None) extends LeafNode with MultiInstanceRelation {
   assert(tableMeta.identifier.database.isDefined)
   assert(tableMeta.partitionSchema.sameType(partitionCols.toStructType))
   assert(tableMeta.dataSchema.sameType(dataCols.toStructType))
@@ -628,7 +631,9 @@ case class HiveTableRelation(
   )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled))
+      .orElse(tableStats)
+      .getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }

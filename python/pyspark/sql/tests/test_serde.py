@@ -128,10 +128,6 @@ class SerdeTests(ReusedSQLTestCase):
 
     def test_int_array_serialization(self):
         # Note that this test seems dependent on parallelism.
-        # This issue is because internal object map in Pyrolite is not cleared after op code
-        # STOP. If we use protocol 4 to pickle Python objects, op code MEMOIZE will store
-        # objects in the map. We need to clear up it to make sure next unpickling works on
-        # clear map.
         data = self.spark.sparkContext.parallelize([[1, 2, 3, 4]] * 100, numSlices=12)
         df = self.spark.createDataFrame(data, "array<integer>")
         self.assertEqual(len(list(filter(lambda r: None in r.value, df.collect()))), 0)

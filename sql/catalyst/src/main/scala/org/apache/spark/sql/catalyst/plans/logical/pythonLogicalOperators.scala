@@ -59,8 +59,7 @@ trait BaseEvalPython extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
-  @transient
-  override lazy val references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 }
 
 /**

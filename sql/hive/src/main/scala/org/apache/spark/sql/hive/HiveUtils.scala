@@ -63,8 +63,8 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.5</code> and " +
-        "<code>3.0.0</code> through <code>3.1.1</code>.")
+        "<code>0.12.0</code> through <code>2.3.6</code> and " +
+        "<code>3.0.0</code> through <code>3.1.2</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -111,6 +111,15 @@ private[spark] object HiveUtils extends Logging {
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(true)
+
+  val CONVERT_INSERTING_PARTITIONED_TABLE =
+    buildConf("spark.sql.hive.convertInsertingPartitionedTable")
+      .doc("When set to true, and `spark.sql.hive.convertMetastoreParquet` or " +
+        "`spark.sql.hive.convertMetastoreOrc` is true, the built-in ORC/Parquet writer is used" +
+        "to process inserting into partitioned ORC/Parquet tables created by using the HiveSQL " +
+        "syntax.")
+      .booleanConf
+      .createWithDefault(true)
 
   val CONVERT_METASTORE_CTAS = buildConf("spark.sql.hive.convertMetastoreCtas")
     .doc("When set to true,  Spark will try to use built-in data source writer " +
@@ -271,7 +280,7 @@ private[spark] object HiveUtils extends Logging {
   /**
    * Create a [[HiveClient]] used for execution.
    *
-   * Currently this must always be Hive 1.2.1 as this is the version of Hive that is packaged
+   * Currently this must always be the Hive built-in version that packaged
    * with Spark SQL. This copy of the client is used for execution related tasks like
    * registering temporary functions or ensuring that the ThreadLocal SessionState is
    * correctly populated.  This copy of Hive is *not* used for storing persistent metadata,
@@ -338,18 +347,20 @@ private[spark] object HiveUtils extends Logging {
       }
 
       val classLoader = Utils.getContextOrSparkClassLoader
-      val jars = allJars(classLoader)
-      if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
+      val jars: Array[URL] = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
         // Do nothing. The system classloader is no longer a URLClassLoader in Java 9,
-        // so it won't match the case in allJars above. It no longer exposes URLs of
+        // so it won't match the case in allJars. It no longer exposes URLs of
         // the system classpath
+        Array.empty[URL]
       } else {
+        val loadedJars = allJars(classLoader)
         // Verify at least one jar was found
-        if (jars.length == 0) {
+        if (loadedJars.length == 0) {
           throw new IllegalArgumentException(
             "Unable to locate hive jars to connect to metastore. " +
               s"Please set ${HIVE_METASTORE_JARS.key}.")
         }
+        loadedJars
       }
 
       logInfo(
@@ -430,6 +441,13 @@ private[spark] object HiveUtils extends Logging {
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
       "org.datanucleus.store.rdbms.adapter.DerbyAdapter")
+
+    // Disable schema verification and allow schema auto-creation in the
+    // Derby database, in case the config for the metastore is set otherwise.
+    // Without these settings, starting the client fails with
+    // MetaException(message:Version information not found in metastore.)
+    propMap.put("hive.metastore.schema.verification", "false")
+    propMap.put("datanucleus.schema.autoCreateAll", "true")
 
     // SPARK-11783: When "hive.metastore.uris" is set, the metastore connection mode will be
     // remote (https://cwiki.apache.org/confluence/display/Hive/AdminManual+MetastoreAdmin

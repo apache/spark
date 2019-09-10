@@ -227,6 +227,10 @@ public interface TableChange {
     }
   }
 
+  interface ColumnChange extends TableChange {
+    String[] fieldNames();
+  }
+
   /**
    * A TableChange to add a field.
    * <p>
@@ -234,7 +238,7 @@ public interface TableChange {
    * If the new field is nested and its parent does not exist or is not a struct, the change must
    * result in an {@link IllegalArgumentException}.
    */
-  final class AddColumn implements TableChange {
+  final class AddColumn implements ColumnChange {
     private final String[] fieldNames;
     private final DataType dataType;
     private final boolean isNullable;
@@ -247,6 +251,7 @@ public interface TableChange {
       this.comment = comment;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }
@@ -272,7 +277,7 @@ public interface TableChange {
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
-  final class RenameColumn implements TableChange {
+  final class RenameColumn implements ColumnChange {
     private final String[] fieldNames;
     private final String newName;
 
@@ -281,6 +286,7 @@ public interface TableChange {
       this.newName = newName;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }
@@ -297,7 +303,7 @@ public interface TableChange {
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
-  final class UpdateColumnType implements TableChange {
+  final class UpdateColumnType implements ColumnChange {
     private final String[] fieldNames;
     private final DataType newDataType;
     private final boolean isNullable;
@@ -308,6 +314,7 @@ public interface TableChange {
       this.isNullable = isNullable;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }
@@ -328,7 +335,7 @@ public interface TableChange {
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
-  final class UpdateColumnComment implements TableChange {
+  final class UpdateColumnComment implements ColumnChange {
     private final String[] fieldNames;
     private final String newComment;
 
@@ -337,6 +344,7 @@ public interface TableChange {
       this.newComment = newComment;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }
@@ -351,13 +359,14 @@ public interface TableChange {
    * <p>
    * If the field does not exist, the change must result in an {@link IllegalArgumentException}.
    */
-  final class DeleteColumn implements TableChange {
+  final class DeleteColumn implements ColumnChange {
     private final String[] fieldNames;
 
     private DeleteColumn(String[] fieldNames) {
       this.fieldNames = fieldNames;
     }
 
+    @Override
     public String[] fieldNames() {
       return fieldNames;
     }

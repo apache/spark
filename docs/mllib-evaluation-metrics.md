@@ -577,31 +577,3 @@ variable from a number of independent variables.
     </tr>
   </tbody>
 </table>
-
-**Examples**
-
-<div class="codetabs">
-The following code snippets illustrate how to load a sample dataset, train a linear regression algorithm on the data,
-and evaluate the performance of the algorithm by several regression metrics.
-
-<div data-lang="scala" markdown="1">
-Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
-
-{% include_example scala/org/apache/spark/examples/mllib/RegressionMetricsExample.scala %}
-
-</div>
-
-<div data-lang="java" markdown="1">
-Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
-
-{% include_example java/org/apache/spark/examples/mllib/JavaRegressionMetricsExample.java %}
-
-</div>
-
-<div data-lang="python" markdown="1">
-Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
-
-{% include_example python/mllib/regression_metrics_example.py %}
-
-</div>
-</div>

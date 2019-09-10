@@ -53,10 +53,17 @@ private[hive] class SparkGetTablesOperation(
     tableName: String,
     tableTypes: JList[String])
   extends GetTablesOperation(parentSession, catalogName, schemaName, tableName, tableTypes)
-    with Logging{
+    with SparkMetadataOperationUtils with Logging {
+
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    super.close()
+    HiveThriftServer2.listener.onOperationClosed(statementId)
+  }
 
   override def runInternal(): Unit = {
-    val statementId = UUID.randomUUID().toString
+    statementId = UUID.randomUUID().toString
     // Do not change cmdStr. It's used for Hive auditing and authorization.
     val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName"
     val tableTypesStr = if (tableTypes == null) "null" else tableTypes.asScala.mkString(",")
@@ -138,12 +145,5 @@ private[hive] class SparkGetTablesOperation(
     } else {
       rowSet.addRow(rowData)
     }
-  }
-
-  private def tableTypeString(tableType: CatalogTableType): String = tableType match {
-    case EXTERNAL | MANAGED => "TABLE"
-    case VIEW => "VIEW"
-    case t =>
-      throw new IllegalArgumentException(s"Unknown table type is found at showCreateHiveTable: $t")
   }
 }

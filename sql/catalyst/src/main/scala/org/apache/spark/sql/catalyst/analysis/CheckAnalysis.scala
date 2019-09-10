@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.AlterTableStatement
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -298,10 +300,10 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-          case CreateTableAsSelect(_, _, partitioning, query, _, _, _) =>
-            val references = partitioning.flatMap(_.references).toSet
+          case create: V2CreateTablePlan =>
+            val references = create.partitioning.flatMap(_.references).toSet
             val badReferences = references.map(_.fieldNames).flatMap { column =>
-              query.schema.findNestedField(column) match {
+              create.tableSchema.findNestedField(column) match {
                 case Some(_) =>
                   None
                 case _ =>
@@ -351,6 +353,62 @@ trait CheckAnalysis extends PredicateHelper {
                     "as it may truncate\n")
                 }
               case _ =>
+            }
+
+          case alter: AlterTableStatement =>
+            alter.failAnalysis(s"Table or view not found: ${alter.tableName.quoted}")
+
+          case alter: AlterTable if alter.childrenResolved =>
+            val table = alter.table
+            def findField(operation: String, fieldName: Array[String]): StructField = {
+              // include collections because structs nested in maps and arrays may be altered
+              val field = table.schema.findNestedField(fieldName, includeCollections = true)
+              if (field.isEmpty) {
+                throw new AnalysisException(
+                  s"Cannot $operation missing field in ${table.name} schema: ${fieldName.quoted}")
+              }
+              field.get
+            }
+
+            alter.changes.foreach {
+              case add: AddColumn =>
+                val parent = add.fieldNames.init
+                if (parent.nonEmpty) {
+                  findField("add to", parent)
+                }
+              case update: UpdateColumnType =>
+                val field = findField("update", update.fieldNames)
+                val fieldName = update.fieldNames.quoted
+                update.newDataType match {
+                  case _: StructType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a struct by adding, deleting, or updating its fields")
+                  case _: MapType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update a map by updating $fieldName.key or $fieldName.value")
+                  case _: ArrayType =>
+                    throw new AnalysisException(
+                      s"Cannot update ${table.name} field $fieldName type: " +
+                          s"update the element by updating $fieldName.element")
+                  case _: AtomicType =>
+                    // update is okay
+                }
+                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+                  throw new AnalysisException(
+                    s"Cannot update ${table.name} field $fieldName: " +
+                        s"${field.dataType.simpleString} cannot be cast to " +
+                        s"${update.newDataType.simpleString}")
+                }
+              case rename: RenameColumn =>
+                findField("rename", rename.fieldNames)
+              case update: UpdateColumnComment =>
+                findField("update", update.fieldNames)
+              case delete: DeleteColumn =>
+                findField("delete", delete.fieldNames)
+              case _ =>
+              // no validation needed for set and remove property
             }
 
           case _ => // Fallbacks to the following checks
@@ -530,7 +588,7 @@ trait CheckAnalysis extends PredicateHelper {
           // Only certain operators are allowed to host subquery expression containing
           // outer references.
           plan match {
-            case _: Filter | _: Aggregate | _: Project => // Ok
+            case _: Filter | _: Aggregate | _: Project | _: DeleteFromTable => // Ok
             case other => failAnalysis(
               "Correlated scalar sub-queries can only be used in a " +
                 s"Filter/Aggregate/Project: $plan")
@@ -539,9 +597,10 @@ trait CheckAnalysis extends PredicateHelper {
 
       case inSubqueryOrExistsSubquery =>
         plan match {
-          case _: Filter => // Ok
+          case _: Filter | _: DeleteFromTable => // Ok
           case _ =>
-            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in a Filter: $plan")
+            failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
+                s" Filter/DeleteFromTable: $plan")
         }
     }
 

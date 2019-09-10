@@ -204,9 +204,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query 16 schema
-struct<1:int>
+struct<2:int>
 -- !query 16 output
-1
+2
 
 
 -- !query 17
@@ -224,7 +224,7 @@ SELECT * FROM t2
 -- !query 17 schema
 struct<scalarsubquery():int>
 -- !query 17 output
-1
+2
 
 
 -- !query 18
@@ -240,9 +240,9 @@ WITH
   )
 SELECT * FROM t2
 -- !query 18 schema
-struct<2:int>
+struct<3:int>
 -- !query 18 output
-2
+3
 
 
 -- !query 19
@@ -295,7 +295,7 @@ SELECT (
 -- !query 22 schema
 struct<scalarsubquery():int>
 -- !query 22 output
-1
+2
 
 
 -- !query 23
@@ -309,7 +309,7 @@ SELECT (
 -- !query 23 schema
 struct<scalarsubquery():int>
 -- !query 23 output
-1
+2
 
 
 -- !query 24
@@ -324,7 +324,7 @@ SELECT (
 -- !query 24 schema
 struct<scalarsubquery():int>
 -- !query 24 output
-1
+3
 
 
 -- !query 25
