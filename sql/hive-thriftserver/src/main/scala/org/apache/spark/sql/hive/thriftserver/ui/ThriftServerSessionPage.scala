@@ -81,6 +81,9 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Close Time",
         "Execution Time", "Duration", "Statement", "State", "Detail")
+      val tooltips = Seq(None, None, None, None, Some(ToolTips.THRIFT_SERVER_FINISH_TIME),
+        Some(ToolTips.THRIFT_SERVER_CLOSE_TIME), Some(ToolTips.THRIFT_SERVER_EXECUTION),
+        Some(ToolTips.THRIFT_SERVER_DURATION), None, None, None)
       val dataRows = executionList.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
@@ -109,7 +112,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
       }
 
       Some(UIUtils.listingTable(headerRow, generateDataRow,
-        dataRows, false, None, Seq(null), false))
+        dataRows, false, None, Seq(null), false, tooltipHeaders = tooltips))
     } else {
       None
     }
