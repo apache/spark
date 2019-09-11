@@ -26,6 +26,13 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.ui.JettyUtils._
 
+/**
+ * This exposes the metrics of the given registry with Prometheus format.
+ *
+ * The output is consistent with /metrics/json result in terms of item ordering
+ * and with the previous result of Spark JMX Sink + Prometheus JMX Converter combination
+ * in terms of key string format.
+ */
 private[spark] class PrometheusServlet(
     val property: Properties,
     val registry: MetricRegistry,
@@ -43,8 +50,6 @@ private[spark] class PrometheusServlet(
     )
   }
 
-  // The following aims to be consistent with /metrics/json result in terms of item ordering
-  // and with Spark JMX Sink + Prometheus JMX Converter result in terms of key/value string format.
   def getMetricsSnapshot(request: HttpServletRequest): String = {
     import scala.collection.JavaConverters._
 
