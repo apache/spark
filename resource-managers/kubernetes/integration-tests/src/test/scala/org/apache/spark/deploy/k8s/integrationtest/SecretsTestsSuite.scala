@@ -58,15 +58,15 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
     sparkAppConf
       .set(s"spark.kubernetes.driver.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
       .set(
-        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_1.toUpperCase}",
+        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_1_CAP}",
         s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_1}")
       .set(
-        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_2.toUpperCase}",
+        s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_2_CAP}",
         s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_2}")
       .set(s"spark.kubernetes.executor.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_1.toUpperCase}",
+      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_1_CAP}",
         s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_1")
-      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_2.toUpperCase}",
+      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_2_CAP}",
         s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_2")
     try {
       runSparkPiAndVerifyCompletion(
@@ -97,8 +97,8 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
       assert(!env.isEmpty)
       env
     }
-    env.toString should include (s"${ENV_SECRET_KEY_1.toUpperCase}=$ENV_SECRET_VALUE_1")
-    env.toString should include (s"${ENV_SECRET_KEY_2.toUpperCase}=$ENV_SECRET_VALUE_2")
+    env.toString should include (s"${ENV_SECRET_KEY_1_CAP}=$ENV_SECRET_VALUE_1")
+    env.toString should include (s"${ENV_SECRET_KEY_2_CAP}=$ENV_SECRET_VALUE_2")
 
     // Make sure our secret files are mounted correctly
     val files = Utils.executeCommand("ls", s"$SECRET_MOUNT_PATH")
@@ -119,6 +119,8 @@ private[spark] object SecretsTestsSuite {
   val SECRET_MOUNT_PATH = "/etc/secret"
   val ENV_SECRET_KEY_1 = "username"
   val ENV_SECRET_KEY_2 = "password"
+  val ENV_SECRET_KEY_1_CAP = ENV_SECRET_KEY_1.toUpperCase(Locale.ROOT)
+  val ENV_SECRET_KEY_2_CAP = ENV_SECRET_KEY_2.toUpperCase(Locale.ROOT)
   val ENV_SECRET_VALUE_1 = "secretusername"
   val ENV_SECRET_VALUE_2 = "secretpassword"
 }
