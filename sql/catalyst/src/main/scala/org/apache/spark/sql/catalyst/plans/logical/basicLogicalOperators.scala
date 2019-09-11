@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalog.v2.{CatalogManager, Identifier, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, Identifier, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
@@ -560,6 +560,17 @@ object OverwritePartitionsDynamic {
   }
 }
 
+/**
+ * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
+ */
+case class ShowNamespaces(
+    catalog: SupportsNamespaces,
+    namespace: Option[Seq[String]],
+    pattern: Option[String]) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)())
+}
+
 case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(table)
@@ -628,6 +639,9 @@ case class ShowTables(
     AttributeReference("tableName", StringType, nullable = false)())
 }
 
+/**
+ * The logical plan of the USE/USE CATALOG command that works for v2 catalogs.
+ */
 case class UseCatalogAndNamespace(
     catalogManager: CatalogManager,
     catalogName: Option[String],

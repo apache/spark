@@ -24,15 +24,15 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalog.v2.{Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.catalog.v2.{CatalogManager, Identifier, NamespaceChange, SupportsNamespaces, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.NamespaceChange.{RemoveProperty, SetProperty}
-import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.catalog.v2.expressions.{BucketTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.sources.v2.internal.V1Table
 import org.apache.spark.sql.types.StructType
@@ -41,25 +41,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 /**
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
-class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with SupportsNamespaces {
+class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
+  extends TableCatalog with SupportsNamespaces {
   import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
   import V2SessionCatalog._
 
-  def this() = {
-    this(SparkSession.active.sessionState)
-  }
-
   override val defaultNamespace: Array[String] = Array("default")
 
-  private lazy val catalog: SessionCatalog = sessionState.catalog
+  override def name: String = CatalogManager.SESSION_CATALOG_NAME
 
-  private var _name: String = _
-
-  override def name: String = _name
-
-  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
-    this._name = name
-  }
+  // This class is instantiated by Spark, so `initialize` method will not be called.
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {}
 
   override def listTables(namespace: Array[String]): Array[Identifier] = {
     namespace match {
@@ -92,7 +84,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       properties: util.Map[String, String]): Table = {
 
     val (partitionColumns, maybeBucketSpec) = V2SessionCatalog.convertTransforms(partitions)
-    val provider = properties.getOrDefault("provider", sessionState.conf.defaultDataSourceName)
+    val provider = properties.getOrDefault("provider", conf.defaultDataSourceName)
     val tableProperties = properties.asScala
     val location = Option(properties.get(LOCATION_TABLE_PROP))
     val storage = DataSource.buildStorageFormatFromOptions(tableProperties.toMap)
@@ -108,7 +100,7 @@ class V2SessionCatalog(sessionState: SessionState) extends TableCatalog with Sup
       partitionColumnNames = partitionColumns,
       bucketSpec = maybeBucketSpec,
       properties = tableProperties.toMap,
-      tracksPartitionsInCatalog = sessionState.conf.manageFilesourcePartitions,
+      tracksPartitionsInCatalog = conf.manageFilesourcePartitions,
       comment = Option(properties.get(COMMENT_TABLE_PROP)))
 
     try {

@@ -139,13 +139,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[SetDatabaseCommand]] logical plan.
-   */
-  override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
-    SetDatabaseCommand(ctx.db.getText)
-  }
-
-  /**
    * Create a [[ShowTablesCommand]] logical plan.
    * Example SQL :
    * {{{

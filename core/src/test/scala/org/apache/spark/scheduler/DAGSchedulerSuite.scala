@@ -19,13 +19,14 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -36,7 +37,7 @@ import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, ThreadUtils, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -786,6 +787,36 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
           HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
       }
     }
+  }
+
+  test("SPARK-28967 properties must be cloned before posting to listener bus for 0 partition") {
+    val properties = new Properties()
+    val func = (context: TaskContext, it: Iterator[(_)]) => 1
+    val resultHandler = (taskIndex: Int, result: Int) => {}
+    val assertionError = new AtomicReference[TestFailedException](
+      new TestFailedException("Listener didn't receive expected JobStart event", 0))
+    val listener = new SparkListener() {
+      override def onJobStart(event: SparkListenerJobStart): Unit = {
+        try {
+          assert(event.properties.equals(properties), "Expected same content of properties, " +
+            s"but got properties with different content. props in caller ${properties} /" +
+            s" props in event ${event.properties}")
+          assert(event.properties.ne(properties), "Expected instance with different identity, " +
+            "but got same instance.")
+          assertionError.set(null)
+        } catch {
+          case e: TestFailedException => assertionError.set(e)
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+
+    // 0 partition
+    val testRdd = new MyRDD(sc, 0, Nil)
+    val waiter = scheduler.submitJob(testRdd, func, Seq.empty, CallSite.empty,
+      resultHandler, properties)
+    sc.listenerBus.waitUntilEmpty(1000L)
+    assert(assertionError.get() === null)
   }
 
   // Helper function to validate state when creating tests for task failures

@@ -40,12 +40,18 @@ trait LookupCatalog extends Logging {
   def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
 
   /**
+   *
+   *
+   */
+  def currentCatalog: CatalogPlugin = catalogManager.currentCatalog
+
+  /**
    * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
    * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
    * in the fallback configuration, spark.sql.sources.write.useV1SourceList
    */
-  def sessionCatalog: Option[CatalogPlugin] = catalogManager.v2SessionCatalog
+  def sessionCatalog: CatalogPlugin = catalogManager.v2SessionCatalog
 
   /**
    * Extract catalog plugin and remaining identifier names.
@@ -81,7 +87,7 @@ trait LookupCatalog extends Logging {
     }
   }
 
-  type CatalogNamespace = (Option[CatalogPlugin], Seq[String])
+  type CatalogNamespace = (CatalogPlugin, Seq[String])
 
   /**
    * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
@@ -91,10 +97,10 @@ trait LookupCatalog extends Logging {
     def unapply(parts: Seq[String]): Some[CatalogNamespace] = parts match {
       case Seq(catalogName, tail @ _*) =>
         try {
-          Some((Some(catalogManager.catalog(catalogName)), tail))
+          Some((catalogManager.catalog(catalogName), tail))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((defaultCatalog, parts))
+            Some((currentCatalog, parts))
         }
     }
   }

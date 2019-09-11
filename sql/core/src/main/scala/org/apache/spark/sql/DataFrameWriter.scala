@@ -354,15 +354,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
-    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
+    val sessionCatalog = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         insertInto(catalog, ident)
 
-      case CatalogObjectIdentifier(None, ident)
-          if canUseV2 && sessionCatalogOpt.isDefined && ident.namespace().length <= 1 =>
-        insertInto(sessionCatalogOpt.get, ident)
+      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
+        insertInto(sessionCatalog, ident)
 
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
@@ -488,17 +487,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val session = df.sparkSession
     val canUseV2 = lookupV2Provider().isDefined
-    val sessionCatalogOpt = session.sessionState.analyzer.sessionCatalog
+    val sessionCatalog = session.sessionState.analyzer.sessionCatalog
 
     session.sessionState.sqlParser.parseMultipartIdentifier(tableName) match {
       case CatalogObjectIdentifier(Some(catalog), ident) =>
         saveAsTable(catalog.asTableCatalog, ident, modeForDSV2)
 
-      case CatalogObjectIdentifier(None, ident)
-          if canUseV2 && sessionCatalogOpt.isDefined && ident.namespace().length <= 1 =>
+      case CatalogObjectIdentifier(None, ident) if canUseV2 && ident.namespace().length <= 1 =>
         // We pass in the modeForDSV1, as using the V2 session catalog should maintain compatibility
         // for now.
-        saveAsTable(sessionCatalogOpt.get.asTableCatalog, ident, modeForDSV1)
+        saveAsTable(sessionCatalog.asTableCatalog, ident, modeForDSV1)
 
       case AsTableIdentifier(tableIdentifier) =>
         saveAsTable(tableIdentifier)

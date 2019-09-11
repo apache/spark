@@ -23,6 +23,7 @@ package org.apache.spark.sql.catalyst.plans.logical.sql
 case class UseCatalogStatement(catalogName: String) extends ParsedStatement
 
 /**
- * A USE NAMESPACE statement, as parsed from SQL.
+ * A USE statement, as parsed from SQL.
  */
-case class UseNamespaceStatement(namespace: Seq[String]) extends ParsedStatement
+case class UseStatement(catalogName: Option[String], namespace: Seq[String])
+    extends ParsedStatement

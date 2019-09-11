@@ -82,9 +82,8 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE db=errorCapturingIdentifier                                  #use
+    | USE namespace=multipartIdentifier (IN catalog=STRING)?           #use
     | USE CATALOG catalog=STRING                                       #useCatalog
-    | USE NAMESPACE namespace=multipartIdentifier                      #useNamespace
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
@@ -94,6 +93,8 @@ statement
     | DROP database (IF EXISTS)? db=errorCapturingIdentifier
         (RESTRICT | CASCADE)?                                          #dropDatabase
     | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
+    | SHOW NAMESPACES ((FROM | IN) multipartIdentifier)?
+        (LIKE? pattern=STRING)?                                        #showNamespaces
     | createTableHeader ('(' colTypeList ')')? tableProvider
         ((OPTIONS options=tablePropertyList) |
         (PARTITIONED BY partitioning=transformList) |
@@ -1009,7 +1010,7 @@ ansiNonReserved
     | MINUTES
     | MONTHS
     | MSCK
-    | NAMESPACE
+    | NAMESPACES
     | NO
     | NULLS
     | OF
@@ -1260,7 +1261,7 @@ nonReserved
     | MONTH
     | MONTHS
     | MSCK
-    | NAMESPACE
+    | NAMESPACES
     | NO
     | NOT
     | NULL
@@ -1522,7 +1523,7 @@ MINUTES: 'MINUTES';
 MONTH: 'MONTH';
 MONTHS: 'MONTHS';
 MSCK: 'MSCK';
-NAMESPACE: 'NAMESPACE';
+NAMESPACES: 'NAMESPACES';
 NATURAL: 'NATURAL';
 NO: 'NO';
 NOT: 'NOT' | '!';

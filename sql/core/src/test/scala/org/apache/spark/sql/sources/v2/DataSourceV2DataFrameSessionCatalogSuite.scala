@@ -21,15 +21,14 @@ import java.util
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, SaveMode}
+import org.apache.spark.sql.{DataFrame, QueryTest, SaveMode}
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog, TableChange}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalog.v2.utils.CatalogV2Util
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.connector.InMemoryTable
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
-import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG}
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
 import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -89,7 +88,7 @@ class DataSourceV2DataFrameSessionCatalogSuite
     val t1 = "prop_table"
     withTable(t1) {
       spark.range(20).write.format(v2Format).option("path", "abc").saveAsTable(t1)
-      val cat = spark.sessionState.catalogManager.v2SessionCatalog.get.asInstanceOf[TableCatalog]
+      val cat = spark.sessionState.catalogManager.v2SessionCatalog.asInstanceOf[TableCatalog]
       val tableInfo = cat.loadTable(Identifier.of(Array.empty, t1))
       assert(tableInfo.properties().get("location") === "abc")
       assert(tableInfo.properties().get("provider") === v2Format)
@@ -156,7 +155,7 @@ private[v2] trait SessionCatalogTest[T <: Table, Catalog <: TestV2SessionCatalog
   override def afterEach(): Unit = {
     super.afterEach()
     catalog("session").asInstanceOf[Catalog].clearTables()
-    spark.conf.set(V2_SESSION_CATALOG.key, classOf[V2SessionCatalog].getName)
+    spark.conf.unset(V2_SESSION_CATALOG.key)
   }
 
   protected def verifyTable(tableName: String, expected: DataFrame): Unit

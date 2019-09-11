@@ -105,7 +105,8 @@ class QueryExecution(
    * Given QueryExecution is not a public class, end users are discouraged to use this: please
    * use `Dataset.rdd` instead where conversion will be applied.
    */
-  lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
+  lazy val toRdd: RDD[InternalRow] = new SQLExecutionRDD(
+    executedPlan.execute(), sparkSession.sessionState.conf)
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal

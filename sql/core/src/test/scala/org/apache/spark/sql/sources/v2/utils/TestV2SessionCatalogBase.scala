@@ -22,9 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalog.v2.Identifier
+import org.apache.spark.sql.catalog.v2.{DelegatingCatalogExtension, Identifier}
 import org.apache.spark.sql.catalog.v2.expressions.Transform
-import org.apache.spark.sql.execution.datasources.v2.V2SessionCatalog
 import org.apache.spark.sql.sources.v2.Table
 import org.apache.spark.sql.types.StructType
 
@@ -33,7 +32,7 @@ import org.apache.spark.sql.types.StructType
  * for testing DDL as well as write operations (through df.write.saveAsTable, df.write.insertInto
  * and SQL).
  */
-private[v2] trait TestV2SessionCatalogBase[T <: Table] extends V2SessionCatalog {
+private[v2] abstract class TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension {
 
   protected val tables: util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()
 
