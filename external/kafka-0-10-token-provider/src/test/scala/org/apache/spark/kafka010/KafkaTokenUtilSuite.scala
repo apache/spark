@@ -197,8 +197,10 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
       matchingTargetServersRegex)
     addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
-    assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) ===
-      Some(KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)))
+    val clusterConfig = KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
+    assert(new String(clusterConfig.get._1.getIdentifier()) === tokenId1)
+    assert(new String(clusterConfig.get._1.getPassword()) === tokenPassword1)
+    assert(clusterConfig.get._2 === KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1))
   }
 
   test("findMatchingToken with multiple matching tokens should throw exception") {
