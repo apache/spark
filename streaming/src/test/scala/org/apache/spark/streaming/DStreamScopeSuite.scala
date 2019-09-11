@@ -32,9 +32,7 @@ import org.apache.spark.util.ManualClock
  */
 class DStreamScopeSuite
   extends SparkFunSuite
-  with LocalStreamingContext
-  with BeforeAndAfter
-  with BeforeAndAfterAll {
+  with LocalStreamingContext {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -45,6 +43,14 @@ class DStreamScopeSuite
     ssc = new StreamingContext(new SparkContext(conf), batchDuration)
 
     assertPropertiesNotSet()
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      assertPropertiesNotSet()
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("dstream without scope") {

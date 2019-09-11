@@ -31,7 +31,7 @@ import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext,
 import org.apache.spark.util.{ManualClock, Utils}
 
 class ExecutorAllocationManagerSuite extends TestSuiteBase
-  with BeforeAndAfterEach with MockitoSugar with PrivateMethodTester {
+  with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
