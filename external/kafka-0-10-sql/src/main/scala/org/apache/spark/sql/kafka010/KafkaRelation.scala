@@ -109,7 +109,7 @@ private[kafka010] class KafkaRelation(
     }
     val rdd = new KafkaSourceRDD(
       sqlContext.sparkContext, executorKafkaParams, offsetRanges,
-      pollTimeoutMs, failOnDataLoss).map(toInternalRow(_))
+      pollTimeoutMs, failOnDataLoss).map(toInternalRow)
     sqlContext.internalCreateDataFrame(rdd.setName("kafka"), schema).rdd
   }
 

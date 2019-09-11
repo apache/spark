@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.sql.Timestamp
+
 import scala.collection.JavaConverters._
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -37,13 +39,13 @@ private[kafka010] class KafkaRecordToRowConverter {
   val toInternalRowWithoutHeaders: Record => InternalRow =
     (cr: Record) => InternalRow(
       cr.key, cr.value, UTF8String.fromString(cr.topic), cr.partition, cr.offset,
-      DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)), cr.timestampType.id
+      DateTimeUtils.fromJavaTimestamp(new Timestamp(cr.timestamp)), cr.timestampType.id
     )
 
   val toInternalRowWithHeaders: Record => InternalRow =
     (cr: Record) => InternalRow(
       cr.key, cr.value, UTF8String.fromString(cr.topic), cr.partition, cr.offset,
-      DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(cr.timestamp)), cr.timestampType.id,
+      DateTimeUtils.fromJavaTimestamp(new Timestamp(cr.timestamp)), cr.timestampType.id,
       if (cr.headers.iterator().hasNext) {
         new GenericArrayData(cr.headers.iterator().asScala
           .map(header =>

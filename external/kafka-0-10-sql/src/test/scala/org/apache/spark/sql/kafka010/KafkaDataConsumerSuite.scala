@@ -92,7 +92,7 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
   test("new KafkaDataConsumer instance in case of Task retry") {
     try {
       val kafkaParams = getKafkaParams()
-      val key = new CacheKey(groupId, topicPartition)
+      val key = CacheKey(groupId, topicPartition)
 
       val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
       TaskContext.setTaskContext(context1)
@@ -168,9 +168,9 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
           // value
           assert(expected._1 === actual._1)
           // headers
-          expected._2 zip actual._2 foreach { case (l, r) =>
+          expected._2.zip(actual._2).foreach { case (l, r) =>
             // header key
-            assert(l._1 == r._1)
+            assert(l._1 === r._1)
             // header value
             assert(l._2 === r._2)
           }
