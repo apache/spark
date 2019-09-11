@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s.features
 
+import java.io.File
+
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, KeyToPathBuilder, PodBuilder, VolumeBuilder}
 
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, SparkPod}
@@ -33,13 +35,14 @@ private[spark] class KerberosConfExecutorFeatureStep(kubernetesConf: KubernetesE
 
   override def configurePod(original: SparkPod): SparkPod = {
     original.transform { case pod if krb5File.isDefined =>
+      val krb5Conf = new File(krb5File.get)
       val krb5Volume = new VolumeBuilder()
         .withName(KRB_FILE_VOLUME)
         .withNewConfigMap()
           .withName(s"${kubernetesConf.resourceNamePrefix}-krb5-file")
           .withItems(new KeyToPathBuilder()
-            .withKey(krb5File.get)
-            .withPath(krb5File.get)
+            .withKey(krb5Conf.getName)
+            .withPath(krb5Conf.getName)
             .build())
           .endConfigMap()
         .build()
