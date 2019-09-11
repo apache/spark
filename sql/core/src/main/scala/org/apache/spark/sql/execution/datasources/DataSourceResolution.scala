@@ -173,18 +173,29 @@ case class DataSourceResolution(
       ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
-      val CatalogNamespace(catalog, ns) = namespace
-      ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
+      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
+        case Some(catalog) =>
+          ShowNamespaces(catalog.asNamespaceCatalog, Some(ns), pattern)
+        case None =>
+          throw new AnalysisException(
+            s"No v2 catalog is available for ${namespace.quoted}")
+      }
 
     case ShowTablesStatement(None, pattern) =>
-      ShowTables(
-        currentCatalog.asTableCatalog,
-        catalogManager.currentNamespace,
-        pattern)
+      ShowTables(currentCatalog.asTableCatalog, catalogManager.currentNamespace, pattern)
 
     case ShowTablesStatement(Some(namespace), pattern) =>
-      val CatalogNamespace(catalog, ns) = namespace
-      ShowTables(catalog.asTableCatalog, ns, pattern)
+      val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
+      maybeCatalog match {
+        case Some(catalog) =>
+          ShowTables(catalog.asTableCatalog, ns, pattern)
+        case None =>
+          if (namespace.length != 1) {
+            throw new AnalysisException(s"The database name is not valid: ${namespace.quoted}")
+          }
+          ShowTablesCommand(Some(namespace.quoted), pattern)
+      }
 
     case UseCatalogStatement(catalogName) =>
       validateCatalog(catalogName)
@@ -196,7 +207,7 @@ case class DataSourceResolution(
           validateCatalog(c)
           UseCatalogAndNamespace(catalogManager, Some(c), Some(namespace))
         case None =>
-          val CatalogNamespace(catalog, ns) = namespace
+          val CurrentCatalogAndNamespace(catalog, ns) = namespace
           UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
       }
   }

@@ -714,16 +714,15 @@ class DataSourceV2SQLSuite
     runShowTablesSql("SHOW TABLES", Seq(Row("", "table")))
   }
 
-  test("ShowTables: namespace not specified and default v2 catalog not set - fallback to v1") {
+  test("ShowTables: namespace not specified and default v2 catalog not set") {
+    // For the following, the current catalog (v2 session catalog) is used.
     runShowTablesSql(
       "SHOW TABLES",
-      Seq(Row("", "source", true), Row("", "source2", true)),
-      expectV2Catalog = false)
+      Seq(Row("", "source"), Row("", "source2")))
 
     runShowTablesSql(
       "SHOW TABLES LIKE '*2'",
-      Seq(Row("", "source2", true)),
-      expectV2Catalog = false)
+      Seq(Row("", "source2")))
   }
 
   private def runShowTablesSql(
@@ -783,10 +782,12 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
     val exception = intercept[AnalysisException] {
+      // The following is resolved to current catalog, where it is a session
+      // catalog that does not support namespaces.
       sql("SHOW NAMESPACES")
     }
 
-    assert(exception.getMessage.contains("No default v2 catalog is set"))
+    assert(exception.getMessage.contains("does not support namespaces"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -816,6 +817,9 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: no v2 catalog is available") {
     val exception = intercept[AnalysisException] {
+      // Since there is no catalog named 'dummy', the following is resolved
+      // to use currentCatalog.listNamespaces('dummy') where currentCatalog
+      // is a session catalog which does not support namespaces.
       sql("SHOW NAMESPACES in dummy")
     }
 
@@ -833,23 +837,13 @@ class DataSourceV2SQLSuite
   }
 
   test("UseCatalog: use catalog with v2 catalog") {
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
+    sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
 
-    // Look up only with catalog name, which should list root namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
-
-    // Look up sub-namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
-
-    // Try to look up namespaces that do not exist.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
+    sql("USE CATALOG hello")
   }
 
   test("tableCreation: partition column case insensitive resolution") {

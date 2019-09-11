@@ -82,8 +82,8 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE namespace=multipartIdentifier (IN catalog=STRING)?           #use
     | USE CATALOG catalog=STRING                                       #useCatalog
+    | USE namespace=multipartIdentifier (IN catalog=STRING)?           #use
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |
@@ -925,7 +925,6 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
-    | CATALOG
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1146,7 +1145,6 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
-    | CATALOG
     | CHANGE
     | CHECK
     | CLEAR

@@ -77,7 +77,7 @@ class CatalogManager(conf: SQLConf, defaultSessionCatalog: TableCatalog) extends
 
   private def getDefaultNamespace(c: CatalogPlugin) = c match {
     case c: SupportsNamespaces => c.defaultNamespace()
-    case _ => Array.empty[String]
+    case _ => Array("default") // The builtin catalog use "default" as the default database.
   }
 
   private var _currentNamespace: Option[Array[String]] = None
@@ -93,15 +93,9 @@ class CatalogManager(conf: SQLConf, defaultSessionCatalog: TableCatalog) extends
   private var _currentCatalogName: Option[String] = None
 
   def currentCatalog: CatalogPlugin = synchronized {
-    _currentCatalogName.map { catalogName =>
-      try {
-        catalog(catalogName)
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Cannot load v2 catalog: $catalogName", e)
-          defaultCatalog.getOrElse(v2SessionCatalog)
-      }
-    }.orElse(defaultCatalog).getOrElse(v2SessionCatalog)
+    _currentCatalogName.map(catalogName => catalog(catalogName))
+      .orElse(defaultCatalog)
+      .getOrElse(v2SessionCatalog)
   }
 
   def setCurrentCatalog(catalogName: String): Unit = synchronized {
