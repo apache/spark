@@ -42,7 +42,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -564,6 +564,10 @@ object ALSModel extends MLReadable[ALSModel] {
  * r is greater than 0 and 0 if r is less than or equal to 0. The ratings then act as 'confidence'
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
+ *
+ * Note: the input rating dataset to the ALS implementation must be determinate. If the training
+ * data is prepared using some indeterminate operations, like `randomSplit` or `sample`, please
+ * checkpoint the training data before fitting.
  */
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams
@@ -919,6 +923,14 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     require(!ratings.isEmpty(), s"No ratings available from $ratings")
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
+
+    // Indeterminate rating RDD causes inconsistent in/out blocks in case of rerun.
+    // It can cause runtime error when matching in/out user/item blocks.
+    if (ratings.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
+      throw new IllegalArgumentException("The output of rating RDD can not be indeterminate. " +
+        "If your training data has indeterminate RDD computations, like `randomSplit` or `sample`" +
+        ", please checkpoint the training data before running ALS.")
+    }
 
     val sc = ratings.sparkContext
 

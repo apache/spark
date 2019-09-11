@@ -36,10 +36,10 @@ import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Encoder, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
@@ -948,6 +948,30 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
     assert(shuffledUserFactors.size == 0)
     assert(shuffledItemFactors.size == 0)
+  }
+
+  test("The input data to ALS must be determinate") {
+    // Explicitly disable this config, so the input dataset is indeterminate.
+    withSQLConf("spark.sql.execution.sortBeforeRepartition" -> "false") {
+      val spark = this.spark
+      import spark.implicits._
+
+      val (ratings, _) = genExplicitTestData(numUsers = 2, numItems = 2, rank = 1)
+      val data = ratings.toDF
+      implicit val rowEncoder = RowEncoder(data.schema)
+
+      val input = data.repartition(10).map(x => x).repartition(20).map(x => x)
+      assert(input.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE)
+
+      val err = intercept[IllegalArgumentException] {
+        new ALS()
+          .setMaxIter(2)
+          .setImplicitPrefs(true)
+          .setCheckpointInterval(-1)
+          .fit(input)
+      }
+      assert(err.getMessage.contains("The output of rating RDD can not be indeterminate."))
+    }
   }
 
   private def checkRecommendations(

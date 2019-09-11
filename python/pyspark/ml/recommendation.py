@@ -67,6 +67,10 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
+    .. note:: the input rating dataframe to the ALS implementation must be determinate. If the
+              training data is prepared using some indeterminate operations, like `randomSplit`
+              or `sample`, please checkpoint the training data before fitting.
+
     >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
