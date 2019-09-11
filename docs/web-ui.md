@@ -370,7 +370,7 @@ scheduling delay and processing time for each micro-batch in the data stream, wh
 for troubleshooting the streaming application.
 
 ## JDBC/ODBC Server Tab
-We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and SQL operations submitted.
+We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and submitted SQL operations.
 
 The first section of the page displays general information about the JDBC/ODBC server: start time and uptime.
 
@@ -379,10 +379,10 @@ The first section of the page displays general information about the JDBC/ODBC s
 </p>
 
 The second section contains information about active and finished sessions.
-* User and IP of the connection.
-* Session id link to access to session info.
-* Start time, finish time and duration of the session.
-* Number of operations submitted in this session.
+* **User** and **IP** of the connection.
+* **Session id** link to access to session info.
+* **Start time**, **finish time** and **duration** of the session.
+* **Total execute** is the number of operations submitted in this session.
 
 <p style="text-align: center;">
   <img src="img/JDBCServer2.png" title="JDBC/ODBC sessions" alt="JDBC/ODBC sessions">
