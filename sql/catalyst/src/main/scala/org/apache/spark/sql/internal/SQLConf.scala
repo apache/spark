@@ -139,7 +139,7 @@ object SQLConf {
       }
     } else {
       val isSchedulerEventLoopThread = SparkContext.getActive
-        .flatMap(sc => Option(sc.dagScheduler))
+        .flatMap { sc => Option(sc.dagScheduler) }
         .map(_.eventProcessLoop.eventThread)
         .exists(_.getId == Thread.currentThread().getId)
       if (isSchedulerEventLoopThread) {
