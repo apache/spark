@@ -1026,7 +1026,7 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val SHUFFLE_UNDAFE_FAST_MERGE_ENABLE =
+  private[spark] val SHUFFLE_UNSAFE_FAST_MERGE_ENABLE =
     ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
       .doc("Whether to perform a fast spill merge.")
       .booleanConf

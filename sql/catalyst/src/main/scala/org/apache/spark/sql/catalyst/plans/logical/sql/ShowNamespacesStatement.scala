@@ -15,13 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.plans.logical.sql
 
 /**
- * Support for running Spark SQL queries using functionality from Apache Hive (does not require an
- * existing Hive installation).  Supported Hive features include:
- *  - Using HiveQL to express queries.
- *  - Reading metadata from the Hive Metastore using HiveSerDes.
- *  - Hive UDFs, UDAs, UDTs
+ * A SHOW NAMESPACES statement, as parsed from SQL.
  */
-package object hive
+case class ShowNamespacesStatement(namespace: Option[Seq[String]], pattern: Option[String])
+  extends ParsedStatement

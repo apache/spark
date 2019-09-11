@@ -2521,25 +2521,25 @@ object functions {
   }
 
   /**
-   * Overlay the specified portion of `src` with `replaceString`,
-   *  starting from byte position `pos` of `inputString` and proceeding for `len` bytes.
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src` and proceeding for `len` bytes.
    *
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replaceString: String, pos: Int, len: Int): Column = withExpr {
-    Overlay(src.expr, lit(replaceString).expr, lit(pos).expr, lit(len).expr)
+  def overlay(src: Column, replace: Column, pos: Column, len: Column): Column = withExpr {
+    Overlay(src.expr, replace.expr, pos.expr, len.expr)
   }
 
   /**
-   * Overlay the specified portion of `src` with `replaceString`,
-   *  starting from byte position `pos` of `inputString`.
+   * Overlay the specified portion of `src` with `replace`,
+   *  starting from byte position `pos` of `src`.
    *
    * @group string_funcs
    * @since 3.0.0
    */
-  def overlay(src: Column, replaceString: String, pos: Int): Column = withExpr {
-    new Overlay(src.expr, lit(replaceString).expr, lit(pos).expr)
+  def overlay(src: Column, replace: Column, pos: Column): Column = withExpr {
+    new Overlay(src.expr, replace.expr, pos.expr)
   }
 
   /**

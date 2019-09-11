@@ -15,13 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.shuffle.api;
+
+import java.io.File;
+import java.io.IOException;
+
+import org.apache.spark.annotation.Private;
 
 /**
- * Support for running Spark SQL queries using functionality from Apache Hive (does not require an
- * existing Hive installation).  Supported Hive features include:
- *  - Using HiveQL to express queries.
- *  - Reading metadata from the Hive Metastore using HiveSerDes.
- *  - Hive UDFs, UDAs, UDTs
+ * Optional extension for partition writing that is optimized for transferring a single
+ * file to the backing store.
  */
-package object hive
+@Private
+public interface SingleSpillShuffleMapOutputWriter {
+
+  /**
+   * Transfer a file that contains the bytes of all the partitions written by this map task.
+   */
+  void transferMapSpillFile(File mapOutputFile, long[] partitionLengths) throws IOException;
+}
