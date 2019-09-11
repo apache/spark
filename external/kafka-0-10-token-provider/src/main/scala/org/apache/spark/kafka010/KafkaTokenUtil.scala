@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.token.Token
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.{AdminClient, CreateDelegationTokenOptions}
@@ -253,14 +253,15 @@ private[spark] object KafkaTokenUtil extends Logging {
 
   def findMatchingToken(
       sparkConf: SparkConf,
-      bootStrapServers: String): Option[KafkaTokenClusterConf] = {
+      bootStrapServers: String): Option[(Token[_ <: TokenIdentifier], KafkaTokenClusterConf)] = {
     val tokens = UserGroupInformation.getCurrentUser().getCredentials.getAllTokens.asScala
     val clusterConfigs = tokens
       .filter(_.getService().toString().startsWith(TOKEN_SERVICE_PREFIX))
       .map { token =>
-        KafkaTokenSparkConf.getClusterConfig(sparkConf, getClusterIdentifier(token.getService()))
+        (token, KafkaTokenSparkConf.getClusterConfig(
+          sparkConf, getClusterIdentifier(token.getService())))
       }
-      .filter { clusterConfig =>
+      .filter { case (_, clusterConfig) =>
         val pattern = Pattern.compile(clusterConfig.targetServersRegex)
         Utils.stringToSeq(bootStrapServers).exists(pattern.matcher(_).matches())
       }

@@ -185,8 +185,8 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf.set(s"spark.kafka.clusters.$identifier2.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(tokenService1)
-    addTokenToUGI(new Text("intentionally_garbage"))
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    addTokenToUGI(new Text("intentionally_garbage"), tokenId1, tokenPassword1)
 
     assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
   }
@@ -195,7 +195,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
     assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) ===
       Some(KafkaTokenSparkConf.getClusterConfig(sparkConf, identifier1)))
@@ -208,8 +208,8 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     sparkConf.set(s"spark.kafka.clusters.$identifier2.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier2.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
-    addTokenToUGI(tokenService1)
-    addTokenToUGI(tokenService2)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
+    addTokenToUGI(tokenService2, tokenId1, tokenPassword1)
 
     val thrown = intercept[IllegalArgumentException] {
       KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers)
@@ -218,14 +218,14 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
   }
 
   test("getTokenJaasParams with token should return scram module") {
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
     val clusterConf = createClusterConf(identifier1, SASL_SSL.name)
 
     val jaasParams = KafkaTokenUtil.getTokenJaasParams(clusterConf)
 
     assert(jaasParams.contains("ScramLoginModule required"))
     assert(jaasParams.contains("tokenauth=true"))
-    assert(jaasParams.contains(tokenId))
-    assert(jaasParams.contains(tokenPassword))
+    assert(jaasParams.contains(tokenId1))
+    assert(jaasParams.contains(tokenPassword1))
   }
 }

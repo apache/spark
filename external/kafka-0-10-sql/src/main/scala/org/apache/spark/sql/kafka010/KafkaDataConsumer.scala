@@ -23,12 +23,14 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.SaslConfigs
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.kafka010.KafkaConfigUpdater
+import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.{AvailableOffsetRange, UNKNOWN_OFFSET}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.util.{ShutdownHookManager, UninterruptibleThread}
@@ -46,6 +48,9 @@ private[kafka010] class InternalKafkaConsumer(
 
   val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
+  // Kafka consumer is not able to give back the params instantiated with so we need to store it.
+  // It must be updated all the time when new consumer created.
+  private[kafka010] var kafkaParamsWithSecurity: ju.Map[String, Object] = _
   private val consumer = createConsumer()
 
   /**
@@ -106,10 +111,10 @@ private[kafka010] class InternalKafkaConsumer(
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer(): KafkaConsumer[Array[Byte], Array[Byte]] = {
-    val updatedKafkaParams = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
+    kafkaParamsWithSecurity = KafkaConfigUpdater("executor", kafkaParams.asScala.toMap)
       .setAuthenticationConfigIfNeeded()
       .build()
-    val c = new KafkaConsumer[Array[Byte], Array[Byte]](updatedKafkaParams)
+    val c = new KafkaConsumer[Array[Byte], Array[Byte]](kafkaParamsWithSecurity)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
@@ -516,13 +521,41 @@ private[kafka010] class KafkaDataConsumer(
     fetchedData.withNewPoll(records.listIterator, offsetAfterPoll)
   }
 
-  private def getOrRetrieveConsumer(): InternalKafkaConsumer = _consumer match {
-    case None =>
-      _consumer = Option(consumerPool.borrowObject(cacheKey, kafkaParams))
-      require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
-      _consumer.get
+  private[kafka010] def getOrRetrieveConsumer(): InternalKafkaConsumer = {
+    if (!_consumer.isDefined) {
+      retrieveConsumer()
+    }
+    ensureConsumerHasLatestToken()
+    _consumer.get
+  }
 
-    case Some(consumer) => consumer
+  private def retrieveConsumer(): Unit = {
+    _consumer = Option(consumerPool.borrowObject(cacheKey, kafkaParams))
+    require(_consumer.isDefined, "borrowing consumer from pool must always succeed.")
+  }
+
+  private def ensureConsumerHasLatestToken(): Unit = {
+    require(_consumer.isDefined, "Consumer must be defined")
+    val params = _consumer.get.kafkaParamsWithSecurity
+    if (params.containsKey(SaslConfigs.SASL_JAAS_CONFIG)) {
+      logDebug("Delegation token used by cached consumer, checking if uses the latest token.")
+
+      val jaasParams = params.get(SaslConfigs.SASL_JAAS_CONFIG).asInstanceOf[String]
+      val clusterConfig = KafkaTokenUtil.findMatchingToken(SparkEnv.get.conf,
+        params.get(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG).asInstanceOf[String])
+      require(clusterConfig.isDefined, "Delegation token must exist for this consumer.")
+      val username = new String(clusterConfig.get._1.getIdentifier)
+      // Identifier is changing only when new token obtained (in Spark we're not renewing tokens).
+      // As a conclusion if the actual token identifier in UGI is not found in the JAAS
+      // configuration then it uses the old token so it can be invalidated.
+      if (!jaasParams.contains(username)) {
+        logDebug("Cached consumer uses and old delegation token, invalidating.")
+        releaseConsumer()
+        consumerPool.invalidateKey(cacheKey)
+        fetchedDataPool.invalidate(cacheKey)
+        retrieveConsumer()
+      }
+    }
   }
 
   private def getOrRetrieveFetchedData(offset: Long): FetchedData = _fetchedData match {

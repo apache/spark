@@ -104,7 +104,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
         s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers" -> bootStrapServers
       )
     )
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
     val updatedParams = KafkaConfigUpdater(testModule, params)
       .setAuthenticationConfigIfNeeded()
@@ -128,7 +128,7 @@ class KafkaConfigUpdaterSuite extends SparkFunSuite with KafkaDelegationTokenTes
         s"spark.kafka.clusters.$identifier1.sasl.token.mechanism" -> "intentionally_invalid"
       )
     )
-    addTokenToUGI(tokenService1)
+    addTokenToUGI(tokenService1, tokenId1, tokenPassword1)
 
     val e = intercept[IllegalArgumentException] {
       KafkaConfigUpdater(testModule, params)
