@@ -48,35 +48,42 @@ object ExtractBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def run(cardinality: Long, field: String): Unit = {
-    codegenBenchmark(s"$field of timestamp", cardinality) {
-      doBenchmark(cardinality, s"EXTRACT($field FROM (cast(id as timestamp)))")
+  private def castExpr(from: String): String = from match {
+    case "timestamp" => s"cast(id as $from)"
+    // Use modulo division to prevent overflow in internal conversion to microseconds
+    case "date" => s"cast((id % 10000) as $from)"
+    case other => throw new IllegalArgumentException(
+      s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
+  }
+
+  private def run(func: String, cardinality: Long, field: String, from: String): Unit = {
+    val expr = func match {
+      case "extract" => s"EXTRACT($field FROM ${castExpr(from)})"
+      case "date_part" => s"DATE_PART('$field', ${castExpr(from)})"
+      case other => throw new IllegalArgumentException(
+        s"Unsupported function '$other'. Valid functions are 'extract' and 'date_part'.")
+    }
+    codegenBenchmark(s"$field of $from", cardinality) {
+      doBenchmark(cardinality, expr)
     }
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 10000000L
-    runBenchmark("Extract") {
-      run(N, "cast to timestamp", "cast(id as timestamp)")
-      run(N, "MILLENNIUM")
-      run(N, "CENTURY")
-      run(N, "DECADE")
-      run(N, "YEAR")
-      run(N, "ISOYEAR")
-      run(N, "QUARTER")
-      run(N, "MONTH")
-      run(N, "WEEK")
-      run(N, "DAY")
-      run(N, "DAYOFWEEK")
-      run(N, "DOW")
-      run(N, "ISODOW")
-      run(N, "DOY")
-      run(N, "HOUR")
-      run(N, "MINUTE")
-      run(N, "SECOND")
-      run(N, "MILLISECONDS")
-      run(N, "MICROSECONDS")
-      run(N, "EPOCH")
+    val fields = Seq(
+      "MILLENNIUM", "CENTURY", "DECADE", "YEAR",
+      "ISOYEAR", "QUARTER", "MONTH", "WEEK",
+      "DAY", "DAYOFWEEK", "DOW", "ISODOW",
+      "DOY", "HOUR", "MINUTE", "SECOND",
+      "MILLISECONDS", "MICROSECONDS", "EPOCH")
+
+    Seq("extract", "date_part").foreach { func =>
+      Seq("timestamp", "date").foreach { dateType =>
+        runBenchmark(s"Invoke $func for $dateType") {
+          run(N, s"cast to $dateType", castExpr(dateType))
+          fields.foreach(run(func, N, _, dateType))
+        }
+      }
     }
   }
 }
