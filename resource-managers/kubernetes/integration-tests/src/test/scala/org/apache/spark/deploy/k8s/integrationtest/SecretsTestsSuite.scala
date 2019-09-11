@@ -64,9 +64,9 @@ private[spark] trait SecretsTestsSuite { k8sSuite: KubernetesSuite =>
         s"spark.kubernetes.driver.secretKeyRef.${ENV_SECRET_KEY_2.toUpperCase}",
         s"$ENV_SECRET_NAME:${ENV_SECRET_KEY_2}")
       .set(s"spark.kubernetes.executor.secrets.$ENV_SECRET_NAME", SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.secretKeyRef.USERNAME",
+      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_1.toUpperCase}",
         s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_1")
-      .set(s"spark.kubernetes.executor.secretKeyRef.PASSWORD",
+      .set(s"spark.kubernetes.executor.secretKeyRef.${ENV_SECRET_KEY_2.toUpperCase}",
         s"${ENV_SECRET_NAME}:$ENV_SECRET_KEY_2")
     try {
       runSparkPiAndVerifyCompletion(
