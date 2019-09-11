@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.{Seconds => ScalaTestSeconds, Span}
@@ -211,7 +211,7 @@ class BatchCounter(ssc: StreamingContext) {
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
-trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
+trait TestSuiteBase extends SparkFunSuite with BeforeAndAfterEach with Logging {
 
   // Name of the framework for Spark context
   def framework: String = this.getClass.getSimpleName
@@ -250,7 +250,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
   val eventuallyTimeout: PatienceConfiguration.Timeout = timeout(Span(10, ScalaTestSeconds))
 
   // Default before function for any streaming test suite. Override this
-  // if you want to add your stuff to "before" (i.e., don't call before { } )
+  // if you want to add your stuff to "beforeEach"
   def beforeFunction() {
     if (useManualClock) {
       logInfo("Using manual clock")
@@ -262,13 +262,24 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   // Default after function for any streaming test suite. Override this
-  // if you want to add your stuff to "after" (i.e., don't call after { } )
+  // if you want to add your stuff to "afterEach"
   def afterFunction() {
     System.clearProperty("spark.streaming.clock")
   }
 
-  before(beforeFunction)
-  after(afterFunction)
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    beforeFunction()
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      afterFunction()
+    } finally {
+      super.afterEach()
+    }
+
+  }
 
   /**
    * Run a block of code with the given StreamingContext and automatically
@@ -278,12 +289,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     try {
       block(ssc)
     } finally {
-      try {
-        ssc.stop(stopSparkContext = true)
-      } catch {
-        case e: Exception =>
-          logError("Error stopping StreamingContext", e)
-      }
+      LocalStreamingContext.stop(ssc, stopSparkContext = true)
     }
   }
 
