@@ -191,7 +191,7 @@ class KafkaTokenUtilSuite extends SparkFunSuite with KafkaDelegationTokenTest {
     assert(KafkaTokenUtil.findMatchingToken(sparkConf, bootStrapServers) === None)
   }
 
-  test("findMatchingToken with one matching token should return cluster configuration") {
+  test("findMatchingToken with one matching token should return token and cluster configuration") {
     sparkConf.set(s"spark.kafka.clusters.$identifier1.auth.bootstrap.servers", bootStrapServers)
     sparkConf.set(s"spark.kafka.clusters.$identifier1.target.bootstrap.servers.regex",
       matchingTargetServersRegex)
