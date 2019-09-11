@@ -356,7 +356,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeL
     logInfo("==================================\n\n\n")
     ssc = new StreamingContext(sc, Milliseconds(100))
     var runningCount = 0
-    SlowTestReceiver.receivedAllRecords = false
     // Create test receiver that sleeps in onStop()
     val totalNumRecords = 15
     val recordsPerSecond = 1
@@ -962,6 +961,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
   extends Receiver[Int](StorageLevel.MEMORY_ONLY) with Logging {
 
   var receivingThreadOption: Option[Thread] = None
+  @volatile var receivedAllRecords = false
 
   def onStart() {
     val thread = new Thread() {
@@ -971,7 +971,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
           Thread.sleep(1000 / recordsPerSecond)
           store(i)
         }
-        SlowTestReceiver.receivedAllRecords = true
+        receivedAllRecords = true
         logInfo(s"Received all $totalRecords records")
       }
     }
@@ -982,7 +982,7 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 
   def onStop() {
     // Simulate slow receiver by waiting for all records to be produced
-    while (!SlowTestReceiver.receivedAllRecords) {
+    while (!receivedAllRecords) {
       Thread.sleep(100)
     }
     // no clean to be done, the receiving thread should stop on it own
@@ -991,7 +991,6 @@ class SlowTestReceiver(totalRecords: Int, recordsPerSecond: Int)
 
 object SlowTestReceiver {
   var initialized = false
-  var receivedAllRecords = false
 }
 
 /** Streaming application for testing DStream and RDD creation sites */
