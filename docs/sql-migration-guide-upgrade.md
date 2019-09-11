@@ -7,6 +7,12 @@ displayTitle: Spark SQL Upgrading Guide
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 2.4 to 2.4.5
+
+ - Starting from 2.4.5, SQL configurations are effective also when a Dataset is converted to an RDD and its
+   plan is executed due to action on the derived RDD. The previous buggy behavior can be restored setting
+   `spark.sql.legacy.rdd.applyConf` to `false`.
+
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
   - The value of `spark.executor.heartbeatInterval`, when specified without units like "30" rather than "30s", was

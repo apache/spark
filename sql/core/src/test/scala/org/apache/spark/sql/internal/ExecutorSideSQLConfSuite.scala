@@ -105,17 +105,29 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
   }
 
   test("SPARK-28939: propagate SQLConf also in conversions to RDD") {
-    val confs = Seq("spark.sql.a" -> "x", "spark.sql.b" -> "y")
-    val physicalPlan = SQLConfAssertPlan(confs)
-    val dummyQueryExecution = FakeQueryExecution(spark, physicalPlan)
-    withSQLConf(confs: _*) {
-      // Force RDD evaluation to trigger asserts
-      dummyQueryExecution.toRdd.collect()
+    withSQLConf(SQLConf.USE_CONF_ON_RDD_OPERATION.key -> "true") {
+      val confs = Seq("spark.sql.a" -> "x", "spark.sql.b" -> "y")
+      val physicalPlan = SQLConfAssertPlan(confs)
+      val dummyQueryExecution = FakeQueryExecution(spark, physicalPlan)
+      withSQLConf(confs: _*) {
+        // Force RDD evaluation to trigger asserts
+        dummyQueryExecution.toRdd.collect()
+      }
+      val dummyQueryExecution1 = FakeQueryExecution(spark, physicalPlan)
+      // Without setting the configs assertions fail
+      val e = intercept[SparkException](dummyQueryExecution1.toRdd.collect())
+      assert(e.getCause.isInstanceOf[NoSuchElementException])
     }
-    val dummyQueryExecution1 = FakeQueryExecution(spark, physicalPlan)
-    // Without setting the configs assertions fail
-    val e = intercept[SparkException](dummyQueryExecution1.toRdd.collect())
-    assert(e.getCause.isInstanceOf[NoSuchElementException])
+    withSQLConf(SQLConf.USE_CONF_ON_RDD_OPERATION.key -> "false") {
+      val confs = Seq("spark.sql.a" -> "x", "spark.sql.b" -> "y")
+      val physicalPlan = SQLConfAssertPlan(confs)
+      val dummyQueryExecution = FakeQueryExecution(spark, physicalPlan)
+      withSQLConf(confs: _*) {
+        // Force RDD evaluation to trigger asserts
+        val e = intercept[SparkException](dummyQueryExecution.toRdd.collect())
+        assert(e.getCause.isInstanceOf[NoSuchElementException])
+      }
+    }
   }
 }
 
