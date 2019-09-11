@@ -1042,11 +1042,11 @@ class HiveDDLSuite
 
       assert(sql("DESC tbl").collect().containsSlice(
         Seq(
-          Row("a", "int", "NULL"),
-          Row("b", "int", "NULL"),
+          Row("a", "int", null),
+          Row("b", "int", null),
           Row("# Partition Information", "", ""),
           Row("# col_name", "data_type", "comment"),
-          Row("b", "int", "NULL")
+          Row("b", "int", null)
         )
       ))
     }
@@ -1617,7 +1617,7 @@ class HiveDDLSuite
 
           val desc = sql("DESC FORMATTED t1").collect().toSeq
 
-          assert(desc.contains(Row("id", "bigint", "NULL")))
+          assert(desc.contains(Row("id", "bigint", null)))
         }
       }
     }

@@ -510,8 +510,7 @@ abstract class DescribeCommandBase extends RunnableCommand {
       append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
     }
     schema.foreach { column =>
-      append(buffer, column.name, column.dataType.simpleString,
-        column.getComment().getOrElse("NULL"))
+      append(buffer, column.name, column.dataType.simpleString, column.getComment().orNull)
     }
   }
 
