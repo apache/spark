@@ -267,6 +267,10 @@ private[hive] class SparkExecuteStatementOperation(
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
+        // When cancel() and close() is called very quickly after the query is started,
+        // then they may both call cleanup() before Spark Jobs are started. But before background
+        // task interrupted, it may have start some spark job, so we need to cancel again to
+        // make sure job was cancelled when background thread was interrupted
         if (statementId != null) {
           sqlContext.sparkContext.cancelJobGroup(statementId)
         }
