@@ -122,7 +122,7 @@ private[spark] class MetricsSystem private (
    * If either ID is not available, this defaults to just using <source name>.
    *
    * @param source Metric source to be named by this method.
-   * @return An unique metric name for each combination of
+   * @return A unique metric name for each combination of
    *         application, executor/driver and metric source.
    */
   private[spark] def buildRegistryName(source: Source): String = {

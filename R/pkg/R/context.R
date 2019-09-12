@@ -297,7 +297,7 @@ broadcastRDD <- function(sc, object) {
 #' Set the checkpoint directory
 #'
 #' Set the directory under which RDDs are going to be checkpointed. The
-#' directory must be a HDFS path if running on a cluster.
+#' directory must be an HDFS path if running on a cluster.
 #'
 #' @param sc Spark Context to use
 #' @param dirName Directory path
@@ -442,7 +442,7 @@ setLogLevel <- function(level) {
 #' Set checkpoint directory
 #'
 #' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
-#' a HDFS path if running on a cluster.
+#' an HDFS path if running on a cluster.
 #'
 #' @rdname setCheckpointDir
 #' @param directory Directory path to checkpoint to
