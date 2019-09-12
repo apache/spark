@@ -743,7 +743,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoTable(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
+      case i @ InsertIntoStatement(u @ UnresolvedRelation(AsTableIdentifier(ident)), _, child, _, _)
           if child.resolved =>
         EliminateSubqueryAliases(lookupTableFromCatalog(ident, u)) match {
           case v: View =>
@@ -794,7 +794,7 @@ class Analyzer(
           case scala.Right(Some(v2Table: Table)) =>
             resolveV2Insert(i, v2Table)
           case _ =>
-            InsertIntoTable(i.table, i.partitionSpec, i.query, i.overwrite, i.ifPartitionNotExists)
+            i
         }
     }
 

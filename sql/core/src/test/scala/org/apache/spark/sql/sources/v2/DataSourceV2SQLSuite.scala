@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalog.v2.{CatalogPlugin, Identifier, TableCatalog}
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
-import org.apache.spark.sql.connector.{InMemoryTable, InMemoryTableCatalog, StagingInMemoryTableCatalog}
+import org.apache.spark.sql.connector.{BasicInMemoryTableCatalog, InMemoryTable, InMemoryTableCatalog, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG
 import org.apache.spark.sql.sources.v2.internal.V1Table
@@ -744,6 +744,92 @@ class DataSourceV2SQLSuite
     val df = spark.sql(sqlText)
     assert(df.schema === schema)
     assert(expected === df.collect())
+  }
+
+  test("ShowNamespaces: show root namespaces with default v2 catalog") {
+    spark.conf.set("spark.sql.default.catalog", "testcat")
+
+    testShowNamespaces("SHOW NAMESPACES", Seq())
+
+    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
+
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
+    testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
+  }
+
+  test("ShowNamespaces: show namespaces with v2 catalog") {
+    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
+    spark.sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
+
+    // Look up only with catalog name, which should list root namespaces.
+    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
+
+    // Look up sub-namespaces.
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
+
+    // Try to look up namespaces that do not exist.
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
+    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
+  }
+
+  test("ShowNamespaces: default v2 catalog is not set") {
+    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
+
+    val exception = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES")
+    }
+
+    assert(exception.getMessage.contains("No default v2 catalog is set"))
+  }
+
+  test("ShowNamespaces: default v2 catalog doesn't support namespace") {
+    spark.conf.set(
+      "spark.sql.catalog.testcat_no_namspace",
+      classOf[BasicInMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.default.catalog", "testcat_no_namspace")
+
+    val exception = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES")
+    }
+
+    assert(exception.getMessage.contains("does not support namespaces"))
+  }
+
+  test("ShowNamespaces: v2 catalog doesn't support namespace") {
+    spark.conf.set(
+      "spark.sql.catalog.testcat_no_namspace",
+      classOf[BasicInMemoryTableCatalog].getName)
+
+    val exception = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES in testcat_no_namspace")
+    }
+
+    assert(exception.getMessage.contains("does not support namespaces"))
+  }
+
+  test("ShowNamespaces: no v2 catalog is available") {
+    val exception = intercept[AnalysisException] {
+      sql("SHOW NAMESPACES in dummy")
+    }
+
+    assert(exception.getMessage.contains("No v2 catalog is available"))
+  }
+
+  private def testShowNamespaces(
+      sqlText: String,
+      expected: Seq[String]): Unit = {
+    val schema = new StructType().add("namespace", StringType, nullable = false)
+
+    val df = spark.sql(sqlText)
+    assert(df.schema === schema)
+    assert(df.collect().map(_.getAs[String](0)).sorted === expected.sorted)
   }
 
   test("tableCreation: partition column case insensitive resolution") {
