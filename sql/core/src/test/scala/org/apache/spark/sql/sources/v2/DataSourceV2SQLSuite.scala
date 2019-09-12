@@ -725,6 +725,21 @@ class DataSourceV2SQLSuite
       Seq(Row("", "source2")))
   }
 
+  test("ShowTables: change catalog and namespace with USE statements") {
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+
+    // Initially, the current catalog (v2 session catalog) is used.
+    runShowTablesSql("SHOW TABLES", Seq(Row("", "source"), Row("", "source2")))
+
+    // Update the current catalog only, but current namespace doesn't match ns1.ns2.table.
+    sql("USE CATALOG testcat")
+    runShowTablesSql("SHOW TABLES", Seq())
+
+    // Now the current namespace is also changed to match ns1.ns2.table.
+    sql("USE ns1.ns2 IN testcat")
+    runShowTablesSql("SHOW TABLES", Seq(Row("ns1.ns2", "table")))
+  }
+
   private def runShowTablesSql(
       sqlText: String,
       expected: Seq[Row],
@@ -826,6 +841,21 @@ class DataSourceV2SQLSuite
     assert(exception.getMessage.contains("No v2 catalog is available"))
   }
 
+  test("ShowNamespaces: change catalog and namespace with USE statements") {
+    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
+
+    // Initially catalog is v2 session catalog that does not support namespaces.
+    intercept[AnalysisException] { sql("SHOW NAMESPACES") }
+
+    // Update the current catalog.
+    sql("USE CATALOG testcat")
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
+
+    // Update the current namespace.
+    sql("USE ns1")
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1.ns2"))
+  }
+
   private def testShowNamespaces(
       sqlText: String,
       expected: Seq[String]): Unit = {
@@ -837,13 +867,47 @@ class DataSourceV2SQLSuite
   }
 
   test("UseCatalog: use catalog with v2 catalog") {
-    sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
-    sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-    sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
+    val catalogManager = spark.sessionState.catalogManager
+    assert(catalogManager.currentCatalog.name() == "session")
 
-    sql("USE CATALOG hello")
+    sql("USE CATALOG testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+  }
+
+  test("UseCatalog: v2 catalog does not exist") {
+    val exception = intercept[AnalysisException] {
+      sql("USE CATALOG unknown")
+    }
+    assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
+  }
+
+  test("Use: basic tests with USE statements") {
+    val catalogManager = spark.sessionState.catalogManager
+    // Initial current catalog and namespace.
+    assert(catalogManager.currentCatalog.name() == "session")
+    assert(catalogManager.currentNamespace === Array("default"))
+
+    // Catalog is explicitly specified.
+    sql("USE ns1.ns1_1 IN testcat")
+    assert(catalogManager.currentCatalog.name() == "testcat")
+    assert(catalogManager.currentNamespace === Array("ns1", "ns1_1"))
+
+    // Catalog is resolved to "testcat2".
+    sql("USE testcat2.ns2.ns2_2")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("ns2", "ns2_2"))
+
+    // Only the namespace is changed.
+    sql("USE ns3.ns3_3")
+    assert(catalogManager.currentCatalog.name() == "testcat2")
+    assert(catalogManager.currentNamespace === Array("ns3", "ns3_3"))
+  }
+
+  test("Use: catalog is explicitly specified, but does not exist") {
+    val exception = intercept[AnalysisException] {
+      sql("USE ns1.ns1_1 IN unknown")
+    }
+    assert(exception.getMessage.contains("v2 catalog 'unknown' cannot be loaded"))
   }
 
   test("tableCreation: partition column case insensitive resolution") {

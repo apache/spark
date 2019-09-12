@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{CastSupport, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTableType, CatalogUtils, UnresolvedCatalogRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, CreateV2Table, DeleteFromTable, DropTable, Filter, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables, SubqueryAlias, UseCatalogAndNamespace}
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UseCatalogStatement, UseStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UseCatalogAndNamespaceStatement}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.{AlterTableAddColumnsCommand, AlterTableSetLocationCommand, AlterTableSetPropertiesCommand, AlterTableUnsetPropertiesCommand, DescribeColumnCommand, DescribeTableCommand, DropTableCommand, ShowDatabasesCommand, ShowTablesCommand}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -170,7 +170,10 @@ case class DataSourceResolution(
       DeleteFromTable(aliased, delete.condition)
 
     case ShowNamespacesStatement(None, pattern) =>
-      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
+      ShowNamespaces(
+        currentCatalog.asNamespaceCatalog,
+        Some(catalogManager.currentNamespace),
+        pattern)
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
       val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace
@@ -197,17 +200,14 @@ case class DataSourceResolution(
           ShowTablesCommand(Some(namespace.quoted), pattern)
       }
 
-    case UseCatalogStatement(catalogName) =>
-      validateCatalog(catalogName)
-      UseCatalogAndNamespace(catalogManager, Some(catalogName), None)
-
-    case UseStatement(catalogName, namespace) =>
+    case UseCatalogAndNamespaceStatement(catalogName, namespace) =>
       catalogName match {
         case Some(c) =>
           validateCatalog(c)
-          UseCatalogAndNamespace(catalogManager, Some(c), Some(namespace))
+          UseCatalogAndNamespace(catalogManager, Some(c), namespace)
         case None =>
-          val CurrentCatalogAndNamespace(catalog, ns) = namespace
+          require(namespace.nonEmpty)
+          val CurrentCatalogAndNamespace(catalog, ns) = namespace.get
           UseCatalogAndNamespace(catalogManager, Some(catalog.name()), Some(ns))
       }
   }

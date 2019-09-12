@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UseCatalogStatement, UseStatement}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{AlterTableAddColumnsStatement, AlterTableAlterColumnStatement, AlterTableDropColumnsStatement, AlterTableRenameColumnStatement, AlterTableSetLocationStatement, AlterTableSetPropertiesStatement, AlterTableUnsetPropertiesStatement, AlterViewSetPropertiesStatement, AlterViewUnsetPropertiesStatement, CreateTableAsSelectStatement, CreateTableStatement, DeleteFromStatement, DescribeColumnStatement, DescribeTableStatement, DropTableStatement, DropViewStatement, InsertIntoStatement, QualifiedColType, ReplaceTableAsSelectStatement, ReplaceTableStatement, ShowNamespacesStatement, ShowTablesStatement, UseCatalogAndNamespaceStatement}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2423,17 +2423,19 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create a [[UseCatalogStatement]] logical plan.
+   * Create a [[UseCatalogAndNamespaceStatement]] logical plan.
    */
   override def visitUseCatalog(ctx: UseCatalogContext): LogicalPlan = withOrigin(ctx) {
-    UseCatalogStatement(string(ctx.catalog))
+    UseCatalogAndNamespaceStatement(Some(ctx.catalog.getText), None)
   }
 
   /**
-   * Create a [[UseStatement]] logical plan.
+   * Create a [[UseCatalogAndNamespaceStatement]] logical plan.
    */
   override def visitUse(ctx: UseContext): LogicalPlan = withOrigin(ctx) {
-    UseStatement(Option(ctx.catalog).map(string), visitMultipartIdentifier(ctx.namespace))
+    UseCatalogAndNamespaceStatement(
+      Option(ctx.catalog).map(_.getText),
+      Some(visitMultipartIdentifier(ctx.namespace)))
   }
 
   /**

@@ -77,7 +77,7 @@ object FakeV2SessionCatalog extends TableCatalog {
   override def dropTable(ident: Identifier): Boolean = fail()
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
-  override def name(): String = fail()
+  override def name(): String = "fake_v2_session"
 }
 
 /**

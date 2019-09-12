@@ -18,12 +18,11 @@
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
 /**
- * A USE CATALOG statement, as parsed from SQL.
+ * A USE or USE CATALOG statement, as parsed from SQL.
  */
-case class UseCatalogStatement(catalogName: String) extends ParsedStatement
-
-/**
- * A USE statement, as parsed from SQL.
- */
-case class UseStatement(catalogName: Option[String], namespace: Seq[String])
-    extends ParsedStatement
+case class UseCatalogAndNamespaceStatement(
+    catalogName: Option[String],
+    namespace: Option[Seq[String]])
+    extends ParsedStatement {
+  require(catalogName.nonEmpty || namespace.nonEmpty)
+}

@@ -82,8 +82,9 @@ singleTableSchema
 statement
     : query                                                            #statementDefault
     | ctes? dmlStatementNoWith                                         #dmlStatement
-    | USE CATALOG catalog=STRING                                       #useCatalog
-    | USE namespace=multipartIdentifier (IN catalog=STRING)?           #use
+    | USE CATALOG catalog=errorCapturingIdentifier                     #useCatalog
+    | USE namespace=multipartIdentifier
+        (IN catalog=errorCapturingIdentifier)?                         #use
     | CREATE database (IF NOT EXISTS)? db=errorCapturingIdentifier
         ((COMMENT comment=STRING) |
          locationSpec |

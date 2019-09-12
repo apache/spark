@@ -30,30 +30,30 @@ class CatalogManagerSuite extends SparkFunSuite {
   test("CatalogManager should reflect the changes of default catalog") {
     val conf = new SQLConf
     val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
-    // assert(catalogManager.currentCatalog.isEmpty)
+    assert(catalogManager.currentCatalog.name == "fake_v2_session")
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     conf.setConfString(SQLConf.DEFAULT_V2_CATALOG.key, "dummy")
 
     // The current catalog should be changed if the default catalog is set.
-    assert(catalogManager.currentCatalog == Some("dummy"))
+    assert(catalogManager.currentCatalog.name == "dummy")
     assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
   }
 
   test("CatalogManager should keep the current catalog once set") {
     val conf = new SQLConf
     val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
-    // assert(catalogManager.currentCatalog.isEmpty)
+    assert(catalogManager.currentCatalog.name == "fake_v2_session")
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     catalogManager.setCurrentCatalog("dummy")
-    assert(catalogManager.currentCatalog == Some("dummy"))
+    assert(catalogManager.currentCatalog.name == "dummy")
     assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
 
     conf.setConfString("spark.sql.catalog.dummy2", classOf[DummyCatalog].getName)
     conf.setConfString(SQLConf.DEFAULT_V2_CATALOG.key, "dummy2")
     // The current catalog shouldn't be changed if it's set before.
-    assert(catalogManager.currentCatalog == Some("dummy"))
+    assert(catalogManager.currentCatalog.name == "dummy")
   }
 
   test("current namespace should be updated when switching current catalog") {
