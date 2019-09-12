@@ -156,10 +156,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(error.contains("within 1 second(s)"))
   }
 
-
-  def testBarrierTaskKilled(sc: SparkContext, interruptOnCancel: Boolean): Unit = {
-    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
-
+  def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {
     withTempDir { dir =>
       val killedFlagFile = "barrier.task.killed"
       val rdd = sc.makeRDD(Seq(0, 1), 2)
@@ -181,12 +178,15 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
       val listener = new SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-          new Thread {
-            override def run: Unit = {
-              Thread.sleep(1000)
-              sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = false)
-            }
-          }.start()
+          val partitionId = taskStart.taskInfo.index
+          if (partitionId == 0) {
+            new Thread {
+              override def run: Unit = {
+                Thread.sleep(1000)
+                sc.killTaskAttempt(taskStart.taskInfo.taskId, interruptThread = interruptOnKill)
+              }
+            }.start()
+          }
         }
       }
       sc.addSparkListener(listener)
@@ -201,7 +201,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("barrier task killed") {
+  test("barrier task killed, no interrupt") {
     val conf = new SparkConf()
       .set("spark.barrier.sync.timeout", "1")
       .set(TEST_NO_STAGE_RETRY, true)
@@ -209,7 +209,17 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       .setAppName("test-cluster")
     sc = new SparkContext(conf)
 
-    testBarrierTaskKilled(sc, true)
-    testBarrierTaskKilled(sc, false)
+    testBarrierTaskKilled(interruptOnKill = false)
+  }
+
+  test("barrier task killed, interrupt") {
+    val conf = new SparkConf()
+      .set("spark.barrier.sync.timeout", "1")
+      .set(TEST_NO_STAGE_RETRY, true)
+      .setMaster("local-cluster[4, 1, 1024]")
+      .setAppName("test-cluster")
+    sc = new SparkContext(conf)
+
+    testBarrierTaskKilled(interruptOnKill = true)
   }
 }
