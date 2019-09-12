@@ -24,17 +24,16 @@ import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalog.v2.{Catalogs, Identifier, NamespaceChange, TableChange}
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, NamespaceChange, TableChange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession with BeforeAndAfter {
+abstract class V2SessionCatalogBaseSuite extends SharedSparkSession with BeforeAndAfter {
 
   val emptyProps: util.Map[String, String] = Collections.emptyMap[String, String]
   val schema: StructType = new StructType()
@@ -54,7 +53,7 @@ class V2SessionCatalogBaseSuite extends SparkFunSuite with SharedSparkSession wi
 
 class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
@@ -752,7 +751,7 @@ class V2SessionCatalogTableSuite extends V2SessionCatalogBaseSuite {
 
 class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   def checkMetadata(
       expected: scala.collection.Map[String, String],

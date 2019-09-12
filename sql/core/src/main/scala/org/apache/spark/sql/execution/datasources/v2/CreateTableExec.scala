@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +35,7 @@ case class CreateTableExec(
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
     ignoreIfExists: Boolean) extends LeafExecNode {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits._
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (!catalog.tableExists(identifier)) {

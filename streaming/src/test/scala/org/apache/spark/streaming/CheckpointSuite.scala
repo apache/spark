@@ -39,8 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.scheduler._
-import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties,
-  Utils}
+import org.apache.spark.util.{Clock, ManualClock, MutableURLClassLoader, ResetSystemProperties, Utils}
 
 /**
  * A input stream that records the times of restore() invoked
@@ -206,24 +205,21 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
-class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
+class CheckpointSuite extends TestSuiteBase with LocalStreamingContext with DStreamCheckpointTester
   with ResetSystemProperties {
-
-  var ssc: StreamingContext = null
 
   override def batchDuration: Duration = Milliseconds(500)
 
-  override def beforeFunction() {
-    super.beforeFunction()
+  override def beforeEach(): Unit = {
+    super.beforeEach()
     Utils.deleteRecursively(new File(checkpointDir))
   }
 
-  override def afterFunction() {
+  override def afterEach(): Unit = {
     try {
-      if (ssc != null) { ssc.stop() }
       Utils.deleteRecursively(new File(checkpointDir))
     } finally {
-      super.afterFunction()
+      super.afterEach()
     }
   }
 
@@ -255,7 +251,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
       .checkpoint(stateStreamCheckpointInterval)
       .map(t => (t._1, t._2))
     }
-    var ssc = setupStreams(input, operation)
+    ssc = setupStreams(input, operation)
     var stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
 
     def waitForCompletionOfBatch(numBatches: Long): Unit = {
