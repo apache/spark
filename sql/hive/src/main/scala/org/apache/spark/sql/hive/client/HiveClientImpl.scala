@@ -311,6 +311,7 @@ private[hive] class HiveClientImpl(
     val ret = try f finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
+      SessionState.detachSession()
       HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
     ret
