@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical.sql
 
 /**
- * A USE or USE CATALOG statement, as parsed from SQL.
+ * A USE/USE CATALOG statement, as parsed from SQL.
  */
 case class UseCatalogAndNamespaceStatement(
     catalogName: Option[String],

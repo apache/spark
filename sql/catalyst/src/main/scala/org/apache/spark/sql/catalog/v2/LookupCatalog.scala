@@ -40,8 +40,7 @@ trait LookupCatalog extends Logging {
   def defaultCatalog: Option[CatalogPlugin] = catalogManager.defaultCatalog
 
   /**
-   *
-   *
+   * Returns the current catalog set.
    */
   def currentCatalog: CatalogPlugin = catalogManager.currentCatalog
 
@@ -80,10 +79,10 @@ trait LookupCatalog extends Logging {
   object CatalogObjectIdentifier {
     def unapply(parts: Seq[String]): Some[CatalogObjectIdentifier] = parts match {
       case CatalogAndIdentifier(maybeCatalog, nameParts) =>
-        Some(
-          (
+        Some((
             maybeCatalog.orElse(defaultCatalog),
-            Identifier.of(nameParts.init.toArray, nameParts.last)))
+            Identifier.of(nameParts.init.toArray, nameParts.last)
+        ))
     }
   }
 
@@ -108,7 +107,7 @@ trait LookupCatalog extends Logging {
   type CurrentCatalogAndNamespace = (CatalogPlugin, Seq[String])
 
   /**
-   * Extract catalog and namespace from a multi-part identifier with the default catalog if needed.
+   * Extract catalog and namespace from a multi-part identifier with the current catalog if needed.
    * Catalog name takes precedence over namespaces.
    */
   object CurrentCatalogAndNamespace {

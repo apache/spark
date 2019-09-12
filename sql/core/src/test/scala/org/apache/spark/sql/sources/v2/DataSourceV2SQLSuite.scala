@@ -797,8 +797,8 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
     val exception = intercept[AnalysisException] {
-      // The following is resolved to current catalog, where it is a session
-      // catalog that does not support namespaces.
+      // The current catalog is resolved to a v2 session catalog that does not
+      // support namespaces.
       sql("SHOW NAMESPACES")
     }
 
@@ -832,9 +832,6 @@ class DataSourceV2SQLSuite
 
   test("ShowNamespaces: no v2 catalog is available") {
     val exception = intercept[AnalysisException] {
-      // Since there is no catalog named 'dummy', the following is resolved
-      // to use currentCatalog.listNamespaces('dummy') where currentCatalog
-      // is a session catalog which does not support namespaces.
       sql("SHOW NAMESPACES in dummy")
     }
 
@@ -844,14 +841,14 @@ class DataSourceV2SQLSuite
   test("ShowNamespaces: change catalog and namespace with USE statements") {
     sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
 
-    // Initially catalog is v2 session catalog that does not support namespaces.
+    // Initially, the current catalog is a v2 session catalog that does not support namespaces.
     intercept[AnalysisException] { sql("SHOW NAMESPACES") }
 
-    // Update the current catalog.
+    // Update the current catalog to 'testcat'.
     sql("USE CATALOG testcat")
     testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
 
-    // Update the current namespace.
+    // Update the current namespace to 'ns1'.
     sql("USE ns1")
     testShowNamespaces("SHOW NAMESPACES", Seq("ns1.ns2"))
   }
@@ -883,16 +880,17 @@ class DataSourceV2SQLSuite
 
   test("Use: basic tests with USE statements") {
     val catalogManager = spark.sessionState.catalogManager
-    // Initial current catalog and namespace.
+
+    // Validate the initial current catalog and namespace.
     assert(catalogManager.currentCatalog.name() == "session")
     assert(catalogManager.currentNamespace === Array("default"))
 
-    // Catalog is explicitly specified.
+    // Catalog is explicitly specified as 'testcat'.
     sql("USE ns1.ns1_1 IN testcat")
     assert(catalogManager.currentCatalog.name() == "testcat")
     assert(catalogManager.currentNamespace === Array("ns1", "ns1_1"))
 
-    // Catalog is resolved to "testcat2".
+    // Catalog is resolved to 'testcat2'.
     sql("USE testcat2.ns2.ns2_2")
     assert(catalogManager.currentCatalog.name() == "testcat2")
     assert(catalogManager.currentNamespace === Array("ns2", "ns2_2"))

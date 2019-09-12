@@ -195,7 +195,8 @@ case class DataSourceResolution(
           ShowTables(catalog.asTableCatalog, ns, pattern)
         case None =>
           if (namespace.length != 1) {
-            throw new AnalysisException(s"The database name is not valid: ${namespace.quoted}")
+            throw new AnalysisException(
+              s"The database name is not valid: ${namespace.quoted}")
           }
           ShowTablesCommand(Some(namespace.quoted), pattern)
       }
