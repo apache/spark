@@ -20,28 +20,35 @@ license: |
 ---
 
 ### Description
-`REFRESH TABLE` statement first invalidates all the cached entries, which includes data and metadata of the given table 
-or view, then cache lazily when the table is scanned next time.
-For Hive metastore table, the metadata is refreshed. For data source tables, the schema will not be inferred and 
-refreshed.
+`REFRESH TABLE` statement invalidates the cached entries, which include data
+and metadata of the given table or view. The invalidated cache is populated in
+lazy manner when the cached table or the query associated with it is executed again.
 
 ### Syntax
 {% highlight sql %}
-REFRESH TABLE tableIdentifier
-
-tableIdentifier:= [db.][table_name]
+REFRESH [TABLE] tableIdentifier
 {% endhighlight %}
-**Note**<br>
-* table_name is either a qualified or unqualified name that designates a table/view. If no database identifier is 
-provided, it refers to a temporary view or a table/view in the current database.
+
+### Parameters
+<dl>
+  <dt><code><em>tableIdentifier</em></code></dt>
+  <dd>
+    Specifies a table name, which is either a qualified or unqualified name that designates a table/view. If no database identifier is provided, it refers to a temporary view or a table/view in the current database.<br><br>
+    <b>Syntax:</b>
+      <code>
+        [database_name.]table_name
+      </code>
+  </dd>
+</dl>
 
 ### Examples
 {% highlight sql %}
 -- The cached entries of the table will be refreshed  
 -- The table is resolved from the current database as the table name is unqualified.
-REFRESH TABLE tbl1
+REFRESH TABLE tbl1;
+
 -- The cached entries of the view will be refreshed or invalidated
 -- The view is resolved from tempDB database, as the view name is qualified.
-REFRESH TABLE tempDB.view1   
+REFRESH TABLE tempDB.view1;   
 {% endhighlight %}
 
