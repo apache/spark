@@ -20,13 +20,16 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.{ReusedSubqueryExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.rule.CoalescedShuffleReaderExec
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BuildRight, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
+class AdaptiveQueryExecSuite
+  extends QueryTest
+  with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
+
   import testImplicits._
 
   setupTestData()
@@ -51,34 +54,27 @@ class AdaptiveQueryExecSuite extends QueryTest with SharedSparkSession {
   }
 
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
-    plan.collect {
-      case j: BroadcastHashJoinExec => Seq(j)
-      case s: QueryStageExec => findTopLevelBroadcastHashJoin(s.plan)
-    }.flatten
+    collect(plan) {
+      case j: BroadcastHashJoinExec => j
+    }
   }
 
   private def findTopLevelSortMergeJoin(plan: SparkPlan): Seq[SortMergeJoinExec] = {
-    plan.collect {
-      case j: SortMergeJoinExec => Seq(j)
-      case s: QueryStageExec => findTopLevelSortMergeJoin(s.plan)
-    }.flatten
+    collect(plan) {
+      case j: SortMergeJoinExec => j
+    }
   }
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedQueryStageExec] = {
-    plan.collect {
-      case e: ReusedQueryStageExec => Seq(e)
-      case a: AdaptiveSparkPlanExec => findReusedExchange(a.executedPlan)
-      case s: QueryStageExec => findReusedExchange(s.plan)
-      case p: SparkPlan => p.subqueries.flatMap(findReusedExchange)
-    }.flatten
+    collectInPlanAndSubqueries(plan) {
+      case e: ReusedQueryStageExec => e
+    }
   }
 
   private def findReusedSubquery(plan: SparkPlan): Seq[ReusedSubqueryExec] = {
-    plan.collect {
-      case e: ReusedSubqueryExec => Seq(e)
-      case s: QueryStageExec => findReusedSubquery(s.plan)
-      case p: SparkPlan => p.subqueries.flatMap(findReusedSubquery)
-    }.flatten
+    collectInPlanAndSubqueries(plan) {
+      case e: ReusedSubqueryExec => e
+    }
   }
 
   test("Change merge join to broadcast join") {
