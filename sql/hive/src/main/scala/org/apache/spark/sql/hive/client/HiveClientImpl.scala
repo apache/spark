@@ -221,15 +221,7 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private val userName = {
-    val doAs = sys.env.get("HADOOP_USER_NAME").orNull
-    val ugi = if (doAs != null && doAs.length() > 0) {
-      UserGroupInformation.createProxyUser(doAs, UserGroupInformation.getLoginUser())
-    } else {
-      UserGroupInformation.getCurrentUser
-    }
-    ugi.getShortUserName
-  }
+  private val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
