@@ -43,12 +43,6 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
     prop.setProperty("*.sink.servlet.path", "/metrics/json")
     prop.setProperty("master.sink.servlet.path", "/metrics/master/json")
     prop.setProperty("applications.sink.servlet.path", "/metrics/applications/json")
-
-    prop.setProperty("*.sink.prometheusServlet.class",
-      "org.apache.spark.metrics.sink.PrometheusServlet")
-    prop.setProperty("*.sink.prometheusServlet.path", "/metrics/prometheus")
-    prop.setProperty("master.sink.prometheusServlet.path", "/metrics/master/prometheus")
-    prop.setProperty("applications.sink.prometheusServlet.path", "/metrics/applications/prometheus")
   }
 
   /**
