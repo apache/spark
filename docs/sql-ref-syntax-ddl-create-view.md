@@ -28,13 +28,8 @@ only change metadata.
 ### Syntax
 {% highlight sql %}
 CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
-    [(column_name [COMMENT column_comment], ...) ]
     create_view_clauses
-    AS SELECT ...;
-    
-    create_view_clauses (order insensitive):
-        [COMMENT view_comment]
-        [TBLPROPERTIES (property_name = property_value, ...)]
+    AS query;
 {% endhighlight %}
 
 ### Parameters
@@ -53,15 +48,17 @@ CREATE [OR REPLACE] [[GLOBAL] TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_nam
   <dd>Creates a view if it does not exists.</dd>
 </dl>
 <dl>
-  <dt><code><em>COMMENT</em></code></dt>
-  <dd>View-level and column-level comments can be specified in CREATE VIEW statement.</dd>
+  <dt><code><em>create_view_clauses</em></code></dt>
+  <dd>These clauses are optional and order insensitive. It can be of following formats.
+    <ul>
+      <li><code>[(column_name [COMMENT column_comment], ...) ]</code> to specify column-level comments.</li>
+      <li><code>[COMMENT view_comment]</code> to specify view-level comments.</li>
+      <li><code>[TBLPROPERTIES (property_name = property_value, ...)]</code> to add metadata key-value pairs.</li>
+    </ul>  
+  </dd>
 </dl>
 <dl>
-  <dt><code><em>TBLPROPERTIES</em></code></dt>
-  <dd>Metadata key-value pairs.</dd>
-</dl>
-<dl>
-  <dt><code><em>AS SELECT</em></code></dt>
+  <dt><code><em>query</em></code></dt>
   <dd>A <a href="sql-ref-syntax-qry-select.md">SELECT</a> statement that constructs the view from base tables or other views.</dd>
 </dl>
 
