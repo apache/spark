@@ -855,6 +855,10 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("1234", DateType).checkInputDataTypes().isSuccess)
     assert(cast(new Timestamp(1), DateType).checkInputDataTypes().isSuccess)
     assert(cast(false, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.toByte, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1.toShort, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1, DateType).checkInputDataTypes().isFailure)
+    assert(cast(1L, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0.toFloat, DateType).checkInputDataTypes().isFailure)
     assert(cast(1.0, DateType).checkInputDataTypes().isFailure)
   }
@@ -1195,12 +1199,5 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(cast(Long.MaxValue + 0.9D, LongType), Long.MaxValue)
       checkEvaluation(cast(Long.MinValue - 0.9D, LongType), Long.MinValue)
     }
-  }
-
-  test("cast integral types to date") {
-    checkCast(0.toByte, Date.valueOf("1970-01-01"))
-    checkCast(-1.toShort, Date.valueOf("1969-12-31"))
-    checkCast(1, Date.valueOf("1970-01-02"))
-    checkCast(365, Date.valueOf("1971-01-01"))
   }
 }
