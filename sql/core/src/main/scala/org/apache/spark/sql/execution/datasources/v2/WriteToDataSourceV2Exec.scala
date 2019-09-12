@@ -26,16 +26,15 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.{Identifier, StagingTableCatalog, TableCatalog}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, TableCatalog}
+import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
-import org.apache.spark.sql.sources.v2.{StagedTable, SupportsWrite}
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -69,7 +68,7 @@ case class CreateTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     ifNotExists: Boolean) extends V2TableWriteExec with SupportsV1Write {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (catalog.tableExists(ident)) {
@@ -158,7 +157,7 @@ case class ReplaceTableAsSelectExec(
     writeOptions: CaseInsensitiveStringMap,
     orCreate: Boolean) extends V2TableWriteExec with SupportsV1Write {
 
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
   override protected def doExecute(): RDD[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
@@ -470,7 +469,7 @@ object DataWritingSparkTask extends Logging {
 }
 
 private[v2] trait AtomicTableWriteExec extends V2TableWriteExec with SupportsV1Write {
-  import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.IdentifierHelper
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 
   protected def writeToStagedTable(
       stagedTable: StagedTable,

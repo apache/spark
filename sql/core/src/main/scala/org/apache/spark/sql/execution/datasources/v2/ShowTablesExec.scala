@@ -20,12 +20,12 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalog.v2.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.catalog.v2.TableCatalog
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.execution.LeafExecNode
 
 /**
