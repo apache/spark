@@ -179,7 +179,7 @@ with models.DAG(
 
     # [END howto_operator_create_instance_and_import]
     create_instance_and_import = CloudMemorystoreCreateInstanceAndImportOperator(
-        task_id="create-instance",
+        task_id="create-instance-and-import",
         location="europe-north1",
         instance_id=INSTANCE_NAME_3,
         instance=FIRST_INSTANCE,
