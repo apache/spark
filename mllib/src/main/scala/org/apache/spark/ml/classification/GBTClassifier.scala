@@ -23,7 +23,6 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
@@ -34,7 +33,7 @@ import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.tree.model.{GradientBoostedTreesModel => OldGBTModel}
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 /**
@@ -169,25 +168,11 @@ class GBTClassifier @Since("1.4.0") (
 
     val withValidation = isDefined(validationIndicatorCol) && $(validationIndicatorCol).nonEmpty
 
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-
-    val convert2Instance = (dataset: Dataset[_]) => {
-      dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-        case Row(label: Double, weight: Double, features: Vector) =>
-          require(label == 0 || label == 1, s"GBTClassifier was given" +
-            s" dataset with invalid label $label.  Labels must be in {0,1}; note that" +
-            s" GBTClassifier currently only supports binary classification.")
-          Instance(label, weight, features)
-      }
-    }
-
     val (trainDataset, validationDataset) = if (withValidation) {
-      (
-        convert2Instance(dataset.filter(not(col($(validationIndicatorCol))))),
-        convert2Instance(dataset.filter(col($(validationIndicatorCol))))
-      )
+      (extractInstances(dataset.filter(not(col($(validationIndicatorCol)))), 2),
+        extractInstances(dataset.filter(col($(validationIndicatorCol))), 2))
     } else {
-      (convert2Instance(dataset), null)
+      (extractInstances(dataset, 2), null)
     }
 
     val boostingStrategy = super.getOldBoostingStrategy(categoricalFeatures, OldAlgo.Classification)
@@ -384,14 +369,9 @@ class GBTClassificationModel private[ml](
    */
   @Since("2.4.0")
   def evaluateEachIteration(dataset: Dataset[_]): Array[Double] = {
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val data = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
-      case Row(label: Double, weight: Double, features: Vector) =>
-        Instance(label, weight, features)
-    }
+    val data = extractInstances(dataset)
     GradientBoostedTrees.evaluateEachIteration(data, trees, treeWeights, loss,
-      OldAlgo.Classification
-    )
+      OldAlgo.Classification)
   }
 
   @Since("2.0.0")
