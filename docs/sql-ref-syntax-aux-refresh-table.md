@@ -52,3 +52,7 @@ REFRESH TABLE tbl1;
 REFRESH TABLE tempDB.view1;   
 {% endhighlight %}
 
+### Related Statements
+- [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
+- [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
+- [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
