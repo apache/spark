@@ -62,7 +62,6 @@ object Cast {
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
-    case (_: IntegralType, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
 
@@ -475,10 +474,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
       buildCast[Long](_, t => microsToEpochDays(t, zoneId))
-    case LongType => buildCast[Long](_, l => l.toInt)
-    case IntegerType => buildCast[Int](_, identity)
-    case ShortType => buildCast[Short](_, s => s.toInt)
-    case ByteType => buildCast[Byte](_, b => b.toInt)
   }
 
   // IntervalConverter
@@ -1081,8 +1076,6 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToEpochDays($c, $zid);"""
-    case _: IntegralType =>
-      (c, evPrim, _) => code"$evPrim = (int)$c;"
     case _ =>
       (c, evPrim, evNull) => code"$evNull = true;"
   }
