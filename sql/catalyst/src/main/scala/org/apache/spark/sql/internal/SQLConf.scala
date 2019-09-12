@@ -1302,7 +1302,8 @@ object SQLConf {
     buildConf("spark.sql.legacy.rdd.applyConf")
       .internal()
       .doc("When false, SQL configurations are disregarded when operations on a RDD derived from" +
-        " a dataframe are executed. This is the (buggy) behavior up to 2.4.3.")
+        " a dataframe are executed. This is the (buggy) behavior up to 2.4.4. This config is " +
+        "deprecated and it will be removed in 3.0.0.")
       .booleanConf
       .createWithDefault(true)
 
