@@ -49,9 +49,8 @@ object ExtractBenchmark extends SqlBasedBenchmark {
   }
 
   private def castExpr(from: String): String = from match {
-    case "timestamp" => s"cast(id as $from)"
-    // Use modulo division to prevent overflow in internal conversion to microseconds
-    case "date" => s"cast((id % 10000) as $from)"
+    case "timestamp" => s"cast(id as timestamp)"
+    case "date" => s"cast(cast(id as timestamp) as date)"
     case other => throw new IllegalArgumentException(
       s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
   }
