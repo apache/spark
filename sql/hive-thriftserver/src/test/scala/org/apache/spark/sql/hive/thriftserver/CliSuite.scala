@@ -319,7 +319,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-28840 test --jars and hive.aux.jars.path command") {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
-    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    val hiveContribJar = HiveTestJars.getHiveContribJar.getCanonicalPath
     runCliWithin(
       1.minute,
       Seq("--jars", s"$jarFile", "--conf",
