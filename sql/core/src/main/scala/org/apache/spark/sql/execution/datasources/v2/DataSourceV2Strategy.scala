@@ -26,7 +26,7 @@ import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalog.v2.StagingTableCatalog
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, CreateTableAsSelect, CreateV2Table, DeleteFromTable, DescribeTable, DropTable, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, Repartition, ReplaceTable, ReplaceTableAsSelect, ShowNamespaces, ShowTables}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousCoalesceExec, WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -155,17 +155,30 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isDefined =>
       val microBatchStream = r.stream.asInstanceOf[MicroBatchStream]
-      // ensure there is a projection, which will produce unsafe rows required by some operators
-      ProjectExec(r.output,
-        MicroBatchScanExec(
-          r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)) :: Nil
+      val scanExec = MicroBatchScanExec(
+        r.output, r.scan, microBatchStream, r.startOffset.get, r.endOffset.get)
+
+      val withProjection = if (scanExec.supportsColumnar) {
+        scanExec
+      } else {
+        // Add a Project here to make sure we produce unsafe rows.
+        ProjectExec(r.output, scanExec)
+      }
+
+      withProjection :: Nil
 
     case r: StreamingDataSourceV2Relation if r.startOffset.isDefined && r.endOffset.isEmpty =>
       val continuousStream = r.stream.asInstanceOf[ContinuousStream]
-      // ensure there is a projection, which will produce unsafe rows required by some operators
-      ProjectExec(r.output,
-        ContinuousScanExec(
-          r.output, r.scan, continuousStream, r.startOffset.get)) :: Nil
+      val scanExec = ContinuousScanExec(r.output, r.scan, continuousStream, r.startOffset.get)
+
+      val withProjection = if (scanExec.supportsColumnar) {
+        scanExec
+      } else {
+        // Add a Project here to make sure we produce unsafe rows.
+        ProjectExec(r.output, scanExec)
+      }
+
+      withProjection :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
@@ -277,6 +290,9 @@ object DataSourceV2Strategy extends Strategy with PredicateHelper {
 
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
+
+    case r: ShowNamespaces =>
+      ShowNamespacesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil
 
     case r : ShowTables =>
       ShowTablesExec(r.output, r.catalog, r.namespace, r.pattern) :: Nil

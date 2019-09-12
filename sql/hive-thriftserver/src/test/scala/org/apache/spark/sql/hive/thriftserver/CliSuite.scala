@@ -305,4 +305,31 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT example_format('%o', 93);" -> "135"
     )
   }
+
+  test("SPARK-28840 test --jars command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
+    )
+  }
+
+  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile", "--conf",
+        s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
+      "CREATE TEMPORARY FUNCTION example_max AS " +
+        "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
+      "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
+    )
+  }
 }
