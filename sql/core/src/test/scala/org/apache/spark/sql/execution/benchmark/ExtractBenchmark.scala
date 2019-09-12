@@ -19,6 +19,11 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.time.Instant
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
+
 /**
  * Synthetic benchmark for the extract function.
  * To run this benchmark:
@@ -31,19 +36,30 @@ import java.time.Instant
  *      Results will be written to "benchmarks/ExtractBenchmark-results.txt".
  * }}}
  */
-object ExtractBenchmark extends SqlBasedBenchmark {
+object ExtractBenchmark extends BenchmarkBase with SQLHelper {
+  private val spark: SparkSession = SparkSession.builder()
+    .master("local[1]")
+    .appName(this.getClass.getCanonicalName)
+    .getOrCreate()
+
   private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
     val sinceSecond = Instant.parse("2010-01-01T00:00:00Z").getEpochSecond
-    spark
-      .range(sinceSecond, sinceSecond + cardinality, 1, 1)
-      .selectExpr(exprs: _*)
-      .write
-      .format("noop")
-      .save()
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      spark
+        .range(sinceSecond, sinceSecond + cardinality, 1, 1)
+        .selectExpr(exprs: _*)
+        .write
+        .format("noop")
+        .save()
+    }
   }
 
-  private def run(cardinality: Long, name: String, exprs: String*): Unit = {
-    codegenBenchmark(name, cardinality) {
+  private def run(
+      benchmark: Benchmark,
+      cardinality: Long,
+      name: String,
+      exprs: String*): Unit = {
+    benchmark.addCase(name, numIters = 3) { _ =>
       doBenchmark(cardinality, exprs: _*)
     }
   }
@@ -55,14 +71,19 @@ object ExtractBenchmark extends SqlBasedBenchmark {
       s"Unsupported column type $other. Valid column types are 'timestamp' and 'date'")
   }
 
-  private def run(func: String, cardinality: Long, field: String, from: String): Unit = {
+  private def run(
+      benchmark: Benchmark,
+      func: String,
+      cardinality: Long,
+      field: String,
+      from: String): Unit = {
     val expr = func match {
       case "extract" => s"EXTRACT($field FROM ${castExpr(from)})"
       case "date_part" => s"DATE_PART('$field', ${castExpr(from)})"
       case other => throw new IllegalArgumentException(
         s"Unsupported function '$other'. Valid functions are 'extract' and 'date_part'.")
     }
-    codegenBenchmark(s"$field of $from", cardinality) {
+    benchmark.addCase(s"$field of $from", numIters = 3) { _ =>
       doBenchmark(cardinality, expr)
     }
   }
@@ -78,10 +99,12 @@ object ExtractBenchmark extends SqlBasedBenchmark {
 
     Seq("extract", "date_part").foreach { func =>
       Seq("timestamp", "date").foreach { dateType =>
-        runBenchmark(s"Invoke $func for $dateType") {
-          run(N, s"cast to $dateType", castExpr(dateType))
-          fields.foreach(run(func, N, _, dateType))
-        }
+        val benchmark = new Benchmark(s"Invoke $func for $dateType", N, output = output)
+
+        run(benchmark, N, s"cast to $dateType", castExpr(dateType))
+        fields.foreach(run(benchmark, func, N, _, dateType))
+
+        benchmark.run()
       }
     }
   }
