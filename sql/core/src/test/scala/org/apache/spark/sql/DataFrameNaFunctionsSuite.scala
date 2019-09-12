@@ -231,6 +231,26 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("fill for join operation") {
+    val df1 = Seq(
+      ("f1-1", "f2", null),
+      ("f1-2", null, null),
+      ("f1-3", "f2", "f3-1"),
+      ("f1-4", "f2", "f3-1")
+    ).toDF("f1", "f2", "f3")
+    val df2 = Seq(
+      ("f1-1", null, null),
+      ("f1-2", "f2", null),
+      ("f1-3", "f2", "f4-1")
+    ).toDF("f1", "f2", "f4")
+    val joined_df = df1.join(df2, Seq("f1"), joinType = "left_outer")
+    checkAnswer(joined_df.na.fill("", cols = Seq("f4")),
+      Row("f1-1", "f2", null, null, "") ::
+        Row("f1-2", null, null, "f2", "") ::
+        Row("f1-3", "f2", "f3-1", "f2", "f4-1") ::
+        Row("f1-4", "f2", "f3-1", null, "") :: Nil)
+  }
+
   test("replace") {
     val input = createDF()
 
