@@ -28,22 +28,61 @@ Dropping a user-defined function(UDF). An exception will be thrown if the functi
 DROP [TEMPORARY] FUNCTION [IF EXISTS] [db_name.]function_name;
 {% endhighlight %}
 
-### Example
-{% highlight sql %}
-DROP TEMPORARY FUNCTION tempfunction;
-DROP FUNCTION testdb.permfunction;
-{% endhighlight %}
 
 ### Parameters
 
-### **function_name**
+<dl>
+  <dt><code><em>function_name</em></code></dt>
+  <dd>The name of an existing function.</dd>
+</dl>
 
-The name of an existing function.
+<dl>
+  <dt><code><em>TEMPORARY</em></code></dt>
+  <dd>Should be used to delete the `temporary` function.</dd>
+</dl>
 
-### **TEMPORARY**
+<dl>
+  <dt><code><em>IF EXISTS</em></code></dt>
+  <dd>If specified, no exception is thrown when the function does not exist.</dd>
+</dl>
 
-Should be used to delete the `temporary` function.
+### Example
+{% highlight sql %}
+-- Create a permanent function `test_avg`
 
-### **IF EXISTS**
+CREATE FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
 
-If specified, no exception is thrown when the function does not exist.
+-- List user functions 
+
+SHOW user functions;
+
++-------------------+
+|     function      |
++-------------------+
+| default.test_avg  |
++-------------------+
+
+-- Drop Permanent function
+
+DROP FUNCTION test_avg;
++---------+
+| Result  |
++---------+
++---------+
+
+-- Creaet Temporary function `temp_avg`
+CREATE TEMPORARY FUNCTION temp_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
+
+-- Drop Temporary function
+
+DROP TEMPORARY FUNCTION IF EXISTS temp_avg;
++---------+
+| Result  |
++---------+
++---------+
+
+{% endhighlight %}
+### Related statements
+- [CREATE FUNCTION](sql-ref-syntax-ddl-create-function.html)
+- [DESCRIBE FUNCTION](sql-ref-syntax-aux-describe-function.html)
+- [SHOW FUNCTION](sql-ref-syntax-aux-show-functions.html)
