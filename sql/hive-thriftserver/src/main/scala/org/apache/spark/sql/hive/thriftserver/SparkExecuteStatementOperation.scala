@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
@@ -103,6 +104,8 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Timestamp](ordinal)
       case BinaryType =>
         to += from.getAs[Array[Byte]](ordinal)
+      case CalendarIntervalType =>
+        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
         val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
@@ -331,7 +334,11 @@ private[hive] class SparkExecuteStatementOperation(
 object SparkExecuteStatementOperation {
   def getTableSchema(structType: StructType): TableSchema = {
     val schema = structType.map { field =>
-      val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
+      val attrTypeString = field.dataType match {
+        case NullType => "void"
+        case CalendarIntervalType => StringType.catalogString
+        case other => other.catalogString
+      }
       new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
     }
     new TableSchema(schema.asJava)

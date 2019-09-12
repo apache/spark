@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalog.v2.{Identifier, TableCatalog, TableChange}
-import org.apache.spark.sql.catalog.v2.TableChange.{AddColumn, ColumnChange}
-import org.apache.spark.sql.catalog.v2.expressions.Transform
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsNamespaces, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
 
@@ -560,6 +559,17 @@ object OverwritePartitionsDynamic {
   }
 }
 
+/**
+ * The logical plan of the SHOW NAMESPACES command that works for v2 catalogs.
+ */
+case class ShowNamespaces(
+    catalog: SupportsNamespaces,
+    namespace: Option[Seq[String]],
+    pattern: Option[String]) extends Command {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("namespace", StringType, nullable = false)())
+}
+
 case class DescribeTable(table: NamedRelation, isExtended: Boolean) extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(table)
@@ -626,42 +636,6 @@ case class ShowTables(
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)())
-}
-
-/**
- * Insert some data into a table. Note that this plan is unresolved and has to be replaced by the
- * concrete implementations during analysis.
- *
- * @param table the logical plan representing the table. In the future this should be a
- *              [[org.apache.spark.sql.catalyst.catalog.CatalogTable]] once we converge Hive tables
- *              and data source tables.
- * @param partition a map from the partition key to the partition value (optional). If the partition
- *                  value is optional, dynamic partition insert will be performed.
- *                  As an example, `INSERT INTO tbl PARTITION (a=1, b=2) AS ...` would have
- *                  Map('a' -> Some('1'), 'b' -> Some('2')),
- *                  and `INSERT INTO tbl PARTITION (a=1, b) AS ...`
- *                  would have Map('a' -> Some('1'), 'b' -> None).
- * @param query the logical plan representing data to write to.
- * @param overwrite overwrite existing table or partitions.
- * @param ifPartitionNotExists If true, only write if the partition does not exist.
- *                             Only valid for static partitions.
- */
-case class InsertIntoTable(
-    table: LogicalPlan,
-    partition: Map[String, Option[String]],
-    query: LogicalPlan,
-    overwrite: Boolean,
-    ifPartitionNotExists: Boolean)
-  extends LogicalPlan {
-  // IF NOT EXISTS is only valid in INSERT OVERWRITE
-  assert(overwrite || !ifPartitionNotExists)
-  // IF NOT EXISTS is only valid in static partitions
-  assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
-
-  // We don't want `table` in children as sometimes we don't want to transform it.
-  override def children: Seq[LogicalPlan] = query :: Nil
-  override def output: Seq[Attribute] = Seq.empty
-  override lazy val resolved: Boolean = false
 }
 
 /**

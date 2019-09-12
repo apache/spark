@@ -22,12 +22,12 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalog.v2.expressions.{IdentityTransform, Transform}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog._
+import org.apache.spark.sql.connector.expressions.{IdentityTransform, Transform}
+import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
-import org.apache.spark.sql.sources.v2.{SupportsDelete, SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.sources.v2.reader.{Batch, InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, DataWriter, DataWriterFactory, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 

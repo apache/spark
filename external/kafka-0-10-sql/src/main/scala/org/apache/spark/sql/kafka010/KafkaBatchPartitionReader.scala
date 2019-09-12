@@ -22,8 +22,7 @@ import java.{util => ju}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.sources.v2.reader._
-
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 
 /** A [[InputPartition]] for reading Kafka data in a batch based streaming query. */
 private[kafka010] case class KafkaBatchInputPartition(

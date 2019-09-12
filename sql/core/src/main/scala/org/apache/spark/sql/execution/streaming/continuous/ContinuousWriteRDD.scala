@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.streaming.continuous
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.writer.DataWriter
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamingDataWriterFactory
+import org.apache.spark.sql.connector.write.DataWriter
+import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
 import org.apache.spark.util.Utils
 
 /**

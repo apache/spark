@@ -1749,7 +1749,7 @@ class HiveDDLSuite
   test("create hive serde table with Catalog") {
     withTable("t") {
       withTempDir { dir =>
-        val df = spark.catalog.createExternalTable(
+        val df = spark.catalog.createTable(
           "t",
           "hive",
           new StructType().add("i", "int"),

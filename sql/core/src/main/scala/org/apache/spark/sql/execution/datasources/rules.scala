@@ -20,18 +20,19 @@ package org.apache.spark.sql.execution.datasources
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
-import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources.InsertableRelation
-import org.apache.spark.sql.types.{ArrayType, AtomicType, StructField, StructType}
+import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -377,19 +378,19 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 }
 
 /**
- * Preprocess the [[InsertIntoTable]] plan. Throws exception if the number of columns mismatch, or
- * specified partition columns are different from the existing partition columns in the target
+ * Preprocess the [[InsertIntoStatement]] plan. Throws exception if the number of columns mismatch,
+ * or specified partition columns are different from the existing partition columns in the target
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
 case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
-      insert: InsertIntoTable,
+      insert: InsertIntoStatement,
       tblName: String,
-      partColNames: Seq[String]): InsertIntoTable = {
+      partColNames: Seq[String]): InsertIntoStatement = {
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
-      insert.partition, partColNames, tblName, conf.resolver)
+      insert.partitionSpec, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
@@ -417,16 +418,16 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
            """.stripMargin)
       }
 
-      insert.copy(query = newQuery, partition = normalizedPartSpec)
+      insert.copy(query = newQuery, partitionSpec = normalizedPartSpec)
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      insert.copy(query = newQuery, partition = partColNames.map(_ -> None).toMap)
+      insert.copy(query = newQuery, partitionSpec = partColNames.map(_ -> None).toMap)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoStatement(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
@@ -503,7 +504,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
+      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
@@ -525,7 +526,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoTable(t, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.{V2StreamingScanSupportCheck, V2WriteSupportCheck}
+import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -151,6 +151,8 @@ abstract class BaseSessionStateBuilder(
     catalog
   }
 
+  protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog, conf)
+
   /**
    * Interface exposed to the user for registering user-defined functions.
    *
@@ -164,7 +166,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
+  protected def analyzer: Analyzer = new Analyzer(catalog, v2SessionCatalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
@@ -183,8 +185,7 @@ abstract class BaseSessionStateBuilder(
       PreWriteCheck +:
         PreReadCheck +:
         HiveOnlyCheck +:
-        V2WriteSupportCheck +:
-        V2StreamingScanSupportCheck +:
+        TableCapabilityCheck +:
         customCheckRules
   }
 

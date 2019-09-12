@@ -1576,6 +1576,20 @@ class TypeCoercionSuite extends AnalysisTest {
         SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
     )
   }
+
+  test("SPARK-29000: skip to handle decimals in ImplicitTypeCasts") {
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Literal(1)),
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Literal(1)))
+
+    ruleTest(TypeCoercion.ImplicitTypeCasts,
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)),
+      Multiply(CaseWhen(Seq((EqualTo(1, 2), Cast(1, DecimalType(34, 24)))),
+        Cast(100, DecimalType(34, 24))), Cast(1, IntegerType)))
+  }
 }
 
 
