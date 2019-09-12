@@ -10,8 +10,9 @@ displayTitle: Spark SQL Upgrading Guide
 ## Upgrading from Spark SQL 2.4 to 2.4.5
 
  - Starting from 2.4.5, SQL configurations are effective also when a Dataset is converted to an RDD and its
-   plan is executed due to action on the derived RDD. The previous buggy behavior can be restored setting
-   `spark.sql.legacy.rdd.applyConf` to `false`.
+   plan is executed due to action on the derived RDD. The previous behavior can be restored setting
+   `spark.sql.legacy.rdd.applyConf` to `false`: in this case, SQL configurations are ignored for operations
+   performed on a RDD derived from a Dataset.
 
 ## Upgrading from Spark SQL 2.4 to 2.4.1
 
