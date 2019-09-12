@@ -814,7 +814,7 @@ class Column(val expr: Expression) extends Logging {
     if (hSet.size > SQLConf.get.optimizerInSetConversionThreshold) {
       InSet(expr, hSet)
     } else {
-      In(expr, hSet.toSeq.map(lit(_).expr))
+      In(expr, values.toSeq.map(lit(_).expr))
     }
   }
 

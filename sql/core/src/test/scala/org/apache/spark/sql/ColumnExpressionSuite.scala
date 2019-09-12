@@ -26,7 +26,7 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.expressions.{In, InSet, NamedExpression}
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -454,6 +454,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
 
   test("isInCollection: Scala Collection") {
     val df = Seq((1, "x"), (2, "y"), (3, "z")).toDF("a", "b")
+
+
     // Test with different types of collections
     checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
@@ -463,6 +465,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 2))
     checkAnswer(df.filter($"a".isInCollection(Seq(3, 1).toList)),
       df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+
+    assert($"a".isInCollection(Seq(3, 1)).expr.isInstanceOf[In], "Expect expr to be In")
+
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "1") {
+      checkAnswer(df.filter($"a".isInCollection(Seq(3, 1))),
+        df.collect().toSeq.filter(r => r.getInt(0) == 3 || r.getInt(0) == 1))
+      checkAnswer(df.filter($"a".isInCollection(Seq(1, 2).toSet)),
+        df.collect().toSeq.filter(r => r.getInt(0) == 1 || r.getInt(0) == 2))
+
+      assert($"a".isInCollection(Seq(3, 1)).expr.isInstanceOf[InSet], "Expect expr to be InSet")
+    }
 
     val df2 = Seq((1, Seq(1)), (2, Seq(2)), (3, Seq(3))).toDF("a", "b")
 
