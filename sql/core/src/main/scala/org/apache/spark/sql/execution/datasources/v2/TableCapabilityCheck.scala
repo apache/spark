@@ -20,9 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+<<<<<<< HEAD
 import org.apache.spark.sql.sources.v2.{SupportsWrite, Table}
 import org.apache.spark.sql.sources.v2.TableCapability._
+=======
+>>>>>>> c56a012bc839cd2f92c2be41faea91d1acfba4eb
 import org.apache.spark.sql.types.BooleanType
 
 /**
