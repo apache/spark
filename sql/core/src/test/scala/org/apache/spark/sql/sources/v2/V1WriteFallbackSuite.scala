@@ -24,10 +24,10 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SQLContext, SaveMode, SparkSession}
 import org.apache.spark.sql.catalog.v2.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.InMemoryTable
-import org.apache.spark.sql.sources.{DataSourceRegister, Filter, InsertableRelation}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2.utils.TestV2SessionCatalogBase
 import org.apache.spark.sql.sources.v2.writer.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -117,11 +117,11 @@ private object InMemoryV1Provider {
 
 class InMemoryV1Provider extends TableProvider with DataSourceRegister {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    InMemoryV1Provider.tables.getOrElseUpdate(options.get("name"), {
+    InMemoryV1Provider.tables.getOrElse(options.get("name"), {
       new InMemoryTableWithV1Fallback(
         "InMemoryTableWithV1Fallback",
-        new StructType().add("a", IntegerType).add("b", StringType),
-        Array(IdentityTransform(FieldReference(Seq("a")))),
+        new StructType(),
+        Array.empty,
         options.asCaseSensitiveMap()
       )
     })
@@ -134,7 +134,10 @@ class InMemoryTableWithV1Fallback(
     override val name: String,
     override val schema: StructType,
     override val partitioning: Array[Transform],
-    override val properties: util.Map[String, String]) extends Table with SupportsWrite {
+    override val properties: util.Map[String, String])
+  extends Table
+  with SupportsWrite
+  with CreatableRelationProvider {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -155,6 +158,14 @@ class InMemoryTableWithV1Fallback(
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new FallbackWriteBuilder(options)
+  }
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+
   }
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)
