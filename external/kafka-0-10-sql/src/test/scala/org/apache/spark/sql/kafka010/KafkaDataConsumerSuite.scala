@@ -33,7 +33,7 @@ import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.sql.kafka010.KafkaDataConsumer.CacheKey
 import org.apache.spark.sql.test.SharedSparkSession
 
-class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester {
+class KafkaDataConsumerSuite extends SharedSparkSession with KafkaTest with PrivateMethodTester {
 
   protected var testUtils: KafkaTestUtils = _
   private val topic = "topic" + Random.nextInt()
@@ -148,7 +148,7 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
 
     @volatile var error: Throwable = null
 
-    def consume(i: Int): Unit = {
+    def consume(): Unit = {
       val taskContext = if (Random.nextBoolean) {
         new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), null, null, null)
       } else {
@@ -188,7 +188,7 @@ class KafkaDataConsumerSuite extends SharedSparkSession with PrivateMethodTester
     try {
       val futures = (1 to numConsumerUsages).map { i =>
         threadpool.submit(new Runnable {
-          override def run(): Unit = { consume(i) }
+          override def run(): Unit = { consume() }
         })
       }
       futures.foreach(_.get(1, TimeUnit.MINUTES))

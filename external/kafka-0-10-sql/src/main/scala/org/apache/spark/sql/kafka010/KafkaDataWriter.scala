@@ -44,7 +44,7 @@ private[kafka010] class KafkaDataWriter(
     inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
 
-  private lazy val producer = CachedKafkaProducer.getOrCreate(producerParams)
+  private lazy val producer = CachedKafkaProducer.acquire(producerParams)
 
   def write(row: InternalRow): Unit = {
     checkForErrors()
@@ -61,14 +61,21 @@ private[kafka010] class KafkaDataWriter(
     KafkaDataWriterCommitMessage
   }
 
-  def abort(): Unit = {}
+  def abort(): Unit = {
+    close()
+  }
 
   def close(): Unit = {
-    checkForErrors()
-    if (producer != null) {
-      producer.flush()
+    try {
       checkForErrors()
-      CachedKafkaProducer.close(producerParams)
+      if (producer != null) {
+        producer.flush()
+        checkForErrors()
+      }
+    } finally {
+      if (producer != null) {
+        CachedKafkaProducer.release(producer)
+      }
     }
   }
 }

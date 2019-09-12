@@ -593,7 +593,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       consumerPool.close()
     } catch {
       case e: Throwable =>
-        logWarning("Ignoring Exception while shutting down pools from shutdown hook", e)
+        logWarning("Ignoring exception while shutting down pools from shutdown hook", e)
     }
   }
 
@@ -617,6 +617,10 @@ private[kafka010] object KafkaDataConsumer extends Logging {
     }
 
     new KafkaDataConsumer(topicPartition, kafkaParams, consumerPool, fetchedDataPool)
+  }
+
+  private[kafka010] def clear(): Unit = {
+    consumerPool.reset()
   }
 
   private def reportDataLoss0(
