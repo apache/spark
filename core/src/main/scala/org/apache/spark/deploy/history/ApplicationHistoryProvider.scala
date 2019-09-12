@@ -114,6 +114,9 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def stop(): Unit = { }
 
+  /**
+   * Called when the server is starting up.
+   */
   def start(): Unit = { }
 
   /**
