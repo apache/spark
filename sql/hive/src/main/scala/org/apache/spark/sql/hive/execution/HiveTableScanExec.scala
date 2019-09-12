@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
@@ -87,6 +87,8 @@ case class HiveTableScanExec(
     BindReferences.bindReference(pred, relation.partitionCols)
   }
 
+  @transient private lazy val  hiveClient: HiveClient = sparkSession.sharedState.externalCatalog
+    .unwrapped.asInstanceOf[HiveExternalCatalog].client
   @transient private lazy val hiveQlTable = HiveClientImpl.toHiveTable(relation.tableMeta)
   @transient private lazy val tableDesc = new TableDesc(
     hiveQlTable.getInputFormatClass,
@@ -95,7 +97,7 @@ case class HiveTableScanExec(
 
   // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
-  @transient private lazy val hadoopConf = {
+  @transient private lazy val hadoopConf = hiveClient.withHiveState {
     val c = sparkSession.sessionState.newHadoopConf()
     // append columns ids and names before broadcast
     addColumnMetadataToConf(c)
