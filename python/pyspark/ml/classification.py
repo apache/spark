@@ -1954,8 +1954,6 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     def setClassifier(self, value):
         """
         Sets the value of :py:attr:`classifier`.
-
-        .. note:: Only LogisticRegression and NaiveBayes are supported now.
         """
         return self._set(classifier=value)
 
