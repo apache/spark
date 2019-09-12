@@ -82,6 +82,7 @@ private[spark] object UI {
     .createWithDefault(true)
 
   val UI_PROMETHEUS_ENABLED = ConfigBuilder("spark.ui.prometheus.enabled")
+    .internal()
     .doc("Expose executor metrics at /metrics/executors/prometheus. " +
       "For master/worker/driver metrics, you need to configure `conf/metrics.properties`.")
     .booleanConf
