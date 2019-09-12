@@ -83,9 +83,10 @@ package object debug {
     val codegenSeq = codegenStringSeq(plan)
     append(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
     for (((subtree, code, codeStats), i) <- codegenSeq.zipWithIndex) {
-      val codeStatsStr = s"maxClassCodeSize:${codeStats.maxClassCodeSize} " +
-        s"maxMethodCodeSize:${codeStats.maxMethodCodeSize} " +
-        s"maxConstantPoolSize:${codeStats.maxConstPoolSize}"
+      val codeStatsStr = s"maxClassCodeSize:${codeStats.maxClassCodeSize}; " +
+        s"maxMethodCodeSize:${codeStats.maxMethodCodeSize}; " +
+        s"maxConstantPoolSize:${codeStats.maxConstPoolSize}; " +
+        s"numInnerClasses:${codeStats.numInnerClasses}"
       append(s"== Subtree ${i + 1} / ${codegenSeq.size} ($codeStatsStr) ==\n")
       append(subtree)
       append("\nGenerated code:\n")
@@ -113,7 +114,7 @@ package object debug {
         CodeGenerator.compile(source)._2
       } catch {
         case NonFatal(_) =>
-          ByteCodeStats.unavailable
+          ByteCodeStats.UNAVAILABLE
       }
       (subtree.toString, CodeFormatter.format(source), codeStats)
     }

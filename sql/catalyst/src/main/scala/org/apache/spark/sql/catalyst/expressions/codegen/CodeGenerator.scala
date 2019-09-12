@@ -1214,15 +1214,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 /**
  * Java bytecode statistics of a compiled class by Janino.
  */
-case class ByteCodeStats(maxClassCodeSize: Int, maxMethodCodeSize: Int, maxConstPoolSize: Int)
+case class ByteCodeStats(
+  maxClassCodeSize: Int, maxMethodCodeSize: Int, maxConstPoolSize: Int, numInnerClasses: Int)
 
 object ByteCodeStats {
-
-  val unavailable = ByteCodeStats(-1, -1, -1)
-
-  def apply(codeStats: (Int, Int, Int)): ByteCodeStats = {
-    ByteCodeStats(codeStats._1, codeStats._2, codeStats._3)
-  }
+  val UNAVAILABLE = ByteCodeStats(-1, -1, -1, -1)
 }
 
 object CodeGenerator extends Logging {
@@ -1332,9 +1328,9 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Returns the bytecode statistics (max class bytecode size, max method bytecode size, and
-   * max constant pool size) of generated classes by inspecting janino private fields.inspecting
-   * janino private fields. Also, this method updates the metrics information.
+   * Returns the bytecode statistics (max class bytecode size, max method bytecode size,
+   * max constant pool size, and # of inner classes) of generated classes
+   * by inspecting Janino classes. Also, this method updates the metrics information.
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
@@ -1378,9 +1374,17 @@ object CodeGenerator extends Logging {
       }
     }
 
-    ByteCodeStats(codeStats.reduce[(Int, Int, Int)] { case (v1, v2) =>
+    // Computes the max values of the three metrics: class code size, method code size,
+    // and constant pool size.
+    val maxCodeStats = codeStats.reduce[(Int, Int, Int)] { case (v1, v2) =>
       (Math.max(v1._1, v2._1), Math.max(v1._2, v2._2), Math.max(v1._3, v2._3))
-    })
+    }
+    ByteCodeStats(
+      maxClassCodeSize = maxCodeStats._1,
+      maxMethodCodeSize = maxCodeStats._2,
+      maxConstPoolSize = maxCodeStats._3,
+      // Minus 2 for `GeneratedClass` and an outer-most generated class
+      numInnerClasses = classes.size - 2)
   }
 
   /**

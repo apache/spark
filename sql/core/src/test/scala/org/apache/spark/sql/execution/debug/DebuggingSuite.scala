@@ -90,4 +90,30 @@ class DebuggingSuite extends SharedSparkSession {
         | id LongType: {}
         |""".stripMargin))
   }
+
+  test("Prints bytecode statistics in debugCodegen") {
+    Seq(("SELECT sum(v) FROM VALUES(1) t(v)", (0, 0)),
+      // We expect HashAggregate uses an inner class for fast hash maps
+      // in partial aggregates with keys.
+      ("SELECT k, avg(v) FROM VALUES((1, 1)) t(k, v) GROUP BY k", (0, 1)))
+        .foreach { case (query, (expectedNumInnerClasses0, expectedNumInnerClasses1)) =>
+
+      val executedPlan = sql(query).queryExecution.executedPlan
+      val res = codegenStringSeq(executedPlan)
+      assert(res.length == 2)
+      assert(res.forall { case (_, _, codeStats) =>
+        codeStats.maxClassCodeSize > 0 &&
+          codeStats.maxMethodCodeSize > 0 &&
+          codeStats.maxConstPoolSize > 0
+      })
+      assert(res(0)._3.numInnerClasses == expectedNumInnerClasses0)
+      assert(res(1)._3.numInnerClasses == expectedNumInnerClasses1)
+
+      val debugCodegenStr = codegenString(executedPlan)
+      assert(debugCodegenStr.contains("maxClassCodeSize:"))
+      assert(debugCodegenStr.contains("maxMethodCodeSize:"))
+      assert(debugCodegenStr.contains("maxConstantPoolSize:"))
+      assert(debugCodegenStr.contains("numInnerClasses:"))
+    }
+  }
 }
