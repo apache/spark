@@ -46,7 +46,7 @@ class DebuggingSuite extends SharedSparkSession {
     val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
       .queryExecution.executedPlan)
     assert(res.length == 2)
-    assert(res.forall{ case (subtree, code) =>
+    assert(res.forall{ case (subtree, code, _) =>
       subtree.contains("Range") && code.contains("Object[]")})
   }
 

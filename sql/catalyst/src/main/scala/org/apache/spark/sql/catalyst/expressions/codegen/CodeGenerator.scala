@@ -1211,6 +1211,20 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 }
 
+/**
+ * Java bytecode statistics of a compiled class by Janino.
+ */
+case class ByteCodeStats(maxClassCodeSize: Int, maxMethodCodeSize: Int, maxConstPoolSize: Int)
+
+object ByteCodeStats {
+
+  val unavailable = ByteCodeStats(-1, -1, -1)
+
+  def apply(codeStats: (Int, Int, Int)): ByteCodeStats = {
+    ByteCodeStats(codeStats._1, codeStats._2, codeStats._3)
+  }
+}
+
 object CodeGenerator extends Logging {
 
   // This is the default value of HugeMethodLimit in the OpenJDK HotSpot JVM,
@@ -1244,7 +1258,7 @@ object CodeGenerator extends Logging {
    *
    * @return a pair of a generated class and the max bytecode size of generated functions.
    */
-  def compile(code: CodeAndComment): (GeneratedClass, Int) = try {
+  def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
     cache.get(code)
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
@@ -1257,7 +1271,7 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
+  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
     val evaluator = new ClassBodyEvaluator()
 
     // A special classloader used to wrap the actual parent classloader of
@@ -1318,10 +1332,11 @@ object CodeGenerator extends Logging {
   }
 
   /**
-   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
-   * Also, this method updates the metrics information.
+   * Returns the bytecode statistics (max class bytecode size, max method bytecode size, and
+   * max constant pool size) of generated classes by inspecting janino private fields.inspecting
+   * janino private fields. Also, this method updates the metrics information.
    */
-  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
+  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -1336,11 +1351,13 @@ object CodeGenerator extends Logging {
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
     val codeAttrField = codeAttr.getDeclaredField("code")
     codeAttrField.setAccessible(true)
-    val codeSizes = classes.flatMap { case (_, classBytes) =>
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
+    val codeStats = classes.map { case (_, classBytes) =>
+      val classCodeSize = classBytes.length
+      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val stats = cf.methodInfos.asScala.flatMap { method =>
+        val constPoolSize = cf.getConstantPoolSize
+        val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
           method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
@@ -1353,19 +1370,17 @@ object CodeGenerator extends Logging {
             byteCodeSize
           }
         }
-        Some(stats)
+        (classCodeSize, methodCodeSizes.max, constPoolSize)
       } catch {
         case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
-          None
+          (classCodeSize, -1, -1)
       }
-    }.flatten
-
-    if (codeSizes.nonEmpty) {
-      codeSizes.max
-    } else {
-      0
     }
+
+    ByteCodeStats(codeStats.reduce[(Int, Int, Int)] { case (v1, v2) =>
+      (Math.max(v1._1, v2._1), Math.max(v1._2, v2._2), Math.max(v1._3, v2._3))
+    })
   }
 
   /**
@@ -1380,8 +1395,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(SQLConf.get.codegenCacheMaxEntries)
     .build(
-      new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
-        override def load(code: CodeAndComment): (GeneratedClass, Int) = {
+      new CacheLoader[CodeAndComment, (GeneratedClass, ByteCodeStats)]() {
+        override def load(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()
