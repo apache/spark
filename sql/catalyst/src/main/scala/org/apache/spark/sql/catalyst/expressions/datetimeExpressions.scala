@@ -589,22 +589,43 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+  var formatter: Option[TimestampFormatter] = None
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
+    if (formatter.isEmpty && right.foldable) {
+      val format = right.eval().toString
+      formatter = Some(TimestampFormatter(
+        format,
+        DateTimeUtils.getZoneId(timeZoneId),
+        Locale.US))
+    }
     copy(timeZoneId = Option(timeZoneId))
+  }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val df = TimestampFormatter(format.toString, zoneId)
-    UTF8String.fromString(df.format(timestamp.asInstanceOf[Long]))
+    val tf = if (formatter.isEmpty) {
+      TimestampFormatter(format.toString, zoneId, Locale.US)
+    } else {
+      formatter.get
+    }
+    UTF8String.fromString(tf.format(timestamp.asInstanceOf[Long]))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-    val locale = ctx.addReferenceObj("locale", Locale.US)
-    defineCodeGen(ctx, ev, (timestamp, format) => {
-      s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
+    formatter.map { tf =>
+      val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
+      defineCodeGen(ctx, ev, (timestamp, _) => {
+        s"""UTF8String.fromString($timestampFormatter.format($timestamp))"""
+      })
+    }.getOrElse {
+      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val locale = ctx.addReferenceObj("locale", Locale.US)
+      defineCodeGen(ctx, ev, (timestamp, format) => {
+        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
           .format($timestamp))"""
-    })
+      })
+    }
   }
 
   override def prettyName: String = "date_format"
