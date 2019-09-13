@@ -25,6 +25,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
 
+import org.apache.spark.storage.TimeTrackingOutputStream;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -382,6 +383,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         ShufflePartitionWriter writer = mapWriter.getPartitionWriter(partition);
         OutputStream partitionOutput = writer.openStream();
         try {
+          partitionOutput = new TimeTrackingOutputStream(writeMetrics, partitionOutput);
           partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
           if (compressionCodec != null) {
             partitionOutput = compressionCodec.compressedOutputStream(partitionOutput);
