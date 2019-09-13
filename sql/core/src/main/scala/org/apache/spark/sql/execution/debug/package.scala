@@ -83,9 +83,15 @@ package object debug {
     val codegenSeq = codegenStringSeq(plan)
     append(s"Found ${codegenSeq.size} WholeStageCodegen subtrees.\n")
     for (((subtree, code, codeStats), i) <- codegenSeq.zipWithIndex) {
+      val usedConstPoolRatio = if (codeStats.maxConstPoolSize > 0) {
+        val rt = 100.0 * codeStats.maxConstPoolSize / CodeGenerator.MAX_JVM_CONSTANT_POOL_SIZE
+        "(%.2f%% used)".format(rt)
+      } else {
+        ""
+      }
       val codeStatsStr = s"maxClassCodeSize:${codeStats.maxClassCodeSize}; " +
         s"maxMethodCodeSize:${codeStats.maxMethodCodeSize}; " +
-        s"maxConstantPoolSize:${codeStats.maxConstPoolSize}; " +
+        s"maxConstantPoolSize:${codeStats.maxConstPoolSize}$usedConstPoolRatio; " +
         s"numInnerClasses:${codeStats.numInnerClasses}"
       append(s"== Subtree ${i + 1} / ${codegenSeq.size} ($codeStatsStr) ==\n")
       append(subtree)

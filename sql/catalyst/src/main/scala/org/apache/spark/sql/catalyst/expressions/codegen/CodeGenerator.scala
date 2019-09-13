@@ -1230,6 +1230,9 @@ object CodeGenerator extends Logging {
   // The max valid length of method parameters in JVM.
   final val MAX_JVM_METHOD_PARAMS_LENGTH = 255
 
+  // The max number of constant pool entries in JVM.
+  final val MAX_JVM_CONSTANT_POOL_SIZE = 65535
+
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
   final val MERGE_SPLIT_METHODS_THRESHOLD = 3
@@ -1374,17 +1377,13 @@ object CodeGenerator extends Logging {
       }
     }
 
-    // Computes the max values of the three metrics: class code size, method code size,
-    // and constant pool size.
-    val maxCodeStats = codeStats.reduce[(Int, Int, Int)] { case (v1, v2) =>
-      (Math.max(v1._1, v2._1), Math.max(v1._2, v2._2), Math.max(v1._3, v2._3))
-    }
+    val (classSizes, maxMethodSizes, constPoolSize) = codeStats.unzip3
     ByteCodeStats(
-      maxClassCodeSize = maxCodeStats._1,
-      maxMethodCodeSize = maxCodeStats._2,
-      maxConstPoolSize = maxCodeStats._3,
+      maxClassCodeSize = classSizes.max,
+      maxMethodCodeSize = maxMethodSizes.max,
+      maxConstPoolSize = constPoolSize.max,
       // Minus 2 for `GeneratedClass` and an outer-most generated class
-      numInnerClasses = classes.size - 2)
+      numInnerClasses = classSizes.size - 2)
   }
 
   /**
