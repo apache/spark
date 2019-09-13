@@ -899,9 +899,11 @@ private[spark] class SparkSubmit extends Logging {
 
     try {
       app.start(childArgs.toArray, sparkConf)
+      System.exit(0)
     } catch {
       case t: Throwable =>
-        throw findCause(t)
+        logError("Error running job", t)
+        System.exit(-1)
     }
   }
 
