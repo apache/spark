@@ -314,6 +314,8 @@ private[hive] class HiveClientImpl(
       Thread.currentThread().setContextClassLoader(original)
       if (originState != null) {
         SessionState.setCurrentSessionState(originState)
+      } else {
+        SessionState.detachSession()
       }
       HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
