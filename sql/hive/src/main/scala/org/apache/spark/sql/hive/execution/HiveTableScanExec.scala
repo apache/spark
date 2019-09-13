@@ -87,8 +87,6 @@ case class HiveTableScanExec(
     BindReferences.bindReference(pred, relation.partitionCols)
   }
 
-  @transient private lazy val  hiveClient: HiveClient = sparkSession.sharedState.externalCatalog
-    .unwrapped.asInstanceOf[HiveExternalCatalog].client
   @transient private lazy val hiveQlTable = HiveClientImpl.toHiveTable(relation.tableMeta)
   @transient private lazy val tableDesc = new TableDesc(
     hiveQlTable.getInputFormatClass,
@@ -97,7 +95,7 @@ case class HiveTableScanExec(
 
   // Create a local copy of hadoopConf,so that scan specific modifications should not impact
   // other queries
-  @transient private lazy val hadoopConf = hiveClient.withHiveState {
+  @transient private lazy val hadoopConf = {
     val c = sparkSession.sessionState.newHadoopConf()
     // append columns ids and names before broadcast
     addColumnMetadataToConf(c)

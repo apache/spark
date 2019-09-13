@@ -294,6 +294,7 @@ private[hive] class HiveClientImpl(
   def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
     val originalConfLoader = state.getConf.getClassLoader
+    val originState = SessionState.get()
     // The classloader in clientLoader could be changed after addJar, always use the latest
     // classloader. We explicitly set the context class loader since "conf.setClassLoader" does
     // not do that, and the Hive client libraries may need to load classes defined by the client's
@@ -311,6 +312,9 @@ private[hive] class HiveClientImpl(
     val ret = try f finally {
       state.getConf.setClassLoader(originalConfLoader)
       Thread.currentThread().setContextClassLoader(original)
+      if (originState != null) {
+        SessionState.setCurrentSessionState(originState)
+      }
       HiveCatalogMetrics.incrementHiveClientCalls(1)
     }
     ret
