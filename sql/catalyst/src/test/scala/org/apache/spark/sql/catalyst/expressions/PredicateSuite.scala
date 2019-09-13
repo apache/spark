@@ -560,4 +560,10 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         assert(msg.contains("argument 1 requires boolean type"))
     }
   }
+
+  test("SPARK-29100: InSet with empty input set") {
+    val row = create_row(1)
+    val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty)
+    checkEvaluation(inSet, false, row)
+  }
 }
