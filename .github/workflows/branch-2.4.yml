@@ -1,0 +1,30 @@
+name: branch-2.4
+
+on:
+  push:
+    branches:
+    - branch-2.4
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        scala: [ '2.11', '2.12' ]
+    name: Build Spark with Scala ${{ matrix.scala }}
+
+    steps:
+    - uses: actions/checkout@master
+    - name: Set up JDK 8
+      uses: actions/setup-java@v1
+      with:
+        version: '1.8'
+    - name: Change to Scala ${{ matrix.scala }}
+      run: |
+        dev/change-scala-version.sh ${{ matrix.scala }}
+    - name: Build with Maven
+      run: |
+        export MAVEN_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=512m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Pscala-${{ matrix.scala }} package
