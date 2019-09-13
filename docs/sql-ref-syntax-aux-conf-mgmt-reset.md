@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Reset all SQLConf properties to the default values. After RESET command, executing SET command will output empty.
+Reset all the properties specific to the current session to their default values. After RESET command, executing SET command will output empty.
 
 ### Syntax
 {% highlight sql %}
