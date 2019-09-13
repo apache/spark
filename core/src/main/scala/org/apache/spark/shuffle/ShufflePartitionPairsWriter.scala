@@ -61,7 +61,7 @@ private[spark] class ShufflePartitionPairsWriter(
     try {
       partitionStream = partitionWriter.openStream
       timeTrackingStream = new TimeTrackingOutputStream(writeMetrics, partitionStream)
-      wrappedStream = serializerManager.wrapStream(blockId, partitionStream)
+      wrappedStream = serializerManager.wrapStream(blockId, timeTrackingStream)
       objOut = serializerInstance.serializeStream(wrappedStream)
     } catch {
       case e: Exception =>
