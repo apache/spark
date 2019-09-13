@@ -124,11 +124,10 @@ class DebuggingSuite extends SharedSparkSession {
       assert(genCodes.length == 1)
       val (_, _, codeStats) = genCodes.head
       val expectedNumInnerClasses = if (useInnerClass) 1 else 0
-      assert(codeStats.maxClassCodeSize > 0 && codeStats.maxMethodCodeSize > 0 &&
-        codeStats.maxConstPoolSize > 0 && codeStats.numInnerClasses == expectedNumInnerClasses)
+      assert(codeStats.maxMethodCodeSize > 0 && codeStats.maxConstPoolSize > 0 &&
+        codeStats.numInnerClasses == expectedNumInnerClasses)
 
       val debugCodegenStr = codegenString(plan)
-      assert(debugCodegenStr.contains("maxClassCodeSize:"))
       assert(debugCodegenStr.contains("maxMethodCodeSize:"))
       assert(debugCodegenStr.contains("maxConstantPoolSize:"))
       assert(debugCodegenStr.contains("numInnerClasses:"))

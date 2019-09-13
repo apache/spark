@@ -213,10 +213,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession {
 
   ignore("SPARK-21871 check if we can get large code size when compiling too long functions") {
     val codeWithShortFunctions = genGroupByCode(3)
-    val (_, ByteCodeStats(_, maxCodeSize1, _, _)) = CodeGenerator.compile(codeWithShortFunctions)
+    val (_, ByteCodeStats(maxCodeSize1, _, _)) = CodeGenerator.compile(codeWithShortFunctions)
     assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
     val codeWithLongFunctions = genGroupByCode(50)
-    val (_, ByteCodeStats(_, maxCodeSize2, _, _)) = CodeGenerator.compile(codeWithLongFunctions)
+    val (_, ByteCodeStats(maxCodeSize2, _, _)) = CodeGenerator.compile(codeWithLongFunctions)
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
 

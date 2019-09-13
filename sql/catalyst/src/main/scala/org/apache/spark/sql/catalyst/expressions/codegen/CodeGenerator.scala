@@ -1214,11 +1214,10 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 /**
  * Java bytecode statistics of a compiled class by Janino.
  */
-case class ByteCodeStats(
-  maxClassCodeSize: Int, maxMethodCodeSize: Int, maxConstPoolSize: Int, numInnerClasses: Int)
+case class ByteCodeStats(maxMethodCodeSize: Int, maxConstPoolSize: Int, numInnerClasses: Int)
 
 object ByteCodeStats {
-  val UNAVAILABLE = ByteCodeStats(-1, -1, -1, -1)
+  val UNAVAILABLE = ByteCodeStats(-1, -1, -1)
 }
 
 object CodeGenerator extends Logging {
@@ -1255,7 +1254,7 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    *
-   * @return a pair of a generated class and the max bytecode size of generated functions.
+   * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
   def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
     cache.get(code)
@@ -1309,7 +1308,7 @@ object CodeGenerator extends Logging {
       s"\n${CodeFormatter.format(code)}"
     })
 
-    val maxCodeSize = try {
+    val codeStats = try {
       evaluator.cook("generated.java", code.body)
       updateAndGetCompilationStats(evaluator)
     } catch {
@@ -1327,13 +1326,13 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
+    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
   }
 
   /**
-   * Returns the bytecode statistics (max class bytecode size, max method bytecode size,
-   * max constant pool size, and # of inner classes) of generated classes
-   * by inspecting Janino classes. Also, this method updates the metrics information.
+   * Returns the bytecode statistics (max method bytecode size, max constant pool size, and
+   * # of inner classes) of generated classes by inspecting Janino classes.
+   * Also, this method updates the metrics information.
    */
   private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
@@ -1369,21 +1368,20 @@ object CodeGenerator extends Logging {
             byteCodeSize
           }
         }
-        (classCodeSize, methodCodeSizes.max, constPoolSize)
+        (methodCodeSizes.max, constPoolSize)
       } catch {
         case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
-          (classCodeSize, -1, -1)
+          (-1, -1)
       }
     }
 
-    val (classSizes, maxMethodSizes, constPoolSize) = codeStats.unzip3
+    val (maxMethodSizes, constPoolSize) = codeStats.unzip
     ByteCodeStats(
-      maxClassCodeSize = classSizes.max,
       maxMethodCodeSize = maxMethodSizes.max,
       maxConstPoolSize = constPoolSize.max,
       // Minus 2 for `GeneratedClass` and an outer-most generated class
-      numInnerClasses = classSizes.size - 2)
+      numInnerClasses = classes.size - 2)
   }
 
   /**

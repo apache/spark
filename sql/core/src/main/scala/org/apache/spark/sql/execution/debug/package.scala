@@ -89,8 +89,7 @@ package object debug {
       } else {
         ""
       }
-      val codeStatsStr = s"maxClassCodeSize:${codeStats.maxClassCodeSize}; " +
-        s"maxMethodCodeSize:${codeStats.maxMethodCodeSize}; " +
+      val codeStatsStr = s"maxMethodCodeSize:${codeStats.maxMethodCodeSize}; " +
         s"maxConstantPoolSize:${codeStats.maxConstPoolSize}$usedConstPoolRatio; " +
         s"numInnerClasses:${codeStats.numInnerClasses}"
       append(s"== Subtree ${i + 1} / ${codegenSeq.size} ($codeStatsStr) ==\n")
