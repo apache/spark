@@ -42,22 +42,25 @@ CREATE {DATABASE | SCHEMA} [ IF NOT EXISTS ] database_name
     <dd>Path of the file system in which database to be created. If the specified path does not exist in the underlying file system, this command creates a directory with the path. If location is not specified, database will be created in default warehouse directory.</dd>
 
     <dt><code><em>database_comment</em></code></dt>
-    <dd>Description for the database.</dd>
+    <dd>Specifies the description for the database.</dd>
 
     <dt><code><em>WITH DBPROPERTIES (property_name=property_value [ , ...])</em></code></dt>
-    <dd>Properties for the database in key-value pair.</dd>
+    <dd>Specifies the properties for the database in key-value pair.</dd>
 </dl>
 
 ### Examples
 {% highlight sql %}
--- Create database `customer_db`. This throws exception if database with name customer_db already exists.
+-- Create database `customer_db`. This throws exception if database with name customer_db
+-- already exists.
 CREATE DATABASE customer_db;
 
 -- Create database `customer_db` only if database with same name doesn't exist.
 CREATE DATABASE IF NOT EXISTS customer_db;
 
--- Create database `customer_db` only if database with same name doesn't exist with `Comments`,`Specific Location` and `Database properties`.
-CREATE DATABASE IF NOT EXISTS customer_db COMMENT 'This is customer database' LOCATION '/user' WITH DBPROPERTIES (ID=001, Name='John');
+-- Create database `customer_db` only if database with same name doesn't exist with 
+-- `Comments`,`Specific Location` and `Database properties`.
+CREATE DATABASE IF NOT EXISTS customer_db COMMENT 'This is customer database' LOCATION '/user'
+ WITH DBPROPERTIES (ID=001, Name='John');
 
 -- Verify that properties are set.
 DESCRIBE DATABASE EXTENDED customer_db;
@@ -73,4 +76,4 @@ DESCRIBE DATABASE EXTENDED customer_db;
 
 ### Related Statements
 - [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
-
+- [DROP DATABASE](sql-ref-syntax-ddl-drop-database.html)
