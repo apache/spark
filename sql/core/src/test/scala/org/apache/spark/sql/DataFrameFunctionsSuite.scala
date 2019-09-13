@@ -2199,9 +2199,9 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     ).toDF("s", "i")
 
     val ex1 = intercept[AnalysisException] {
-      df.selectExpr("filter(s, (x, y) -> x + y)")
+      df.selectExpr("filter(s, (x, y, z) -> x + y)")
     }
-    assert(ex1.getMessage.contains("The number of lambda function arguments '2' does not match"))
+    assert(ex1.getMessage.contains("The number of lambda function arguments '3' does not match"))
 
     val ex2 = intercept[AnalysisException] {
       df.selectExpr("filter(i, x -> x)")
