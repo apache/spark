@@ -2061,6 +2061,17 @@
                 </rules>
               </configuration>
             </execution>
+            <execution>
+              <id>enforce-no-duplicate-dependencies</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <configuration>
+                <rules>
+                  <banDuplicatePomDependencyVersions/>
+                </rules>
+              </configuration>
+            </execution>
           </executions>
         </plugin>
         <plugin>
