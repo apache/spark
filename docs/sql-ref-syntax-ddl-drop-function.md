@@ -20,7 +20,7 @@ license: |
 ---
 
 ### Description
-Dropping a user-defined function(UDF). An exception will be thrown if the function does not exist
+`DROP FUNCTION` statement drops a temporary or user defined function(UDF). An exception will be thrown if the function does not exist
  in the system. 
 
 ### Syntax
@@ -49,38 +49,33 @@ DROP [TEMPORARY] FUNCTION [IF EXISTS] [db_name.]function_name;
 ### Example
 {% highlight sql %}
 -- Create a permanent function `test_avg`
-
 CREATE FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
 
--- List user functions 
-
+-- List user functions
 SHOW user functions;
 
-+-------------------+
-|     function      |
-+-------------------+
-| default.test_avg  |
-+-------------------+
+  +-------------------+
+  |     function      |
+  +-------------------+
+  | default.test_avg  |
+  +-------------------+
 
 -- Drop Permanent function
-
 DROP FUNCTION test_avg;
-+---------+
-| Result  |
-+---------+
-+---------+
+  +---------+
+  | Result  |
+  +---------+
+  +---------+
 
--- Creaet Temporary function `temp_avg`
+-- Create Temporary function `temp_avg`
 CREATE TEMPORARY FUNCTION temp_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
 
 -- Drop Temporary function
-
 DROP TEMPORARY FUNCTION IF EXISTS temp_avg;
-+---------+
-| Result  |
-+---------+
-+---------+
-
+  +---------+
+  | Result  |
+  +---------+
+  +---------+
 {% endhighlight %}
 ### Related statements
 - [CREATE FUNCTION](sql-ref-syntax-ddl-create-function.html)
