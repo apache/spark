@@ -30,7 +30,7 @@ RESET
 
 ### Examples
 {% highlight sql %}
--- Reset all SQLConf properties to the default values.
+-- Reset all the properties specific to the current session to their default values.
 RESET;
 {% endhighlight %}
 

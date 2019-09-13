@@ -24,9 +24,9 @@ The SET command sets a property, returns the value of an existing property or re
 
 ### Syntax
 {% highlight sql %}
-SET;
-SET [ -v ];
-SET property_key[ =property_value ];
+SET
+SET [ -v ]
+SET property_key[ = property_value ]
 {% endhighlight %}
 
 ### Parameters
@@ -42,7 +42,7 @@ SET property_key[ =property_value ];
 
 <dl>
   <dt><code><em>property_key=property_value</em></code></dt>
-  <dd>Sets the value of specified property key.</dd>
+  <dd>The new value overrides any existing value for the specified property key.</dd>
 </dl>
 
 ### Examples
