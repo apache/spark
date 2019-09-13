@@ -53,7 +53,6 @@ CREATE FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAv
 
 -- List user functions
 SHOW user functions;
-
   +-------------------+
   |     function      |
   +-------------------+
