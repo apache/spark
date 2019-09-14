@@ -141,8 +141,9 @@ private[spark] class Benchmark(
     val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
     val minDuration = if (overrideNumIters != 0) 0 else minTime.toNanos
     val runTimes = ArrayBuffer[Long]()
+    val startTime = System.nanoTime()
     var i = 0
-    while (i < minIters || runTimes.sum < minDuration) {
+    while (i < minIters || (System.nanoTime() - startTime) < minDuration) {
       val timer = new Benchmark.Timer(i)
       f(timer)
       val runTime = timer.totalTime()
