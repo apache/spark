@@ -67,7 +67,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
-    .. note:: the input rating dataframe to the ALS implementation must be determinate. If the
+    .. note:: the input rating dataframe to the ALS implementation must be deterministic. If the
               training data is prepared using some indeterminate operations, like `randomSplit`
               or `sample`, please checkpoint the training data before fitting.
 

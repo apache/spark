@@ -565,7 +565,7 @@ object ALSModel extends MLReadable[ALSModel] {
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
  *
- * Note: the input rating dataset to the ALS implementation must be determinate. If the training
+ * Note: the input rating dataset to the ALS implementation must be deterministic. If the training
  * data is prepared using some indeterminate operations, like `randomSplit` or `sample`, please
  * checkpoint the training data before fitting.
  */

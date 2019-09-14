@@ -63,7 +63,7 @@ case class Rating @Since("0.8.0") (
  * indicated user
  * preferences rather than explicit ratings given to items.
  *
- * Note: the input rating RDD to the ALS implementation must be determinate. If the training data
+ * Note: the input rating RDD to the ALS implementation must be deterministic. If the training data
  * is prepared using some indeterminate RDD operations, like `randomSplit` or `sample`, please
  * checkpoint the training data before fitting.
  */
