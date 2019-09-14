@@ -927,9 +927,11 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     // Indeterminate rating RDD causes inconsistent in/out blocks in case of rerun.
     // It can cause runtime error when matching in/out user/item blocks.
     if (ratings.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
-      throw new IllegalArgumentException("The output of rating RDD can not be indeterminate. " +
-        "If your training data has indeterminate RDD computations, like `randomSplit` or `sample`" +
-        ", please checkpoint the training data before running ALS.")
+      logWarning("The output of rating RDD should not be indeterminate. " +
+        "If indeterminate RDD needs to be rerun during fitting ALS model, it could " +
+        "cause failures. If your training data has indeterminate RDD computations, " +
+        "like `randomSplit` or `sample`, please checkpoint the training data before " +
+        "running ALS.")
     }
 
     val sc = ratings.sparkContext
