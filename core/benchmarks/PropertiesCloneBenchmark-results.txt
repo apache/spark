@@ -1,0 +1,40 @@
+================================================================================================
+Properties Cloning
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.14.6
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Empty Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              0              0           0          0.2        4188.0       1.0X
+Utils.cloneProperties                                 0              0           0         62.5          16.0     261.8X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.14.6
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+System Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              0              0           0          0.0      104325.0       1.0X
+Utils.cloneProperties                                 0              0           0          1.0         964.0     108.2X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.14.6
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Small Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              0              0           0          0.0      316166.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.9        1090.0     290.1X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.14.6
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Medium Properties:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              1              1           0          0.0     1337463.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.2        5430.0     246.3X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_131-b11 on Mac OS X 10.14.6
+Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
+Large Properties:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+SerializationUtils.clone                              3              3           0          0.0     2539010.0       1.0X
+Utils.cloneProperties                                 0              0           0          0.1       10941.0     232.1X
+
+

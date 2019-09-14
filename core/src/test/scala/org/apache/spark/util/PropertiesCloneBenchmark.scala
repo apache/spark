@@ -25,6 +25,18 @@ import org.apache.commons.lang.SerializationUtils
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
 
+/**
+ * Benchmark for Kryo Unsafe vs safe Serialization.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <spark core test jar>
+ *   2. build/sbt "core/test:runMain <this class>"
+ *   3. generate result:
+ *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
+ *      Results will be written to "benchmarks/PropertiesCloneBenchmark-results.txt".
+ * }}}
+ */
 object PropertiesCloneBenchmark extends BenchmarkBase {
   /**
    * Benchmark various cases of cloning properties objects
