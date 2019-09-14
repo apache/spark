@@ -650,6 +650,7 @@ private[sql] class TestHiveSessionStateBuilder(
 
 private[hive] object HiveTestJars {
   private val repository = "https://repository.apache.org/content/repositories/releases/"
+  private val hiveTestJarsDir = Utils.createTempDir()
 
   def getHiveContribJar: File =
     getJarFromUrl(s"${repository}org/apache/hive/hive-contrib/" +
@@ -660,15 +661,9 @@ private[hive] object HiveTestJars {
 
   private def getJarFromUrl(urlString: String): File = {
     val fileName = urlString.split("/").last
-    val hiveTestJarsDir = new File("/tmp/test-spark/hiveTestJars")
-    if (!hiveTestJarsDir.exists()) {
-      hiveTestJarsDir.mkdirs()
-    }
     val targetFile = new File(hiveTestJarsDir, fileName)
-    if (!targetFile.exists() || !(targetFile.length() > 0)) {
-      val conf = new SparkConf
-      conf.set("spark.files.overwrite", "true")
-      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, conf, null, null)
+    if (!targetFile.exists()) {
+      Utils.doFetchFile(urlString, hiveTestJarsDir, fileName, new SparkConf, null, null)
     }
     targetFile
   }
