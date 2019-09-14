@@ -596,17 +596,14 @@ case class DateFormatClass(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
     val tf = if (formatter.isEmpty && right.foldable) {
       val format = right.eval().toString
-      Some(TimestampFormatter(
-        format,
-        DateTimeUtils.getZoneId(timeZoneId),
-        Locale.US))
+      Some(TimestampFormatter(format, DateTimeUtils.getZoneId(timeZoneId)))
     } else None
     copy(formatter = tf, timeZoneId = Option(timeZoneId))
   }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
     val tf = if (formatter.isEmpty) {
-      TimestampFormatter(format.toString, zoneId, Locale.US)
+      TimestampFormatter(format.toString, zoneId)
     } else {
       formatter.get
     }
@@ -622,9 +619,8 @@ case class DateFormatClass(
     }.getOrElse {
       val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
       val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      val locale = ctx.addReferenceObj("locale", Locale.US)
       defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid, $locale)
+        s"""UTF8String.fromString($tf$$.MODULE$$.apply($format.toString(), $zid)
           .format($timestamp))"""
       })
     }
