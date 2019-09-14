@@ -82,9 +82,10 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' statsS <- summary(modelS)
 #' }
 #' @note spark.als since 2.1.0
-#' @note the input rating dataframe to the ALS implementation must be deterministic. If the training
-#'       data is prepared using some indeterminate operations, like \code{randomSplit} or
-#'       \code{sample}, please checkpoint the training data before fitting.
+#' @note the input rating dataframe to the ALS implementation should not be indeterminate.
+#'       Indeterminate data can probably cause failure during fitting ALS model. If the
+#'       training data is prepared using some indeterminate operations, like \code{randomSplit}
+#'       or \code{sample}, please checkpoint the training data before fitting.
 setMethod("spark.als", signature(data = "SparkDataFrame"),
           function(data, ratingCol = "rating", userCol = "user", itemCol = "item",
                    rank = 10, regParam = 0.1, maxIter = 10, nonnegative = FALSE,
