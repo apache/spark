@@ -20,8 +20,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 
 class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
-  private val ctx = new CodegenContext
-
   test("Structurally Expression Equivalence") {
     val equivalence = new EquivalentExpressions
     assert(equivalence.getAllStructuralExpressions.isEmpty)
@@ -29,29 +27,28 @@ class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
     val oneA = Literal(1)
     val oneB = Literal(1)
     val twoA = Literal(2)
-    var twoB = Literal(2)
 
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA).isEmpty)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, twoA).isEmpty)
+    assert(equivalence.getStructurallyEquivalentExprs(oneA).isEmpty)
+    assert(equivalence.getStructurallyEquivalentExprs(twoA).isEmpty)
 
     // Add oneA and test if it is returned. Since it is a group of one, it does not.
-    equivalence.addStructExpr(ctx, oneA)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA).size == 1)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA)(0).size == 1)
+    equivalence.addStructExpr(oneA)
+    assert(equivalence.getStructurallyEquivalentExprs(oneA).size == 1)
+    assert(equivalence.getStructurallyEquivalentExprs(oneA)(0).size == 1)
 
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, twoA).isEmpty)
-    equivalence.addStructExpr(ctx, oneA)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA).size == 1)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA)(0).size == 2)
+    assert(equivalence.getStructurallyEquivalentExprs(twoA).isEmpty)
+    equivalence.addStructExpr(oneA)
+    assert(equivalence.getStructurallyEquivalentExprs(oneA).size == 1)
+    assert(equivalence.getStructurallyEquivalentExprs(oneA)(0).size == 2)
 
     // Add B and make sure they can see each other.
-    equivalence.addStructExpr(ctx, oneB)
+    equivalence.addStructExpr(oneB)
     // Use exists and reference equality because of how equals is defined.
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA).flatten.exists(_ eq oneB))
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneA).flatten.exists(_ eq oneA))
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneB).flatten.exists(_ eq oneA))
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, oneB).flatten.exists(_ eq oneB))
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, twoA).isEmpty)
+    assert(equivalence.getStructurallyEquivalentExprs(oneA).flatten.exists(_ eq oneB))
+    assert(equivalence.getStructurallyEquivalentExprs(oneA).flatten.exists(_ eq oneA))
+    assert(equivalence.getStructurallyEquivalentExprs(oneB).flatten.exists(_ eq oneA))
+    assert(equivalence.getStructurallyEquivalentExprs(oneB).flatten.exists(_ eq oneB))
+    assert(equivalence.getStructurallyEquivalentExprs(twoA).isEmpty)
 
     assert(equivalence.getAllStructuralExpressions.size == 1)
     assert(equivalence.getAllStructuralExpressions.values.head.values.flatten.toSeq.size == 3)
@@ -61,20 +58,20 @@ class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
     val add1 = Add(oneA, oneB)
     val add2 = Add(oneA, oneB)
 
-    equivalence.addStructExpr(ctx, add1)
-    equivalence.addStructExpr(ctx, add2)
+    equivalence.addStructExpr(add1)
+    equivalence.addStructExpr(add2)
 
     assert(equivalence.getAllStructuralExpressions.size == 2)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, add2).flatten.exists(_ eq add1))
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, add2).flatten.size == 2)
-    assert(equivalence.getStructurallyEquivalentExprs(ctx, add1).flatten.exists(_ eq add2))
+    assert(equivalence.getStructurallyEquivalentExprs(add2).flatten.exists(_ eq add1))
+    assert(equivalence.getStructurallyEquivalentExprs(add2).flatten.size == 2)
+    assert(equivalence.getStructurallyEquivalentExprs(add1).flatten.exists(_ eq add2))
   }
 
   test("Expression equivalence - non deterministic") {
     val sum = Add(Rand(0), Rand(0))
     val equivalence = new EquivalentExpressions
-    equivalence.addStructExpr(ctx, sum)
-    equivalence.addStructExpr(ctx, sum)
+    equivalence.addStructExpr(sum)
+    equivalence.addStructExpr(sum)
     assert(equivalence.getAllStructuralExpressions.isEmpty)
   }
 
@@ -86,7 +83,7 @@ class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
     val add2 = Add(add, fallback)
 
     val equivalence = new EquivalentExpressions
-    equivalence.addStructuralExprTree(ctx, add2)
+    equivalence.addStructuralExprTree(add2)
     // `fallback` and the `add` inside should not be added
     assert(equivalence.getAllStructuralExpressions.values
       .map(_.values.count(_.size > 1)).sum == 0)
@@ -100,7 +97,7 @@ class StructuralSubexpressionEliminationSuite extends SparkFunSuite {
     val ifExpr = If(condition, add, add)
 
     val equivalence = new EquivalentExpressions
-    equivalence.addStructuralExprTree(ctx, ifExpr)
+    equivalence.addStructuralExprTree(ifExpr)
     // the `add` inside `If` should not be added
     assert(equivalence.getAllStructuralExpressions.values
       .map(_.values.count(_.size > 1)).sum == 0)

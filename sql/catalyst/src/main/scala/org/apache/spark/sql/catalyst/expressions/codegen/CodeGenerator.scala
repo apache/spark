@@ -1074,8 +1074,8 @@ class CodegenContext {
     // Add each expression tree and compute the structurally common subexpressions.
     // Those expressions are not added into structurally common subexpressions, defer them to
     // semantically common subexpression.
-    val exprsOut =
-      expressions.filterNot(equivalentExpressions.addStructuralExprTree(this, _))
+    val nonApplicableExprs =
+      expressions.filterNot(equivalentExpressions.addStructuralExprTree)
 
     val structuralExprs = equivalentExpressions.getAllStructuralExpressions
 
@@ -1090,7 +1090,12 @@ class CodegenContext {
         Some((key.e, exprGroups))
       }
     }.foreach { case (expr, exprGroups) =>
-      val parameters = expr.collect {
+      val parameterizedExpr = expr.transformUp {
+        case b: BoundReference =>
+          val param = freshName("ordinal")
+          ParameterizedBoundReference(param, b.dataType, b.nullable)
+      }
+      val parameters = parameterizedExpr.collect {
         case b: ParameterizedBoundReference => b
       }
       val resultIndex = freshName("resultIndex")
@@ -1117,7 +1122,7 @@ class CodegenContext {
       // Generate the code for this expression tree and wrap it in a function.
       // Sets the current parameters.
       subExprEliminationParameters = parameters
-      val eval = expr.genCode(this)
+      val eval = parameterizedExpr.genCode(this)
       val fn =
         s"""
            |private void $fnName($parameterString) {
@@ -1146,7 +1151,7 @@ class CodegenContext {
     }
     subExprEliminationParameters = Seq.empty
 
-    exprsOut
+    nonApplicableExprs
   }
 
   private def semanticSubexpressionElimination(expressions: Seq[Expression]): Unit = {
