@@ -20,26 +20,62 @@ license: |
 ---
 
 ### Description
-TRUNCATE TABLE statement removes all the rows from a table or partition(s). The table must not be a 
+The `TRUNCATE TABLE` statement removes all the rows from a table or partition(s). The table must not be a 
 temporary table, an external table, or a view. User can specify partial partition_spec for 
 truncating multiple partitions at once, omitting partition_spec will truncate all partitions in the table.
 
 ### Syntax
 {% highlight sql %}
 TRUNCATE TABLE table_name [PARTITION partition_spec];
- 
-partition_spec:
-  : (partition_column = partition_col_value, partition_column = partition_col_value, ...)
 {% endhighlight %}
+
+### Parameters
+<dl>
+  <dt><code><em>table_name</em></code></dt>
+  <dd>The name of an existing table.</dd>
+</dl>
+
+<dl>
+  <dt><code><em>PARTITION ( partition_spec :[ partition_column = partition_col_value, partition_column = partition_col_value, ...] )</em></code></dt>
+  <dd>Specifies one or more partition column and value pairs. The partition value is optional.</dd>
+</dl>
 
 
 ### Examples
 {% highlight sql %}
+
+--Create table Student with partition
+CREATE TABLE Student ( name String, rollno INT) PARTITIONED BY (age int);
+
+SELECT * from Student;
++-------+---------+------+--+
+| name  | rollno  | age  |
++-------+---------+------+--+
+| ABC   | 1       | 10   |
+| DEF   | 2       | 10   |
+| XYZ   | 3       | 12   |
++-------+---------+------+--+
+
 -- Removes all rows from the table in the partion specified
-TRUNCATE TABLE partition_date2_1 partition(dt=date '2000-01-01', region=2);
+TRUNCATE TABLE Student partition(age=10);
+
+--After truncate execution, records belonging to partition age=10 is removed
+SELECT * from Student;
++-------+---------+------+--+
+| name  | rollno  | age  |
++-------+---------+------+--+
+| XYZ   | 3       | 12   |
++-------+---------+------+--+
 
 -- Removes all rows from the table from all partitions
-TRUNCATE TABLE num_result;
+TRUNCATE TABLE Student;
+
+SELECT * from Student;
++-------+---------+------+--+
+| name  | rollno  | age  |
++-------+---------+------+--+
++-------+---------+------+--+
+No rows selected 
 
 {% endhighlight %}
 
