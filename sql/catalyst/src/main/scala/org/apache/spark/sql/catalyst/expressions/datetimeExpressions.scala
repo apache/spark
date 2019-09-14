@@ -596,7 +596,7 @@ case class DateFormatClass(
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
     val tf = if (formatter.isEmpty && right.foldable) {
       val format = right.eval().toString
-      Some(TimestampFormatter(format, DateTimeUtils.getZoneId(timeZoneId)))
+      Some(TimestampFormatter(format, getZoneId(timeZoneId)))
     } else None
     copy(formatter = tf, timeZoneId = Option(timeZoneId))
   }
