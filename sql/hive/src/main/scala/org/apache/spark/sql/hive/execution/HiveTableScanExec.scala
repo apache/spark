@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
+import org.apache.hadoop.hive.serde2.Deserializer
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -122,11 +123,17 @@ case class HiveTableScanExec(
     HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
 
     val currentState = SessionState.get()
-    if (currentState != null) {
+    val deserializer = if (currentState != null) {
+      val originClassLoader = currentState.getConf.getClassLoader
       currentState.getConf.setClassLoader(Thread.currentThread().getContextClassLoader)
+      val instance = tableDesc.getDeserializerClass.getConstructor().newInstance()
+      currentState.getConf.setClassLoader(originClassLoader)
+      instance
+    } else {
+      tableDesc.getDeserializerClass.getConstructor().newInstance()
     }
-    val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
+
 
     // Specifies types and object inspectors of columns to be scanned.
     val structOI = ObjectInspectorUtils
