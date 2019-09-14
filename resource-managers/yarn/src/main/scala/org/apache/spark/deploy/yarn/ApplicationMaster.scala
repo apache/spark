@@ -704,7 +704,7 @@ private[spark] class ApplicationMaster(
       userArgs = Seq(args.primaryPyFile, "") ++ userArgs
     }
     if (args.primaryRFile != null &&
-      (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
+        (args.primaryRFile.endsWith(".R") || args.primaryRFile.endsWith(".r"))) {
       // TODO(davies): add R dependencies here
     }
 
