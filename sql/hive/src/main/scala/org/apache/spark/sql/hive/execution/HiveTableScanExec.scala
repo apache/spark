@@ -129,11 +129,7 @@ case class HiveTableScanExec(
       currentState.getConf.setClassLoader(originClassLoader)
       instance
     } else {
-      val originClassLoader = Thread.currentThread().getContextClassLoader
-      Thread.currentThread().setContextClassLoader(sparkSession.sharedState.jarClassLoader)
-      val instance = tableDesc.getDeserializerClass.getConstructor().newInstance()
-      Thread.currentThread().setContextClassLoader(originClassLoader)
-      instance
+      tableDesc.getDeserializerClass.getConstructor().newInstance()
     }
     deserializer.initialize(hiveConf, tableDesc.getProperties)
 
@@ -196,6 +192,7 @@ case class HiveTableScanExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    Thread.currentThread().setContextClassLoader(sparkSession.sharedState.jarClassLoader)
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {

@@ -92,23 +92,6 @@ class HadoopTableReader(
   override def conf: SQLConf = sparkSession.sessionState.conf
 
   override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] = {
-    logInfo(s"${sparkSession.sharedState.jarClassLoader}")
-    logInfo(s"${Thread.currentThread().getContextClassLoader}")
-    logInfo(s"${Utils.getSparkClassLoader}")
-
-    var x: RDD[InternalRow] = null
-    val origin = Thread.currentThread().getContextClassLoader
-    try {
-      logInfo("Use sharedState.jarClassLoader")
-      Thread.currentThread().setContextClassLoader(sparkSession.sharedState.jarClassLoader)
-      makeRDDForTable(
-        hiveTable,
-        Utils.classForName[Deserializer](tableDesc.getSerdeClassName),
-        filterOpt = None)
-    } catch {
-      case e: Exception => logError("Failed with sharedState.jarClassLoader", e)
-    }
-    Thread.currentThread().setContextClassLoader(origin)
     makeRDDForTable(
       hiveTable,
       Utils.classForName[Deserializer](tableDesc.getSerdeClassName),
