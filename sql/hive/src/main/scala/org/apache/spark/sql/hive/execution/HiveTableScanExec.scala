@@ -132,7 +132,7 @@ case class HiveTableScanExec(
       tableDesc.getDeserializerClass.getConstructor().newInstance()
     }
     deserializer.initialize(hiveConf, tableDesc.getProperties)
-    
+
     // Specifies types and object inspectors of columns to be scanned.
     val structOI = ObjectInspectorUtils
       .getStandardObjectInspector(
