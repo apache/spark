@@ -17,17 +17,20 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Comparator
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
+
+import scala.util.Sorting
 
 /**
  * A placeholder of lambda variables to prevent unexpected resolution of [[LambdaFunction]].
@@ -269,7 +272,7 @@ case class ArrayTransform(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    val result = new GenericArrayData(new Array[Any](arr.numElements))
+    var result = new GenericArrayData(new Array[Any](arr.numElements))
     var i = 0
     while (i < arr.numElements) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
@@ -284,6 +287,109 @@ case class ArrayTransform(
 
   override def prettyName: String = "transform"
 }
+
+//scalastyle:off
+/***************************************/
+/***************************************/
+/***************************************/
+/***************************************/
+/***************************************/
+/***************************************/
+
+case class ArraySorting(
+                           argument: Expression,
+                           function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySorting = {
+    val ArrayType(elementType, containsNull) = argument.dataType
+    function match {
+      case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
+        copy(function = f(function, (elementType, containsNull) :: (elementType, false) :: Nil))
+      case _ =>
+        copy(function = f(function, (elementType, containsNull) :: Nil))
+    }
+  }
+
+  @transient lazy val (firstParam, secondParam) = {
+    val LambdaFunction(_, (firstParam: NamedLambdaVariable) +: tail, _) = function
+    val secondParam = tail.head.asInstanceOf[NamedLambdaVariable]
+    (firstParam, secondParam)
+  }
+
+  @transient lazy val elementType: DataType =
+    function.dataType.asInstanceOf[ArrayType].elementType
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    val result = new GenericArrayData(new Array[Any](arr.numElements))
+
+    @transient lazy val customComparator: Comparator[Any] = {
+      (o1: Any, o2: Any) => {
+          firstParam.value.set(o2)
+          secondParam.value.set(o1)
+          f.eval(inputRow).asInstanceOf[Int]
+      }
+    }
+
+
+
+    for(i <- 0 until arr.numElements()){
+      result.update(i, arr.get(i, firstParam.dataType))
+    }
+   val p = sortEval(result, customComparator)
+    val t = 2
+    p
+
+  }
+
+  def sortEval(array: Any, comparator: Comparator[Any]): Any = {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](firstParam.dataType)
+    if (firstParam.dataType!= NullType) {
+      java.util.Arrays.sort(data, comparator)
+    }
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  override def prettyName: String = "array_new_sort"
+
+  //    var i = 0
+  //    while (i < arr.numElements - 1) {
+  //      firstParam.value.set(arr.get(i, firstParam.dataType))
+  //      secondParam.value.set(i)
+  //      result.update(i, f.eval(inputRow))
+  //      i += 1
+  //    }
+
+  //    for(i <- 0 until arr.numElements() -1){
+  //      result.update(i, arr.get(i, firstParam.dataType))
+  //    }
+  //    for(i <- 0 until arr.numElements()-1) {
+  //      for(j<-0 until arr.numElements - i-1) {
+  //        firstParam.value.set(arr.get(j, firstParam.dataType))
+  //        secondParam.value.set(arr.get(j + 1, secondParam.dataType))
+  //        if(f.eval(inputRow) == -1) {
+  //         var temp = arr.get(j, firstParam.dataType)
+  //          arr.update(j, arr.get(j+1, firstParam.dataType))
+  //          arr.update(j+1 ,temp)
+  //       }
+  //      }
+  //    }
+
+  //    result
+
+}
+
+
+/***************************************/
+/***************************************/
+/***************************************/
+/***************************************/
+/***************************************/
+/***************************************/
 
 /**
  * Filters entries in a map using the provided function.

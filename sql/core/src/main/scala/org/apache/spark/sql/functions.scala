@@ -3346,6 +3346,16 @@ object functions {
     */
   def array_sort(e: Column, asc: Column): Column = withExpr { ArraySort(e.expr, asc.expr) }
 
+  private def createLambda(f: (Column, Column) => Column) = {
+    val x = UnresolvedNamedLambdaVariable(Seq("x"))
+    val y = UnresolvedNamedLambdaVariable(Seq("y"))
+    val function = f(Column(x), Column(y)).expr
+    LambdaFunction(function, Seq(x, y))
+  }
+//scalastyle:off
+  def array_sort_f(e: Column, f: (Column, Column) => Column): Column = withExpr { ArraySortF(e.expr, createLambda(f)) }
+
+
   /**
    * Remove all elements that equal to element from the given array.
    *

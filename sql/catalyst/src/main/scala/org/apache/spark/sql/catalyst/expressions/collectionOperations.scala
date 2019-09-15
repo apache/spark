@@ -712,7 +712,7 @@ trait ArraySortLike extends ExpectsInputTypes {
 
   protected def nullOrder: NullOrder
 
-  @transient private lazy val lt: Comparator[Any] = {
+  @transient  lazy val lt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
@@ -958,6 +958,40 @@ case class ArraySort(base: Expression, ascendingOrder: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (c, order) => sortCodegen(ctx, ev, c, order))
+  }
+
+  override def prettyName: String = "array_sort"
+}
+
+//scalastyle:off
+
+case class ArraySortF(child: Expression, function: Expression) extends UnaryExpression with ArraySortLike {
+
+  override def dataType: DataType = child.dataType
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def arrayExpression: Expression = child
+  override def nullOrder: NullOrder = NullOrder.Greatest
+  function.asInstanceOf[LambdaFunction].arguments
+  function.asInstanceOf[LambdaFunction].function
+  function.asInstanceOf[LambdaFunction].dataType
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+      TypeCheckResult.TypeCheckSuccess
+    case ArrayType(dt, _) =>
+      val dtSimple = dt.catalogString
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
+    case _ =>
+      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+  }
+
+  override def nullSafeEval(array: Any): Any = {
+    sortEval(array, true)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => sortCodegen(ctx, ev, c, "true"))
   }
 
   override def prettyName: String = "array_sort"
