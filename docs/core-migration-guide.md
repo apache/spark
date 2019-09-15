@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Old Migration Guides - MLlib
-displayTitle: Old Migration Guides - MLlib
+title: "Migration Guide: Spark Core"
+displayTitle: "Migration Guide: Spark Core"
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,6 +19,14 @@ license: |
   limitations under the License.
 ---
 
-The migration guide for the current Spark version is kept on the [MLlib Guide main page](ml-guide.html#migration-guide).
+* Table of contents
+{:toc}
 
-Past migration guides are now stored at [ml-migration-guides.html](ml-migration-guides.html).
+## Upgrading from Core 2.4 to 3.0
+
+- In Spark 3.0, deprecated method `TaskContext.isRunningLocally` has been removed. Local execution was removed and it always has returned `false`.
+
+- In Spark 3.0, deprecated method `shuffleBytesWritten`, `shuffleWriteTime` and `shuffleRecordsWritten` in `ShuffleWriteMetrics` have been removed. Instead, use `bytesWritten`, `writeTime ` and `recordsWritten` respectively.
+
+- In Spark 3.0, deprecated method `AccumulableInfo.apply` have been removed because creating `AccumulableInfo` is disallowed.
+
