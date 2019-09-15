@@ -22,6 +22,8 @@ import java.net.URI
 import java.sql.Timestamp
 import java.util.{Locale, TimeZone}
 
+import com.google.common.io.Files
+
 import scala.util.Try
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
@@ -38,6 +40,7 @@ import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{HiveTestUtils, TestHive}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode}
 import org.apache.spark.sql.test.SQLTestUtils
 
 case class TestData(a: Int, b: String)
@@ -1221,6 +1224,34 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       assertResult(Array(Row(2.4999991485811655))) {
         sql("select radians(143.2394) FROM src tablesample (1 rows)").collect()
+      }
+    }
+  }
+
+  test("SPARK-29037: Spark gives duplicate result when an application was killed") {
+    withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
+      withTable("test") {
+        sql("create table test(id int, p1 int, p2 int) using parquet partitioned by (p1, p2)")
+        sql("insert overwrite table test partition(p1=1,p2) select 1,3")
+        val df = sql("select id from test where p1=1 and p2=3").collect()
+        assertResult(Array(Row(1)))(df)
+
+        val warehouse = SQLConf.get.warehousePath
+        val tblPath = Array(warehouse, "test").mkString(File.separator)
+        val taskAttemptPath = Array(tblPath, "_temporary", "0", "task_20190914232019_0000_m_000000",
+          "p1=1", "p2=3").mkString(File.separator)
+        new File(taskAttemptPath).mkdirs()
+
+        val tblResult = new File(Array(tblPath, "p1=1", "p2=3").mkString(File.separator))
+        val tFile = tblResult.list((_: File, name: String) => !name.startsWith(".")).apply(0)
+        val from = new File(tblResult.getAbsolutePath + File.separator + tFile)
+        val to = new File(taskAttemptPath + File.separator + tFile)
+        Files.copy(from, to)
+
+        sql("insert overwrite table test partition(p1=1,p2) select 2, 3")
+        assert(tblResult.list((_: File, name: String) => !name.startsWith(".")).size === 1)
+        val df2 = sql("select id from test where p1=1 and p2=3").collect()
+        assertResult(Array(Row(2)))(df2)
       }
     }
   }
