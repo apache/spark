@@ -63,8 +63,8 @@ case class Rating @Since("0.8.0") (
  * indicated user
  * preferences rather than explicit ratings given to items.
  *
- * Note: the input rating RDD to the ALS implementation should not be nondeterministic.
- * Nondeterministic data can probably cause failure during fitting ALS model.
+ * Note: the input rating RDD to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
  * For example, an order-sensitive operation like sampling after a repartition makes RDD
  * output nondeterministic, like `rdd.repartition(2).sample(false, 0.5, 1618)`.
  * Checkpointing sampled RDD or adding a sort before sampling can help make the RDD

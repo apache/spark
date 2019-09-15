@@ -565,8 +565,8 @@ object ALSModel extends MLReadable[ALSModel] {
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
  *
- * Note: the input rating dataset to the ALS implementation should not be nondeterministic.
- * Nondeterministic data can probably cause failure during fitting ALS model.
+ * Note: the input rating dataset to the ALS implementation should be deterministic.
+ * Nondeterministic data can cause failure during fitting ALS model.
  * For example, an order-sensitive operation like sampling after a repartition makes dataset
  * output nondeterministic, like `dataset.repartition(2).sample(false, 0.5, 1618)`.
  * Checkpointing sampled dataset or adding a sort before sampling can help make the dataset

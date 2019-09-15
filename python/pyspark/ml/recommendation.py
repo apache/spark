@@ -67,8 +67,8 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
-    .. note:: the input rating dataframe to the ALS implementation should not be nondeterministic.
-              Nondeterministic data can probably cause failure during fitting ALS model.
+    .. note:: the input rating dataframe to the ALS implementation should be deterministic.
+              Nondeterministic data can cause failure during fitting ALS model.
               For example, an order-sensitive operation like sampling after a repartition makes
               dataframe output nondeterministic, like `df.repartition(2).sample(False, 0.5, 1618)`.
               Checkpointing sampled dataframe or adding a sort before sampling can help make the
