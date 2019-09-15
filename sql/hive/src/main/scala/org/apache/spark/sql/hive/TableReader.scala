@@ -91,13 +91,11 @@ class HadoopTableReader(
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
-  override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] = {
+  override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
       Utils.classForName[Deserializer](tableDesc.getSerdeClassName),
       filterOpt = None)
-  }
-
 
   /**
    * Creates a Hadoop RDD to read data from the target table's data directory. Returns a transformed
