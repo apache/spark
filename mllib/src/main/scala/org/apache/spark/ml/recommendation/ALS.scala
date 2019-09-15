@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 
-import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext}
+import org.apache.spark.{Dependency, Partitioner, ShuffleDependency, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
@@ -927,16 +927,6 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     require(intermediateRDDStorageLevel != StorageLevel.NONE,
       "ALS is not designed to run without persisting intermediate RDDs.")
 
-    // Indeterminate rating RDD causes inconsistent in/out blocks in case of rerun.
-    // It can cause runtime error when matching in/out user/item blocks.
-    if (ratings.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
-      logWarning("The output of rating RDD should not be indeterminate. " +
-        "If indeterminate RDD needs to be rerun during fitting ALS model, it could " +
-        "cause failures. If your training data has indeterminate RDD computations, " +
-        "like `randomSplit` or `sample`, please checkpoint the training data before " +
-        "running ALS.")
-    }
-
     val sc = ratings.sparkContext
 
     // Precompute the rating dependencies of each partition
@@ -1683,6 +1673,13 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
         }
     }
     val merged = srcOut.groupByKey(new ALSPartitioner(dstInBlocks.partitions.length))
+
+    // SPARK-28927: Nondeterministic RDDs causes inconsistent in/out blocks in case of rerun.
+    // It can cause runtime error when matching in/out user/item blocks.
+    val isBlockRDDNondeterministic =
+      dstInBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE ||
+        srcOutBlocks.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
+
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
@@ -1703,7 +1700,19 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
             val localIndex = srcEncoder.localIndex(encoded)
-            val srcFactor = sortedSrcFactors(blockId)(localIndex)
+            var srcFactor: Array[Float] = null
+            try {
+              srcFactor = sortedSrcFactors(blockId)(localIndex)
+            } catch {
+              case a: ArrayIndexOutOfBoundsException if isBlockRDDNondeterministic =>
+                val errMsg = "A failure detected when matching In/Out blocks of users/items. " +
+                  "Because at least one In/Out block RDD is found to be nondeterministic now, " +
+                  "the issue is probably caused by nondeterministic input data. You can try to " +
+                  "checkpoint training data to make it deterministic. If you do `repartition` + " +
+                  "`sample` or `randomSplit`, you can also try to sort it before `sample` or " +
+                  "`randomSplit` to make it deterministic."
+                throw new SparkException(errMsg, a)
+            }
             val rating = ratings(i)
             if (implicitPrefs) {
               // Extension to the original paper to handle rating < 0. confidence is a function
