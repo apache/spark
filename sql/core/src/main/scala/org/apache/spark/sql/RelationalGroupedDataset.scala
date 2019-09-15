@@ -533,8 +533,9 @@ class RelationalGroupedDataset protected[sql](
    * This function uses Apache Arrow as serialization format between Java executors and Python
    * workers.
    */
-  private[sql] def flatMapCoGroupsInPandas
-  (r: RelationalGroupedDataset, expr: PythonUDF): DataFrame = {
+  private[sql] def flatMapCoGroupsInPandas(
+      r: RelationalGroupedDataset,
+      expr: PythonUDF): DataFrame = {
     require(expr.evalType == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
       "Must pass a cogrouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
