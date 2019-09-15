@@ -67,10 +67,12 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     indicated user preferences rather than explicit ratings given to
     items.
 
-    .. note:: the input rating dataframe to the ALS implementation should not be indeterminate.
-              Indeterminate data can probably cause failure during fitting ALS model. If the
-              training data is prepared using some indeterminate operations, like `randomSplit`
-              or `sample`, please checkpoint the training data before fitting.
+    .. note:: the input rating dataframe to the ALS implementation should not be nondeterministic.
+              Nondeterministic data can probably cause failure during fitting ALS model.
+              For example, an order-sensitive operation like sampling after a repartition makes
+              dataframe output nondeterministic, like `df.repartition(2).sample(False, 0.5, 1618)`.
+              Checkpointing sampled dataframe or adding a sort before sampling can help make the
+              dataframe deterministic.
 
     >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],

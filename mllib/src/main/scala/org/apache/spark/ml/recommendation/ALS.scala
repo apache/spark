@@ -565,10 +565,12 @@ object ALSModel extends MLReadable[ALSModel] {
  * values related to strength of indicated user
  * preferences rather than explicit ratings given to items.
  *
- * Note: the input rating dataset to the ALS implementation should not be indeterminate.
- * Indeterminate data can probably cause failure during fitting ALS model. If the
- * training data is prepared using some indeterminate operations, like `randomSplit`
- * or `sample`, please checkpoint the training data before fitting.
+ * Note: the input rating dataset to the ALS implementation should not be nondeterministic.
+ * Nondeterministic data can probably cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes dataset
+ * output nondeterministic, like `dataset.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled dataset or adding a sort before sampling can help make the dataset
+ * deterministic.
  */
 @Since("1.3.0")
 class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] with ALSParams

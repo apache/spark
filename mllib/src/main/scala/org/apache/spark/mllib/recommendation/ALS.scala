@@ -63,10 +63,12 @@ case class Rating @Since("0.8.0") (
  * indicated user
  * preferences rather than explicit ratings given to items.
  *
- * Note: the input rating RDD to the ALS implementation should not be indeterminate.
- * Indeterminate data can probably cause failure during fitting ALS model. If the
- * training data is prepared using some indeterminate operations, like `randomSplit`
- * or `sample`, please checkpoint the training data before fitting.
+ * Note: the input rating RDD to the ALS implementation should not be nondeterministic.
+ * Nondeterministic data can probably cause failure during fitting ALS model.
+ * For example, an order-sensitive operation like sampling after a repartition makes RDD
+ * output nondeterministic, like `rdd.repartition(2).sample(false, 0.5, 1618)`.
+ * Checkpointing sampled RDD or adding a sort before sampling can help make the RDD
+ * deterministic.
  */
 @Since("0.8.0")
 class ALS private (
