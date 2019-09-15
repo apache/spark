@@ -124,7 +124,7 @@ case class HiveTableScanExec(
     val currentState = SessionState.get()
     val deserializer = if (currentState != null) {
       val originClassLoader = currentState.getConf.getClassLoader
-      currentState.getConf.setClassLoader(Thread.currentThread().getContextClassLoader)
+      currentState.getConf.setClassLoader(sparkSession.sharedState.jarClassLoader)
       val instance = tableDesc.getDeserializerClass.getConstructor().newInstance()
       currentState.getConf.setClassLoader(originClassLoader)
       instance
