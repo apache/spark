@@ -712,7 +712,7 @@ trait ArraySortLike extends ExpectsInputTypes {
 
   protected def nullOrder: NullOrder
 
-  @transient  lazy val lt: Comparator[Any] = {
+  @transient private lazy val lt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
@@ -902,16 +902,14 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 
 
 /**
- * Sorts the input array in ascending / descending order according to the natural ordering of
+ * Sorts the input array in ascending order according to the natural ordering of
  * the array elements and returns it.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order
-      according to the natural ordering of the array elements. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array
-      in descending / ascending order
+    _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
+      be orderable. Null elements will be placed at the end of the returned array.
   """,
   examples = """
     Examples:
@@ -920,61 +918,14 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class ArraySort(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with ArraySortLike {
-
-  def this(e: Expression) = this(e, Literal(true))
-
-  override def left: Expression = base
-  override def right: Expression = ascendingOrder
-  override def dataType: DataType = base.dataType
-  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
-
-  override def arrayExpression: Expression = base
-  override def nullOrder: NullOrder = {
-    if (ascendingOrder == Literal(true)) NullOrder.Greatest else NullOrder.Least
-  }
-
-  override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
-      ascendingOrder match {
-        case Literal(_: Boolean, BooleanType) =>
-          TypeCheckResult.TypeCheckSuccess
-        case _ =>
-          TypeCheckResult.TypeCheckFailure(
-            "Sort order in second argument requires a boolean literal.")
-      }
-    case ArrayType(dt, _) =>
-      val dtSimple = dt.catalogString
-      TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
-    case _ =>
-      TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
-  }
-
-  override def nullSafeEval(array: Any, ascending: Any): Any = {
-    sortEval(array, ascending.asInstanceOf[Boolean])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (c, order) => sortCodegen(ctx, ev, c, order))
-  }
-
-  override def prettyName: String = "array_sort"
-}
-
-//scalastyle:off
-
-case class ArraySortF(child: Expression, function: Expression) extends UnaryExpression with ArraySortLike {
+case class ArraySort(child: Expression) extends UnaryExpression with ArraySortLike {
 
   override def dataType: DataType = child.dataType
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def arrayExpression: Expression = child
   override def nullOrder: NullOrder = NullOrder.Greatest
-  function.asInstanceOf[LambdaFunction].arguments
-  function.asInstanceOf[LambdaFunction].function
-  function.asInstanceOf[LambdaFunction].dataType
+
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
       TypeCheckResult.TypeCheckSuccess

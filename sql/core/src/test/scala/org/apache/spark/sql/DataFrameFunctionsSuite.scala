@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.TimeZone
 
 import scala.util.Random
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -31,8 +32,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Test suite for functions in [[org.apache.spark.sql.functions]].
@@ -312,7 +311,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2))
     )
   }
-//scalastyle:off
   test("array_sort with lambda functions") {
 
     spark.udf.register("fAsc", (x: Int, y: Int) => {
@@ -435,15 +433,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
-
-    checkAnswer(
-      df.select(array_sort($"a", lit(false)), array_sort($"b", lit(false))),
-      Seq(
-        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
-        Row(Seq.empty[Int], Seq.empty[String]),
-        Row(null, null))
-    )
-
     checkAnswer(
       df.selectExpr("array_sort(a)", "array_sort(b)"),
       Seq(
@@ -453,21 +442,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
 
     checkAnswer(
-      df.selectExpr("array_sort(a, false)", "array_sort(b, false)"),
-      Seq(
-        Row(Seq(3, 2, 1), Seq("c", "b", "a")),
-        Row(Seq.empty[Int], Seq.empty[String]),
-        Row(null, null))
-    )
-
-    checkAnswer(
       df2.selectExpr("array_sort(a)"),
       Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
-    )
-
-    checkAnswer(
-      df2.selectExpr("array_sort(a, false)"),
-      Seq(Row(Seq[Seq[Int]](Seq(2, 4), Seq(2), Seq(1), null)))
     )
 
     assert(intercept[AnalysisException] {

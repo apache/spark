@@ -3328,33 +3328,13 @@ object functions {
   }
 
   /**
-   * Sorts the input array for the given column in ascending order,
-   * according to the natural ordering of the array elements.
+   * Sorts the input array in ascending order. The elements of the input array must be orderable.
    * Null elements will be placed at the end of the returned array.
    *
    * @group collection_funcs
    * @since 2.4.0
    */
-  def array_sort(e: Column): Column = array_sort(e, asc = lit(true))
-
-  /**
-    * Sorts the input array for the given column in ascending or descending order,
-    * according to the natural ordering of the array elements.
-    * Null elements will be placed at the end of the returned array in descending / ascending order
-    * @group collection_funcs
-    * @since 3.0.0
-    */
-  def array_sort(e: Column, asc: Column): Column = withExpr { ArraySort(e.expr, asc.expr) }
-
-  private def createLambda(f: (Column, Column) => Column) = {
-    val x = UnresolvedNamedLambdaVariable(Seq("x"))
-    val y = UnresolvedNamedLambdaVariable(Seq("y"))
-    val function = f(Column(x), Column(y)).expr
-    LambdaFunction(function, Seq(x, y))
-  }
-//scalastyle:off
-  def array_sort_f(e: Column, f: (Column, Column) => Column): Column = withExpr { ArraySortF(e.expr, createLambda(f)) }
-
+  def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
 
   /**
    * Remove all elements that equal to element from the given array.

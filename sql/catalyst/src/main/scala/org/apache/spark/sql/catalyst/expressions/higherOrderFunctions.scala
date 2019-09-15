@@ -23,14 +23,11 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-
-import scala.util.Sorting
 
 /**
  * A placeholder of lambda variables to prevent unexpected resolution of [[LambdaFunction]].
@@ -272,7 +269,7 @@ case class ArrayTransform(
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    var result = new GenericArrayData(new Array[Any](arr.numElements))
+    val result = new GenericArrayData(new Array[Any](arr.numElements))
     var i = 0
     while (i < arr.numElements) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
@@ -288,17 +285,10 @@ case class ArrayTransform(
   override def prettyName: String = "transform"
 }
 
-//scalastyle:off
-/***************************************/
-/***************************************/
-/***************************************/
-/***************************************/
-/***************************************/
-/***************************************/
 
 case class ArraySorting(
-                           argument: Expression,
-                           function: Expression)
+    argument: Expression,
+    function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
 
@@ -310,7 +300,8 @@ case class ArraySorting(
     val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        copy(function = f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
+        copy(function =
+          f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
       case _ =>
         copy(function = f(function, (elementType, containsNull) :: Nil))
     }
@@ -343,10 +334,7 @@ case class ArraySorting(
       }
     }
 
-   val p = sortEval(arr, customComparator)
-    val t = 2
-    p
-
+   sortEval(arr, customComparator)
   }
 
   def sortEval(array: Any, comparator: Comparator[Any]): Any = {
@@ -362,13 +350,6 @@ case class ArraySorting(
 
 }
 
-
-/***************************************/
-/***************************************/
-/***************************************/
-/***************************************/
-/***************************************/
-/***************************************/
 
 /**
  * Filters entries in a map using the provided function.
