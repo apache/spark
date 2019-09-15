@@ -3205,7 +3205,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession {
         checkAnswer(df, Array(Row(1)))
 
         val warehouse = SQLConf.get.warehousePath.split(":").last
-        val tblPath = Array(warehouse, "test").mkString(File.separator)
+        val tblPath = Array(warehouse, "org.apache.spark.sql.SQLQuerySuite", "test")
+          .mkString(File.separator)
         val taskAttemptPath = Array(tblPath, "_temporary", "0", "task_20190914232019_0000_m_000000",
           "p1=1", "p2=3").mkString(File.separator)
         new File(taskAttemptPath).mkdirs()
