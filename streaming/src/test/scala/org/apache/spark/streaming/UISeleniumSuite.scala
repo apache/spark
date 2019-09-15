@@ -96,7 +96,7 @@ class UISeleniumSuite
 
       val sparkUI = ssc.sparkContext.ui.get
 
-      sparkUI.getHandlers.count(_.getContextPath.contains("/streaming")) should be (5)
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (5)
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
@@ -197,7 +197,7 @@ class UISeleniumSuite
 
       ssc.stop(false)
 
-      sparkUI.getHandlers.count(_.getContextPath.contains("/streaming")) should be (0)
+      sparkUI.getDelegatingHandlers.count(_.getContextPath.contains("/streaming")) should be (0)
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sparkUI.webUrl.stripSuffix("/"))
