@@ -249,7 +249,6 @@ class BaseOperator(LoggingMixin):
         'retry_exponential_backoff',
         'max_retry_delay',
         'start_date',
-        'schedule_interval',
         'depends_on_past',
         'wait_for_downstream',
         'priority_weight',
@@ -275,7 +274,6 @@ class BaseOperator(LoggingMixin):
         max_retry_delay: Optional[datetime] = None,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
-        schedule_interval: Optional[ScheduleInterval] = None,  # not hooked as of now
         depends_on_past: bool = False,
         wait_for_downstream: bool = False,
         dag: Optional[DAG] = None,
@@ -343,14 +341,6 @@ class BaseOperator(LoggingMixin):
         if wait_for_downstream:
             self.depends_on_past = True
 
-        if schedule_interval:
-            self.log.warning(
-                "schedule_interval is used for %s, though it has "
-                "been deprecated as a task parameter, you need to "
-                "specify it as a DAG parameter instead",
-                self
-            )
-        self._schedule_interval = schedule_interval
         self.retries = retries if retries is not None else \
             conf.getint('core', 'default_task_retries', fallback=0)
         self.queue = queue
@@ -542,18 +532,6 @@ class BaseOperator(LoggingMixin):
             PrevDagrunDep(),
             TriggerRuleDep(),
         }
-
-    @property
-    def schedule_interval(self):
-        """
-        The schedule interval of the DAG always wins over individual tasks so
-        that tasks within a DAG always line up. The task still needs a
-        schedule_interval as it may not be attached to a DAG.
-        """
-        if self.has_dag():
-            return self.dag._schedule_interval
-        else:
-            return self._schedule_interval
 
     @property
     def priority_weight_total(self):
