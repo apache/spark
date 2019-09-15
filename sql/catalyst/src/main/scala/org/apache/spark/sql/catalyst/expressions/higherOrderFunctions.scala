@@ -301,13 +301,16 @@ case class ArraySorting(
                            function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  override def dataType: ArrayType = ArrayType(function.dataType, function.nullable)
+
+  @transient lazy val elementType: DataType =
+    argument.dataType.asInstanceOf[ArrayType].elementType
+  override def dataType: ArrayType = ArrayType(elementType, function.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySorting = {
     val ArrayType(elementType, containsNull) = argument.dataType
     function match {
       case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
-        copy(function = f(function, (elementType, containsNull) :: (elementType, false) :: Nil))
+        copy(function = f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
       case _ =>
         copy(function = f(function, (elementType, containsNull) :: Nil))
     }
@@ -319,36 +322,36 @@ case class ArraySorting(
     (firstParam, secondParam)
   }
 
-  @transient lazy val elementType: DataType =
-    function.dataType.asInstanceOf[ArrayType].elementType
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
-    val result = new GenericArrayData(new Array[Any](arr.numElements))
 
     @transient lazy val customComparator: Comparator[Any] = {
       (o1: Any, o2: Any) => {
+        if (o1 == null && o2 == null) {
+          0
+        } else if (o1 == null) {
+          1
+        } else if (o2 == null) {
+          -1
+        } else {
           firstParam.value.set(o2)
           secondParam.value.set(o1)
           f.eval(inputRow).asInstanceOf[Int]
+        }
       }
     }
 
-
-
-    for(i <- 0 until arr.numElements()){
-      result.update(i, arr.get(i, firstParam.dataType))
-    }
-   val p = sortEval(result, customComparator)
+   val p = sortEval(arr, customComparator)
     val t = 2
     p
 
   }
 
   def sortEval(array: Any, comparator: Comparator[Any]): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](firstParam.dataType)
-    if (firstParam.dataType!= NullType) {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    if (elementType!= NullType) {
       java.util.Arrays.sort(data, comparator)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
@@ -356,30 +359,6 @@ case class ArraySorting(
 
   override def prettyName: String = "array_new_sort"
 
-  //    var i = 0
-  //    while (i < arr.numElements - 1) {
-  //      firstParam.value.set(arr.get(i, firstParam.dataType))
-  //      secondParam.value.set(i)
-  //      result.update(i, f.eval(inputRow))
-  //      i += 1
-  //    }
-
-  //    for(i <- 0 until arr.numElements() -1){
-  //      result.update(i, arr.get(i, firstParam.dataType))
-  //    }
-  //    for(i <- 0 until arr.numElements()-1) {
-  //      for(j<-0 until arr.numElements - i-1) {
-  //        firstParam.value.set(arr.get(j, firstParam.dataType))
-  //        secondParam.value.set(arr.get(j + 1, secondParam.dataType))
-  //        if(f.eval(inputRow) == -1) {
-  //         var temp = arr.get(j, firstParam.dataType)
-  //          arr.update(j, arr.get(j+1, firstParam.dataType))
-  //          arr.update(j+1 ,temp)
-  //       }
-  //      }
-  //    }
-
-  //    result
 
 }
 
