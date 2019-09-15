@@ -91,8 +91,11 @@ public class UnsafeExternalSorterSuite {
   private final long pageSizeBytes = conf.getSizeAsBytes(
           package$.MODULE$.BUFFER_PAGESIZE().key(), "4m");
 
-  private final int spillThreshold =
+  private final int spillElementsThreshold =
     (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
+
+  private final long spillSizeThreshold =
+      (long) conf.get(package$.MODULE$.SHUFFLE_SPILL_MAP_MAX_SIZE_FORCE_SPILL_THRESHOLD());
 
   @Before
   public void setUp() {
@@ -167,7 +170,8 @@ public class UnsafeExternalSorterSuite {
       prefixComparator,
       /* initialSize */ 1024,
       pageSizeBytes,
-      spillThreshold,
+      spillElementsThreshold,
+      spillSizeThreshold,
       shouldUseRadixSort());
   }
 
@@ -394,7 +398,8 @@ public class UnsafeExternalSorterSuite {
       null,
       /* initialSize */ 1024,
       pageSizeBytes,
-      spillThreshold,
+      spillElementsThreshold,
+      spillSizeThreshold,
       shouldUseRadixSort());
     long[] record = new long[100];
     int recordSize = record.length * 8;
@@ -456,7 +461,8 @@ public class UnsafeExternalSorterSuite {
       prefixComparator,
       1024,
       pageSizeBytes,
-      spillThreshold,
+      spillElementsThreshold,
+      spillSizeThreshold,
       shouldUseRadixSort());
 
     // Peak memory should be monotonically increasing. More specifically, every time

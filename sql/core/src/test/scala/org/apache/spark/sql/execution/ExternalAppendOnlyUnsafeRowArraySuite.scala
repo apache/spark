@@ -50,7 +50,8 @@ class ExternalAppendOnlyUnsafeRowArraySuite extends SparkFunSuite with LocalSpar
       1024,
       SparkEnv.get.memoryManager.pageSizeBytes,
       inMemoryThreshold,
-      spillThreshold)
+      spillThreshold,
+      Long.MaxValue)
     try f(array) finally {
       array.clear()
     }

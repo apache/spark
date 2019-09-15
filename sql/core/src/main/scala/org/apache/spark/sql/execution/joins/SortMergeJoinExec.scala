@@ -171,6 +171,10 @@ case class SortMergeJoinExec(
     sqlContext.conf.sortMergeJoinExecBufferSpillThreshold
   }
 
+  private def getSpillSizeThreshold: Long = {
+    sqlContext.conf.sortMergeJoinExecBufferSpillSizeThreshold
+  }
+
   private def getInMemoryThreshold: Int = {
     sqlContext.conf.sortMergeJoinExecBufferInMemoryThreshold
   }
@@ -178,6 +182,7 @@ case class SortMergeJoinExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillThreshold = getSpillThreshold
+    val spillSizeThreshold = getSpillSizeThreshold
     val inMemoryThreshold = getInMemoryThreshold
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
@@ -206,6 +211,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               cleanupResources
             )
             private[this] val joinRow = new JoinedRow
@@ -251,6 +257,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(rightIter),
             inMemoryThreshold,
             spillThreshold,
+            spillSizeThreshold,
             cleanupResources
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
@@ -266,6 +273,7 @@ case class SortMergeJoinExec(
             bufferedIter = RowIterator.fromScala(leftIter),
             inMemoryThreshold,
             spillThreshold,
+            spillSizeThreshold,
             cleanupResources
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
@@ -301,6 +309,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               cleanupResources
             )
             private[this] val joinRow = new JoinedRow
@@ -337,6 +346,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               cleanupResources
             )
             private[this] val joinRow = new JoinedRow
@@ -380,6 +390,7 @@ case class SortMergeJoinExec(
               RowIterator.fromScala(rightIter),
               inMemoryThreshold,
               spillThreshold,
+              spillSizeThreshold,
               cleanupResources
             )
             private[this] val joinRow = new JoinedRow
@@ -712,6 +723,7 @@ private[joins] class SortMergeJoinScanner(
     bufferedIter: RowIterator,
     inMemoryThreshold: Int,
     spillThreshold: Int,
+    spillSizeThreshold: Long,
     eagerCleanupResources: () => Unit) {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
@@ -724,7 +736,7 @@ private[joins] class SortMergeJoinScanner(
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
   private[this] val bufferedMatches =
-    new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+    new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold, spillSizeThreshold)
 
   // Initialization (note: do _not_ want to advance streamed here).
   advancedBufferedToRowWithNullFreeJoinKey()
