@@ -22,10 +22,9 @@ import java.net.URI
 import java.sql.Timestamp
 import java.util.{Locale, TimeZone}
 
-import com.google.common.io.Files
-
 import scala.util.Try
 
+import com.google.common.io.Files
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
