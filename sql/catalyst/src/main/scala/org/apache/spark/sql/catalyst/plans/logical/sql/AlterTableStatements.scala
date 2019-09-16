@@ -24,9 +24,7 @@ import org.apache.spark.sql.types.DataType
  */
 case class QualifiedColType(name: Seq[String], dataType: DataType, comment: Option[String])
 
-trait AlterTableStatement extends ParsedStatement {
-  val tableName: Seq[String]
-}
+trait AlterTableStatement extends StatementRequiringTable
 
 /**
  * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.

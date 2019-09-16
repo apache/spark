@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 
@@ -130,6 +129,41 @@ private[sql] trait LookupCatalog extends Logging {
         Some(TableIdentifier(table, Some(database)))
       case _ =>
         None
+    }
+  }
+
+  /**
+   * Extract catalog and the rest name parts from a multi-part identifier.
+   */
+  object CatalogAndRestNameParts {
+    def unapply(nameParts: Seq[String]): Some[(CatalogPlugin, Seq[String])] = {
+      assert(nameParts.nonEmpty)
+      try {
+        Some((catalogManager.catalog(nameParts.head), nameParts.tail))
+      } catch {
+        case _: CatalogNotFoundException =>
+          // TODO (SPARK-29014): use current catalog here.
+          Some((defaultCatalog.getOrElse(sessionCatalog), nameParts))
+      }
+    }
+  }
+
+  /**
+   * Extract catalog and table with its name from a multi-part identifier. If the table can't be
+   * found, return None.
+   */
+  object CatalogAndTable {
+    import CatalogV2Implicits._
+    import CatalogV2Util._
+
+    def unapply(nameParts: Seq[String]): Option[(TableCatalog, Seq[String], Table)] = {
+      assert(nameParts.nonEmpty)
+      nameParts match {
+        case CatalogAndRestNameParts(catalog, restNameParts) =>
+          loadTable(catalog, restNameParts.asIdentifier).map { table =>
+            (catalog.asTableCatalog, restNameParts, table)
+          }
+      }
     }
   }
 }

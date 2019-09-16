@@ -2638,7 +2638,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+      assert(e.message.contains("Cannot alter a view with ALTER TABLE"))
     }
   }
 
