@@ -311,73 +311,68 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       Seq(Row(2))
     )
   }
+
   test("array_sort with lambda functions") {
 
     spark.udf.register("fAsc", (x: Int, y: Int) => {
-      if(x < y) -1
-      else if(x == y) 0
+      if (x < y) -1
+      else if (x == y) 0
       else 1
     })
 
     spark.udf.register("fDesc", (x: Int, y: Int) => {
-      if(x < y) 1
-      else if(x == y) 0
+      if (x < y) 1
+      else if (x == y) 0
       else -1
     })
 
     spark.udf.register("fString", (x: String, y: String) => {
-      if(x < y) -1
-      else if(x == y) 0
+      if (x < y) -1
+      else if (x == y) 0
       else 1
     })
 
     spark.udf.register("fStringLength", (x: String, y: String) => {
-      if(x.length < y.length) 1
-      else if(x.length == y.length) 0
+      if (x.length < y.length) 1
+      else if (x.length == y.length) 0
       else -1
     })
-
-    spark.udf.register("fArraylength", (x: Int, y: Int) => {
-      if(x < y) 1
-      else if(x == y) 0
-      else -1
-    })
-
 
     val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
 
     checkAnswer(
-      df1.selectExpr("array_new_sort(a, (b, i) -> fAsc(b,i))"),
+      df1.selectExpr("array_sort(a, (b, i) -> fAsc(b,i))"),
       Seq(
         Row(Seq(5, 3, 2, 2, 1))))
 
     checkAnswer(
-      df1.selectExpr("array_new_sort(a, (b, i) -> fDesc(b,i))"),
+      df1.selectExpr("array_sort(a, (b, i) -> fDesc(b,i))"),
       Seq(
         Row(Seq(1, 2, 2, 3, 5))))
 
     val df2 = Seq(Array[String]("bc", "ab", "dc")).toDF("a")
     checkAnswer(
-      df2.selectExpr("array_new_sort(a, (b, i) -> fString(b,i))"),
+      df2.selectExpr("array_sort(a, (b, i) -> fString(b,i))"),
       Seq(
         Row(Seq("dc", "bc", "ab"))))
 
     val df3 = Seq(Array[String]("a", "abcd", "abc")).toDF("a")
     checkAnswer(
-      df3.selectExpr("array_new_sort(a, (b, i) -> fStringLength(b,i))"),
+      df3.selectExpr("array_sort(a, (b, i) -> fStringLength(b,i))"),
       Seq(
         Row(Seq("a", "abc", "abcd"))))
 
 
-    val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4), Array(1, 2)), "x")).toDF("a", "b")
+    val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4), Array(1, 2)), "x"))
+      .toDF("a", "b")
     checkAnswer(
-      df4.selectExpr("array_new_sort(a, (b, i) -> fArraylength(cardinality(b),cardinality(i)))"),
+      df4.selectExpr("array_sort(a, (b, i) -> fDesc(cardinality(b),cardinality(i)))"),
       Seq(
-        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2,3,1), Seq(4, 2, 1, 4)))))
+        Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4)))))
 
   }
 
-    test("sort_array/array_sort functions") {
+  test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
       (Array.empty[Int], Array.empty[String]),

@@ -285,7 +285,25 @@ case class ArrayTransform(
   override def prettyName: String = "transform"
 }
 
-
+/**
+ * Sorts elements in an array using a comparator function.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(expr, func) - Sorts and returns the array based on the given " +
+    "comparator function. The comparator will take two nullable arguments " +
+    "representing two nullable elements of the array." +
+    "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater" +
+    "than the second nullable element." +
+    "If the comparator function returns other values (including NULL)," +
+    "the query will fail and raise an error",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(5, 6, 1), (x,y) -> f(x,y));
+       [1,5,6]
+      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (x, y) -> f(x,y));
+       ['dc', 'bc', 'ab']
+  """,
+  since = "3.0.0")
 case class ArraySorting(
     argument: Expression,
     function: Expression)
@@ -345,7 +363,7 @@ case class ArraySorting(
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 
-  override def prettyName: String = "array_new_sort"
+  override def prettyName: String = "array_sort"
 
 
 }
