@@ -2891,9 +2891,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     scheduler.resubmitFailedStages()
 
     def checkAndCompleteRetryStage(
-      taskSetIndex: Int,
-      stageId: Int,
-      shuffleId: Int): Unit = {
+        taskSetIndex: Int,
+        stageId: Int,
+        shuffleId: Int): Unit = {
       assert(taskSets(taskSetIndex).stageId == stageId)
       assert(taskSets(taskSetIndex).stageAttemptId == 1)
       assert(taskSets(taskSetIndex).tasks.length == 2)

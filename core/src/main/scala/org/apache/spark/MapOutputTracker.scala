@@ -871,9 +871,9 @@ private[spark] object MapOutputTracker extends Logging {
           if (size != 0) {
             if (useOldFetchProtocol) {
               // While we use the old shuffle fetch protocol, we use mapIndex as mapTaskId in the
-              // ShuffleBlockId, so here set mapIndex with a invalid value -1.
+              // ShuffleBlockId.
               splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
-                ((ShuffleBlockId(shuffleId, mapIndex, part), size, -1))
+                ((ShuffleBlockId(shuffleId, mapIndex, part), size, mapIndex))
             } else {
               splitsByAddress.getOrElseUpdate(status.location, ListBuffer()) +=
                 ((ShuffleBlockId(shuffleId, status.mapTaskId, part), size, mapIndex))

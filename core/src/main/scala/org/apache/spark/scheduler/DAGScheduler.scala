@@ -1104,10 +1104,10 @@ private[spark] class DAGScheduler(
     logDebug("submitMissingTasks(" + stage + ")")
 
     // Before find missing partition, do the intermediate state clean work first.
-    // The operation here can make sure for the intermediate stage, `findMissingPartitions()`
-    // returns all partitions every time.
+    // The operation here can make sure for the partially completed intermediate stage,
+    // `findMissingPartitions()` returns all partitions every time.
     stage match {
-      case sms: ShuffleMapStage if stage.isIndeterminate =>
+      case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
         mapOutputTracker.unregisterAllMapOutput(sms.shuffleDep.shuffleId)
       case _ =>
     }
@@ -1610,6 +1610,8 @@ private[spark] class DAGScheduler(
 
                 activeJobs.foreach(job => collectStagesToRollback(job.finalStage :: Nil))
 
+                // The stages will be rolled back after checking
+                val rollingBackStages = HashSet[Stage](mapStage)
                 stagesToRollback.foreach {
                   case mapStage: ShuffleMapStage =>
                     val numMissingPartitions = mapStage.findMissingPartitions().length
@@ -1622,9 +1624,7 @@ private[spark] class DAGScheduler(
                           "SPARK-27665 and SPARK-25341."
                         abortStage(mapStage, reason, None)
                       } else {
-                        logInfo(s"The indeterminate stage $mapStage will be resubmitted," +
-                          " the stage self and all indeterminate parent stage will be" +
-                          " rollback and whole stage rerun.")
+                        rollingBackStages += mapStage
                       }
                     }
 
@@ -1637,6 +1637,9 @@ private[spark] class DAGScheduler(
 
                   case _ =>
                 }
+                logInfo(s"The shuffle map stage $mapStage with indeterminate output was failed, " +
+                  s"we will roll back and rerun below stages which include itself and all its " +
+                  s"indeterminate child stages: $rollingBackStages")
               }
 
               // We expect one executor failure to trigger many FetchFailures in rapid succession,
