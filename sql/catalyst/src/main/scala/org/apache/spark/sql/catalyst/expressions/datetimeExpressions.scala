@@ -580,11 +580,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   """,
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class DateFormatClass(
-    left: Expression,
-    right: Expression,
-    timeZoneId: Option[String] = None,
-    formatter: Option[TimestampFormatter] = None)
+case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
   def this(left: Expression, right: Expression) = this(left, right, None)
@@ -593,12 +589,14 @@ case class DateFormatClass(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType)
 
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
-    val tf = if (formatter.isEmpty && right.foldable) {
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  @transient private lazy val formatter: Option[TimestampFormatter] = {
+    if (right.foldable) {
       val format = right.eval().toString
-      Some(TimestampFormatter(format, getZoneId(timeZoneId)))
+      Some(TimestampFormatter(format, zoneId))
     } else None
-    copy(formatter = tf, timeZoneId = Option(timeZoneId))
   }
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
