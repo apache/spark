@@ -99,12 +99,13 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
     val result = piped.mapPartitions(_ => Array.emptyIntArray.iterator)
 
     assert(result.collect().length === 0)
+    sc.listenerBus.waitUntilEmpty(10000)
 
-    // collect stderr writer threads
-    val stderrWriterThread = Thread.getAllStackTraces.keySet().asScala
+    // collect stdin writer threads
+    val stdinWriterThread = Thread.getAllStackTraces.keySet().asScala
       .find { _.getName.startsWith(PipedRDD.STDIN_WRITER_THREAD_PREFIX) }
 
-    assert(stderrWriterThread.isEmpty)
+    assert(stdinWriterThread.isEmpty)
   }
 
   test("advanced pipe") {
