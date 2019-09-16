@@ -1275,7 +1275,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw new ArithmeticException("Casting $c to $integralType causes overflow");
+            throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
           }
         """
     } else {
@@ -1300,7 +1300,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting $c to $integralType causes overflow");
+          throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
         }
       """
   }
@@ -1335,7 +1335,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting $c to $integralType causes overflow");
+          throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
         }
       """
   }

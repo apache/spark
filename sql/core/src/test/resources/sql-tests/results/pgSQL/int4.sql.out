@@ -205,13 +205,10 @@ struct<three:string,f1:int>
 -- !query 22
 SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 -- !query 22 schema
-struct<five:string,f1:int,x:int>
+struct<>
 -- !query 22 output
-	-123456	-246912
-	-2147483647	2
-	0	0
-	123456	246912
-	2147483647	-2
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 23
@@ -228,13 +225,10 @@ struct<five:string,f1:int,x:int>
 -- !query 24
 SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 -- !query 24 schema
-struct<five:string,f1:int,x:int>
+struct<>
 -- !query 24 output
-	-123456	-246912
-	-2147483647	2
-	0	0
-	123456	246912
-	2147483647	-2
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 25
@@ -251,13 +245,10 @@ struct<five:string,f1:int,x:int>
 -- !query 26
 SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 -- !query 26 schema
-struct<five:string,f1:int,x:int>
+struct<>
 -- !query 26 output
-	-123456	-123454
-	-2147483647	-2147483645
-	0	2
-	123456	123458
-	2147483647	-2147483647
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 27
@@ -275,13 +266,10 @@ struct<five:string,f1:int,x:int>
 -- !query 28
 SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 -- !query 28 schema
-struct<five:string,f1:int,x:int>
+struct<>
 -- !query 28 output
-	-123456	-123454
-	-2147483647	-2147483645
-	0	2
-	123456	123458
-	2147483647	-2147483647
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 29
@@ -299,13 +287,10 @@ struct<five:string,f1:int,x:int>
 -- !query 30
 SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 -- !query 30 schema
-struct<five:string,f1:int,x:int>
+struct<>
 -- !query 30 output
-	-123456	-123458
-	-2147483647	2147483647
-	0	-2
-	123456	123454
-	2147483647	2147483645
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 31
@@ -323,13 +308,10 @@ struct<five:string,f1:int,x:int>
 -- !query 32
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 -- !query 32 schema
-struct<five:string,f1:int,x:int>
+struct<>
 -- !query 32 output
-	-123456	-123458
-	-2147483647	2147483647
-	0	-2
-	123456	123454
-	2147483647	2147483645
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query 33
