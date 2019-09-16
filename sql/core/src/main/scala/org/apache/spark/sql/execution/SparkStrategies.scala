@@ -84,7 +84,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ReturnAnswer(rootPlan) => rootPlan match {
         case logical.Offset(IntegerLiteral(offset), child) =>
-          OffsetExec(offset, planLater(child)) :: Nil
+          CollectOffsetExec(offset, planLater(child)) :: Nil
         case _ => Nil
       }
       case logical.Offset(IntegerLiteral(offset), child) =>

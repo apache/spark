@@ -26,8 +26,10 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartiti
 
 /**
  * Skip the first `offset` elements and collect them to a single partition.
+ * This operator will be used when a logical `Offset` operation is the final operator in an
+ * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class OffsetExec(offset: Int, child: SparkPlan) extends UnaryExecNode {
+case class CollectOffsetExec(offset: Int, child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -41,6 +43,23 @@ case class OffsetExec(offset: Int, child: SparkPlan) extends UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     sparkContext.parallelize(executeCollect(), 1)
+  }
+
+}
+
+/**
+ * Skip the first `offset` elements and collect them to a single partition.
+ */
+case class OffsetExec(offset: Int, child: SparkPlan) extends UnaryExecNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val rdd = child.execute()
+    val arr = rdd.take(offset)
+    rdd.filter(!arr.contains(_))
   }
 
 }
