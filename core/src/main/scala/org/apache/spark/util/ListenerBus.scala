@@ -38,11 +38,19 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   // Marked `private[spark]` for access in tests.
   private[spark] def listeners = listenersPlusTimers.asScala.map(_._1).asJava
 
-  private lazy val logSlowEventEnabled =
-    SparkEnv.get.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_ENABLED)
+  private lazy val env = SparkEnv.get
 
-  private lazy val logSlowEventThreshold =
-    SparkEnv.get.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD)
+  private lazy val logSlowEventEnabled = if (env != null) {
+    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_ENABLED)
+  } else {
+    false
+  }
+
+  private lazy val logSlowEventThreshold = if (env != null) {
+    env.conf.get(config.LISTENER_BUS_LOG_SLOW_EVENT_TIME_THRESHOLD)
+  } else {
+    Long.MaxValue
+  }
 
   /**
    * Returns a CodaHale metrics Timer for measuring the listener's event processing time.
