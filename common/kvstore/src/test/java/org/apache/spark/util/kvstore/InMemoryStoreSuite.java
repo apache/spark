@@ -17,9 +17,11 @@
 
 package org.apache.spark.util.kvstore;
 
+import java.util.Arrays;
 import java.util.NoSuchElementException;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -87,6 +89,52 @@ public class InMemoryStoreSuite {
   }
 
   @Test
+  public void testMultipleTypesWriteReadDelete() throws Exception {
+    KVStore store = new InMemoryStore();
+    
+    CustomType1 t1 = new CustomType1();
+    t1.key = "key1";
+    t1.id = "id";
+    t1.name = "name1";
+
+    IntKeyType t2 = new IntKeyType();
+    t2.key = 2;
+    t2.id = "2";
+    t2.values = Arrays.asList("value1", "value2");
+
+    ArrayKeyIndexType t3 = new ArrayKeyIndexType();
+    t3.key = new int[] { 42, 84 };
+    t3.id = new String[] { "id1", "id2" };
+
+    store.write(t1);
+    store.write(t2);
+    store.write(t3);
+
+    assertEquals(Sets.newHashSet(IntKeyType.class, ArrayKeyIndexType.class, CustomType1.class), store.types());
+
+    assertEquals(t1, store.read(t1.getClass(), t1.key));
+    assertEquals(t2, store.read(t2.getClass(), t2.key));
+    assertEquals(t3, store.read(t3.getClass(), t3.key));
+
+    // There should be one "id" index with a single entry for each type.
+    assertEquals(1, store.count(t1.getClass(), "id", t1.id));
+    assertEquals(1, store.count(t2.getClass(), "id", t2.id));
+    assertEquals(1, store.count(t3.getClass(), "id", t3.id));
+
+    // Delete the first entry; this should not affect the entries for the second type.
+    store.delete(t1.getClass(), t1.key);
+    assertEquals(1, store.count(t2.getClass(), "id", t2.id));
+    assertEquals(1, store.count(t3.getClass(), "id", t3.id));
+
+    // Delete the remaining entries, make sure all data is gone.
+    store.delete(t2.getClass(), t2.key);
+    assertEquals(0, store.count(t2.getClass()));
+
+    store.delete(t3.getClass(), t3.key);
+    assertEquals(0, store.count(t3.getClass()));
+  }
+
+  @Test
   public void testMetadata() throws Exception {
     KVStore store = new InMemoryStore();
     assertNull(store.getMetadata(CustomType1.class));
@@ -96,9 +144,11 @@ public class InMemoryStoreSuite {
     t.name = "name";
 
     store.setMetadata(t);
+    assertEquals(CustomType1.class, store.metadataType());
     assertEquals(t, store.getMetadata(CustomType1.class));
 
     store.setMetadata(null);
+    assertNull(store.metadataType());
     assertNull(store.getMetadata(CustomType1.class));
   }
 

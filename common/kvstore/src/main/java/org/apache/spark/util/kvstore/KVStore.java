@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.Closeable;
 import java.util.Collection;
+import java.util.Set;
 
 import org.apache.spark.annotation.Private;
 
@@ -116,6 +117,16 @@ public interface KVStore extends Closeable {
    * Returns a configurable view for iterating over entities of the given type.
    */
   <T> KVStoreView<T> view(Class<T> type) throws Exception;
+
+  /**
+   * Returns a type of app-specific metadata from the store, or null if it's not currently set.
+   */
+  Class<?> metadataType();
+
+  /**
+   * Returns all available types of all objects.
+   */
+  Set<Class<?>> types();
 
   /**
    * Returns the number of items of the given type currently in the store.

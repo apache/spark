@@ -36,9 +36,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import static org.junit.Assert.*;
 
-public abstract class DBIteratorSuite {
+public abstract class KVStoreIteratorSuite {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DBIteratorSuite.class);
+  private static final Logger LOG = LoggerFactory.getLogger(KVStoreIteratorSuite.class);
 
   private static final int MIN_ENTRIES = 42;
   private static final int MAX_ENTRIES = 1024;
@@ -380,7 +380,7 @@ public abstract class DBIteratorSuite {
 
   @Test
   public void testRefWithIntNaturalKey() throws Exception {
-    LevelDBSuite.IntKeyType i = new LevelDBSuite.IntKeyType();
+    IntKeyType i = new IntKeyType();
     i.key = 1;
     i.id = "1";
     i.values = Arrays.asList("1");

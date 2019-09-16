@@ -17,32 +17,28 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.io.File;
+import java.util.List;
 
-import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
+public class IntKeyType {
+  @KVIndex
+  public int key;
 
-public class LevelDBIteratorSuite extends KVStoreIteratorSuite {
+  @KVIndex("id")
+  public String id;
 
-  private static File dbpath;
-  private static LevelDB db;
+  public List<String> values;
 
-  @AfterClass
-  public static void cleanup() throws Exception {
-    if (db != null) {
-      db.close();
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof IntKeyType) {
+      IntKeyType other = (IntKeyType) o;
+      return key == other.key && id.equals(other.id) && values.equals(other.values);
     }
-    if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
-    }
+    return false;
   }
 
   @Override
-  protected KVStore createStore() throws Exception {
-    dbpath = File.createTempFile("test.", ".ldb");
-    dbpath.delete();
-    db = new LevelDB(dbpath);
-    return db;
+  public int hashCode() {
+    return id.hashCode();
   }
-
 }

@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
 import org.junit.After;
@@ -148,6 +149,8 @@ public class LevelDBSuite {
     db.write(t2);
     db.write(t3);
 
+    assertEquals(Sets.newHashSet(IntKeyType.class, ArrayKeyIndexType.class, CustomType1.class), db.types());
+
     assertEquals(t1, db.read(t1.getClass(), t1.key));
     assertEquals(t2, db.read(t2.getClass(), t2.key));
     assertEquals(t3, db.read(t3.getClass(), t3.key));
@@ -178,9 +181,11 @@ public class LevelDBSuite {
     CustomType1 t = createCustomType1(1);
 
     db.setMetadata(t);
+    assertEquals(CustomType1.class, db.metadataType());
     assertEquals(t, db.getMetadata(CustomType1.class));
 
     db.setMetadata(null);
+    assertNull(db.metadataType());
     assertNull(db.getMetadata(CustomType1.class));
   }
 
@@ -302,31 +307,4 @@ public class LevelDBSuite {
 
     return count;
   }
-
-  public static class IntKeyType {
-
-    @KVIndex
-    public int key;
-
-    @KVIndex("id")
-    public String id;
-
-    public List<String> values;
-
-    @Override
-    public boolean equals(Object o) {
-      if (o instanceof IntKeyType) {
-        IntKeyType other = (IntKeyType) o;
-        return key == other.key && id.equals(other.id) && values.equals(other.values);
-      }
-      return false;
-    }
-
-    @Override
-    public int hashCode() {
-      return id.hashCode();
-    }
-
-  }
-
 }

@@ -17,13 +17,7 @@
 
 package org.apache.spark.util.kvstore;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
@@ -104,6 +98,19 @@ public class InMemoryStore implements KVStore {
   public <T> KVStoreView<T> view(Class<T> type){
     InstanceList<T> list = inMemoryLists.get(type);
     return list != null ? list.view() : emptyView();
+  }
+
+  @Override
+  public Class<?> metadataType() {
+    if (metadata == null) {
+      return null;
+    }
+    return metadata.getClass();
+  }
+
+  @Override
+  public Set<Class<?>> types() {
+    return inMemoryLists.data.keySet();
   }
 
   @Override

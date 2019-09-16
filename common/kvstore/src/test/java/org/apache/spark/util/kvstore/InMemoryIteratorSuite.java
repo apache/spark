@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.kvstore;
 
-public class InMemoryIteratorSuite extends DBIteratorSuite {
+public class InMemoryIteratorSuite extends KVStoreIteratorSuite {
 
   @Override
   protected KVStore createStore() {

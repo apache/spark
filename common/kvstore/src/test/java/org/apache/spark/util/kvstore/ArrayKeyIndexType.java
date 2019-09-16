@@ -40,5 +40,4 @@ public class ArrayKeyIndexType {
   public int hashCode() {
     return Arrays.hashCode(key) ^ Arrays.hashCode(id);
   }
-
 }
