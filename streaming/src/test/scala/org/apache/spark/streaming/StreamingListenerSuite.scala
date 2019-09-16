@@ -36,19 +36,10 @@ import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
 
-class StreamingListenerSuite extends TestSuiteBase with Matchers {
+class StreamingListenerSuite extends TestSuiteBase with LocalStreamingContext with Matchers {
 
   val input = (1 to 4).map(Seq(_)).toSeq
   val operation = (d: DStream[Int]) => d.map(x => x)
-
-  var ssc: StreamingContext = _
-
-  override def afterFunction() {
-    super.afterFunction()
-    if (ssc != null) {
-      ssc.stop()
-    }
-  }
 
   // To make sure that the processing start and end times in collected
   // information are different for successive batches

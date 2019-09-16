@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.SparkEnv
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset
+import org.apache.spark.sql.connector.read.streaming.PartitionOffset
 
 case class ContinuousRecordPartitionOffset(partitionId: Int, offset: Int) extends PartitionOffset
 case class GetRecord(offset: ContinuousRecordPartitionOffset)

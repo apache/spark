@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
@@ -98,7 +99,7 @@ class KafkaDataConsumerSuite
   test("new KafkaDataConsumer instance in case of Task retry") {
     try {
       val kafkaParams = getKafkaParams()
-      val key = new CacheKey(groupId, topicPartition)
+      val key = CacheKey(groupId, topicPartition)
 
       val context1 = new TaskContextImpl(0, 0, 0, 0, 0, null, null, null)
       TaskContext.setTaskContext(context1)
@@ -183,7 +184,8 @@ class KafkaDataConsumerSuite
   }
 
   test("SPARK-23623: concurrent use of KafkaDataConsumer") {
-    val data: immutable.IndexedSeq[String] = prepareTestTopicHavingTestMessages(topic)
+    val data: immutable.IndexedSeq[(String, Seq[(String, Array[Byte])])] =
+      prepareTestTopicHavingTestMessages(topic)
 
     val topicPartition = new TopicPartition(topic, 0)
     val kafkaParams = getKafkaParams()
@@ -203,10 +205,22 @@ class KafkaDataConsumerSuite
       try {
         val range = consumer.getAvailableOffsetRange()
         val rcvd = range.earliest until range.latest map { offset =>
-          val bytes = consumer.get(offset, Long.MaxValue, 10000, failOnDataLoss = false).value()
-          new String(bytes)
+          val record = consumer.get(offset, Long.MaxValue, 10000, failOnDataLoss = false)
+          val value = new String(record.value(), StandardCharsets.UTF_8)
+          val headers = record.headers().toArray.map(header => (header.key(), header.value())).toSeq
+          (value, headers)
         }
-        assert(rcvd == data)
+        data.zip(rcvd).foreach { case (expected, actual) =>
+          // value
+          assert(expected._1 === actual._1)
+          // headers
+          expected._2.zip(actual._2).foreach { case (l, r) =>
+            // header key
+            assert(l._1 === r._1)
+            // header value
+            assert(l._2 === r._2)
+          }
+        }
       } catch {
         case e: Throwable =>
           error = e
@@ -353,9 +367,9 @@ class KafkaDataConsumerSuite
   }
 
   private def prepareTestTopicHavingTestMessages(topic: String) = {
-    val data = (1 to 1000).map(_.toString)
+    val data = (1 to 1000).map(i => (i.toString, Seq[(String, Array[Byte])]()))
     testUtils.createTopic(topic, 1)
-    testUtils.sendMessages(topic, data.toArray)
+    testUtils.sendMessages(topic, data.toArray, None)
     data
   }
 

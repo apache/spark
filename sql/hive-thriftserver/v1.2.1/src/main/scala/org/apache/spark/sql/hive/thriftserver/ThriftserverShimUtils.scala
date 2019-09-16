@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.commons.logging.LogFactory
-import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.{RowSet, RowSetFactory, TableSchema, Type}
+import org.apache.hive.service.cli.Type._
 import org.apache.hive.service.cli.thrift.TProtocolVersion._
 
 /**
@@ -51,10 +51,12 @@ private[thriftserver] object ThriftserverShimUtils {
 
   private[thriftserver] def toJavaSQLType(s: String): Int = Type.getType(s).toJavaSQLType
 
-  private[thriftserver] def addToClassPath(
-      loader: ClassLoader,
-      auxJars: Array[String]): ClassLoader = {
-    Utilities.addToClassPath(loader, auxJars)
+  private[thriftserver] def supportedType(): Seq[Type] = {
+    Seq(NULL_TYPE, BOOLEAN_TYPE, STRING_TYPE, BINARY_TYPE,
+      TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE, BIGINT_TYPE,
+      FLOAT_TYPE, DOUBLE_TYPE, DECIMAL_TYPE,
+      DATE_TYPE, TIMESTAMP_TYPE,
+      ARRAY_TYPE, MAP_TYPE, STRUCT_TYPE)
   }
 
   private[thriftserver] val testedProtocolVersions = Seq(

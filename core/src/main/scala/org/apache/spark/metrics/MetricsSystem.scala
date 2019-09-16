@@ -28,7 +28,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
+import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
 import org.apache.spark.metrics.source.{Source, StaticSources}
 import org.apache.spark.util.Utils
 
@@ -83,13 +83,15 @@ private[spark] class MetricsSystem private (
 
   // Treat MetricsServlet as a special sink as it should be exposed to add handlers to web ui
   private var metricsServlet: Option[MetricsServlet] = None
+  private var prometheusServlet: Option[PrometheusServlet] = None
 
   /**
    * Get any UI handlers used by this metrics system; can only be called after start().
    */
   def getServletHandlers: Array[ServletContextHandler] = {
     require(running, "Can only call getServletHandlers on a running MetricsSystem")
-    metricsServlet.map(_.getHandlers(conf)).getOrElse(Array())
+    metricsServlet.map(_.getHandlers(conf)).getOrElse(Array()) ++
+      prometheusServlet.map(_.getHandlers(conf)).getOrElse(Array())
   }
 
   metricsConfig.initialize()
@@ -124,7 +126,7 @@ private[spark] class MetricsSystem private (
    * If either ID is not available, this defaults to just using <source name>.
    *
    * @param source Metric source to be named by this method.
-   * @return An unique metric name for each combination of
+   * @return A unique metric name for each combination of
    *         application, executor/driver and metric source.
    */
   private[spark] def buildRegistryName(source: Source): String = {
@@ -201,6 +203,12 @@ private[spark] class MetricsSystem private (
                 classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
               .newInstance(kv._2, registry, securityMgr)
             metricsServlet = Some(servlet)
+          } else if (kv._1 == "prometheusServlet") {
+            val servlet = Utils.classForName[PrometheusServlet](classPath)
+              .getConstructor(
+                classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+              .newInstance(kv._2, registry, securityMgr)
+            prometheusServlet = Some(servlet)
           } else {
             val sink = Utils.classForName[Sink](classPath)
               .getConstructor(
