@@ -146,6 +146,7 @@ options for deployment:
 * Integration with other storage systems:
   * [Cloud Infrastructures](cloud-integration.html)
   * [OpenStack Swift](storage-openstack-swift.html)
+* [Migration Guide](migration-guide.html): Migration guides for Spark components
 * [Building Spark](building-spark.html): build Spark using the Maven system
 * [Contributing to Spark](https://spark.apache.org/contributing.html)
 * [Third Party Projects](https://spark.apache.org/third-party-projects.html): related third party Spark projects

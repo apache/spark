@@ -1873,15 +1873,6 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCo
     classifier = Param(Params._dummy(), "classifier", "base binary classifier")
 
     @since("2.0.0")
-    def setClassifier(self, value):
-        """
-        Sets the value of :py:attr:`classifier`.
-
-        .. note:: Only LogisticRegression and NaiveBayes are supported now.
-        """
-        return self._set(classifier=value)
-
-    @since("2.0.0")
     def getClassifier(self):
         """
         Gets the value of classifier or its default value.
@@ -1958,6 +1949,13 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setClassifier(self, value):
+        """
+        Sets the value of :py:attr:`classifier`.
+        """
+        return self._set(classifier=value)
 
     def _fit(self, dataset):
         labelCol = self.getLabelCol()
@@ -2212,7 +2210,8 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         classifier = JavaParams._from_java(java_stage.getClassifier())
         models = [JavaParams._from_java(model) for model in java_stage.models()]
         py_stage = cls(models=models).setPredictionCol(predictionCol).setLabelCol(labelCol)\
-            .setFeaturesCol(featuresCol).setClassifier(classifier)
+            .setFeaturesCol(featuresCol)
+        py_stage._set(classifier=classifier)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 

@@ -200,7 +200,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  val initThread = initialize()
+  var initThread: Thread = null
 
   private[history] def initialize(): Thread = {
     if (!isFsInSafeMode()) {
@@ -382,6 +382,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       Map()
     }
     Map("Event log directory" -> logDir.toString) ++ safeMode
+  }
+
+  override def start(): Unit = {
+    initThread = initialize()
   }
 
   override def stop(): Unit = {

@@ -552,7 +552,7 @@ class UDFTests(ReusedSQLTestCase):
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .format("org.apache.spark.sql.connector.SimpleDataSourceV2") \
                 .load().toDF('i', 'j')
 
             c1 = udf(lambda x: x + 1, 'int')(lit(1))
