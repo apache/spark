@@ -3,7 +3,7 @@
 --
 --
 -- INT4
--- https://github.com/postgres/postgres/blob/REL_12_BETA1/src/test/regress/sql/int4.sql
+-- https://github.com/postgres/postgres/blob/REL_12_BETA2/src/test/regress/sql/int4.sql
 --
 
 CREATE TABLE INT4_TBL(f1 int) USING parquet;
@@ -33,6 +33,10 @@ INSERT INTO INT4_TBL VALUES ('-2147483647');
 -- INSERT INTO INT4_TBL(f1) VALUES ('123       5');
 -- INSERT INTO INT4_TBL(f1) VALUES ('');
 
+-- We cannot test this when failOnOverFlow=true here
+-- because exception happens in the executors and the
+-- output stacktrace cannot have an exact match
+set spark.sql.arithmeticOperations.failOnOverFlow=false;
 
 SELECT '' AS five, * FROM INT4_TBL;
 
@@ -125,7 +129,8 @@ SELECT int('2') * smallint('2') = smallint('16') / int('4') AS true;
 
 SELECT smallint('2') * int('2') = int('16') / smallint('4') AS true;
 
-SELECT int('1000') < int('999') AS false;
+-- [SPARK-28349] We do not need to follow PostgreSQL to support reserved words in column alias
+SELECT int('1000') < int('999') AS `false`;
 
 -- [SPARK-28027] Our ! and !! has different meanings
 -- SELECT 4! AS twenty_four;
@@ -134,7 +139,6 @@ SELECT int('1000') < int('999') AS false;
 
 SELECT 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 AS ten;
 
--- [SPARK-2659] HiveQL: Division operator should always perform fractional division
 SELECT 2 + 2 / 2 AS three;
 
 SELECT (2 + 2) / 2 AS two;

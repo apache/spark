@@ -64,20 +64,168 @@
     - text: Usage Notes
       url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
-  url: sql-migration-guide.html
-  subitems:
-    - text: Spark SQL Upgrading Guide
-      url: sql-migration-guide-upgrade.html
-    - text: Compatibility with Apache Hive
-      url: sql-migration-guide-hive-compatibility.html
-    - text: SQL Reserved/Non-Reserved Keywords
-      url: sql-reserved-and-non-reserved-keywords.html
-- text: Reference
-  url: sql-reference.html
+  url: sql-migration-old.html
+- text: SQL Reference
+  url: sql-ref.html
   subitems:
     - text: Data Types
-      url: sql-reference.html#data-types
+      url: sql-ref-datatypes.html
+    - text: Null Semantics
+      url: sql-ref-null-semantics.html
     - text: NaN Semantics
-      url: sql-reference.html#nan-semantics
-    - text: Arithmetic operations
-      url: sql-reference.html#arithmetic-operations
+      url: sql-ref-nan-semantics.html
+    - text: SQL Syntax
+      url: sql-ref-syntax.html
+      subitems:
+        - text: Data Definition Statements
+          url: sql-ref-syntax-ddl.html
+          subitems:
+            - text: ALTER DATABASE
+              url: sql-ref-syntax-ddl-alter-database.html
+            - text: ALTER TABLE
+              url: sql-ref-syntax-ddl-alter-table.html
+            - text: ALTER VIEW
+              url: sql-ref-syntax-ddl-alter-view.html
+            - text: CREATE DATABASE
+              url: sql-ref-syntax-ddl-create-database.html
+            - text: CREATE FUNCTION
+              url: sql-ref-syntax-ddl-create-function.html
+            - text: CREATE TABLE
+              url: sql-ref-syntax-ddl-create-table.html
+            - text: CREATE VIEW
+              url: sql-ref-syntax-ddl-create-view.html
+            - text: DROP DATABASE
+              url: sql-ref-syntax-ddl-drop-database.html
+            - text: DROP FUNCTION
+              url: sql-ref-syntax-ddl-drop-function.html
+            - text: DROP TABLE
+              url: sql-ref-syntax-ddl-drop-table.html
+            - text: DROP VIEW
+              url: sql-ref-syntax-ddl-drop-view.html
+            - text: TRUNCATE TABLE
+              url: sql-ref-syntax-ddl-truncate-table.html
+            - text: REPAIR TABLE
+              url: sql-ref-syntax-ddl-repair-table.html
+        - text: Data Manipulation Statements
+          url: sql-ref-syntax-dml.html
+          subitems:
+            - text: INSERT
+              url: sql-ref-syntax-dml-insert.html
+            - text: LOAD
+              url: sql-ref-syntax-dml-load.html
+        - text: Data Retrieval(Queries)
+          url: sql-ref-syntax-qry.html
+          subitems:
+            - text: SELECT 
+              url: sql-ref-syntax-qry-select.html 
+              subitems:
+                - text: DISTINCT Clause
+                  url: sql-ref-syntax-qry-select-distinct.html
+                - text: Joins
+                  url: sql-ref-syntax-qry-select-join.html
+                - text: ORDER BY Clause 
+                  url: sql-ref-syntax-qry-select-orderby.html
+                - text: GROUP BY Clause 
+                  url: sql-ref-syntax-qry-select-groupby.html
+                - text: HAVING Clause 
+                  url: sql-ref-syntax-qry-select-having.html
+                - text: LIMIT Clause 
+                  url: sql-ref-syntax-qry-select-limit.html
+                - text: Set operations
+                  url: sql-ref-syntax-qry-select-setops.html
+                - text: Common Table Expression(CTE)
+                  url: sql-ref-syntax-qry-select-cte.html
+                - text: Subqueries
+                  url: sql-ref-syntax-qry-select-subqueries.html
+                - text: Query hints
+                  url: sql-ref-syntax-qry-select-hints.html
+            - text: SAMPLING
+              url: sql-ref-syntax-qry-sampling.html
+            - text: WINDOWING ANALYTIC FUNCTIONS 
+              url: sql-ref-syntax-qry-window.html
+            - text: AGGREGATION (CUBE/ROLLUP/GROUPING)
+              url: sql-ref-syntax-qry-aggregation.html
+            - text: EXPLAIN
+              url: sql-ref-syntax-qry-explain.html
+        - text: Auxilarry Statements
+          url: sql-ref-syntax-aux.html
+          subitems:
+            - text: Analyze statement
+              url: sql-ref-syntax-aux-analyze.html
+              subitems: 
+                - text: ANALYZE TABLE
+                  url: sql-ref-syntax-aux-analyze-table.html
+            - text: Caching statements 
+              url: sql-ref-syntax-aux-cache.html
+              subitems:
+                - text: CACHE TABLE
+                  url: sql-ref-syntax-aux-cache-cache-table.html
+                - text: UNCACHE TABLE
+                  url: sql-ref-syntax-aux-cache-uncache-table.html
+                - text: CLEAR CACHE
+                  url: sql-ref-syntax-aux-cache-clear-cache.html
+                - text: REFRESH TABLE
+                  url: sql-ref-syntax-aux-refresh-table.html
+            - text: Describe Commands
+              url: sql-ref-syntax-aux-describe.html
+              subitems:
+                - text: DESCRIBE DATABASE
+                  url: sql-ref-syntax-aux-describe-database.html
+                - text: DESCRIBE TABLE
+                  url: sql-ref-syntax-aux-describe-table.html
+                - text: DESCRIBE FUNCTION
+                  url: sql-ref-syntax-aux-describe-function.html
+                - text: DESCRIBE QUERY
+                  url: sql-ref-syntax-aux-describe-query.html
+            - text: Show commands
+              url: sql-ref-syntax-aux-show.html
+              subitems:
+                - text: SHOW COLUMNS 
+                  url: sql-ref-syntax-aux-show-columns.html
+                - text: SHOW DATABASES
+                  url: sql-ref-syntax-aux-show-databases.html
+                - text: SHOW FUNCTIONS
+                  url: sql-ref-syntax-aux-show-functions.html
+                - text: SHOW TABLE
+                  url: sql-ref-syntax-aux-show-table.html
+                - text: SHOW TABLES
+                  url: sql-ref-syntax-aux-show-tables.html
+                - text: SHOW TBLPROPERTIES
+                  url: sql-ref-syntax-aux-show-tblproperties.html
+                - text: SHOW PARTITIONS 
+                  url: sql-ref-syntax-aux-show-partitions.html
+                - text: SHOW CREATE TABLE
+                  url: sql-ref-syntax-aux-show-create-table.html
+            - text: Configuration Management Commands
+              url: sql-ref-syntax-aux-conf-mgmt.html
+              subitems:
+                - text: SET 
+                  url: sql-ref-syntax-aux-conf-mgmt-set.html
+                - text: RESET
+                  url: sql-ref-syntax-aux-conf-mgmt-reset.html
+            - text: Resource Management Commands
+              url: sql-ref-syntax-aux-resource-mgmt.html
+              subitems:
+                - text: ADD FILE
+                  url: sql-ref-syntax-aux-resource-mgmt-add-file.html
+                - text: ADD JAR
+                  url: sql-ref-syntax-aux-resource-mgmt-add-jar.html
+    - text: Functions
+      url: sql-ref-functions.html
+      subitems:
+        - text: Builtin Functions
+          url: sql-ref-functions-builtin.html
+          subitems:
+            - text: Scalar functions
+              url: sql-ref-functions-builtin-scalar.html
+            - text: Aggregate functions
+              url: sql-ref-functions-builtin-aggregate.html
+        - text: User defined Functions
+          url: sql-ref-functions-udf.html
+          subitems:
+            - text: Scalar functions
+              url: sql-ref-functions-udf-scalar.html
+            - text: Aggregate functions
+              url: sql-ref-functions-udf-aggregate.html
+    - text: Arthmetic operations
+      url: sql-ref-arithmetic-ops.html

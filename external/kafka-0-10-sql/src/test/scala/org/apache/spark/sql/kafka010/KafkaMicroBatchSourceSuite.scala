@@ -34,6 +34,8 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
+import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.streaming._
@@ -41,13 +43,12 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
-import org.apache.spark.sql.sources.v2.reader.streaming.SparkDataStream
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with KafkaTest {
+abstract class KafkaSourceTest extends StreamTest with SharedSparkSession with KafkaTest {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -1066,7 +1067,7 @@ class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(
-      "spark.sql.streaming.disabledV2MicroBatchReaders",
+      SQLConf.DISABLED_V2_STREAMING_MICROBATCH_READERS.key,
       classOf[KafkaSourceProvider].getCanonicalName)
   }
 
@@ -1145,7 +1146,6 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
           KafkaSourceOffset(Map(tp -> 100L))).map(_.asInstanceOf[KafkaBatchInputPartition])
         withClue(s"minPartitions = $minPartitions generated factories $inputPartitions\n\t") {
           assert(inputPartitions.size == numPartitionsGenerated)
-          inputPartitions.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
         }
       }
     }
@@ -1336,14 +1336,16 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
       (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
       (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
         SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
-      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map(optionKey -> optionValue)), optionKey, answer)
       assert(offset === answer)
     }
 
     for ((optionKey, answer) <- Seq(
       (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
       (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
-      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      val offset = getKafkaOffsetRangeLimit(
+        CaseInsensitiveMap[String](Map.empty), optionKey, answer)
       assert(offset === answer)
     }
   }

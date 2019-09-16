@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,10 +32,10 @@ import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{BinaryType, DataType}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{BinaryType, DataType, StringType, StructField, StructType}
 
-abstract class KafkaSinkSuiteBase extends QueryTest with SharedSQLContext with KafkaTest {
+abstract class KafkaSinkSuiteBase extends QueryTest with SharedSparkSession with KafkaTest {
   protected var testUtils: KafkaTestUtils = _
 
   override def beforeAll(): Unit = {
@@ -59,13 +60,14 @@ abstract class KafkaSinkSuiteBase extends QueryTest with SharedSQLContext with K
 
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 
-  protected def createKafkaReader(topic: String): DataFrame = {
+  protected def createKafkaReader(topic: String, includeHeaders: Boolean = false): DataFrame = {
     spark.read
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("startingOffsets", "earliest")
       .option("endingOffsets", "latest")
       .option("subscribe", topic)
+      .option("includeHeaders", includeHeaders.toString)
       .load()
   }
 }
@@ -368,15 +370,51 @@ abstract class KafkaSinkBatchSuiteBase extends KafkaSinkSuiteBase {
   test("batch - write to kafka") {
     val topic = newTopic()
     testUtils.createTopic(topic)
-    val df = Seq("1", "2", "3", "4", "5").map(v => (topic, v)).toDF("topic", "value")
+    val data = Seq(
+      Row(topic, "1", Seq(
+        Row("a", "b".getBytes(UTF_8))
+      )),
+      Row(topic, "2", Seq(
+        Row("c", "d".getBytes(UTF_8)),
+        Row("e", "f".getBytes(UTF_8))
+      )),
+      Row(topic, "3", Seq(
+        Row("g", "h".getBytes(UTF_8)),
+        Row("g", "i".getBytes(UTF_8))
+      )),
+      Row(topic, "4", null),
+      Row(topic, "5", Seq(
+        Row("j", "k".getBytes(UTF_8)),
+        Row("j", "l".getBytes(UTF_8)),
+        Row("m", "n".getBytes(UTF_8))
+      ))
+    )
+
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(data),
+      StructType(Seq(StructField("topic", StringType), StructField("value", StringType),
+        StructField("headers", KafkaRecordToRowConverter.headersType)))
+    )
+
     df.write
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("topic", topic)
       .save()
     checkAnswer(
-      createKafkaReader(topic).selectExpr("CAST(value as STRING) value"),
-      Row("1") :: Row("2") :: Row("3") :: Row("4") :: Row("5") :: Nil)
+      createKafkaReader(topic, includeHeaders = true).selectExpr(
+        "CAST(value as STRING) value", "headers"
+      ),
+      Row("1", Seq(Row("a", "b".getBytes(UTF_8)))) ::
+        Row("2", Seq(Row("c", "d".getBytes(UTF_8)), Row("e", "f".getBytes(UTF_8)))) ::
+        Row("3", Seq(Row("g", "h".getBytes(UTF_8)), Row("g", "i".getBytes(UTF_8)))) ::
+        Row("4", null) ::
+        Row("5", Seq(
+          Row("j", "k".getBytes(UTF_8)),
+          Row("j", "l".getBytes(UTF_8)),
+          Row("m", "n".getBytes(UTF_8)))) ::
+        Nil
+    )
   }
 
   test("batch - null topic field value, and no topic option") {
@@ -427,7 +465,7 @@ class KafkaSinkBatchSuiteV1 extends KafkaSinkBatchSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "kafka")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "kafka")
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) => s"Save mode ${mode.name} not allowed for Kafka")
@@ -438,7 +476,7 @@ class KafkaSinkBatchSuiteV2 extends KafkaSinkBatchSuiteBase {
   override protected def sparkConf: SparkConf =
     super
       .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_WRITER_LIST, "")
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
   test("batch - unsupported save modes") {
     testUnsupportedSaveModes((mode) => s"cannot be written with ${mode.name} mode")

@@ -383,13 +383,18 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // simultaneously, and everything is still OK
 
     def writeAndClose(
-      writer: ShuffleWriter[Int, Int])(
-      iter: Iterator[(Int, Int)]): Option[MapStatus] = {
-      val files = writer.write(iter)
-      writer.stop(true)
+        writer: ShuffleWriter[Int, Int],
+        taskContext: TaskContext)(
+        iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+      try {
+        val files = writer.write(iter)
+        writer.stop(true)
+      } finally {
+        TaskContext.unset()
+      }
     }
     val interleaver = new InterleaveIterators(
-      data1, writeAndClose(writer1), data2, writeAndClose(writer2))
+      data1, writeAndClose(writer1, context1), data2, writeAndClose(writer2, context2))
     val (mapOutput1, mapOutput2) = interleaver.run()
 
     // check that we can read the map output and it has the right data
@@ -407,6 +412,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem)
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
+    TaskContext.unset()
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 

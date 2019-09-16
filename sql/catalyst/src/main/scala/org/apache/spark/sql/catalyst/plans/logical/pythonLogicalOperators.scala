@@ -41,9 +41,9 @@ case class FlatMapGroupsInPandas(
 
 /**
  * Map partitions using an udf: iter(pandas.Dataframe) -> iter(pandas.DataFrame).
- * This is used by DataFrame.mapPartitionsInPandas()
+ * This is used by DataFrame.mapInPandas()
  */
-case class MapPartitionsInPandas(
+case class MapInPandas(
     functionExpr: Expression,
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
@@ -59,8 +59,7 @@ trait BaseEvalPython extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
-  @transient
-  override lazy val references: AttributeSet = AttributeSet(udfs.flatMap(_.references))
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 }
 
 /**

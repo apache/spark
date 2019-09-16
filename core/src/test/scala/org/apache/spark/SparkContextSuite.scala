@@ -170,6 +170,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
+  test("add FS jar files not exists") {
+    try {
+      val jarPath = "hdfs:///no/path/to/TestUDTF.jar"
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath)
+      assert(sc.listJars().forall(!_.contains("TestUDTF.jar")))
+    } finally {
+      sc.stop()
+    }
+  }
+
   test("SPARK-17650: malformed url's throw exceptions before bricking Executors") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -745,7 +756,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       val conf = new SparkConf()
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      conf.set(DRIVER_GPU_ID.amountConf, "1")
+      conf.set(DRIVER_GPU_ID.amountConf, "2")
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
       sc = new SparkContext(conf)
 
@@ -772,8 +783,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(DRIVER_RESOURCES_FILE, resourcesFile)
         .setMaster("local-cluster[1, 1, 1024]")
         .setAppName("test-cluster")
-      conf.set(DRIVER_GPU_ID.amountConf, "1")
-      conf.set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(DRIVER_GPU_ID.amountConf, "3")
+        .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
+        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
@@ -839,26 +851,28 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assume(!(Utils.isWindows))
     withTempDir { dir =>
       val discoveryScript = createTempScriptWithExpectedOutput(dir, "resourceDiscoveryScript",
-        """{"name": "gpu","addresses":["0", "1", "2"]}""")
+        """{"name": "gpu","addresses":["0", "1", "2", "3", "4", "5", "6", "7", "8"]}""")
 
       val conf = new SparkConf()
         .setMaster("local-cluster[3, 3, 1024]")
         .setAppName("test-cluster")
-      conf.set(TASK_GPU_ID.amountConf, "1")
-      conf.set(EXECUTOR_GPU_ID.amountConf, "3")
-      conf.set(EXECUTOR_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(WORKER_GPU_ID.amountConf, "3")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(TASK_GPU_ID.amountConf, "3")
+        .set(EXECUTOR_GPU_ID.amountConf, "3")
+        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
 
       // Ensure all executors has started
       TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
 
-      val rdd = sc.makeRDD(1 to 10, 9).mapPartitions { it =>
+      val rdd = sc.makeRDD(1 to 10, 3).mapPartitions { it =>
         val context = TaskContext.get()
         context.resources().get(GPU).get.addresses.iterator
       }
       val gpus = rdd.collect()
-      assert(gpus.sorted === Seq("0", "0", "0", "1", "1", "1", "2", "2", "2"))
+      assert(gpus.sorted === Seq("0", "1", "2", "3", "4", "5", "6", "7", "8"))
 
       eventually(timeout(10.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)

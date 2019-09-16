@@ -43,7 +43,8 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
-    child: SparkPlan) extends Exchange {
+    child: SparkPlan,
+    canChangeNumPartitions: Boolean = true) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
   //       e.g. it can be null on the Executor side
@@ -241,7 +242,7 @@ object ShuffleExchangeExec {
           }
           // The comparator for comparing row hashcode, which should always be Integer.
           val prefixComparator = PrefixComparators.LONG
-          val canUseRadixSort = SQLConf.get.enableRadixSort
+
           // The prefix computer generates row hashcode as the prefix, so we may decrease the
           // probability that the prefixes are equal when input rows choose column values from a
           // limited range.
@@ -263,7 +264,9 @@ object ShuffleExchangeExec {
             prefixComparator,
             prefixComputer,
             pageSize,
-            canUseRadixSort)
+            // We are comparing binary here, which does not support radix sort.
+            // See more details in SPARK-28699.
+            false)
           sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
         }
       } else {

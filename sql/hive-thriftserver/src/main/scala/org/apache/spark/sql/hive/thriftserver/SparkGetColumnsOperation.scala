@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.UUID
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.hive.thriftserver.ThriftserverShimUtils.toJavaSQLType
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own SparkGetColumnsOperation
@@ -56,15 +58,31 @@ private[hive] class SparkGetColumnsOperation(
 
   val catalog: SessionCatalog = sqlContext.sessionState.catalog
 
+  private var statementId: String = _
+
+  override def close(): Unit = {
+    super.close()
+    HiveThriftServer2.listener.onOperationClosed(statementId)
+  }
+
   override def runInternal(): Unit = {
-    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName" +
-      s", columnName : $columnName"
-    logInfo(s"GetColumnsOperation: $cmdStr")
+    statementId = UUID.randomUUID().toString
+    // Do not change cmdStr. It's used for Hive auditing and authorization.
+    val cmdStr = s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
+    val logMsg = s"Listing columns '$cmdStr, columnName : $columnName'"
+    logInfo(s"$logMsg with $statementId")
 
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
+
+    HiveThriftServer2.listener.onStatementStart(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      logMsg,
+      statementId,
+      parentSession.getUsername)
 
     val schemaPattern = convertSchemaPattern(schemaName)
     val tablePattern = convertIdentifierPattern(tableName, true)
@@ -80,8 +98,6 @@ private[hive] class SparkGetColumnsOperation(
 
     if (isAuthV2Enabled) {
       val privObjs = seqAsJavaListConverter(getPrivObjs(db2Tabs)).asJava
-      val cmdStr =
-        s"catalog : $catalogName, schemaPattern : $schemaName, tablePattern : $tableName"
       authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr)
     }
 
@@ -115,8 +131,11 @@ private[hive] class SparkGetColumnsOperation(
     } catch {
       case e: HiveSQLException =>
         setState(OperationState.ERROR)
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw e
     }
+    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 
   private def addToRowSet(

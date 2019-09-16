@@ -33,11 +33,11 @@ import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 
-class SQLQuerySuite extends QueryTest with SharedSQLContext {
+class SQLQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   setupTestData()
@@ -1896,7 +1896,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("Star Expansion - group by") {
-    withSQLConf("spark.sql.retainGroupColumns" -> "false") {
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
       checkAnswer(
         testData2.groupBy($"a", $"b").agg($"*"),
         sql("SELECT * FROM testData2 group by a, b"))
@@ -1936,7 +1936,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
-    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       // select from a table to prevent constant folding.
       val df = sql("SELECT a, b from testData2 limit 1")
       checkAnswer(df, Row(1, 1))
@@ -1985,9 +1985,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
 
       // Try disabling it via configuration.
-      spark.conf.set("spark.sql.subexpressionElimination.enabled", "false")
+      spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "false")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
-      spark.conf.set("spark.sql.subexpressionElimination.enabled", "true")
+      spark.conf.set(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key, "true")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
     }
   }
@@ -2999,7 +2999,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
 
     Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         withTempPath { dir =>
           spark.range(10).map(i => (i, i.toString)).toDF("id", "s")
             .write
@@ -3024,7 +3024,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-26709: OptimizeMetadataOnlyQuery does not handle empty records correctly") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> "parquet") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
       Seq(true, false).foreach { enableOptimizeMetadataOnlyQuery =>
         withSQLConf(SQLConf.OPTIMIZER_METADATA_ONLY.key ->
           enableOptimizeMetadataOnlyQuery.toString) {
@@ -3179,6 +3179,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
     }
 
+  }
+
+  test("SPARK-29000: arithmetic computation overflow when don't allow decimal precision loss ") {
+    withSQLConf(SQLConf.DECIMAL_OPERATIONS_ALLOW_PREC_LOSS.key -> "false") {
+      val df1 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * 1")
+      checkAnswer(df1, Array(Row(100)))
+      val df2 = sql("select case when 1=2 then 1 else 100.000000000000000000000000 end * " +
+        "case when 1=2 then 2 else 1 end")
+      checkAnswer(df2, Array(Row(100)))
+      val df3 = sql("select case when 1=2 then 1 else 1.000000000000000000000001 end / 10")
+      checkAnswer(df3, Array(Row(new java.math.BigDecimal("0.100000000000000000000000100"))))
+    }
   }
 }
 

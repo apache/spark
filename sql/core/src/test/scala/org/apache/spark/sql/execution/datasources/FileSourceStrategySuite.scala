@@ -35,11 +35,11 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.Utils
 
-class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
+class FileSourceStrategySuite extends QueryTest with SharedSparkSession with PredicateHelper {
   import testImplicits._
 
   protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
@@ -201,7 +201,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("partitioned table - case insensitive") {
-    withSQLConf("spark.sql.caseSensitive" -> "false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val table =
         createTable(
           files = Seq(
@@ -415,7 +415,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
   test("[SPARK-16818] partition pruned file scans implement sameResult correctly") {
     Seq("orc", "").foreach { useV1ReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_READER_LIST.key -> useV1ReaderList) {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1ReaderList) {
         withTempPath { path =>
           val tempDir = path.getCanonicalPath
           spark.range(100)
@@ -437,7 +437,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
   }
 
   test("[SPARK-16818] exchange reuse respects differences in partition pruning") {
-    spark.conf.set("spark.sql.exchange.reuse", true)
+    spark.conf.set(SQLConf.EXCHANGE_REUSE_ENABLED.key, true)
     withTempPath { path =>
       val tempDir = path.getCanonicalPath
       spark.range(10)

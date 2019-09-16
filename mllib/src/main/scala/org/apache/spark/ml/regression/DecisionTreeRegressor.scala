@@ -34,7 +34,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
@@ -212,20 +212,35 @@ class DecisionTreeRegressionModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    transformImpl(dataset)
-  }
 
-  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
-    val predictUDF = udf { (features: Vector) => predict(features) }
-    val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
-    var output = dataset.toDF()
+    var predictionColNames = Seq.empty[String]
+    var predictionColumns = Seq.empty[Column]
+
     if ($(predictionCol).nonEmpty) {
-      output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+      val predictUDF = udf { features: Vector => predict(features) }
+      predictionColNames :+= $(predictionCol)
+      predictionColumns :+= predictUDF(col($(featuresCol)))
     }
+
     if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
-      output = output.withColumn($(varianceCol), predictVarianceUDF(col($(featuresCol))))
+      val predictVarianceUDF = udf { features: Vector => predictVariance(features) }
+      predictionColNames :+= $(varianceCol)
+      predictionColumns :+= predictVarianceUDF(col($(featuresCol)))
     }
-    output
+
+    if ($(leafCol).nonEmpty) {
+      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      predictionColNames :+= $(leafCol)
+      predictionColumns :+= leafUDF(col($(featuresCol)))
+    }
+
+    if (predictionColNames.nonEmpty) {
+      dataset.withColumns(predictionColNames, predictionColumns)
+    } else {
+      this.logWarning(s"$uid: DecisionTreeRegressionModel.transform() does nothing" +
+        " because no output columns were set.")
+      dataset.toDF()
+    }
   }
 
   @Since("1.4.0")

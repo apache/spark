@@ -34,7 +34,8 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -140,7 +141,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
-    case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
+    case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         parts, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
@@ -152,7 +153,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
-    case i @ InsertIntoTable(
+    case i @ InsertIntoStatement(
         l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, query, overwrite, _) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
@@ -241,11 +242,11 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
         if DDLUtils.isDatasourceTable(tableMeta) =>
       i.copy(table = readDataSourceTable(tableMeta))
 
-    case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
     case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
@@ -433,7 +434,7 @@ object DataSourceStrategy {
     filters.map { e =>
       e transform {
         case a: AttributeReference =>
-          a.withName(attributes.find(_.semanticEquals(a)).get.name)
+          a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
       }
     }
   }
