@@ -133,7 +133,7 @@ private[kafka010] class KafkaOffsetReader(
       partitionOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
       assert(partitions == partitionOffsets.keySet,
         "If startingOffsets contains specific offsets, you must specify all TopicPartitions.\n" +
-          "Use -1 for latest, -2 for earliest, if you don't care.\n" +
+          "Use -1 for latest, -2 for earliest.\n" +
           s"Specified: ${partitionOffsets.keySet} Assigned: ${partitions}")
       logDebug(s"Partitions assigned to consumer: $partitions. Seeking to $partitionOffsets")
       partitionOffsets

@@ -86,8 +86,8 @@ private object JsonUtils {
     } catch {
       case NonFatal(x) =>
         throw new IllegalArgumentException(
-          s"""Expected e.g. {"topicA": {"0": 1549597128110, "1": 1549597128110},
-             |"topicB": {"0": 1549597120110, "1": 1549597120110}}, got $str""".stripMargin)
+          s"""Expected e.g. {"topicA": {"0": 123456789, "1": 123456789},
+             |"topicB": {"0": 123456789, "1": 123456789}}, got $str""".stripMargin)
     }
   }
 
