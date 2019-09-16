@@ -147,6 +147,7 @@ class EquivalentExpressions {
   //                will always get accessed.
   //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
   //                children, because others may not get accessed.
+  //   5. SortPrefix: skipt the direct child of SortPrefix which is an unevaluable SortOrder.
   private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
     case _: CodegenFallback => Nil
     case i: If => i.predicate :: Nil
