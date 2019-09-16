@@ -28,7 +28,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.functions.col
 
 /**
  * Params for Naive Bayes Classifiers.
@@ -155,14 +155,14 @@ class NaiveBayes @Since("1.5.0") (
 
     val numFeatures = dataset.select(col($(featuresCol))).head().getAs[Vector](0).size
     instr.logNumFeatures(numFeatures)
-    val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
     // Aggregates term frequencies per label.
     // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
-      .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
-      }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
+
+    val aggregated = extractInstances(dataset).map { instance =>
+      (instance.label, (instance.weight, instance.features))
+    }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
       seqOp = {
          case ((weightSum, featureSum, count), (weight, features)) =>
            requireValues(features)
