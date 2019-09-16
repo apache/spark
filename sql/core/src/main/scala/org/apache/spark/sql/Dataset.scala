@@ -254,10 +254,16 @@ class Dataset[T] private[sql](
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   private[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    queryExecution.analyzed.resolveQuoted(colName, resolver)
       .getOrElse {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        val fields = schema.fieldNames
+        val extraMsg = if (fields.exists(resolver(_, colName))) {
+          s"; did you mean to quote the `$colName` column?"
+        } else ""
+        val fieldsStr = fields.mkString(", ")
+        val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
+        throw new AnalysisException(errorMsg)
       }
   }
 
