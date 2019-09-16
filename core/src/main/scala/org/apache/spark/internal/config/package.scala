@@ -243,7 +243,8 @@ package object config {
     .createWithDefault(false)
 
   private[spark] val MEMORY_OFFHEAP_SIZE = ConfigBuilder("spark.memory.offHeap.size")
-    .doc("The absolute amount of memory in bytes which can be used for off-heap allocation. " +
+    .doc("The absolute amount of memory which can be used for off-heap allocation, " +
+      " in bytes unless otherwise specified. " +
       "This setting has no impact on heap memory usage, so if your executors' total memory " +
       "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
       "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
