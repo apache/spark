@@ -415,7 +415,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         // with a generic pattern "###".
         val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
         (StructType(Seq.empty), Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
-      case s: SparkException =>
+      case s: SparkException if s.getCause != null =>
+        // For a runtime exception, it is hard to match because its message contains
+        // information of stage, task ID, etc.
+        // To make result matching simpler, here we match the cause of the exception if it exists.
         val cause = s.getCause
         (StructType(Seq.empty), Seq(cause.getClass.getName, cause.getMessage))
       case NonFatal(e) =>
