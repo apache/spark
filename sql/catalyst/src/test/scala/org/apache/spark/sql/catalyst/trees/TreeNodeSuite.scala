@@ -513,7 +513,7 @@ class TreeNodeSuite extends SparkFunSuite with SQLHelper {
         "partitionColumnNames" -> List.empty[String],
         "owner" -> "",
         "createTime" -> 0,
-        "lastAccessTime" -> 0,
+        "lastAccessTime" -> -1,
         "createVersion" -> "2.x",
         "tracksPartitionsInCatalog" -> false,
         "properties" -> JNull,
