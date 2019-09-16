@@ -30,7 +30,7 @@ class HiveClientUserNameSuite(version: String)
 
   test("username of HiveClient - no UGI") {
     // Assuming we're not faking System username
-    assert(System.getProperty("user.name") === getUserNameFromHiveClient)
+    assert(getUserNameFromHiveClient === System.getProperty("user.name"))
   }
 
   test("username of HiveClient - UGI") {
@@ -38,7 +38,7 @@ class HiveClientUserNameSuite(version: String)
       "fakeprincipal@EXAMPLE.COM", Array.empty)
     ugi.doAs(new PrivilegedExceptionAction[Unit]() {
       override def run(): Unit = {
-        assert(ugi.getUserName === getUserNameFromHiveClient)
+        assert(getUserNameFromHiveClient === ugi.getShortUserName)
       }
     })
   }
@@ -50,7 +50,7 @@ class HiveClientUserNameSuite(version: String)
       "proxyprincipal@EXAMPLE.COM", ugi, Array.empty)
     proxyUgi.doAs(new PrivilegedExceptionAction[Unit]() {
       override def run(): Unit = {
-        assert(proxyUgi.getUserName === getUserNameFromHiveClient)
+        assert(getUserNameFromHiveClient === proxyUgi.getShortUserName)
       }
     })
   }
