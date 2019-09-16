@@ -752,7 +752,7 @@ object DataSource extends Logging {
     val nonGlobPaths = qualifiedPaths
       .filter(path => !SparkHadoopUtil.get.isGlobPath(path))
 
-    val globbedPaths = globPaths.flatMap { globPath =>
+    val globbedPaths = globPaths.par.flatMap { globPath =>
       val fs = globPath.getFileSystem(hadoopConf)
       val globResult = SparkHadoopUtil.get.globPath(fs, globPath)
 
@@ -763,7 +763,7 @@ object DataSource extends Logging {
       globResult
     }
 
-    nonGlobPaths.foreach { path =>
+    nonGlobPaths.par.foreach { path =>
       val fs = path.getFileSystem(hadoopConf)
       if (checkFilesExist && !fs.exists(path)) {
         throw new AnalysisException(s"Path does not exist: $path")
