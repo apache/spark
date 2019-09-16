@@ -190,6 +190,7 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
+    state.getConf.setClassLoader(initClassLoader)
     SessionState.start(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())

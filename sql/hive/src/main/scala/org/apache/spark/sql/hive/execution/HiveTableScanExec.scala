@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.TableDesc
-import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -121,16 +120,7 @@ case class HiveTableScanExec(
 
     HiveShim.appendReadColumns(hiveConf, neededColumnIDs, output.map(_.name))
 
-    val currentState = SessionState.get()
-    val deserializer = if (currentState != null) {
-      val originClassLoader = currentState.getConf.getClassLoader
-      currentState.getConf.setClassLoader(sparkSession.sharedState.jarClassLoader)
-      val instance = tableDesc.getDeserializerClass.getConstructor().newInstance()
-      currentState.getConf.setClassLoader(originClassLoader)
-      instance
-    } else {
-      tableDesc.getDeserializerClass.getConstructor().newInstance()
-    }
+    val deserializer = tableDesc.getDeserializerClass.getConstructor().newInstance()
     deserializer.initialize(hiveConf, tableDesc.getProperties)
 
     // Specifies types and object inspectors of columns to be scanned.
@@ -191,7 +181,6 @@ case class HiveTableScanExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    Thread.currentThread().setContextClassLoader(sparkSession.sharedState.jarClassLoader)
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
