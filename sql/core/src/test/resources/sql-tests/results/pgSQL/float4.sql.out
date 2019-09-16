@@ -337,7 +337,7 @@ SELECT int(float('-2147483900'))
 struct<>
 -- !query 37 output
 java.lang.ArithmeticException
-Casting -2.1474839E9 to int causes overflow.
+Casting -2.1474839E9 to int causes overflow
 
 
 -- !query 38
@@ -370,7 +370,7 @@ SELECT bigint(float('-9223380000000000000'))
 struct<>
 -- !query 41 output
 java.lang.ArithmeticException
-Casting -9.22338E18 to int causes overflow.
+Casting -9.22338E18 to int causes overflow
 
 
 -- !query 42

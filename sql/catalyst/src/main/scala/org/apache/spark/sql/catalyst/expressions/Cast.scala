@@ -537,7 +537,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if (longValue == longValue.toShort) {
           longValue.toShort
         } else {
-          throw new ArithmeticException(s"Casting $t to short causes overflow.")
+          throw new ArithmeticException(s"Casting $t to short causes overflow")
         }
       })
     case TimestampType =>
@@ -548,12 +548,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw new ArithmeticException(s"Casting $b to short causes overflow.")
+            throw new ArithmeticException(s"Casting $b to short causes overflow")
         }
         if (intValue == intValue.toShort) {
           intValue.toShort
         } else {
-          throw new ArithmeticException(s"Casting $b to short causes overflow.")
+          throw new ArithmeticException(s"Casting $b to short causes overflow")
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toShort
@@ -578,7 +578,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         if (longValue == longValue.toByte) {
           longValue.toByte
         } else {
-          throw new ArithmeticException(s"Casting $t to byte causes overflow.")
+          throw new ArithmeticException(s"Casting $t to byte causes overflow")
         }
       })
     case TimestampType =>
@@ -589,12 +589,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           x.exactNumeric.asInstanceOf[Numeric[Any]].toInt(b)
         } catch {
           case _: ArithmeticException =>
-            throw new ArithmeticException(s"Casting $b to byte causes overflow.")
+            throw new ArithmeticException(s"Casting $b to byte causes overflow")
         }
         if (intValue == intValue.toByte) {
           intValue.toByte
         } else {
-          throw new ArithmeticException(s"Casting $b to byte causes overflow.")
+          throw new ArithmeticException(s"Casting $b to byte causes overflow")
         }
     case x: NumericType =>
       b => x.numeric.asInstanceOf[Numeric[Any]].toInt(b).toByte
