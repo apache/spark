@@ -160,7 +160,9 @@ class HadoopMapReduceCommitProtocol(
 
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
-    committer.setupJob(jobContext)
+    if (!dynamicPartitionOverwrite) {
+      committer.setupJob(jobContext)
+    }
   }
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
@@ -217,7 +219,9 @@ class HadoopMapReduceCommitProtocol(
    */
   override def abortJob(jobContext: JobContext): Unit = {
     try {
-      committer.abortJob(jobContext, JobStatus.State.FAILED)
+      if (!dynamicPartitionOverwrite) {
+        committer.abortJob(jobContext, JobStatus.State.FAILED)
+      }
     } catch {
       case e: IOException =>
         logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
