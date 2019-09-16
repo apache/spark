@@ -294,8 +294,8 @@ case class ArrayTransform(
     "comparator function. The comparator will take two nullable arguments " +
     "representing two nullable elements of the array." +
     "It returns -1, 0, or 1 as the first nullable element is less than, equal to, or greater" +
-    "than the second nullable element." +
-    "If the comparator function returns other values (including NULL)," +
+    "than the second nullable element. Null elements will be placed at the end of the returned" +
+    "array. If the comparator function returns other values (including NULL)," +
     "the query will fail and raise an error",
   examples = """
     Examples:
@@ -310,10 +310,24 @@ case class ArraySorting(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-
   @transient lazy val elementType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
+
   override def dataType: ArrayType = ArrayType(elementType, argument.nullable)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        val LambdaFunction(_, arguments, _) = function
+        if (arguments.size == 2 && function.dataType == IntegerType) {
+          TypeCheckResult.TypeCheckSuccess
+        } else {
+          TypeCheckResult.TypeCheckFailure("Return type of the given function has to be" +
+            "IntegerType")
+        }
+      case failure => failure
+    }
+  }
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySorting = {
     val ArrayType(elementType, containsNull) = argument.dataType
