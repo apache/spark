@@ -141,11 +141,12 @@ private[spark] class HadoopDelegationTokenManager(
    */
   def obtainDelegationTokens(creds: Credentials): Unit = {
     val currentUser = UserGroupInformation.getCurrentUser()
-    val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+    val hasKerberosCreds = principal != null ||
+      Option(currentUser.getRealUser()).getOrElse(currentUser).hasKerberosCredentials()
 
     // Delegation tokens can only be obtained if the real user has Kerberos credentials, so
-    // skip creation when it does not.
-    if (realUser.hasKerberosCredentials()) {
+    // skip creation when those are not available.
+    if (hasKerberosCreds) {
       val freshUGI = doLogin()
       freshUGI.doAs(new PrivilegedExceptionAction[Unit]() {
         override def run(): Unit = {
