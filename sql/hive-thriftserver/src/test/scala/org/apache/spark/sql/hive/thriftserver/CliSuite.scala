@@ -255,6 +255,34 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
+  test("Commands using SerDe provided in --hive.aux.jars.path") {
+
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+
+    runCliWithin(
+      3.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      """CREATE TABLE t1(key string, val string)
+        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+      """.stripMargin
+        -> "",
+      "CREATE TABLE sourceTable (key INT, val STRING);"
+        -> "",
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+        -> "",
+      "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
+        -> "",
+      "SELECT collect_list(array(val)) FROM t1;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
+      "DROP TABLE t1;"
+        -> "",
+      "DROP TABLE sourceTable;"
+        -> ""
+    )
+  }
+
   test("SPARK-11188 Analysis error reporting") {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
