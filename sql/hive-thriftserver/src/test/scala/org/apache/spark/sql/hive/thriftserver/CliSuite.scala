@@ -227,36 +227,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     )
   }
 
-  test("Commands using SerDe provided jars in conf hive.aux.jars.path") {
-
-    val dataFilePath =
-      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
-    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
-
-    runCliWithin(
-      3.minute,
-      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      """CREATE TABLE addJarWithHiveAux(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
-      """.stripMargin
-        -> "",
-      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING);"
-        -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
-        -> "",
-      "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
-        -> "",
-      "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
-        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
-      "DROP TABLE addJarWithHiveAux;"
-        -> "",
-      "DROP TABLE sourceTableForWithHiveAux;"
-        -> ""
-    )
-  }
-
   test("Commands using SerDe provided in --hive.aux.jars.path") {
-
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath

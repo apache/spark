@@ -165,17 +165,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
     }
 
-    SessionState.get().getConf.setClassLoader(SparkSQLEnv.sqlContext.sharedState.jarClassLoader)
-
-    // In SparkSQL CLI, we may want to use jars augmented by hiveconf
-    // hive.aux.jars.path, here we add jars augmented by hiveconf to
-    // Spark's SessionResourceLoader to obtain these jars.
-    val auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS)
-    if (StringUtils.isNotBlank(auxJars)) {
-      val resourceLoader = SparkSQLEnv.sqlContext.sessionState.resourceLoader
-      StringUtils.split(auxJars, ",").foreach(resourceLoader.addJar(_))
-    }
-
     // TODO work around for set the log output to console, because the HiveContext
     // will set the output into an invalid buffer.
     sessionState.in = System.in
