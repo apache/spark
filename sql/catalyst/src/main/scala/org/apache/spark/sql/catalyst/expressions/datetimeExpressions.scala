@@ -594,8 +594,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 
   @transient private lazy val formatter: Option[TimestampFormatter] = {
     if (right.foldable) {
-      val format = right.eval().toString
-      Some(TimestampFormatter(format, zoneId))
+      Option(right.eval()).map(format => TimestampFormatter(format.toString, zoneId))
     } else None
   }
 
