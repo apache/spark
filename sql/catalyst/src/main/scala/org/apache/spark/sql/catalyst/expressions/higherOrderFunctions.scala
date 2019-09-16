@@ -312,7 +312,7 @@ case class ArraySorting(
 
   @transient lazy val elementType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
-  override def dataType: ArrayType = ArrayType(elementType, function.nullable)
+  override def dataType: ArrayType = ArrayType(elementType, argument.nullable)
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySorting = {
     val ArrayType(elementType, containsNull) = argument.dataType

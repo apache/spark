@@ -341,24 +341,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df1 = Seq(Array[Int](3, 2, 5, 1, 2)).toDF("a")
 
     checkAnswer(
-      df1.selectExpr("array_sort(a, (b, i) -> fAsc(b,i))"),
+      df1.selectExpr("array_sort(a, (x, y) -> fAsc(x, y))"),
       Seq(
         Row(Seq(5, 3, 2, 2, 1))))
 
     checkAnswer(
-      df1.selectExpr("array_sort(a, (b, i) -> fDesc(b,i))"),
+      df1.selectExpr("array_sort(a, (x, y) -> fDesc(x, y))"),
       Seq(
         Row(Seq(1, 2, 2, 3, 5))))
 
     val df2 = Seq(Array[String]("bc", "ab", "dc")).toDF("a")
     checkAnswer(
-      df2.selectExpr("array_sort(a, (b, i) -> fString(b,i))"),
+      df2.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
       Seq(
         Row(Seq("dc", "bc", "ab"))))
 
     val df3 = Seq(Array[String]("a", "abcd", "abc")).toDF("a")
     checkAnswer(
-      df3.selectExpr("array_sort(a, (b, i) -> fStringLength(b,i))"),
+      df3.selectExpr("array_sort(a, (x, y) -> fStringLength(x, y))"),
       Seq(
         Row(Seq("a", "abc", "abcd"))))
 
@@ -366,9 +366,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val df4 = Seq((Array[Array[Int]](Array(2, 3, 1), Array(4, 2, 1, 4), Array(1, 2)), "x"))
       .toDF("a", "b")
     checkAnswer(
-      df4.selectExpr("array_sort(a, (b, i) -> fDesc(cardinality(b),cardinality(i)))"),
+      df4.selectExpr("array_sort(a, (x, y) -> fDesc(cardinality(x), cardinality(y)))"),
       Seq(
         Row(Seq[Seq[Int]](Seq(1, 2), Seq(2, 3, 1), Seq(4, 2, 1, 4)))))
+
+    val df5 = Seq(Array[String]("bc", null, "ab", "dc")).toDF("a")
+    checkAnswer(
+      df5.selectExpr("array_sort(a, (x, y) -> fString(x, y))"),
+      Seq(
+        Row(Seq("dc", "bc", "ab", null))))
 
   }
 
