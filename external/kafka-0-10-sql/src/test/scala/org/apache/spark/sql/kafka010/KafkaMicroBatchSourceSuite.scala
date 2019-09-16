@@ -1178,9 +1178,10 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
     testUtils.sendMessages(topic, Array(20, 21, 22).map(_.toString), Some(4))
     require(testUtils.getLatestOffsets(Set(topic)).size === 5)
 
+    val headers = Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))
     (31 to 35).map { num =>
-      (num - 31, (num.toString, Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))))
-    }.foreach { rec => testUtils.sendMessage(topic, rec._2, Some(rec._1)) }
+      new RecordBuilder(topic, num.toString).partition(num - 31).headers(headers).build()
+    }.foreach { rec => testUtils.sendMessage(rec) }
 
     val kafka = spark
       .readStream
@@ -1580,7 +1581,8 @@ abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
     val topic = newTopic()
     testUtils.createTopic(newTopic(), partitions = 1)
     testUtils.sendMessage(
-      topic, ("1", Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))), None
+      new RecordBuilder(topic, "1")
+        .headers(Seq(("a", "b".getBytes(UTF_8)), ("c", "d".getBytes(UTF_8)))).build()
     )
 
     val kafka = spark
