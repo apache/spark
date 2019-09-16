@@ -61,6 +61,7 @@ class JavaClassifier(JavaPredictor, JavaClassifierParams):
     Classes are indexed {0, 1, ..., numClasses - 1}.
     """
 
+    @since("3.0.0")
     def setRawPredictionCol(self, value):
         """
         Sets the value of :py:attr:`rawPredictionCol`.
@@ -76,6 +77,7 @@ class JavaClassificationModel(JavaPredictionModel, JavaClassifierParams):
     To be mixed in with class:`pyspark.ml.JavaModel`
     """
 
+    @since("3.0.0")
     def setRawPredictionCol(self, value):
         """
         Sets the value of :py:attr:`rawPredictionCol`.
@@ -104,12 +106,14 @@ class JavaProbabilisticClassifier(JavaClassifier, JavaProbabilisticClassifierPar
     Java Probabilistic Classifier for classification tasks.
     """
 
+    @since("3.0.0")
     def setProbabilityCol(self, value):
         """
         Sets the value of :py:attr:`probabilityCol`.
         """
         return self._set(probabilityCol=value)
 
+    @since("3.0.0")
     def setThresholds(self, value):
         """
         Sets the value of :py:attr:`thresholds`.
@@ -124,12 +128,14 @@ class JavaProbabilisticClassificationModel(JavaClassificationModel,
     Java Model produced by a ``ProbabilisticClassifier``.
     """
 
+    @since("3.0.0")
     def setProbabilityCol(self, value):
         """
         Sets the value of :py:attr:`probabilityCol`.
         """
         return self._set(probabilityCol=value)
 
+    @since("3.0.0")
     def setThresholds(self, value):
         """
         Sets the value of :py:attr:`thresholds`.
@@ -1959,8 +1965,7 @@ class MultilayerPerceptronClassificationModel(JavaProbabilisticClassificationMod
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol,
-                      HasRawPredictionCol):
+class OneVsRestParams(JavaClassifierParams, HasWeightCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
