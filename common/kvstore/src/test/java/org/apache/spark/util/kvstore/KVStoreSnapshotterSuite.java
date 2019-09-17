@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.collect.Sets;
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 
@@ -29,7 +28,6 @@ import java.util.Set;
 import static org.junit.Assert.*;
 
 public class KVStoreSnapshotterSuite {
-
   private final KVStoreSerializer serializer = new KVStoreSerializer();
   private final KVStoreSnapshotter snapshotter = new KVStoreSnapshotter(serializer);
 

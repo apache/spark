@@ -91,7 +91,7 @@ public class InMemoryStoreSuite {
   @Test
   public void testMultipleTypesWriteReadDelete() throws Exception {
     KVStore store = new InMemoryStore();
-    
+
     CustomType1 t1 = new CustomType1();
     t1.key = "key1";
     t1.id = "id";
@@ -110,7 +110,8 @@ public class InMemoryStoreSuite {
     store.write(t2);
     store.write(t3);
 
-    assertEquals(Sets.newHashSet(IntKeyType.class, ArrayKeyIndexType.class, CustomType1.class), store.types());
+    assertEquals(Sets.newHashSet(IntKeyType.class, ArrayKeyIndexType.class, CustomType1.class),
+        store.types());
 
     assertEquals(t1, store.read(t1.getClass(), t1.key));
     assertEquals(t2, store.read(t2.getClass(), t2.key));

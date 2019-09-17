@@ -122,7 +122,9 @@ public class KVStoreSnapshotter {
     output.writeInt(MARKER_END_OF_FILE);
   }
 
-  private Class<?> readClassName(DataInputStream input, int classNameLen) throws IOException, ClassNotFoundException {
+  private Class<?> readClassName(
+      DataInputStream input,
+      int classNameLen) throws IOException, ClassNotFoundException {
     byte[] classNameBuffer = new byte[classNameLen];
     ByteStreams.readFully(input, classNameBuffer, 0, classNameLen);
     String className = new String(classNameBuffer, StandardCharsets.UTF_8);

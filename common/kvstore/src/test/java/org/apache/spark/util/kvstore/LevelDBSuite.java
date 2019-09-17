@@ -149,7 +149,8 @@ public class LevelDBSuite {
     db.write(t2);
     db.write(t3);
 
-    assertEquals(Sets.newHashSet(IntKeyType.class, ArrayKeyIndexType.class, CustomType1.class), db.types());
+    assertEquals(Sets.newHashSet(IntKeyType.class, ArrayKeyIndexType.class, CustomType1.class),
+        db.types());
 
     assertEquals(t1, db.read(t1.getClass(), t1.key));
     assertEquals(t2, db.read(t2.getClass(), t2.key));
