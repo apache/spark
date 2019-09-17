@@ -196,7 +196,7 @@ private[hive] class HiveClientImpl(
     // in hiveConf's ClassLoader, here we rest it with clientLoader.ClassLoader which contains
     // jars passed by --jars loaded by main thread ClassLoader. Thus we can load all jars
     // passed by --jars and AddJarCommand.
-    state.getConf.setClassLoader(initClassLoader)
+    state.getConf.setClassLoader(clientLoader.classLoader)
     SessionState.start(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
