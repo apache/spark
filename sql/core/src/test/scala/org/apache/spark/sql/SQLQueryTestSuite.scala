@@ -311,6 +311,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         localSparkSession.conf.set(SQLConf.ANSI_SQL_PARSER.key, true)
         localSparkSession.conf.set(SQLConf.PREFER_INTEGRAL_DIVISION.key, true)
         localSparkSession.conf.set(SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key, true)
+        // Propagate the SQL conf FAIL_ON_INTEGRAL_TYPE_OVERFLOW to executor.
+        // TODO: remove this after SPARK-29122 is resolved.
+        localSparkSession.sparkContext.setLocalProperty(
+          SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key, "true")
       case _ =>
     }
 
@@ -404,10 +408,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
       val df = session.sql(sql)
       val schema = df.schema
       // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-      val answer =
-        SQLExecution.withNewExecutionId(session, df.queryExecution, Some(sql)) {
-          hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
-        }
+      val answer = hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
