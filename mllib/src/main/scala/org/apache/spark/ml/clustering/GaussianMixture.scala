@@ -33,7 +33,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Matrix => OldMatrix,
   Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -111,12 +111,13 @@ class GaussianMixtureModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
+    val vectorCol = DatasetUtils.columnToVector(dataset, $(featuresCol))
     var outputData = dataset
     var numColsOutput = 0
 
     if ($(probabilityCol).nonEmpty) {
       val probUDF = udf((vector: Vector) => predictProbability(vector))
-      outputData = outputData.withColumn($(probabilityCol), probUDF(col($(featuresCol))))
+      outputData = outputData.withColumn($(probabilityCol), probUDF(vectorCol))
       numColsOutput += 1
     }
 
@@ -126,7 +127,7 @@ class GaussianMixtureModel private[ml] (
         outputData = outputData.withColumn($(predictionCol), predUDF(col($(probabilityCol))))
       } else {
         val predUDF = udf((vector: Vector) => predict(vector))
-        outputData = outputData.withColumn($(predictionCol), predUDF(col($(featuresCol))))
+        outputData = outputData.withColumn($(predictionCol), predUDF(vectorCol))
       }
       numColsOutput += 1
     }
