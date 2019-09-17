@@ -42,8 +42,8 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
   override def newYarnConfig(): YarnConfiguration = {
     val yarnConfig = new YarnConfiguration()
-    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
-    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
+    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark2_shuffle")
+    yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark2_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.set(SHUFFLE_SERVICE_PORT.key, "0")
     yarnConfig
@@ -55,6 +55,7 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
     logInfo("Shuffle service port = " + shuffleServicePort)
 
     Map(
+      SHUFFLE_SERVICE_NAME.key -> "spark2_shuffle",
       SHUFFLE_SERVICE_ENABLED.key -> "true",
       SHUFFLE_SERVICE_PORT.key -> shuffleServicePort.toString,
       MAX_EXECUTOR_FAILURES.key -> "1"
