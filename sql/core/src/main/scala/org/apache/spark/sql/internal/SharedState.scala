@@ -158,7 +158,7 @@ private[sql] class SharedState(
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
-    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE).toLowerCase(Locale.ROOT)
+    val globalTempDB = conf.get(GLOBAL_TEMP_DATABASE)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +

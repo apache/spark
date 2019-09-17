@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import java.io.OutputStream
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -143,30 +141,3 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     dataType == StringType
 }
 
-class TextOutputWriter(
-    path: String,
-    dataSchema: StructType,
-    lineSeparator: Array[Byte],
-    context: TaskAttemptContext)
-  extends OutputWriter {
-
-  private var outputStream: Option[OutputStream] = None
-
-  override def write(row: InternalRow): Unit = {
-    val os = outputStream.getOrElse {
-      val newStream = CodecStreams.createOutputStream(context, new Path(path))
-      outputStream = Some(newStream)
-      newStream
-    }
-
-    if (!row.isNullAt(0)) {
-      val utf8string = row.getUTF8String(0)
-      utf8string.writeTo(os)
-    }
-    os.write(lineSeparator)
-  }
-
-  override def close(): Unit = {
-    outputStream.foreach(_.close())
-  }
-}

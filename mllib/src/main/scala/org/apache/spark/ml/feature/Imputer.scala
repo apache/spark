@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCols, HasOutputCols}
@@ -73,7 +73,7 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
       s" and outputCols(${$(outputCols).length}) should have the same length")
     val outputFields = $(inputCols).zip($(outputCols)).map { case (inputCol, outputCol) =>
       val inputField = schema(inputCol)
-      SchemaUtils.checkColumnTypes(schema, inputCol, Seq(DoubleType, FloatType))
+      SchemaUtils.checkNumericType(schema, inputCol)
       StructField(outputCol, inputField.dataType, inputField.nullable)
     }
     StructType(schema ++ outputFields)
@@ -81,17 +81,19 @@ private[feature] trait ImputerParams extends Params with HasInputCols with HasOu
 }
 
 /**
- * :: Experimental ::
  * Imputation estimator for completing missing values, either using the mean or the median
  * of the columns in which the missing values are located. The input columns should be of
- * DoubleType or FloatType. Currently Imputer does not support categorical features
+ * numeric type. Currently Imputer does not support categorical features
  * (SPARK-15041) and possibly creates incorrect values for a categorical feature.
+ *
+ * Note when an input column is integer, the imputed value is casted (truncated) to an integer type.
+ * For example, if the input column is IntegerType (1, 2, 4, null),
+ * the output will be IntegerType (1, 2, 4, 2) after mean imputation.
  *
  * Note that the mean/median value is computed after filtering out missing values.
  * All Null values in the input columns are treated as missing, and so are also imputed. For
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
-@Experimental
 @Since("2.2.0")
 class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
@@ -190,13 +192,11 @@ object Imputer extends DefaultParamsReadable[Imputer] {
 }
 
 /**
- * :: Experimental ::
  * Model fitted by [[Imputer]].
  *
  * @param surrogateDF a DataFrame containing inputCols and their corresponding surrogates,
  *                    which are used to replace the missing values in the input DataFrame.
  */
-@Experimental
 @Since("2.2.0")
 class ImputerModel private[ml] (
     @Since("2.2.0") override val uid: String,
@@ -218,7 +218,7 @@ class ImputerModel private[ml] (
     val newCols = $(inputCols).zip($(outputCols)).zip(surrogates).map {
       case ((inputCol, outputCol), surrogate) =>
         val inputType = dataset.schema(inputCol).dataType
-        val ic = col(inputCol)
+        val ic = col(inputCol).cast(DoubleType)
         when(ic.isNull, surrogate)
           .when(ic === $(missingValue), surrogate)
           .otherwise(ic)

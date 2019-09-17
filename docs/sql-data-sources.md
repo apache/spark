@@ -54,4 +54,5 @@ goes into specific options that are available for the built-in data sources.
   * [Compatibility with Databricks spark-avro](sql-data-sources-avro.html#compatibility-with-databricks-spark-avro)
   * [Supported types for Avro -> Spark SQL conversion](sql-data-sources-avro.html#supported-types-for-avro---spark-sql-conversion)
   * [Supported types for Spark SQL -> Avro conversion](sql-data-sources-avro.html#supported-types-for-spark-sql---avro-conversion)
+* [Whole Binary Files](sql-data-sources-binaryFile.html)
 * [Troubleshooting](sql-data-sources-troubleshooting.html)

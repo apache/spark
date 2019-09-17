@@ -24,13 +24,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
-import scala.collection.mutable.{ArrayStack, HashMap, HashSet}
+import scala.collection.mutable
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 import scala.concurrent.duration._
-import scala.language.existentials
-import scala.language.postfixOps
 import scala.util.control.NonFatal
-
-import org.apache.commons.lang3.SerializationUtils
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
@@ -250,9 +247,10 @@ private[spark] class DAGScheduler(
       reason: TaskEndReason,
       result: Any,
       accumUpdates: Seq[AccumulatorV2[_, _]],
+      metricPeaks: Array[Long],
       taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(
-      CompletionEvent(task, reason, result, accumUpdates, taskInfo))
+      CompletionEvent(task, reason, result, accumUpdates, metricPeaks, taskInfo))
   }
 
   /**
@@ -265,12 +263,12 @@ private[spark] class DAGScheduler(
       // (taskId, stageId, stageAttemptId, accumUpdates)
       accumUpdates: Array[(Long, Int, Int, Seq[AccumulableInfo])],
       blockManagerId: BlockManagerId,
-      // executor metrics indexed by ExecutorMetricType.values
-      executorUpdates: ExecutorMetrics): Boolean = {
+      // (stageId, stageAttemptId) -> metrics
+      executorUpdates: mutable.Map[(Int, Int), ExecutorMetrics]): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
-      Some(executorUpdates)))
+      executorUpdates))
     blockManagerMaster.driverEndpoint.askSync[Boolean](
-      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(600 seconds, "BlockManagerHeartbeat"))
+      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
   }
 
   /**
@@ -383,7 +381,8 @@ private[spark] class DAGScheduler(
    * locations that are still available from the previous shuffle to avoid unnecessarily
    * regenerating data.
    */
-  def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
+  def createShuffleMapStage[K, V, C](
+      shuffleDep: ShuffleDependency[K, V, C], jobId: Int): ShuffleMapStage = {
     val rdd = shuffleDep.rdd
     checkBarrierStageWithDynamicAllocation(rdd)
     checkBarrierStageWithNumSlots(rdd)
@@ -432,8 +431,10 @@ private[spark] class DAGScheduler(
    * submission.
    */
   private def checkBarrierStageWithNumSlots(rdd: RDD[_]): Unit = {
-    if (rdd.isBarrier() && rdd.getNumPartitions > sc.maxNumConcurrentTasks) {
-      throw new BarrierJobSlotsNumberCheckFailed
+    val numPartitions = rdd.getNumPartitions
+    val maxNumConcurrentTasks = sc.maxNumConcurrentTasks
+    if (rdd.isBarrier() && numPartitions > maxNumConcurrentTasks) {
+      throw new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
     }
   }
 
@@ -469,21 +470,21 @@ private[spark] class DAGScheduler(
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
   private def getMissingAncestorShuffleDependencies(
-      rdd: RDD[_]): ArrayStack[ShuffleDependency[_, _, _]] = {
-    val ancestors = new ArrayStack[ShuffleDependency[_, _, _]]
+      rdd: RDD[_]): ListBuffer[ShuffleDependency[_, _, _]] = {
+    val ancestors = new ListBuffer[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
     while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
+      val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
         getShuffleDependencies(toVisit).foreach { shuffleDep =>
           if (!shuffleIdToMapStage.contains(shuffleDep.shuffleId)) {
-            ancestors.push(shuffleDep)
-            waitingForVisit.push(shuffleDep.rdd)
+            ancestors.prepend(shuffleDep)
+            waitingForVisit.prepend(shuffleDep.rdd)
           } // Otherwise, the dependency and its ancestors have already been registered.
         }
       }
@@ -507,17 +508,17 @@ private[spark] class DAGScheduler(
       rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
     val parents = new HashSet[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
     while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
+      val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         visited += toVisit
         toVisit.dependencies.foreach {
           case shuffleDep: ShuffleDependency[_, _, _] =>
             parents += shuffleDep
           case dependency =>
-            waitingForVisit.push(dependency.rdd)
+            waitingForVisit.prepend(dependency.rdd)
         }
       }
     }
@@ -530,10 +531,10 @@ private[spark] class DAGScheduler(
    */
   private def traverseParentRDDsWithinStage(rdd: RDD[_], predicate: RDD[_] => Boolean): Boolean = {
     val visited = new HashSet[RDD[_]]
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += rdd
     while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
+      val toVisit = waitingForVisit.remove(0)
       if (!visited(toVisit)) {
         if (!predicate(toVisit)) {
           return false
@@ -543,7 +544,7 @@ private[spark] class DAGScheduler(
           case _: ShuffleDependency[_, _, _] =>
             // Not within the same stage with current rdd, do nothing.
           case dependency =>
-            waitingForVisit.push(dependency.rdd)
+            waitingForVisit.prepend(dependency.rdd)
         }
       }
     }
@@ -555,7 +556,8 @@ private[spark] class DAGScheduler(
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new ArrayStack[RDD[_]]
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += stage.rdd
     def visit(rdd: RDD[_]) {
       if (!visited(rdd)) {
         visited += rdd
@@ -569,15 +571,14 @@ private[spark] class DAGScheduler(
                   missing += mapStage
                 }
               case narrowDep: NarrowDependency[_] =>
-                waitingForVisit.push(narrowDep.rdd)
+                waitingForVisit.prepend(narrowDep.rdd)
             }
           }
         }
       }
     }
-    waitingForVisit.push(stage.rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      visit(waitingForVisit.remove(0))
     }
     missing.toList
   }
@@ -695,7 +696,7 @@ private[spark] class DAGScheduler(
     if (partitions.isEmpty) {
       val time = clock.getTimeMillis()
       listenerBus.post(
-        SparkListenerJobStart(jobId, time, Seq[StageInfo](), properties))
+        SparkListenerJobStart(jobId, time, Seq[StageInfo](), Utils.cloneProperties(properties)))
       listenerBus.post(
         SparkListenerJobEnd(jobId, time, JobSucceeded))
       // Return immediately if the job is running 0 tasks
@@ -707,7 +708,7 @@ private[spark] class DAGScheduler(
     val waiter = new JobWaiter[U](this, jobId, partitions.size, resultHandler)
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
-      SerializationUtils.clone(properties)))
+      Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -779,7 +780,7 @@ private[spark] class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, rdd.partitions.indices.toArray, callSite, listener,
-      SerializationUtils.clone(properties)))
+      Utils.cloneProperties(properties)))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -816,7 +817,7 @@ private[spark] class DAGScheduler(
       this, jobId, 1,
       (_: Int, r: MapOutputStatistics) => callback(r))
     eventProcessLoop.post(MapStageSubmitted(
-      jobId, dependency, callSite, waiter, SerializationUtils.clone(properties)))
+      jobId, dependency, callSite, waiter, Utils.cloneProperties(properties)))
     waiter
   }
 
@@ -934,7 +935,7 @@ private[spark] class DAGScheduler(
   }
 
   private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
-    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId))
+    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId, task.stageAttemptId))
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -980,11 +981,14 @@ private[spark] class DAGScheduler(
       finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite)
     } catch {
       case e: BarrierJobSlotsNumberCheckFailed =>
-        logWarning(s"The job $jobId requires to run a barrier stage that requires more slots " +
-          "than the total number of slots in the cluster currently.")
         // If jobId doesn't exist in the map, Scala coverts its value null to 0: Int automatically.
         val numCheckFailures = barrierJobIdToNumTasksCheckFailures.compute(jobId,
           (_: Int, value: Int) => value + 1)
+
+        logWarning(s"Barrier stage in job $jobId requires ${e.requiredConcurrentTasks} slots, " +
+          s"but only ${e.maxConcurrentTasks} are available. " +
+          s"Will retry up to ${maxFailureNumTasksCheck - numCheckFailures + 1} more times")
+
         if (numCheckFailures <= maxFailureNumTasksCheck) {
           messageScheduler.schedule(
             new Runnable {
@@ -1311,7 +1315,8 @@ private[spark] class DAGScheduler(
       }
 
     listenerBus.post(SparkListenerTaskEnd(event.task.stageId, event.task.stageAttemptId,
-      Utils.getFormattedClassName(event.task), event.reason, event.taskInfo, taskMetrics))
+      Utils.getFormattedClassName(event.task), event.reason, event.taskInfo,
+      new ExecutorMetrics(event.metricPeaks), taskMetrics))
   }
 
   /**
@@ -1390,6 +1395,14 @@ private[spark] class DAGScheduler(
 
     event.reason match {
       case Success =>
+        // An earlier attempt of a stage (which is zombie) may still have running tasks. If these
+        // tasks complete, they still count and we can mark the corresponding partitions as
+        // finished. Here we notify the task scheduler to skip running tasks for the same partition,
+        // to save resource.
+        if (task.stageAttemptId < stage.latestInfo.attemptNumber()) {
+          taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
+        }
+
         task match {
           case rt: ResultTask[_, _] =>
             // Cast to ResultStage here because it's part of the ResultTask
@@ -1561,13 +1574,13 @@ private[spark] class DAGScheduler(
               // guaranteed to be determinate, so the input data of the reducers will not change
               // even if the map tasks are re-tried.
               if (mapStage.rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE) {
-                // It's a little tricky to find all the succeeding stages of `failedStage`, because
+                // It's a little tricky to find all the succeeding stages of `mapStage`, because
                 // each stage only know its parents not children. Here we traverse the stages from
                 // the leaf nodes (the result stages of active jobs), and rollback all the stages
-                // in the stage chains that connect to the `failedStage`. To speed up the stage
+                // in the stage chains that connect to the `mapStage`. To speed up the stage
                 // traversing, we collect the stages to rollback first. If a stage needs to
                 // rollback, all its succeeding stages need to rollback to.
-                val stagesToRollback = scala.collection.mutable.HashSet(failedStage)
+                val stagesToRollback = HashSet[Stage](mapStage)
 
                 def collectStagesToRollback(stageChain: List[Stage]): Unit = {
                   if (stagesToRollback.contains(stageChain.head)) {
@@ -1993,7 +2006,8 @@ private[spark] class DAGScheduler(
     val visitedRdds = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
-    val waitingForVisit = new ArrayStack[RDD[_]]
+    val waitingForVisit = new ListBuffer[RDD[_]]
+    waitingForVisit += stage.rdd
     def visit(rdd: RDD[_]) {
       if (!visitedRdds(rdd)) {
         visitedRdds += rdd
@@ -2002,17 +2016,16 @@ private[spark] class DAGScheduler(
             case shufDep: ShuffleDependency[_, _, _] =>
               val mapStage = getOrCreateShuffleMapStage(shufDep, stage.firstJobId)
               if (!mapStage.isAvailable) {
-                waitingForVisit.push(mapStage.rdd)
+                waitingForVisit.prepend(mapStage.rdd)
               }  // Otherwise there's no need to follow the dependency back
             case narrowDep: NarrowDependency[_] =>
-              waitingForVisit.push(narrowDep.rdd)
+              waitingForVisit.prepend(narrowDep.rdd)
           }
         }
       }
     }
-    waitingForVisit.push(stage.rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.pop())
+      visit(waitingForVisit.remove(0))
     }
     visitedRdds.contains(target.rdd)
   }

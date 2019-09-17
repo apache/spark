@@ -101,6 +101,26 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("getTreeAggregateIdealDepth") {
+    val nbPartitions = 100
+    val vectors = sc.emptyRDD[Vector]
+      .repartition(nbPartitions)
+    val rowMat = new RowMatrix(vectors)
+
+    assert(rowMat.getTreeAggregateIdealDepth(100 * 1024 * 1024) === 2)
+    assert(rowMat.getTreeAggregateIdealDepth(110 * 1024 * 1024) === 3)
+    assert(rowMat.getTreeAggregateIdealDepth(700 * 1024 * 1024) === 10)
+
+    val zeroSizeException = intercept[Exception]{
+      rowMat.getTreeAggregateIdealDepth(0)
+    }
+    assert(zeroSizeException.getMessage.contains("zero-size object to aggregate"))
+    val objectBiggerThanResultSize = intercept[Exception]{
+      rowMat.getTreeAggregateIdealDepth(1100 * 1024 * 1024)
+    }
+    assert(objectBiggerThanResultSize.getMessage.contains("it's bigger than maxResultSize"))
+  }
+
   test("similar columns") {
     val colMags = Vectors.dense(math.sqrt(126), math.sqrt(66), math.sqrt(94))
     val expected = BDM(

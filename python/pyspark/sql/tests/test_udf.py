@@ -197,9 +197,12 @@ class UDFTests(ReusedSQLTestCase):
         left = self.spark.createDataFrame([Row(a=1)])
         right = self.spark.createDataFrame([Row(b=1)])
         f = udf(lambda a, b: a == b, BooleanType())
+        # The udf uses attributes from both sides of join, so it is pulled out as Filter +
+        # Cross join.
         df = left.join(right, f("a", "b"))
-        with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
-            df.collect()
+        with self.sql_conf({"spark.sql.crossJoin.enabled": False}):
+            with self.assertRaisesRegexp(AnalysisException, 'Detected implicit cartesian product'):
+                df.collect()
         with self.sql_conf({"spark.sql.crossJoin.enabled": True}):
             self.assertEqual(df.collect(), [Row(a=1, b=1)])
 
@@ -242,6 +245,14 @@ class UDFTests(ReusedSQLTestCase):
         runWithJoinType("right", "RightOuter")
         runWithJoinType("leftanti", "LeftAnti")
         runWithJoinType("leftsemi", "LeftSemi")
+
+    def test_udf_as_join_condition(self):
+        left = self.spark.createDataFrame([Row(a=1, a1=1, a2=1), Row(a=2, a1=2, a2=2)])
+        right = self.spark.createDataFrame([Row(b=1, b1=1, b2=1), Row(b=1, b1=3, b2=1)])
+        f = udf(lambda a: a, IntegerType())
+
+        df = left.join(right, [f("a") == f("b"), left.a1 == right.b1])
+        self.assertEqual(df.collect(), [Row(a=1, a1=1, a2=1, b=1, b1=1, b2=1)])
 
     def test_udf_without_arguments(self):
         self.spark.catalog.registerFunction("foo", lambda: "bar")
@@ -326,7 +337,6 @@ class UDFTests(ReusedSQLTestCase):
         my_copy = udf(lambda x: x, IntegerType())
         df = self.spark.range(10).orderBy("id")
         res = df.select(df.id, my_copy(df.id).alias("copy")).limit(1)
-        res.explain(True)
         self.assertEqual(res.collect(), [Row(id=0, copy=0)])
 
     def test_udf_registration_returns_udf(self):
@@ -542,7 +552,7 @@ class UDFTests(ReusedSQLTestCase):
                 .format("org.apache.spark.sql.sources.SimpleScanSource") \
                 .option('from', 0).option('to', 1).load().toDF('i')
             datasource_v2_df = self.spark.read \
-                .format("org.apache.spark.sql.sources.v2.SimpleDataSourceV2") \
+                .format("org.apache.spark.sql.connector.SimpleDataSourceV2") \
                 .load().toDF('i', 'j')
 
             c1 = udf(lambda x: x + 1, 'int')(lit(1))
@@ -607,6 +617,18 @@ class UDFTests(ReusedSQLTestCase):
 
         self.spark.range(1).select(f()).collect()
 
+    def test_worker_original_stdin_closed(self):
+        # Test if it closes the original standard input of worker inherited from the daemon,
+        # and replaces it with '/dev/null'.  See SPARK-26175.
+        def task(iterator):
+            import sys
+            res = sys.stdin.read()
+            # Because the standard input is '/dev/null', it reaches to EOF.
+            assert res == '', "Expect read EOF from stdin."
+            return iterator
+
+        self.sc.parallelize(range(1), 1).mapPartitions(task).count()
+
 
 class UDFInitializationTests(unittest.TestCase):
     def tearDown(self):
@@ -634,7 +656,7 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

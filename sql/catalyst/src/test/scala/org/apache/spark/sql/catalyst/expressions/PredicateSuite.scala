@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -512,5 +513,51 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val interpreted = InterpretedPredicate.create(LessThan(Rand(7), Literal(1.0)))
     interpreted.initialize(0)
     assert(interpreted.eval(new UnsafeRow()))
+  }
+
+  test("SPARK-24872: Replace taking the $symbol with $sqlOperator in BinaryOperator's" +
+    " toString method") {
+    val expression = CatalystSqlParser.parseExpression("id=1 or id=2").toString()
+    val expected = "(('id = 1) OR ('id = 2))"
+    assert(expression == expected)
+  }
+
+  val row0 = create_row(null)
+  val row1 = create_row(false)
+  val row2 = create_row(true)
+
+  test("istrue and isnottrue") {
+    checkEvaluation(IsTrue(Literal.create(null, BooleanType)), false, row0)
+    checkEvaluation(IsNotTrue(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsTrue(Literal.create(false, BooleanType)), false, row1)
+    checkEvaluation(IsNotTrue(Literal.create(false, BooleanType)), true, row1)
+    checkEvaluation(IsTrue(Literal.create(true, BooleanType)), true, row2)
+    checkEvaluation(IsNotTrue(Literal.create(true, BooleanType)), false, row2)
+    IsTrue(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
+  }
+
+  test("isfalse and isnotfalse") {
+    checkEvaluation(IsFalse(Literal.create(null, BooleanType)), false, row0)
+    checkEvaluation(IsNotFalse(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsFalse(Literal.create(false, BooleanType)), true, row1)
+    checkEvaluation(IsNotFalse(Literal.create(false, BooleanType)), false, row1)
+    checkEvaluation(IsFalse(Literal.create(true, BooleanType)), false, row2)
+    checkEvaluation(IsNotFalse(Literal.create(true, BooleanType)), true, row2)
+    IsFalse(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
+  }
+
+  test("isunknown and isnotunknown") {
+    checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
+    checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
+    IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("argument 1 requires boolean type"))
+    }
   }
 }

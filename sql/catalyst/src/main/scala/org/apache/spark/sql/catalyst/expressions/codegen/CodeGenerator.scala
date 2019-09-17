@@ -23,7 +23,6 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -404,13 +403,14 @@ class CodegenContext {
    *  equivalentExpressions will match the tree containing `col1 + col2` and it will only
    *  be evaluated once.
    */
-  val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+  private val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
-  var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
+  // Visible for testing.
+  private[expressions] var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
-  val subexprFunctions = mutable.ArrayBuffer.empty[String]
+  private val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   val outerClassName = "OuterClass"
 
@@ -995,6 +995,15 @@ class CodegenContext {
   }
 
   /**
+   * Returns the code for subexpression elimination after splitting it if necessary.
+   */
+  def subexprFunctionsCode: String = {
+    // Whole-stage codegen's subexpression elimination is handled in another code path
+    assert(currentVars == null || subexprFunctions.isEmpty)
+    splitExpressions(subexprFunctions, "subexprFunc_split", Seq("InternalRow" -> INPUT_ROW))
+  }
+
+  /**
    * Perform a function which generates a sequence of ExprCodes with a given mapping between
    * expressions and common expressions, instead of using the mapping in current context.
    */
@@ -1202,6 +1211,15 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   }
 }
 
+/**
+ * Java bytecode statistics of a compiled class by Janino.
+ */
+case class ByteCodeStats(maxMethodCodeSize: Int, maxConstPoolSize: Int, numInnerClasses: Int)
+
+object ByteCodeStats {
+  val UNAVAILABLE = ByteCodeStats(-1, -1, -1)
+}
+
 object CodeGenerator extends Logging {
 
   // This is the default value of HugeMethodLimit in the OpenJDK HotSpot JVM,
@@ -1210,6 +1228,9 @@ object CodeGenerator extends Logging {
 
   // The max valid length of method parameters in JVM.
   final val MAX_JVM_METHOD_PARAMS_LENGTH = 255
+
+  // The max number of constant pool entries in JVM.
+  final val MAX_JVM_CONSTANT_POOL_SIZE = 65535
 
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
@@ -1233,9 +1254,9 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    *
-   * @return a pair of a generated class and the max bytecode size of generated functions.
+   * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
-  def compile(code: CodeAndComment): (GeneratedClass, Int) = try {
+  def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
     cache.get(code)
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
@@ -1248,7 +1269,7 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
+  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
     val evaluator = new ClassBodyEvaluator()
 
     // A special classloader used to wrap the actual parent classloader of
@@ -1287,7 +1308,7 @@ object CodeGenerator extends Logging {
       s"\n${CodeFormatter.format(code)}"
     })
 
-    val maxCodeSize = try {
+    val codeStats = try {
       evaluator.cook("generated.java", code.body)
       updateAndGetCompilationStats(evaluator)
     } catch {
@@ -1305,14 +1326,15 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
+    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
   }
 
   /**
-   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
+   * Returns the bytecode statistics (max method bytecode size, max constant pool size, and
+   * # of inner classes) of generated classes by inspecting Janino classes.
    * Also, this method updates the metrics information.
    */
-  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
+  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -1327,11 +1349,13 @@ object CodeGenerator extends Logging {
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
     val codeAttrField = codeAttr.getDeclaredField("code")
     codeAttrField.setAccessible(true)
-    val codeSizes = classes.flatMap { case (_, classBytes) =>
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
+    val codeStats = classes.map { case (_, classBytes) =>
+      val classCodeSize = classBytes.length
+      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val stats = cf.methodInfos.asScala.flatMap { method =>
+        val constPoolSize = cf.getConstantPoolSize
+        val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
           method.getAttributes().filter(_.getClass eq codeAttr).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
@@ -1344,19 +1368,20 @@ object CodeGenerator extends Logging {
             byteCodeSize
           }
         }
-        Some(stats)
+        (methodCodeSizes.max, constPoolSize)
       } catch {
         case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
-          None
+          (-1, -1)
       }
-    }.flatten
-
-    if (codeSizes.nonEmpty) {
-      codeSizes.max
-    } else {
-      0
     }
+
+    val (maxMethodSizes, constPoolSize) = codeStats.unzip
+    ByteCodeStats(
+      maxMethodCodeSize = maxMethodSizes.max,
+      maxConstPoolSize = constPoolSize.max,
+      // Minus 2 for `GeneratedClass` and an outer-most generated class
+      numInnerClasses = classes.size - 2)
   }
 
   /**
@@ -1371,8 +1396,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(SQLConf.get.codegenCacheMaxEntries)
     .build(
-      new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
-        override def load(code: CodeAndComment): (GeneratedClass, Int) = {
+      new CacheLoader[CodeAndComment, (GeneratedClass, ByteCodeStats)]() {
+        override def load(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()
@@ -1614,6 +1639,48 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Extracts all the input variables from references and subexpression elimination states
+   * for a given `expr`. This result will be used to split the generated code of
+   * expressions into multiple functions.
+   */
+  def getLocalInputVariableValues(
+      ctx: CodegenContext,
+      expr: Expression,
+      subExprs: Map[Expression, SubExprEliminationState]): Set[VariableValue] = {
+    val argSet = mutable.Set[VariableValue]()
+    if (ctx.INPUT_ROW != null) {
+      argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
+    }
+
+    // Collects local variables from a given `expr` tree
+    val collectLocalVariable = (ev: ExprValue) => ev match {
+      case vv: VariableValue => argSet += vv
+      case _ =>
+    }
+
+    val stack = mutable.Stack[Expression](expr)
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case e if subExprs.contains(e) =>
+          val SubExprEliminationState(isNull, value) = subExprs(e)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
+
+        case ref: BoundReference if ctx.currentVars != null &&
+            ctx.currentVars(ref.ordinal) != null =>
+          val ExprCode(_, isNull, value) = ctx.currentVars(ref.ordinal)
+          collectLocalVariable(value)
+          collectLocalVariable(isNull)
+
+        case e =>
+          stack.pushAll(e.children)
+      }
+    }
+
+    argSet.toSet
+  }
+
+  /**
    * Returns the name used in accessor and setter for a Java primitive type.
    */
   def primitiveTypeName(jt: String): String = jt match {
@@ -1715,6 +1782,15 @@ object CodeGenerator extends Logging {
       }
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaParamLength
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr).sum
+  }
+
+  def calculateParamLengthFromExprValues(params: Seq[ExprValue]): Int = {
+    def paramLengthForExpr(input: ExprValue): Int = input.javaType match {
+      case java.lang.Long.TYPE | java.lang.Double.TYPE => 2
+      case _ => 1
     }
     // Initial value is 1 for `this`.
     1 + params.map(paramLengthForExpr).sum

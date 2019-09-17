@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.evaluation
 
 import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
@@ -32,14 +33,6 @@ import org.apache.spark.sql.{DataFrame, Row}
  */
 @Since("1.1.0")
 class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product]) {
-  val predLabelsWeight: RDD[(Double, Double, Double)] = predictionAndLabels.map {
-    case (prediction: Double, label: Double, weight: Double) =>
-      (prediction, label, weight)
-    case (prediction: Double, label: Double) =>
-      (prediction, label, 1.0)
-    case other =>
-      throw new IllegalArgumentException(s"Expected tuples, got $other")
-  }
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -55,31 +48,57 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
     })
 
-  private lazy val labelCountByClass: Map[Double, Double] =
-    predLabelsWeight.map {
-      case (_: Double, label: Double, weight: Double) =>
-        (label, weight)
-    }.reduceByKey(_ + _)
+
+  private val confusions = predictionAndLabels.map {
+    case (prediction: Double, label: Double, weight: Double) =>
+      ((label, prediction), weight)
+    case (prediction: Double, label: Double) =>
+      ((label, prediction), 1.0)
+    case other =>
+      throw new IllegalArgumentException(s"Expected tuples, got $other")
+  }.reduceByKey(_ + _)
     .collectAsMap()
+
+  private lazy val labelCountByClass: Map[Double, Double] = {
+    val labelCountByClass = mutable.Map.empty[Double, Double]
+    confusions.iterator.foreach {
+      case ((label, _), weight) =>
+        val w = labelCountByClass.getOrElse(label, 0.0)
+        labelCountByClass.update(label, w + weight)
+    }
+    labelCountByClass.toMap
+  }
+
   private lazy val labelCount: Double = labelCountByClass.values.sum
-  private lazy val tpByClass: Map[Double, Double] = predLabelsWeight
-    .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        (label, if (label == prediction) weight else 0.0)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
-  private lazy val fpByClass: Map[Double, Double] = predLabelsWeight
-    .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        (prediction, if (prediction != label) weight else 0.0)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
-  private lazy val confusions = predLabelsWeight
-    .map {
-      case (prediction: Double, label: Double, weight: Double) =>
-        ((label, prediction), weight)
-    }.reduceByKey(_ + _)
-    .collectAsMap()
+
+  private lazy val tpByClass: Map[Double, Double] = {
+    val tpByClass = mutable.Map.empty[Double, Double]
+    confusions.iterator.foreach {
+      case ((label, prediction), weight) =>
+        val w = tpByClass.getOrElse(label, 0.0)
+        if (label == prediction) {
+          tpByClass.update(label, w + weight)
+        } else if (w == 0.0) {
+          tpByClass.update(label, w)
+        }
+    }
+    tpByClass.toMap
+  }
+
+  private lazy val fpByClass: Map[Double, Double] = {
+    val fpByClass = mutable.Map.empty[Double, Double]
+    confusions.iterator.foreach {
+      case ((label, prediction), weight) =>
+        val w = fpByClass.getOrElse(prediction, 0.0)
+        if (label != prediction) {
+          fpByClass.update(prediction, w + weight)
+        } else if (w == 0.0) {
+          fpByClass.update(prediction, w)
+        }
+    }
+    fpByClass.toMap
+  }
+
 
   /**
    * Returns confusion matrix:
@@ -211,9 +230,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
    * Returns weighted averaged f1-measure
    */
   @Since("1.1.0")
-  lazy val weightedFMeasure: Double = labelCountByClass.map { case (category, count) =>
-    fMeasure(category, 1.0) * count.toDouble / labelCount
-  }.sum
+  lazy val weightedFMeasure: Double = weightedFMeasure(1.0)
 
   /**
    * Returns the sequence of labels in ascending order

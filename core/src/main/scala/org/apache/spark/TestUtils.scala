@@ -20,9 +20,11 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{HttpURLConnection, URI, URL}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files => JavaFiles}
+import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
-import java.util.{Arrays, Properties}
+import java.util.{Arrays, EnumSet, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 import javax.net.ssl._
@@ -36,8 +38,11 @@ import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.log4j.PropertyConfigurator
+import org.json4s.JsonAST.JValue
+import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -193,6 +198,20 @@ private[spark] object TestUtils {
   }
 
   /**
+   * Asserts that exception message contains the message. Please note this checks all
+   * exceptions in the tree.
+   */
+  def assertExceptionMsg(exception: Throwable, msg: String): Unit = {
+    var e = exception
+    var contains = e.getMessage.contains(msg)
+    while (e.getCause != null && !contains) {
+      e = e.getCause
+      contains = e.getMessage.contains(msg)
+    }
+    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
+  }
+
+  /**
    * Test if a command is available.
    */
   def testCommandAvailable(command: String): Boolean = {
@@ -297,6 +316,22 @@ private[spark] object TestUtils {
     current ++ current.filter(_.isDirectory).flatMap(recursiveList)
   }
 
+  /** Creates a temp JSON file that contains the input JSON record. */
+  def createTempJsonFile(dir: File, prefix: String, jsonValue: JValue): String = {
+    val file = File.createTempFile(prefix, ".json", dir)
+    JavaFiles.write(file.toPath, compact(render(jsonValue)).getBytes())
+    file.getPath
+  }
+
+  /** Creates a temp bash script that prints the given output. */
+  def createTempScriptWithExpectedOutput(dir: File, prefix: String, output: String): String = {
+    val file = File.createTempFile(prefix, ".sh", dir)
+    val script = s"cat <<EOF\n$output\nEOF\n"
+    Files.write(script, file, StandardCharsets.UTF_8)
+    JavaFiles.setPosixFilePermissions(file.toPath,
+      EnumSet.of(OWNER_READ, OWNER_EXECUTE, OWNER_WRITE))
+    file.getPath
+  }
 }
 
 

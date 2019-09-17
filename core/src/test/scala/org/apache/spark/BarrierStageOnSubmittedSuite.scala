@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
@@ -52,7 +51,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     )
 
     val error = intercept[SparkException] {
-      ThreadUtils.awaitResult(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5.seconds)
     }.getCause.getMessage
     assert(error.contains(message))
   }

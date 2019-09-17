@@ -19,9 +19,10 @@ import py4j
 
 
 class CapturedException(Exception):
-    def __init__(self, desc, stackTrace):
+    def __init__(self, desc, stackTrace, cause=None):
         self.desc = desc
         self.stackTrace = stackTrace
+        self.cause = convert_exception(cause) if cause is not None else None
 
     def __str__(self):
         return repr(self.desc)
@@ -57,27 +58,41 @@ class QueryExecutionException(CapturedException):
     """
 
 
+class UnknownException(CapturedException):
+    """
+    None of the above exceptions.
+    """
+
+
+def convert_exception(e):
+    s = e.toString()
+    stackTrace = '\n\t at '.join(map(lambda x: x.toString(), e.getStackTrace()))
+    c = e.getCause()
+    if s.startswith('org.apache.spark.sql.AnalysisException: '):
+        return AnalysisException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.catalyst.analysis'):
+        return AnalysisException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
+        return ParseException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
+        return StreamingQueryException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
+        return QueryExecutionException(s.split(': ', 1)[1], stackTrace, c)
+    if s.startswith('java.lang.IllegalArgumentException: '):
+        return IllegalArgumentException(s.split(': ', 1)[1], stackTrace, c)
+    return UnknownException(s, stackTrace, c)
+
+
 def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
-            s = e.java_exception.toString()
-            stackTrace = '\n\t at '.join(map(lambda x: x.toString(),
-                                             e.java_exception.getStackTrace()))
-            if s.startswith('org.apache.spark.sql.AnalysisException: '):
-                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis'):
-                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
-                raise ParseException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.streaming.StreamingQueryException: '):
-                raise StreamingQueryException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
-                raise QueryExecutionException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('java.lang.IllegalArgumentException: '):
-                raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
-            raise
+            converted = convert_exception(e.java_exception)
+            if not isinstance(converted, UnknownException):
+                raise converted
+            else:
+                raise
     return deco
 
 
@@ -116,7 +131,7 @@ def require_minimum_pandas_version():
     """ Raise ImportError if minimum version of Pandas is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pandas_version = "0.19.2"
+    minimum_pandas_version = "0.23.2"
 
     from distutils.version import LooseVersion
     try:
@@ -136,7 +151,7 @@ def require_minimum_pyarrow_version():
     """ Raise ImportError if minimum version of pyarrow is not installed
     """
     # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
-    minimum_pyarrow_version = "0.8.0"
+    minimum_pyarrow_version = "0.12.1"
 
     from distutils.version import LooseVersion
     try:
@@ -192,3 +207,16 @@ class ForeachBatchFunction(object):
 
     class Java:
         implements = ['org.apache.spark.sql.execution.streaming.sources.PythonForeachBatchFunction']
+
+
+def to_str(value):
+    """
+    A wrapper over str(), but converts bool values to lower case strings.
+    If None is given, just returns None, instead of converting it to string "None".
+    """
+    if isinstance(value, bool):
+        return str(value).lower()
+    elif value is None:
+        return value
+    else:
+        return str(value)

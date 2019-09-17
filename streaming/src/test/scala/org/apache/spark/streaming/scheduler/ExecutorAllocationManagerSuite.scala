@@ -19,26 +19,25 @@ package org.apache.spark.streaming.scheduler
 
 import org.mockito.ArgumentMatchers.{eq => meq}
 import org.mockito.Mockito.{never, reset, times, verify, when}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{ExecutorAllocationClient, SparkConf, SparkFunSuite}
+import org.apache.spark.{ExecutorAllocationClient, SparkConf}
 import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_TESTING}
 import org.apache.spark.internal.config.Streaming._
-import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext}
+import org.apache.spark.streaming.{DummyInputDStream, Seconds, StreamingContext, TestSuiteBase}
 import org.apache.spark.util.{ManualClock, Utils}
 
-
-class ExecutorAllocationManagerSuite extends SparkFunSuite
-  with BeforeAndAfter with BeforeAndAfterAll with MockitoSugar with PrivateMethodTester {
+class ExecutorAllocationManagerSuite extends TestSuiteBase
+  with MockitoSugar with PrivateMethodTester {
 
   private val batchDurationMillis = 1000L
   private var allocationClient: ExecutorAllocationClient = null
   private var clock: StreamManualClock = null
 
-  before {
+  override def beforeEach(): Unit = {
     allocationClient = mock[ExecutorAllocationClient]
     clock = new StreamManualClock()
   }
@@ -61,7 +60,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
         val expectedWaitTime = clock.getTimeMillis() + advancedTime
         clock.advance(advancedTime)
         // Make sure ExecutorAllocationManager.manageAllocation is called
-        eventually(timeout(10 seconds)) {
+        eventually(timeout(10.seconds)) {
           assert(clock.isStreamWaitingAt(expectedWaitTime))
         }
         body
@@ -388,17 +387,13 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite
   }
 
   private def withStreamingContext(conf: SparkConf)(body: StreamingContext => Unit): Unit = {
-    conf.setMaster("myDummyLocalExternalClusterManager")
+    conf.setMaster("local-cluster[1,1,1024]")
       .setAppName(this.getClass.getSimpleName)
       .set("spark.streaming.dynamicAllocation.testing", "true")  // to test dynamic allocation
 
-    var ssc: StreamingContext = null
-    try {
-      ssc = new  StreamingContext(conf, Seconds(1))
+    withStreamingContext(new StreamingContext(conf, Seconds(1))) { ssc =>
       new DummyInputDStream(ssc).foreachRDD(_ => { })
       body(ssc)
-    } finally {
-      if (ssc != null) ssc.stop()
     }
   }
 }

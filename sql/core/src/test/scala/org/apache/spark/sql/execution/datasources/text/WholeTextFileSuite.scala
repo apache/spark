@@ -21,10 +21,10 @@ import java.io.File
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class WholeTextFileSuite extends QueryTest with SharedSQLContext  with SQLTestUtils {
+class WholeTextFileSuite extends QueryTest with SharedSparkSession {
 
   // Hadoop's FileSystem caching does not use the Configuration as part of its cache key, which
   // can cause Filesystem.get(Configuration) to return a cached instance created with a different

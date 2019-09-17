@@ -19,7 +19,7 @@ package org.apache.spark.repl
 
 import java.io._
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils
@@ -387,6 +387,22 @@ class SingletonReplSuite extends SparkFunSuite {
         |spark.implicits.newProductSeqEncoder[Click]
       """.stripMargin)
 
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("create encoder in executors") {
+    val output = runInterpreter(
+      """
+        |case class Foo(s: String)
+        |
+        |import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+        |
+        |val r =
+        |  sc.parallelize(1 to 1).map { i => ExpressionEncoder[Foo](); Foo("bar") }.collect.head
+      """.stripMargin)
+
+    assertContains("r: Foo = Foo(bar)", output)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
   }

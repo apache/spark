@@ -21,7 +21,6 @@ import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
@@ -31,6 +30,9 @@ import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.internal.config.Network._
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.ResourceUtils._
+import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils, Utils}
 
@@ -111,6 +113,21 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.getOption("k4") === None)
   }
 
+  test("basic getAllWithPrefix") {
+    val prefix = "spark.prefix."
+    val conf = new SparkConf(false)
+    conf.set("spark.prefix.main.suffix", "v1")
+    assert(conf.getAllWithPrefix(prefix).toSet ===
+      Set(("main.suffix", "v1")))
+
+    conf.set("spark.prefix.main2.suffix", "v2")
+    conf.set("spark.prefix.main3.extra1.suffix", "v3")
+    conf.set("spark.notMatching.main4", "v4")
+
+    assert(conf.getAllWithPrefix(prefix).toSet ===
+      Set(("main.suffix", "v1"), ("main2.suffix", "v2"), ("main3.extra1.suffix", "v3")))
+  }
+
   test("creating SparkContext without master and app name") {
     val conf = new SparkConf(false)
     intercept[SparkException] { sc = new SparkContext(conf) }
@@ -138,13 +155,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     sc = new SparkContext("local[2]", "My other app", conf)
     assert(sc.master === "local[2]")
     assert(sc.appName === "My other app")
-  }
-
-  test("creating SparkContext with cpus per tasks bigger than cores per executors") {
-    val conf = new SparkConf(false)
-      .set(EXECUTOR_CORES, 1)
-      .set(CPUS_PER_TASK, 2)
-    intercept[SparkException] { sc = new SparkContext(conf) }
   }
 
   test("nested property names") {
@@ -232,7 +242,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
   }
 
   test("deprecated configs") {
-    val conf = new SparkConf()
+    val conf = new SparkConf(false)
     val newName = UPDATE_INTERVAL_S.key
 
     assert(!conf.contains(newName))
@@ -256,7 +266,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.getTimeAsSeconds("spark.yarn.am.waitTime") === 420)
 
     conf.set("spark.kryoserializer.buffer.mb", "1.1")
-    assert(conf.getSizeAsKb("spark.kryoserializer.buffer") === 1100)
+    assert(conf.getSizeAsKb(KRYO_SERIALIZER_BUFFER_SIZE.key) === 1100)
 
     conf.set("spark.history.fs.cleaner.maxAge.seconds", "42")
     assert(conf.get(MAX_LOG_AGE_S) === 42L)
@@ -286,10 +296,10 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(RpcUtils.retryWaitMs(conf) === 2L)
 
     conf.set("spark.akka.askTimeout", "3")
-    assert(RpcUtils.askRpcTimeout(conf).duration === (3 seconds))
+    assert(RpcUtils.askRpcTimeout(conf).duration === 3.seconds)
 
     conf.set("spark.akka.lookupTimeout", "4")
-    assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
+    assert(RpcUtils.lookupRpcTimeout(conf).duration === 4.seconds)
   }
 
   test("SPARK-13727") {
@@ -379,6 +389,19 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       """.stripMargin.trim)
   }
 
+  test("SPARK-28355: Use Spark conf for threshold at which UDFs are compressed by broadcast") {
+    val conf = new SparkConf()
+
+    // Check the default value
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024 * 1024)
+
+    // Set the conf
+    conf.set(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD, 1L * 1024)
+
+    // Verify that it has been set properly
+    assert(conf.get(BROADCAST_FOR_UDF_COMPRESSION_THRESHOLD) === 1L * 1024)
+  }
+
   val defaultIllegalValue = "SomeIllegalValue"
   val illegalValueTests : Map[String, (SparkConf, String) => Any] = Map(
     "getTimeAsSeconds" -> (_.getTimeAsSeconds(_)),
@@ -410,6 +433,28 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       }
       assert(thrown.getMessage.contains(key))
     }
+  }
+
+  test("get task resource requirement from config") {
+    val conf = new SparkConf()
+    conf.set(TASK_GPU_ID.amountConf, "2")
+    conf.set(TASK_FPGA_ID.amountConf, "1")
+    var taskResourceRequirement =
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
+
+    assert(taskResourceRequirement.size == 2)
+    assert(taskResourceRequirement(GPU) == 2)
+    assert(taskResourceRequirement(FPGA) == 1)
+
+    conf.remove(TASK_FPGA_ID.amountConf)
+    // Ignore invalid prefix
+    conf.set(ResourceID("spark.invalid.prefix", FPGA).amountConf, "1")
+    taskResourceRequirement =
+      parseResourceRequirements(conf, SPARK_TASK_PREFIX)
+        .map(req => (req.resourceName, req.amount)).toMap
+    assert(taskResourceRequirement.size == 1)
+    assert(taskResourceRequirement.get(FPGA).isEmpty)
   }
 }
 

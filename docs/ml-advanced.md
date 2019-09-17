@@ -52,7 +52,7 @@ explicitly in Newton's method. As a result, L-BFGS often achieves faster converg
 other first-order optimizations.
 
 [Orthant-Wise Limited-memory
-Quasi-Newton](http://research-srv.microsoft.com/en-us/um/people/jfgao/paper/icml07scalable.pdf)
+Quasi-Newton](https://www.microsoft.com/en-us/research/wp-content/uploads/2007/01/andrew07scalable.pdf)
 (OWL-QN) is an extension of L-BFGS that can effectively handle L1 and elastic net regularization.
 
 L-BFGS is used as a solver for [LinearRegression](api/scala/index.html#org.apache.spark.ml.regression.LinearRegression),

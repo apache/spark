@@ -36,8 +36,9 @@ import org.apache.spark.sql.types.StructType
 class MetadataLogFileIndex(
     sparkSession: SparkSession,
     path: Path,
+    parameters: Map[String, String],
     userSpecifiedSchema: Option[StructType])
-  extends PartitioningAwareFileIndex(sparkSession, Map.empty, userSpecifiedSchema) {
+  extends PartitioningAwareFileIndex(sparkSession, parameters, userSpecifiedSchema) {
 
   private val metadataDirectory = {
     val metadataDir = new Path(path, FileStreamSink.metadataDir)

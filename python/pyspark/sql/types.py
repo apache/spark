@@ -1190,7 +1190,7 @@ _acceptable_types = {
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
-    BinaryType: (bytearray,),
+    BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
@@ -1211,6 +1211,10 @@ def _make_type_verifier(dataType, nullable=True, name=None):
     >>> _make_type_verifier(StructType([]))(None)
     >>> _make_type_verifier(StringType())("")
     >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(LongType())(1 << 64) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
     >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
@@ -1319,6 +1323,16 @@ def _make_type_verifier(dataType, nullable=True, name=None):
 
         verify_value = verify_integer
 
+    elif isinstance(dataType, LongType):
+        def verify_long(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -9223372036854775808 or obj > 9223372036854775807:
+                raise ValueError(
+                    new_msg("object of LongType out of range, got: %s" % obj))
+
+        verify_value = verify_long
+
     elif isinstance(dataType, ArrayType):
         element_verifier = _make_type_verifier(
             dataType.elementType, dataType.containsNull, name="element in array %s" % name)
@@ -1405,7 +1419,7 @@ def _create_row(fields, values):
 class Row(tuple):
 
     """
-    A row in L{DataFrame}.
+    A row in :class:`DataFrame`.
     The fields in it can be accessed:
 
     * like attributes (``row.key``)
@@ -1435,13 +1449,24 @@ class Row(tuple):
 
     >>> Person = Row("name", "age")
     >>> Person
-    <Row(name, age)>
+    <Row('name', 'age')>
     >>> 'name' in Person
     True
     >>> 'wrong_key' in Person
     False
     >>> Person("Alice", 11)
     Row(name='Alice', age=11)
+
+    This form can also be used to create rows as tuple values, i.e. with unnamed
+    fields. Beware that such Row objects have different equality semantics:
+
+    >>> row1 = Row("Alice", 11)
+    >>> row2 = Row(name="Alice", age=11)
+    >>> row1 == row2
+    False
+    >>> row3 = Row(a="Alice", b=11)
+    >>> row1 == row3
+    True
     """
 
     def __new__(self, *args, **kwargs):
@@ -1549,7 +1574,7 @@ class Row(tuple):
             return "Row(%s)" % ", ".join("%s=%r" % (k, v)
                                          for k, v in zip(self.__fields__, tuple(self)))
         else:
-            return "<Row(%s)>" % ", ".join(self)
+            return "<Row(%s)>" % ", ".join("%r" % field for field in self)
 
 
 class DateConverter(object):
@@ -1581,7 +1606,6 @@ register_input_converter(DateConverter())
 def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
-    from distutils.version import LooseVersion
     import pyarrow as pa
     if type(dt) == BooleanType:
         arrow_type = pa.bool_()
@@ -1602,10 +1626,6 @@ def to_arrow_type(dt):
     elif type(dt) == StringType:
         arrow_type = pa.string()
     elif type(dt) == BinaryType:
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt) +
-                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
         arrow_type = pa.binary()
     elif type(dt) == DateType:
         arrow_type = pa.date32()
@@ -1639,8 +1659,6 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
-    from distutils.version import LooseVersion
-    import pyarrow as pa
     import pyarrow.types as types
     if types.is_boolean(at):
         spark_type = BooleanType()
@@ -1661,10 +1679,6 @@ def from_arrow_type(at):
     elif types.is_string(at):
         spark_type = StringType()
     elif types.is_binary(at):
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
-                            "\nPlease install pyarrow >= 0.10.0 for BinaryType support.")
         spark_type = BinaryType()
     elif types.is_date32(at):
         spark_type = DateType()
@@ -1675,10 +1689,6 @@ def from_arrow_type(at):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
     elif types.is_struct(at):
-        # TODO: remove version check once minimum pyarrow version is 0.10.0
-        if LooseVersion(pa.__version__) < LooseVersion("0.10.0"):
-            raise TypeError("Unsupported type in conversion from Arrow: " + str(at) +
-                            "\nPlease install pyarrow >= 0.10.0 for StructType support.")
         if any(types.is_struct(field.type) for field in at):
             raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
         return StructType(
@@ -1695,54 +1705,6 @@ def from_arrow_schema(arrow_schema):
     return StructType(
         [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
          for field in arrow_schema])
-
-
-def _arrow_column_to_pandas(column, data_type):
-    """ Convert Arrow Column to pandas Series.
-
-    :param series: pyarrow.lib.Column
-    :param data_type: a Spark data type for the column
-    """
-    import pandas as pd
-    import pyarrow as pa
-    from distutils.version import LooseVersion
-    # If the given column is a date type column, creates a series of datetime.date directly instead
-    # of creating datetime64[ns] as intermediate data to avoid overflow caused by datetime64[ns]
-    # type handling.
-    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-        if type(data_type) == DateType:
-            return pd.Series(column.to_pylist(), name=column.name)
-        else:
-            return column.to_pandas()
-    else:
-        # Since Arrow 0.11.0, support date_as_object to return datetime.date instead of
-        # np.datetime64.
-        return column.to_pandas(date_as_object=True)
-
-
-def _arrow_table_to_pandas(table, schema):
-    """ Convert Arrow Table to pandas DataFrame.
-
-    Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
-    use datetime.date to match the behavior with when Arrow optimization is disabled.
-
-    :param table: pyarrow.lib.Table
-    :param schema: a Spark schema of the pyarrow.lib.Table
-    """
-    import pandas as pd
-    import pyarrow as pa
-    from distutils.version import LooseVersion
-    # If the given table contains a date type column, use `_arrow_column_to_pandas` for pyarrow<0.11
-    # or use `date_as_object` option for pyarrow>=0.11 to avoid creating datetime64[ns] as
-    # intermediate data.
-    if LooseVersion(pa.__version__) < LooseVersion("0.11.0"):
-        if any(type(field.dataType) == DateType for field in schema):
-            return pd.concat([_arrow_column_to_pandas(column, field.dataType)
-                              for column, field in zip(table.itercolumns(), schema)], axis=1)
-        else:
-            return table.to_pandas()
-    else:
-        return table.to_pandas(date_as_object=True)
 
 
 def _get_local_timezone():

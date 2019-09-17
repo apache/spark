@@ -69,7 +69,7 @@ def from_avro(data, jsonFormatSchema, options={}):
 
 @ignore_unicode_prefix
 @since(3.0)
-def to_avro(data):
+def to_avro(data, jsonFormatSchema=""):
     """
     Converts a column into binary of avro format.
 
@@ -77,18 +77,27 @@ def to_avro(data):
     application as per the deployment section of "Apache Avro Data Source Guide".
 
     :param data: the data column.
+    :param jsonFormatSchema: user-specified output avro schema in JSON string format.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.sql.avro.functions import to_avro
-    >>> data = [(1, Row(name='Alice', age=2))]
-    >>> df = spark.createDataFrame(data, ("key", "value"))
-    >>> df.select(to_avro(df.value).alias("avro")).collect()
-    [Row(avro=bytearray(b'\\x00\\x00\\x04\\x00\\nAlice'))]
+    >>> data = ['SPADES']
+    >>> df = spark.createDataFrame(data, "string")
+    >>> df.select(to_avro(df.value).alias("suite")).collect()
+    [Row(suite=bytearray(b'\\x00\\x0cSPADES'))]
+    >>> jsonFormatSchema = '''["null", {"type": "enum", "name": "value",
+    ...     "symbols": ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]}]'''
+    >>> df.select(to_avro(df.value, jsonFormatSchema).alias("suite")).collect()
+    [Row(suite=bytearray(b'\\x02\\x00'))]
     """
 
     sc = SparkContext._active_spark_context
     try:
-        jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
+        if jsonFormatSchema == "":
+            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(_to_java_column(data))
+        else:
+            jc = sc._jvm.org.apache.spark.sql.avro.functions.to_avro(
+                _to_java_column(data), jsonFormatSchema)
     except TypeError as e:
         if str(e) == "'JavaPackage' object is not callable":
             _print_missing_jar("Avro", "avro", "avro", sc.version)

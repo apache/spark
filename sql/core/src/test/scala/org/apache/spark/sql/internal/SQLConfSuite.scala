@@ -21,10 +21,10 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.internal.StaticSQLConf._
-import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
-class SQLConfSuite extends QueryTest with SharedSQLContext {
+class SQLConfSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val testKey = "test.key.0"
@@ -257,7 +257,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
     // check default value
     assert(spark.sessionState.conf.parquetOutputTimestampType ==
-      SQLConf.ParquetOutputTimestampType.INT96)
+      SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS)
 
     // PARQUET_INT64_AS_TIMESTAMP_MILLIS should be respected.
     spark.sessionState.conf.setConf(SQLConf.PARQUET_INT64_AS_TIMESTAMP_MILLIS, true)

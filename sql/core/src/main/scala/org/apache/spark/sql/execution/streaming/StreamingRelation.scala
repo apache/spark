@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.read.streaming.SparkDataStream
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.sources.v2.{Table, TableProvider}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object StreamingRelation {
@@ -63,7 +64,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
 case class StreamingExecutionRelation(
-    source: BaseStreamingSource,
+    source: SparkDataStream,
     output: Seq[Attribute])(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 

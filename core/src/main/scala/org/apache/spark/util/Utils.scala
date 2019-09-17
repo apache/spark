@@ -24,7 +24,7 @@ import java.lang.reflect.InvocationTargetException
 import java.math.{MathContext, RoundingMode}
 import java.net._
 import java.nio.ByteBuffer
-import java.nio.channels.{Channels, FileChannel}
+import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
@@ -51,6 +51,7 @@ import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.eclipse.jetty.util.MultiException
@@ -197,14 +198,15 @@ private[spark] object Utils extends Logging {
    * Preferred alternative to Class.forName(className), as well as
    * Class.forName(className, initialize, loader) with current thread's ContextClassLoader.
    */
-  def classForName(
+  def classForName[C](
       className: String,
       initialize: Boolean = true,
-      noSparkClassLoader: Boolean = false): Class[_] = {
+      noSparkClassLoader: Boolean = false): Class[C] = {
     if (!noSparkClassLoader) {
-      Class.forName(className, initialize, getContextOrSparkClassLoader)
+      Class.forName(className, initialize, getContextOrSparkClassLoader).asInstanceOf[Class[C]]
     } else {
-      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader)
+      Class.forName(className, initialize, Thread.currentThread().getContextClassLoader).
+        asInstanceOf[Class[C]]
     }
     // scalastyle:on classforname
   }
@@ -265,6 +267,26 @@ private[spark] object Utils extends Logging {
     file.setWritable(true, true) &&
     file.setExecutable(false, false) &&
     file.setExecutable(true, true)
+  }
+
+  /**
+   * Create a directory given the abstract pathname
+   * @return true, if the directory is successfully created; otherwise, return false.
+   */
+  def createDirectory(dir: File): Boolean = {
+    try {
+      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
+      // So attempting to create and then check if directory was created or not.
+      dir.mkdirs()
+      if ( !dir.exists() || !dir.isDirectory) {
+        logError(s"Failed to create directory " + dir)
+      }
+      dir.isDirectory
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to create directory " + dir, e)
+        false
+    }
   }
 
   /**
@@ -393,10 +415,14 @@ private[spark] object Utils extends Logging {
 
   def copyFileStreamNIO(
       input: FileChannel,
-      output: FileChannel,
+      output: WritableByteChannel,
       startPosition: Long,
       bytesToCopy: Long): Unit = {
-    val initialPos = output.position()
+    val outputInitialState = output match {
+      case outputFileChannel: FileChannel =>
+        Some((outputFileChannel.position(), outputFileChannel))
+      case _ => None
+    }
     var count = 0L
     // In case transferTo method transferred less data than we have required.
     while (count < bytesToCopy) {
@@ -411,15 +437,17 @@ private[spark] object Utils extends Logging {
     // kernel version 2.6.32, this issue can be seen in
     // https://bugs.openjdk.java.net/browse/JDK-7052359
     // This will lead to stream corruption issue when using sort-based shuffle (SPARK-3948).
-    val finalPos = output.position()
-    val expectedPos = initialPos + bytesToCopy
-    assert(finalPos == expectedPos,
-      s"""
-         |Current position $finalPos do not equal to expected position $expectedPos
-         |after transferTo, please check your kernel version to see if it is 2.6.32,
-         |this is a kernel bug which will lead to unexpected behavior when using transferTo.
-         |You can set spark.file.transferTo = false to disable this NIO feature.
-           """.stripMargin)
+    outputInitialState.foreach { case (initialPos, outputFileChannel) =>
+      val finalPos = outputFileChannel.position()
+      val expectedPos = initialPos + bytesToCopy
+      assert(finalPos == expectedPos,
+        s"""
+           |Current position $finalPos do not equal to expected position $expectedPos
+           |after transferTo, please check your kernel version to see if it is 2.6.32,
+           |this is a kernel bug which will lead to unexpected behavior when using transferTo.
+           |You can set spark.file.transferTo = false to disable this NIO feature.
+         """.stripMargin)
+    }
   }
 
   /**
@@ -1388,7 +1416,9 @@ private[spark] object Utils extends Logging {
         originalThrowable = cause
         try {
           logError("Aborting task", originalThrowable)
-          TaskContext.get().markTaskFailed(originalThrowable)
+          if (TaskContext.get() != null) {
+            TaskContext.get().markTaskFailed(originalThrowable)
+          }
           catchBlock
         } catch {
           case t: Throwable =>
@@ -2545,6 +2575,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Given a process id, return true if the process is still running.
+   */
+  def isProcessRunning(pid: Int): Boolean = {
+    val process = executeCommand(Seq("kill", "-0", pid.toString))
+    process.waitFor(10, TimeUnit.SECONDS)
+    process.exitValue() == 0
+  }
+
+  /**
+   * Returns the pid of this JVM process.
+   */
+  def getProcessId: Int = {
+    val PROCESS = "(\\d+)@(.*)".r
+    val name = getProcessName()
+    name match {
+      case PROCESS(pid, _) => pid.toInt
+      case _ =>
+        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
+    }
+  }
+
+  /**
    * Returns the name of this JVM process. This is OS dependent but typically (OSX, Linux, Windows),
    * this is formatted as PID@hostname.
    */
@@ -2595,7 +2647,7 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
    * its value is replaced with a dummy text.
    */
-  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  def redact[K, V](regex: Option[Regex], kvs: Seq[(K, V)]): Seq[(K, V)] = {
     regex match {
       case None => kvs
       case Some(r) => redact(r, kvs)
@@ -2617,7 +2669,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
+  private def redact[K, V](redactionPattern: Regex, kvs: Seq[(K, V)]): Seq[(K, V)] = {
     // If the sensitive information regex matches with either the key or the value, redact the value
     // While the original intent was to only redact the value if the key matched with the regex,
     // we've found that especially in verbose mode, the value of the property may contain sensitive
@@ -2631,12 +2683,19 @@ private[spark] object Utils extends Logging {
     // arbitrary property contained the term 'password', we may redact the value from the UI and
     // logs. In order to work around it, user would have to make the spark.redaction.regex property
     // more specific.
-    kvs.map { case (key, value) =>
-      redactionPattern.findFirstIn(key)
-        .orElse(redactionPattern.findFirstIn(value))
-        .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
-        .getOrElse((key, value))
-    }
+    kvs.map {
+      case (key: String, value: String) =>
+        redactionPattern.findFirstIn(key)
+          .orElse(redactionPattern.findFirstIn(value))
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+      case (key, value: String) =>
+        redactionPattern.findFirstIn(value)
+          .map { _ => (key, REDACTION_REPLACEMENT_TEXT) }
+          .getOrElse((key, value))
+      case (key, value) =>
+        (key, value)
+    }.asInstanceOf[Seq[(K, V)]]
   }
 
   /**
@@ -2680,10 +2739,11 @@ private[spark] object Utils extends Logging {
    * other state) and decide they do not need to be added. A log message is printed in that case.
    * Other exceptions are bubbled up.
    */
-  def loadExtensions[T](extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
+  def loadExtensions[T <: AnyRef](
+      extClass: Class[T], classes: Seq[String], conf: SparkConf): Seq[T] = {
     classes.flatMap { name =>
       try {
-        val klass = classForName(name)
+        val klass = classForName[T](name)
         require(extClass.isAssignableFrom(klass),
           s"$name is not a subclass of ${extClass.getName()}.")
 
@@ -2884,6 +2944,19 @@ private[spark] object Utils extends Logging {
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
+
+  /** Check whether the file of the path is splittable. */
+  def isFileSplittable(path: Path, codecFactory: CompressionCodecFactory): Boolean = {
+    val codec = codecFactory.getCodec(path)
+    codec == null || codec.isInstanceOf[SplittableCompressionCodec]
+  }
+
+  /** Create a new properties object with the same values as `props` */
+  def cloneProperties(props: Properties): Properties = {
+    val resultProps = new Properties()
+    props.forEach((k, v) => resultProps.put(k, v))
+    resultProps
+  }
 }
 
 private[util] object CallerContext extends Logging {
@@ -2967,7 +3040,8 @@ private[spark] class CallerContext(
     if (CallerContext.callerContextSupported) {
       try {
         val callerContext = Utils.classForName("org.apache.hadoop.ipc.CallerContext")
-        val builder = Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
+        val builder: Class[AnyRef] =
+          Utils.classForName("org.apache.hadoop.ipc.CallerContext$Builder")
         val builderInst = builder.getConstructor(classOf[String]).newInstance(context)
         val hdfsContext = builder.getMethod("build").invoke(builderInst)
         callerContext.getMethod("setCurrent", callerContext).invoke(null, hdfsContext)

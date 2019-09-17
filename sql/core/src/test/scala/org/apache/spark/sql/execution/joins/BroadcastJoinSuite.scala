@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{BitwiseAnd, BitwiseOr, Cast, Literal, ShiftLeft}
+import org.apache.spark.sql.catalyst.plans.logical.BROADCAST
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
@@ -216,10 +217,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
         .optimizedPlan
 
-      assert(plan1.asInstanceOf[Join].hint.leftHint.get.broadcast)
+      assert(plan1.asInstanceOf[Join].hint.leftHint.get.strategy.contains(BROADCAST))
       assert(plan1.asInstanceOf[Join].hint.rightHint.isEmpty)
       assert(plan2.asInstanceOf[Join].hint.leftHint.isEmpty)
-      assert(plan2.asInstanceOf[Join].hint.rightHint.get.broadcast)
+      assert(plan2.asInstanceOf[Join].hint.rightHint.get.strategy.contains(BROADCAST))
       assert(plan3.asInstanceOf[Join].hint.leftHint.isEmpty)
       assert(plan3.asInstanceOf[Join].hint.rightHint.isEmpty)
     }
@@ -280,13 +281,16 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
       assert(t1Size < t2Size)
 
+      /* ######## test cases for equal join ######### */
       // INNER JOIN && t1Size < t2Size => BuildLeft
       assertJoinBuildSide(
         "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
       // LEFT JOIN => BuildRight
+      // broadcast hash join can not build left side for left join.
       assertJoinBuildSide(
         "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2 ON t1.key = t2.key", bh, BuildRight)
       // RIGHT JOIN => BuildLeft
+      // broadcast hash join can not build right side for right join.
       assertJoinBuildSide(
         "SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
       // INNER JOIN && broadcast(t1) => BuildLeft
@@ -296,16 +300,20 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       assertJoinBuildSide(
         "SELECT /*+ MAPJOIN(t2) */ * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildRight)
 
-
+      /* ######## test cases for non-equal join ######### */
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         // INNER JOIN && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 JOIN t2", bl, BuildLeft)
         // FULL JOIN && t1Size < t2Size => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 FULL JOIN t2", bl, BuildLeft)
+        // FULL OUTER && t1Size < t2Size => BuildLeft
+        assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
         // LEFT JOIN => BuildRight
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 LEFT JOIN t2", bl, BuildRight)
         // RIGHT JOIN => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1, t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
+
+        /* #### test with broadcast hint #### */
         // INNER JOIN && broadcast(t1) => BuildLeft
         assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 JOIN t2", bl, BuildLeft)
         // INNER JOIN && broadcast(t2) => BuildRight
@@ -315,8 +323,10 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
         // FULL OUTER && broadcast(t2) => BuildRight
         assertJoinBuildSide(
           "SELECT /*+ MAPJOIN(t2) */ * FROM t1 FULL OUTER JOIN t2", bl, BuildRight)
-        // FULL OUTER && t1Size < t2Size => BuildLeft
-        assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
+        // LEFT JOIN && broadcast(t1) => BuildLeft
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t1) */ * FROM t1 LEFT JOIN t2", bl, BuildLeft)
+        // RIGHT JOIN && broadcast(t2) => BuildRight
+        assertJoinBuildSide("SELECT /*+ MAPJOIN(t2) */ * FROM t1 RIGHT JOIN t2", bl, BuildRight)
       }
     }
   }
@@ -331,6 +341,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
       assert(t1Size < t2Size)
 
+      /* ######## test cases for equal join ######### */
       assertJoinBuildSide("SELECT * FROM t1 JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
       assertJoinBuildSide("SELECT * FROM t2 JOIN t1 ON t1.key = t2.key", bh, BuildRight)
 
@@ -340,13 +351,23 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       assertJoinBuildSide("SELECT * FROM t1 RIGHT JOIN t2 ON t1.key = t2.key", bh, BuildLeft)
       assertJoinBuildSide("SELECT * FROM t2 RIGHT JOIN t1 ON t1.key = t2.key", bh, BuildLeft)
 
+      /* ######## test cases for non-equal join ######### */
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        // For full outer join, prefer to broadcast the smaller side.
         assertJoinBuildSide("SELECT * FROM t1 FULL OUTER JOIN t2", bl, BuildLeft)
         assertJoinBuildSide("SELECT * FROM t2 FULL OUTER JOIN t1", bl, BuildRight)
 
+        // For inner join, prefer to broadcast the smaller side, if broadcast-able.
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (t2Size + 1).toString()) {
+          assertJoinBuildSide("SELECT * FROM t1 JOIN t2", bl, BuildLeft)
+          assertJoinBuildSide("SELECT * FROM t2 JOIN t1", bl, BuildRight)
+        }
+
+        // For left join, prefer to broadcast the right side.
         assertJoinBuildSide("SELECT * FROM t1 LEFT JOIN t2", bl, BuildRight)
         assertJoinBuildSide("SELECT * FROM t2 LEFT JOIN t1", bl, BuildRight)
 
+        // For right join, prefer to broadcast the left side.
         assertJoinBuildSide("SELECT * FROM t1 RIGHT JOIN t2", bl, BuildLeft)
         assertJoinBuildSide("SELECT * FROM t2 RIGHT JOIN t1", bl, BuildLeft)
       }

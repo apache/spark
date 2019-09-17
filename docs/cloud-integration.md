@@ -125,7 +125,7 @@ consult the relevant documentation.
 ### Recommended settings for writing to object stores
 
 For object stores whose consistency model means that rename-based commits are safe
-use the `FileOutputCommitter` v2 algorithm for performance:
+use the `FileOutputCommitter` v2 algorithm for performance; v1 for safety.
 
 ```
 spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
@@ -143,8 +143,30 @@ job failure:
 spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored true
 ```
 
+The original v1 commit algorithm renames the output of successful tasks
+to a job attempt directory, and then renames all the files in that directory
+into the final destination during the job commit phase:
+
+```
+spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 1
+```
+
+The slow performance of mimicked renames on Amazon S3 makes this algorithm
+very, very slow. The recommended solution to this is switch to an S3 "Zero Rename"
+committer (see below).
+
+For reference, here are the performance and safety characteristics of
+different stores and connectors when renaming directories:
+
+| Store         | Connector | Directory Rename Safety | Rename Performance |
+|---------------|-----------|-------------------------|--------------------|
+| Amazon S3     | s3a       | Unsafe                  | O(data) |
+| Azure Storage | wasb      | Safe                    | O(files) |
+| Azure Datalake Gen 2 | abfs | Safe                  | O(1) |
+| Google GCS    | gs        | Safe                    | O(1) |
+
 As storing temporary files can run up charges; delete
-directories called `"_temporary"` on a regular basis to avoid this.
+directories called `"_temporary"` on a regular basis.
 
 ### Parquet I/O Settings
 
@@ -190,15 +212,50 @@ while they are still being written. Applications can write straight to the monit
 atomic `rename()` operation.
 Otherwise the checkpointing may be slow and potentially unreliable.
 
+## Committing work into cloud storage safely and fast.
+
+As covered earlier, commit-by-rename is dangerous on any object store which
+exhibits eventual consistency (example: S3), and often slower than classic
+filesystem renames.
+
+Some object store connectors provide custom committers to commit tasks and
+jobs without using rename. In versions of Spark built with Hadoop 3.1 or later,
+the S3A connector for AWS S3 is such a committer.
+
+Instead of writing data to a temporary directory on the store for renaming,
+these committers write the files to the final destination, but do not issue
+the final POST command to make a large "multi-part" upload visible. Those
+operations are postponed until the job commit itself. As a result, task and
+job commit are much faster, and task failures do not affect the result. 
+
+To switch to the S3A committers, use a version of Spark was built with Hadoop
+3.1 or later, and switch the committers through the following options.
+
+```
+spark.hadoop.fs.s3a.committer.name directory
+spark.sql.sources.commitProtocolClass org.apache.spark.internal.io.cloud.PathOutputCommitProtocol
+spark.sql.parquet.output.committer.class org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter
+```
+
+It has been tested with the most common formats supported by Spark.
+
+```python
+mydataframe.write.format("parquet").save("s3a://bucket/destination")
+```
+
+More details on these committers can be found in the latest Hadoop documentation.
+
 ## Further Reading
 
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
-* [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html). Hadoop 2.6+
-* [Azure Blob Storage](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html). Since Hadoop 2.7
-* [Azure Data Lake](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html). Since Hadoop 2.8
-* [Amazon S3 via S3A and S3N](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html). Hadoop 2.6+
+* [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html).
+* [Azure Blob Storage and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
+* [Azure Data Lake Gen 1](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html).
+* [Hadoop-AWS module (Hadoop 3.x)](https://hadoop.apache.org/docs/current3/hadoop-aws/tools/hadoop-aws/index.html).
+* [Amazon S3 via S3A and S3N (Hadoop 2.x)](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
 * [Amazon EMR File System (EMRFS)](https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-fs.html). From Amazon
 * [Google Cloud Storage Connector for Spark and Hadoop](https://cloud.google.com/hadoop/google-cloud-storage-connector). From Google
-
+* [The Azure Blob Filesystem driver (ABFS)](https://docs.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-abfs-driver)
+* IBM Cloud Object Storage connector for Apache Spark: [Stocator](https://github.com/CODAIT/stocator), [IBM Object Storage](https://www.ibm.com/cloud/object-storage), [how-to-use-connector](https://developer.ibm.com/code/2018/08/16/installing-running-stocator-apache-spark-ibm-cloud-object-storage). From IBM
 

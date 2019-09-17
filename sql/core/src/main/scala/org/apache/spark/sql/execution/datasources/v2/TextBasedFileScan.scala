@@ -19,27 +19,28 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.util.Utils
 
 abstract class TextBasedFileScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
-    readSchema: StructType,
+    readDataSchema: StructType,
+    readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScan(sparkSession, fileIndex, readSchema, options) {
-  private var codecFactory: CompressionCodecFactory = _
+  extends FileScan(sparkSession, fileIndex, readDataSchema, readPartitionSchema) {
+  @transient private lazy val codecFactory: CompressionCodecFactory = new CompressionCodecFactory(
+    sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
 
-  override def isSplitable(path: Path): Boolean = {
-    if (codecFactory == null) {
-      codecFactory = new CompressionCodecFactory(
-        sparkSession.sessionState.newHadoopConfWithOptions(options.asScala.toMap))
-    }
-    val codec = codecFactory.getCodec(path)
-    codec == null || codec.isInstanceOf[SplittableCompressionCodec]
+  override def isSplitable(path: Path): Boolean = Utils.isFileSplittable(path, codecFactory)
+
+  override def getFileUnSplittableReason(path: Path): String = {
+    assert(!isSplitable(path))
+    "the file is compressed by unsplittable compression codec"
   }
 }

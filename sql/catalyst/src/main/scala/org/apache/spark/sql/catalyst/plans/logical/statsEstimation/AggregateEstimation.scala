@@ -39,8 +39,16 @@ object AggregateEstimation {
       // Multiply distinct counts of group-by columns. This is an upper bound, which assumes
       // the data contains all combinations of distinct values of group-by columns.
       var outputRows: BigInt = agg.groupingExpressions.foldLeft(BigInt(1))(
-        (res, expr) => res *
-          childStats.attributeStats(expr.asInstanceOf[Attribute]).distinctCount.get)
+        (res, expr) => {
+          val columnStat = childStats.attributeStats(expr.asInstanceOf[Attribute])
+          val distinctCount = columnStat.distinctCount.get
+          val distinctValue: BigInt = if (columnStat.nullCount.get > 0) {
+            distinctCount + 1
+          } else {
+            distinctCount
+          }
+          res * distinctValue
+        })
 
       outputRows = if (agg.groupingExpressions.isEmpty) {
         // If there's no group-by columns, the output is a single row containing values of aggregate

@@ -27,14 +27,14 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
 abstract class SchemaPruningSuite
   extends QueryTest
   with FileBasedDataSourceTest
   with SchemaPruningTest
-  with SharedSQLContext {
+  with SharedSparkSession {
   case class FullName(first: String, middle: String, last: String)
   case class Company(name: String, address: String)
   case class Employer(id: Int, company: Company)
@@ -135,7 +135,7 @@ abstract class SchemaPruningSuite
       Row("X.", 1) :: Row("Y.", 1) :: Row(null, 2) :: Row(null, 2) :: Nil)
   }
 
-  ignore("partial schema intersection - select missing subfield") {
+  testSchemaPruning("partial schema intersection - select missing subfield") {
     val query = sql("select name.middle, address from contacts where p=2")
     checkScan(query, "struct<name:struct<middle:string>,address:string>")
     checkAnswer(query.orderBy("id"),
@@ -407,7 +407,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  private val schemaEquality = new Equality[StructType] {
+  protected val schemaEquality = new Equality[StructType] {
     override def areEqual(a: StructType, b: Any): Boolean =
       b match {
         case otherType: StructType => a.sameType(otherType)
@@ -422,7 +422,7 @@ abstract class SchemaPruningSuite
     df.collect()
   }
 
-  private def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+  protected def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
       df.queryExecution.executedPlan.collect {
         case scan: FileSourceScanExec => scan.requiredSchema

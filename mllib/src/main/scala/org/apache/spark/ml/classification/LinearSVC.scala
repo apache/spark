@@ -24,7 +24,7 @@ import breeze.optimize.{CachedDiffFunction, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
@@ -59,8 +59,6 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
 }
 
 /**
- * :: Experimental ::
- *
  * <a href = "https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM">
  *   Linear SVM Classifier</a>
  *
@@ -69,7 +67,6 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
  *
  */
 @Since("2.2.0")
-@Experimental
 class LinearSVC @Since("2.2.0") (
     @Since("2.2.0") override val uid: String)
   extends Classifier[Vector, LinearSVC, LinearSVCModel]
@@ -290,11 +287,9 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 }
 
 /**
- * :: Experimental ::
  * Linear SVM Model trained by [[LinearSVC]]
  */
 @Since("2.2.0")
-@Experimental
 class LinearSVCModel private[classification] (
     @Since("2.2.0") override val uid: String,
     @Since("2.2.0") val coefficients: Vector,
@@ -311,9 +306,6 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
   setDefault(threshold, 0.0)
-
-  @Since("2.2.0")
-  def setWeightCol(value: Double): this.type = set(threshold, value)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, coefficients) + intercept

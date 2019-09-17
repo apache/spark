@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -38,7 +37,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * structure needs to be valid. Unsound expressions should be caught by the Analyzer or
  * CheckAnalysis classes.
  */
-class ExpressionParserSuite extends PlanTest {
+class ExpressionParserSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
@@ -51,12 +50,8 @@ class ExpressionParserSuite extends PlanTest {
     compareExpressions(parser.parseExpression(sqlCommand), e)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](defaultParser.parseExpression(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
-  }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(defaultParser.parseExpression)(sqlCommand, messages: _*)
 
   def assertEval(
       sqlCommand: String,
@@ -453,6 +448,12 @@ class ExpressionParserSuite extends PlanTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'")
 
+    // Interval.
+    assertEqual("InterVal 'interval 3 month 1 hour'",
+      Literal(CalendarInterval.fromString("interval 3 month 1 hour")))
+    assertEqual("Interval 'interval 3 monthsss 1 hoursss'",
+      Literal(null, CalendarIntervalType))
+
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
     assertEqual("x'A10C'", Literal(Array(0xa1, 0x0c).map(_.toByte)))
@@ -670,6 +671,18 @@ class ExpressionParserSuite extends PlanTest {
       checkIntervals(s"'$value' day to second", result)
     }
 
+    // Hour-Time intervals.
+    val hourTimeValues = Seq(
+      "11:22:33.123456789",
+      "9:8:7.123456789",
+      "-19:18:17.123456789",
+      "0:0:0",
+      "0:0:1")
+    hourTimeValues.foreach { value =>
+      val result = Literal(CalendarInterval.fromDayTimeString(value))
+      checkIntervals(s"'$value' hour to second", result)
+    }
+
     // Unknown FROM TO intervals
     intercept("interval 10 month to second",
       "Intervals FROM month TO second are not supported.")
@@ -745,6 +758,15 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("first(a)", First('a, Literal(false)).toAggregateExpression())
     assertEqual("last(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
     assertEqual("last(a)", Last('a, Literal(false)).toAggregateExpression())
+  }
+
+  test("Support respect nulls keywords for first_value and last_value") {
+    assertEqual("first_value(a ignore nulls)", First('a, Literal(true)).toAggregateExpression())
+    assertEqual("first_value(a respect nulls)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("first_value(a)", First('a, Literal(false)).toAggregateExpression())
+    assertEqual("last_value(a ignore nulls)", Last('a, Literal(true)).toAggregateExpression())
+    assertEqual("last_value(a respect nulls)", Last('a, Literal(false)).toAggregateExpression())
+    assertEqual("last_value(a)", Last('a, Literal(false)).toAggregateExpression())
   }
 
   test("timestamp literals") {

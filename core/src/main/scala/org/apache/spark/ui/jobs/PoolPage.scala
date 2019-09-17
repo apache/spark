@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.status.PoolData
-import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing specific pool details */

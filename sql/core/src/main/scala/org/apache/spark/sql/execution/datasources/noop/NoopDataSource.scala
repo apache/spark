@@ -21,12 +21,11 @@ import java.util
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, SupportsTruncate, WriteBuilder, WriterCommitMessage}
+import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -39,16 +38,20 @@ class NoopDataSource extends TableProvider with DataSourceRegister {
   override def getTable(options: CaseInsensitiveStringMap): Table = NoopTable
 }
 
-private[noop] object NoopTable extends Table with SupportsWrite with SupportsStreamingWrite {
+private[noop] object NoopTable extends Table with SupportsWrite {
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = NoopWriteBuilder
   override def name(): String = "noop-table"
   override def schema(): StructType = new StructType()
-  override def capabilities(): util.Set[TableCapability] = Set(TableCapability.BATCH_WRITE).asJava
+  override def capabilities(): util.Set[TableCapability] = {
+    Set(
+      TableCapability.BATCH_WRITE,
+      TableCapability.STREAMING_WRITE,
+      TableCapability.TRUNCATE,
+      TableCapability.ACCEPT_ANY_SCHEMA).asJava
+  }
 }
 
-private[noop] object NoopWriteBuilder extends WriteBuilder
-  with SupportsSaveMode with SupportsTruncate {
-  override def mode(mode: SaveMode): WriteBuilder = this
+private[noop] object NoopWriteBuilder extends WriteBuilder with SupportsTruncate {
   override def truncate(): WriteBuilder = this
   override def buildForBatch(): BatchWrite = NoopBatchWrite
   override def buildForStreaming(): StreamingWrite = NoopStreamingWrite

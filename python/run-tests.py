@@ -136,7 +136,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
             # 2 (or --verbose option is enabled).
             decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
             skipped_tests = list(filter(
-                lambda line: re.search(r'test_.* \(pyspark\..*\) ... skipped ', line),
+                lambda line: re.search(r'test_.* \(pyspark\..*\) ... (skip|SKIP)', line),
                 decoded_lines))
             skipped_counts = len(skipped_tests)
             if skipped_counts > 0:
@@ -160,7 +160,7 @@ def run_individual_python_test(target_dir, test_name, pyspark_python):
 
 
 def get_default_python_executables():
-    python_execs = [x for x in ["python2.7", "python3.4", "pypy"] if which(x)]
+    python_execs = [x for x in ["python2.7", "python3.6", "pypy"] if which(x)]
     if "python2.7" not in python_execs:
         LOGGER.warning("Not testing against `python2.7` because it could not be found; falling"
                        " back to `python` instead")

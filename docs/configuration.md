@@ -181,10 +181,66 @@ of the most common options to set are:
   <td><code>spark.driver.memoryOverhead</code></td>
   <td>driverMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory to be allocated per driver in cluster mode, in MiB unless
-    otherwise specified. This is memory that accounts for things like VM overheads, interned strings, 
+    Amount of non-heap memory to be allocated per driver process in cluster mode, in MiB unless
+    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
     other native overheads, etc. This tends to grow with the container size (typically 6-10%). 
     This option is currently supported on YARN, Mesos and Kubernetes.
+    <em>Note:</em> Non-heap memory includes off-heap memory 
+    (when <code>spark.memory.offHeap.enabled=true</code>) and memory used by other driver processes
+    (e.g. python process that goes with a PySpark driver) and memory used by other non-driver 
+    processes running in the same container. The maximum memory size of container to running 
+    driver is determined by the sum of <code>spark.driver.memoryOverhead</code> 
+    and <code>spark.driver.memory</code>.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.resources.coordinate.enable</code></td>
+  <td>true</td>
+  <td>
+    Whether to coordinate resources automatically among workers/drivers(client only) 
+    in Standalone. If false, the user is responsible for configuring different resources
+    for workers/drivers that run on the same host.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.resources.dir</code></td>
+  <td>SPARK_HOME</td>
+  <td>
+    Directory used to coordinate resources among workers/drivers(client only) in Standalone.
+    Default is SPARK_HOME. Make sure to use the same directory for worker and drivers in
+    client mode that run on the same host. Don't clean up this directory while workers/drivers
+    are still alive to avoid the most likely resources conflict. 
+  </td>
+</tr>
+<tr>
+ <td><code>spark.driver.resource.{resourceName}.amount</code></td>
+  <td>0</td>
+  <td>
+    Amount of a particular resource type to use on the driver.
+    If this is used, you must also specify the
+    <code>spark.driver.resource.{resourceName}.discoveryScript</code>
+    for the driver to find the resource on startup.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.driver.resource.{resourceName}.discoveryScript</code></td>
+  <td>None</td>
+  <td>
+    A script for the driver to run to discover a particular resource type. This should
+    write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
+    name and an array of addresses. For a client-submitted driver in Standalone, discovery
+    script must assign different resource addresses to this driver comparing to workers' and
+    other drivers' when <code>spark.resources.coordinate.enable</code> is off.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.driver.resource.{resourceName}.vendor</code></td>
+  <td>None</td>
+  <td>
+    Vendor of the resources to use for the driver. This option is currently
+    only supported on Kubernetes and is actually both the vendor and domain following
+    the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
+    this config would be set to nvidia.com or amd.com)
   </td>
 </tr>
 <tr>
@@ -215,10 +271,46 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    The amount of off-heap memory to be allocated per executor, in MiB unless otherwise specified.
-    This is memory that accounts for things like VM overheads, interned strings, other native 
-    overheads, etc. This tends to grow with the executor size (typically 6-10%).
+    Amount of additional memory to be allocated per executor process in cluster mode, in MiB unless
+    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
+    other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
     This option is currently supported on YARN and Kubernetes.
+    <br/>
+    <em>Note:</em> Additional memory includes PySpark executor memory 
+    (when <code>spark.executor.pyspark.memory</code> is not configured) and memory used by other
+    non-executor processes running in the same container. The maximum memory size of container to 
+    running executor is determined by the sum of <code>spark.executor.memoryOverhead</code>, 
+    <code>spark.executor.memory</code>, <code>spark.memory.offHeap.size</code> and 
+    <code>spark.executor.pyspark.memory</code>.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.resource.{resourceName}.amount</code></td>
+  <td>0</td>
+  <td>
+    Amount of a particular resource type to use per executor process.
+    If this is used, you must also specify the
+    <code>spark.executor.resource.{resourceName}.discoveryScript</code>
+    for the executor to find the resource on startup.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.resource.{resourceName}.discoveryScript</code></td>
+  <td>None</td>
+  <td>
+    A script for the executor to run to discover a particular resource type. This should
+    write to STDOUT a JSON string in the format of the ResourceInformation class. This has a
+    name and an array of addresses.
+  </td>
+</tr>
+<tr>
+ <td><code>spark.executor.resource.{resourceName}.vendor</code></td>
+  <td>None</td>
+  <td>
+    Vendor of the resources to use for the executors. This option is currently
+    only supported on Kubernetes and is actually both the vendor and domain following
+    the Kubernetes device plugin naming convention. (e.g. For GPUs on Kubernetes
+    this config would be set to nvidia.com or amd.com)
   </td>
 </tr>
 <tr>
@@ -340,10 +432,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.driver.extraJavaOptions</code></td>
+  <td><code>spark.driver.defaultJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    A string of default JVM options to prepend to <code>spark.driver.extraJavaOptions</code>.
+    This is intended to be set by administrators.
+
+    For instance, GC settings or other logging.
     Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
     size settings can be set with <code>spark.driver.memory</code> in the cluster mode and through
     the <code>--driver-memory</code> command line option in the client mode.
@@ -352,6 +447,25 @@ Apart from these, the following properties are also available, and may be useful
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
     your default properties file.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to the driver. This is intended to be set by users.
+
+    For instance, GC settings or other logging.
+    Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
+    size settings can be set with <code>spark.driver.memory</code> in the cluster mode and through
+    the <code>--driver-memory</code> command line option in the client mode.
+
+    <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
+    directly in your application, because the driver JVM has already started at that point.
+    Instead, please set this through the <code>--driver-java-options</code> command line option or in
+    your default properties file.
+
+    <code>spark.driver.defaultJavaOptions</code> will be prepended to this configuration.
   </td>
 </tr>
 <tr>
@@ -387,10 +501,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.extraJavaOptions</code></td>
+  <td><code>spark.executor.defaultJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
+    A string of default JVM options to prepend to <code>spark.executor.extraJavaOptions</code>.
+    This is intended to be set by administrators.
+
+    For instance, GC settings or other logging.
     Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
     option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
     used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
@@ -399,6 +516,25 @@ Apart from these, the following properties are also available, and may be useful
     application ID and {{EXECUTOR_ID}} will be replaced by executor ID. For example, to enable
     verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
     <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to executors. This is intended to be set by users.
+
+    For instance, GC settings or other logging.
+    Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
+    option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
+    used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
+
+    The following symbols, if present will be interpolated: {{APP_ID}} will be replaced by
+    application ID and {{EXECUTOR_ID}} will be replaced by executor ID. For example, to enable
+    verbose gc logging to a file named for the executor ID of the app in /tmp, pass a 'value' of:
+    <code>-verbose:gc -Xloggc:/tmp/{{APP_ID}}-{{EXECUTOR_ID}}.gc</code>
+
+    <code>spark.executor.defaultJavaOptions</code> will be prepended to this configuration.
   </td>
 </tr>
 <tr>
@@ -472,7 +608,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.redaction.regex</code></td>
-  <td>(?i)secret|password</td>
+  <td>(?i)secret|password|token</td>
   <td>
     Regex to decide which Spark configuration properties and environment variables in driver and
     executor environments contain sensitive information. When this regex matches a property key or
@@ -581,7 +717,7 @@ Apart from these, the following properties are also available, and may be useful
     option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
-    found at http://ant.apache.org/ivy/history/latest-milestone/settings.html
+    found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>
   </td>
 </tr>
  <tr>
@@ -697,6 +833,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.io.backLog</code></td>
+  <td>64</td>
+  <td>
+    Length of the accept queue for the shuffle service. For large applications, this value may
+    need to be increased, so that incoming connections are not dropped if the service cannot keep
+    up with a large number of connections arriving in a short period of time. This needs to
+    be configured wherever the shuffle service itself is running, which may be outside of the
+    application (see <code>spark.shuffle.service.enabled</code> option below).
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.enabled</code></td>
   <td>false</td>
   <td>
@@ -798,7 +945,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
-    Compression will use <code>spark.io.compression.codec</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.compression.codec</code></td>
+  <td></td>
+  <td>
+    The codec to compress logged events. If this is not given,
+    <code>spark.io.compression.codec</code> will be used.
   </td>
 </tr>
 <tr>
@@ -875,6 +1029,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.ui.liveUpdate.minFlushPeriod</code></td>
+  <td>1s</td>
+  <td>
+    Minimum time elapsed before stale UI data is flushed. This avoids UI staleness when incoming
+    task events are not fired frequently.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.port</code></td>
   <td>4040</td>
   <td>
@@ -921,11 +1083,13 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.ui.showConsoleProgress</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Show the progress bar in the console. The progress bar shows the progress of stages
     that run for longer than 500ms. If multiple stages run at the same time, multiple
     progress bars will be displayed on the same line.
+    <br/>
+    <em>Note:</em> In shell environment, the default value of spark.ui.showConsoleProgress is true.
   </td>
 </tr>
 <tr>
@@ -1001,7 +1165,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The maximum allowed size for a HTTP request header, in bytes unless otherwise specified.
     This setting applies for the Spark History Server too.
-  <td>
+  </td>
 </tr>
 </table>
 
@@ -1016,6 +1180,14 @@ Apart from these, the following properties are also available, and may be useful
     Whether to compress broadcast variables before sending them. Generally a good idea.
     Compression will use <code>spark.io.compression.codec</code>.
   </td>
+</tr>
+<tr>
+  <td><code>spark.checkpoint.compress</code></td>
+  <td>false</td>
+  <td>
+    Whether to compress RDD checkpoints. Generally a good idea.
+    Compression will use <code>spark.io.compression.codec</code>.
+   </td>
 </tr>
 <tr>
   <td><code>spark.io.compression.codec</code></td>
@@ -1470,6 +1642,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.rpc.io.backLog</code></td>
+  <td>64</td>
+  <td>
+    Length of the accept queue for the RPC server. For large applications, this value may
+    need to be increased, so that incoming connections are not dropped when a large number of
+    connections arrives in a short period of time.
+  </td>
+</tr>
+<tr>
   <td><code>spark.network.timeout</code></td>
   <td>120s</td>
   <td>
@@ -1786,6 +1967,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.task.resource.{resourceName}.amount</code></td>
+  <td>1</td>
+  <td>
+    Amount of a particular resource type to allocate for each task. If this is specified
+    you must also provide the executor config <code>spark.executor.resource.{resourceName}.amount</code>
+    and any corresponding discovery configs so that your executors are created with that resource type.
+  </td>
+</tr>
+<tr>
   <td><code>spark.task.maxFailures</code></td>
   <td>4</td>
   <td>
@@ -1842,6 +2032,50 @@ Apart from these, the following properties are also available, and may be useful
   <td>4</td>
   <td>
     Number of consecutive stage attempts allowed before a stage is aborted.
+  </td>
+</tr>
+</table>
+
+### Barrier Execution Mode
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.barrier.sync.timeout</code></td>
+  <td>365d</td>
+  <td>
+    The timeout in seconds for each <code>barrier()</code> call from a barrier task. If the
+    coordinator didn't receive all the sync messages from barrier tasks within the
+    configured time, throw a SparkException to fail all the tasks. The default value is set
+    to 31536000(3600 * 24 * 365) so the <code>barrier()</code> call shall wait for one year.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.interval</code></td>
+  <td>15s</td>
+  <td>
+    Time in seconds to wait between a max concurrent tasks check failure and the next
+    check. A max concurrent tasks check ensures the cluster can launch more concurrent
+    tasks than required by a barrier stage on job submitted. The check can fail in case
+    a cluster has just started and not enough executors have registered, so we wait for a
+    little while and try to perform the check again. If the check fails more than a
+    configured max failure times for a job then fail current job submission. Note this
+    config only applies to jobs that contain one or more barrier stages, we won't perform
+    the check on non-barrier jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures</code></td>
+  <td>40</td>
+  <td>
+    Number of max concurrent tasks check failures allowed before fail a job submission.
+    A max concurrent tasks check ensures the cluster can launch more concurrent tasks than
+    required by a barrier stage on job submitted. The check can fail in case a cluster
+    has just started and not enough executors have registered, so we wait for a little
+    while and try to perform the check again. If the check fails more than a configured
+    max failure times for a job then fail current job submission. Note this config only
+    applies to jobs that contain one or more barrier stages, we won't perform the check on
+    non-barrier jobs.
   </td>
 </tr>
 </table>
@@ -1944,8 +2178,66 @@ Apart from these, the following properties are also available, and may be useful
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
+<tr>
+  <td><code>spark.dynamicAllocation.shuffleTracking.enabled</code></td>
+  <td><code>false</code></td>
+  <td>
+    Experimental. Enables shuffle file tracking for executors, which allows dynamic allocation
+    without the need for an external shuffle service. This option will try to keep alive executors
+    that are storing shuffle data for active jobs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.shuffleTimeout</code></td>
+  <td><code>infinity</code></td>
+  <td>
+    When shuffle tracking is enabled, controls the timeout for executors that are holding shuffle
+    data. The default value means that Spark will rely on the shuffles being garbage collected to be
+    able to release executors. If for some reason garbage collection is not cleaning up shuffles
+    quickly enough, this option can be used to control when to time out executors even when they are
+    storing shuffle data.
+  </td>
+</tr>
 </table>
 
+### Thread Configurations
+
+Depending on jobs and cluster configurations, we can set number of threads in several places in Spark to utilize 
+available resources efficiently to get better performance. Prior to Spark 3.0, these thread configurations apply 
+to all roles of Spark, such as driver, executor, worker and master. From Spark 3.0, we can configure threads in 
+finer granularity starting from driver and executor. Take RPC module as example in below table. For other modules,
+like shuffle, just replace "rpc" with "shuffle" in the property names except 
+<code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code>, which is only for RPC module.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.{driver|executor}.rpc.io.serverThreads</code></td>
+  <td>
+    Fall back on <code>spark.rpc.io.serverThreads</code>
+  </td>
+  <td>Number of threads used in the server thread pool</td>
+</tr>
+<tr>
+  <td><code>spark.{driver|executor}.rpc.io.clientThreads</code></td>
+  <td>
+    Fall back on <code>spark.rpc.io.clientThreads</code>
+  </td>
+  <td>Number of threads used in the client thread pool</td>
+</tr>
+<tr>
+  <td><code>spark.{driver|executor}.rpc.netty.dispatcher.numThreads</code></td>
+  <td>
+    Fall back on <code>spark.rpc.netty.dispatcher.numThreads</code>
+  </td>
+  <td>Number of threads used in RPC message dispatcher thread pool</td>
+</tr>
+</table>
+
+The default value for number of thread-related config keys is the minimum of the number of cores requested for 
+the driver or executor, or, in the absence of that value, the number of cores available for the JVM (with a hardcoded upper limit of 8).
+
+    
 ### Security
 
 Please refer to the [Security](security.html) page for available options on how to secure different
@@ -2325,3 +2617,15 @@ Also, you can modify or add configurations at runtime:
   --conf spark.hadoop.abc.def=xyz \ 
   myApp.jar
 {% endhighlight %}
+
+# Custom Resource Scheduling and Configuration Overview
+
+GPUs and other accelerators have been widely used for accelerating special workloads, e.g.,
+deep learning and signal processing. Spark now supports requesting and scheduling generic resources, such as GPUs, with a few caveats. The current implementation requires that the resource have addresses that can be allocated by the scheduler. It requires your cluster manager to support and be properly configured with the resources.
+
+There are configurations available to request resources for the driver: <code>spark.driver.resource.{resourceName}.amount</code>, request resources for the executor(s): <code>spark.executor.resource.{resourceName}.amount</code> and specify the requirements for each task: <code>spark.task.resource.{resourceName}.amount</code>. The <code>spark.driver.resource.{resourceName}.discoveryScript</code> config is required on YARN, Kubernetes and a client side Driver on Spark Standalone. <code>spark.driver.executor.{resourceName}.discoveryScript</code> config is required for YARN and Kubernetes. Kubernetes also requires <code>spark.driver.resource.{resourceName}.vendor</code> and/or <code>spark.executor.resource.{resourceName}.vendor</code>. See the config descriptions above for more information on each.
+
+Spark will use the configurations specified to first request containers with the corresponding resources from the cluster manager. Once it gets the container, Spark launches an Executor in that container which will discover what resources the container has and the addresses associated with each resource. The Executor will register with the Driver and report back the resources available to that Executor. The Spark scheduler can then schedule tasks to each Executor and assign specific resource addresses based on the resource requirements the user specified. The user can see the resources assigned to a task using the <code>TaskContext.get().resources</code> api. On the driver, the user can see the resources assigned with the SparkContext <code>resources</code> call. It's then up to the user to use the assignedaddresses to do the processing they want or pass those into the ML/AI framework they are using.
+
+See your cluster manager specific page for requirements and details on each of - [YARN](running-on-yarn.html#resource-allocation-and-configuration-overview), [Kubernetes](running-on-kubernetes.html#resource-allocation-and-configuration-overview) and [Standalone Mode](spark-standalone.html#resource-allocation-and-configuration-overview). It is currently not available with Mesos or local mode. If using local-cluster mode see the Spark Standalone documentation but be aware only a single worker resources file or discovery script can be specified the is shared by all the Workers so you should enable resource coordination (see <code>spark.resources.coordinate.enable</code>).
+

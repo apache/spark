@@ -24,6 +24,8 @@ import java.util.Properties
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceUtils.GPU
 
 class TaskDescriptionSuite extends SparkFunSuite {
   test("encoding and then decoding a TaskDescription results in the same TaskDescription") {
@@ -53,6 +55,9 @@ class TaskDescriptionSuite extends SparkFunSuite {
       }
     }
 
+    val originalResources =
+      Map(GPU -> new ResourceInformation(GPU, Array("1", "2", "3")))
+
     // Create a dummy byte buffer for the task.
     val taskBuffer = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
 
@@ -66,6 +71,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
       originalFiles,
       originalJars,
       originalProperties,
+      originalResources,
       taskBuffer
     )
 
@@ -82,6 +88,17 @@ class TaskDescriptionSuite extends SparkFunSuite {
     assert(decodedTaskDescription.addedFiles.equals(originalFiles))
     assert(decodedTaskDescription.addedJars.equals(originalJars))
     assert(decodedTaskDescription.properties.equals(originalTaskDescription.properties))
+    assert(equalResources(decodedTaskDescription.resources, originalTaskDescription.resources))
     assert(decodedTaskDescription.serializedTask.equals(taskBuffer))
+
+    def equalResources(original: Map[String, ResourceInformation],
+        target: Map[String, ResourceInformation]): Boolean = {
+      original.size == target.size && original.forall { case (name, info) =>
+        target.get(name).exists { targetInfo =>
+          info.name.equals(targetInfo.name) &&
+            info.addresses.sameElements(targetInfo.addresses)
+        }
+      }
+    }
   }
 }

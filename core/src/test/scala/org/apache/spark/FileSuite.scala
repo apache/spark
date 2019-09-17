@@ -35,7 +35,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInp
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
 import org.apache.spark.internal.config._
-import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD, RDD}
+import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -206,8 +206,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     Utils.withContextClassLoader(loader) {
       sc = new SparkContext("local", "test")
-      val objs = sc.makeRDD(1 to 3).map { x =>
-        Utils.classForName(className, noSparkClassLoader = true).getConstructor().newInstance()
+      val objs = sc.makeRDD(1 to 3).map { _ =>
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true).
+          getConstructor().newInstance()
       }
       val outputDir = new File(tempDir, "output").getAbsolutePath
       objs.saveAsObjectFile(outputDir)
