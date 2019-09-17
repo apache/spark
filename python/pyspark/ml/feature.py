@@ -2058,7 +2058,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are skip (filter out rows with invalid values), " +
                           "error (throw an error), or keep (keep invalid values in a special " +
-                          "additional bucket).Note that in the multiple column " +
+                          "additional bucket). Note that in the multiple column " +
                           "case, the invalid handling is applied to all columns. That said " +
                           "for 'error' it will throw an error if any invalids are found in " +
                           "any column, for 'skip' it will skip rows with any invalids in " +
@@ -2144,7 +2144,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
         """
         Private method to convert the java_model to a Python model.
         """
-        if (self.isSet(self.inputCol) is True):
+        if (self.isSet(self.inputCol)):
             return Bucketizer(splits=list(java_model.getSplits()),
                               inputCol=self.getInputCol(),
                               outputCol=self.getOutputCol(),
