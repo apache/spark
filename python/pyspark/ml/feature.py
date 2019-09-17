@@ -1962,10 +1962,10 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
                           HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
-    :py:class:`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-    categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
-    It is possible that the number of buckets used will be less than this value, for example, if
-    there are too few distinct values of the input to create enough distinct quantiles.
+    :py:class:`QuantileDiscretizer` takes a column with continuous features and outputs a column
+    with binned categorical features. The number of bins can be set using the :py:attr:`numBuckets`
+    parameter. It is possible that the number of buckets used will be less than this value, for
+    example, if there are too few distinct values of the input to create enough distinct quantiles.
     Since 3.0.0, :py:class:`QuantileDiscretizer` can map multiple columns at once by setting the
     :py:attr:`inputCols` parameter. If both of the :py:attr:`inputCol` and :py:attr:`inputCols`
     parameters are set, an Exception will be thrown. To specify the number of buckets for each
@@ -1973,8 +1973,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
     should be the same across columns, :py:attr:`numBuckets` can be set as a convenience.
 
     NaN handling: Note also that
-    :py:class:`QuantileDiscretizer` will raise an error when it finds NaN values in the dataset, but the user
-    can also choose to either keep or remove NaN values within the dataset by setting
+    :py:class:`QuantileDiscretizer` will raise an error when it finds NaN values in the dataset,
+    but the user can also choose to either keep or remove NaN values within the dataset by setting
     :py:attr:`handleInvalid` parameter. If the user chooses to keep NaN values, they will be
     handled specially and placed into their own bucket, for example, if 4 buckets are used, then
     non-NaN data will be put into buckets[0-3], but NaNs will be counted in a special bucket[4].
