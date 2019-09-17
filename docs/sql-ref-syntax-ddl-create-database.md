@@ -39,7 +39,7 @@ CREATE {DATABASE | SCHEMA} [ IF NOT EXISTS ] database_name
     <dd>Creates a database with the given name if it doesn't exists. If a database with the same name already exists, nothing will happen.</dd>
 
     <dt><code><em>database_directory</em></code></dt>
-    <dd>Path of the file system in which database to be created. If the specified path does not exist in the underlying file system, this command creates a directory with the path. If location is not specified, database will be created in default warehouse directory.</dd>
+    <dd>Path of the file system in which the specified database is to be created. If the specified path does not exist in the underlying file system, this command creates a directory with the path. If location is not specified, database will be created in default warehouse directory.</dd>
 
     <dt><code><em>database_comment</em></code></dt>
     <dd>Specifies the description for the database.</dd>
