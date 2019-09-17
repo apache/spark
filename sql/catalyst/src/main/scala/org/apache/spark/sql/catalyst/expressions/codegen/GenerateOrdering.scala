@@ -25,6 +25,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -46,7 +47,7 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+    bindReferences(in, inputSchema)
 
   /**
    * Creates a code gen ordering for sorting this schema, in ascending order.
@@ -69,59 +70,54 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   }
 
   /**
+   * Creates the variables for ordering based on the given order.
+   */
+  private def createOrderKeys(
+      ctx: CodegenContext,
+      row: String,
+      ordering: Seq[SortOrder]): Seq[ExprCode] = {
+    ctx.INPUT_ROW = row
+    // to use INPUT_ROW we must make sure currentVars is null
+    ctx.currentVars = null
+    ordering.map(_.child.genCode(ctx))
+  }
+
+  /**
    * Generates the code for ordering based on the given order.
    */
   def genComparisons(ctx: CodegenContext, ordering: Seq[SortOrder]): String = {
-    val comparisons = ordering.map { order =>
-      val oldCurrentVars = ctx.currentVars
-      ctx.INPUT_ROW = "i"
-      // to use INPUT_ROW we must make sure currentVars is null
-      ctx.currentVars = null
-      val eval = order.child.genCode(ctx)
-      ctx.currentVars = oldCurrentVars
-      val asc = order.isAscending
-      val isNullA = ctx.freshName("isNullA")
-      val primitiveA = ctx.freshName("primitiveA")
-      val isNullB = ctx.freshName("isNullB")
-      val primitiveB = ctx.freshName("primitiveB")
+    val oldInputRow = ctx.INPUT_ROW
+    val oldCurrentVars = ctx.currentVars
+    val rowAKeys = createOrderKeys(ctx, "a", ordering)
+    val rowBKeys = createOrderKeys(ctx, "b", ordering)
+    val comparisons = rowAKeys.zip(rowBKeys).zipWithIndex.map { case ((l, r), i) =>
+      val dt = ordering(i).child.dataType
+      val asc = ordering(i).isAscending
+      val nullOrdering = ordering(i).nullOrdering
+      val lRetValue = nullOrdering match {
+        case NullsFirst => "-1"
+        case NullsLast => "1"
+      }
+      val rRetValue = nullOrdering match {
+        case NullsFirst => "1"
+        case NullsLast => "-1"
+      }
       s"""
-          ${ctx.INPUT_ROW} = a;
-          boolean $isNullA;
-          ${ctx.javaType(order.child.dataType)} $primitiveA;
-          {
-            ${eval.code}
-            $isNullA = ${eval.isNull};
-            $primitiveA = ${eval.value};
-          }
-          ${ctx.INPUT_ROW} = b;
-          boolean $isNullB;
-          ${ctx.javaType(order.child.dataType)} $primitiveB;
-          {
-            ${eval.code}
-            $isNullB = ${eval.isNull};
-            $primitiveB = ${eval.value};
-          }
-          if ($isNullA && $isNullB) {
-            // Nothing
-          } else if ($isNullA) {
-            return ${
-              order.nullOrdering match {
-                case NullsFirst => "-1"
-                case NullsLast => "1"
-              }};
-          } else if ($isNullB) {
-            return ${
-              order.nullOrdering match {
-                case NullsFirst => "1"
-                case NullsLast => "-1"
-              }};
-          } else {
-            int comp = ${ctx.genComp(order.child.dataType, primitiveA, primitiveB)};
-            if (comp != 0) {
-              return ${if (asc) "comp" else "-comp"};
-            }
-          }
-      """
+          |${l.code}
+          |${r.code}
+          |if (${l.isNull} && ${r.isNull}) {
+          |  // Nothing
+          |} else if (${l.isNull}) {
+          |  return $lRetValue;
+          |} else if (${r.isNull}) {
+          |  return $rRetValue;
+          |} else {
+          |  int comp = ${ctx.genComp(dt, l.value, r.value)};
+          |  if (comp != 0) {
+          |    return ${if (asc) "comp" else "-comp"};
+          |  }
+          |}
+      """.stripMargin
     }
 
     val code = ctx.splitExpressions(
@@ -131,28 +127,24 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
       returnType = "int",
       makeSplitFunction = { body =>
         s"""
-          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
-          $body
-          return 0;
-        """
+          |$body
+          |return 0;
+        """.stripMargin
       },
       foldFunctions = { funCalls =>
         funCalls.zipWithIndex.map { case (funCall, i) =>
           val comp = ctx.freshName("comp")
           s"""
-            int $comp = $funCall;
-            if ($comp != 0) {
-              return $comp;
-            }
-          """
+            |int $comp = $funCall;
+            |if ($comp != 0) {
+            |  return $comp;
+            |}
+          """.stripMargin
         }.mkString
       })
-    // make sure INPUT_ROW is declared even if splitExpressions
-    // returns an inlined block
-    s"""
-       |InternalRow ${ctx.INPUT_ROW} = null;
-       |$code
-     """.stripMargin
+    ctx.currentVars = oldCurrentVars
+    ctx.INPUT_ROW = oldInputRow
+    code
   }
 
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
@@ -173,19 +165,20 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           ${ctx.initMutableStates()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public int compare(InternalRow a, InternalRow b) {
           $comparisons
           return 0;
         }
+
+        ${ctx.declareAddedFunctions()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated Ordering by ${ordering.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }
 }
 
@@ -196,7 +189,7 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
   extends Ordering[InternalRow] with KryoSerializable {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
-    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+    this(bindReferences(ordering, inputSchema))
 
   @transient
   private[this] var generatedOrdering = GenerateOrdering.generate(ordering)

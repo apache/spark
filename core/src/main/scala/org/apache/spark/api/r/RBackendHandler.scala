@@ -20,15 +20,14 @@ package org.apache.spark.api.r
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.util.concurrent.TimeUnit
 
-import scala.language.existentials
-
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.handler.timeout.ReadTimeoutException
 
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
 import org.apache.spark.internal.Logging
-import org.apache.spark.SparkConf
+import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -97,11 +96,9 @@ private[r] class RBackendHandler(server: RBackend)
           ctx.write(pingBaos.toByteArray)
         }
       }
-      val conf = new SparkConf()
-      val heartBeatInterval = conf.getInt(
-        "spark.r.heartBeatInterval", SparkRDefaults.DEFAULT_HEARTBEAT_INTERVAL)
-      val backendConnectionTimeout = conf.getInt(
-        "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
+      val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf())
+      val heartBeatInterval = conf.get(R_HEARTBEAT_INTERVAL)
+      val backendConnectionTimeout = conf.get(R_BACKEND_CONNECTION_TIMEOUT)
       val interval = Math.min(heartBeatInterval, backendConnectionTimeout - 1)
 
       execService.scheduleAtFixedRate(pingRunner, interval, interval, TimeUnit.SECONDS)

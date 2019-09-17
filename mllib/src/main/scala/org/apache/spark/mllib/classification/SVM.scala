@@ -85,8 +85,6 @@ class SVMModel @Since("1.1.0") (
       numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
   }
 
-  override protected def formatVersion: String = "1.0"
-
   override def toString: String = {
     s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
   }

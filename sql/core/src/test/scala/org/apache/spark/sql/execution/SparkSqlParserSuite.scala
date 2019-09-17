@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
-import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.sql.{DescribeColumnStatement, DescribeTableStatement}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
@@ -36,7 +35,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * See [[org.apache.spark.sql.catalyst.parser.PlanParserSuite]] for rules
  * defined in the Catalyst module.
  */
-class SparkSqlParserSuite extends PlanTest {
+class SparkSqlParserSuite extends AnalysisTest {
 
   val newConf = new SQLConf
   private lazy val parser = new SparkSqlParser(newConf)
@@ -60,11 +59,26 @@ class SparkSqlParserSuite extends PlanTest {
     comparePlans(normalized1, normalized2)
   }
 
-  private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parser.parsePlan(sqlCommand))
-    messages.foreach { message =>
-      assert(e.message.contains(message))
-    }
+  private def intercept(sqlCommand: String, messages: String*): Unit =
+    interceptParseException(parser.parsePlan)(sqlCommand, messages: _*)
+
+  test("refresh resource") {
+    assertEqual("REFRESH prefix_path", RefreshResource("prefix_path"))
+    assertEqual("REFRESH /", RefreshResource("/"))
+    assertEqual("REFRESH /path///a", RefreshResource("/path///a"))
+    assertEqual("REFRESH pat1h/112/_1a", RefreshResource("pat1h/112/_1a"))
+    assertEqual("REFRESH pat1h/112/_1a/a-1", RefreshResource("pat1h/112/_1a/a-1"))
+    assertEqual("REFRESH path-with-dash", RefreshResource("path-with-dash"))
+    assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
+    assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
+    intercept("REFRESH a b", "REFRESH statements cannot contain")
+    intercept("REFRESH a\tb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\rb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\r\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
+    intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
+    intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
   test("show functions") {
@@ -197,42 +211,10 @@ class SparkSqlParserSuite extends PlanTest {
       "no viable alternative at input")
   }
 
-  test("create table using - schema") {
-    assertEqual("CREATE TABLE my_tab(a INT COMMENT 'test', b STRING) USING parquet",
-      createTableUsing(
-        table = "my_tab",
-        schema = (new StructType)
-          .add("a", IntegerType, nullable = true, "test")
-          .add("b", StringType)
-      )
-    )
-    intercept("CREATE TABLE my_tab(a: INT COMMENT 'test', b: STRING) USING parquet",
-      "no viable alternative at input")
-  }
-
-  test("create view as insert into table") {
-    // Single insert query
-    intercept("CREATE VIEW testView AS INSERT INTO jt VALUES(1, 1)",
-      "Operation not allowed: CREATE VIEW ... AS INSERT INTO")
-
-    // Multi insert query
-    intercept("CREATE VIEW testView AS FROM jt INSERT INTO tbl1 SELECT * WHERE jt.id < 5 " +
-      "INSERT INTO tbl2 SELECT * WHERE jt.id > 4",
-      "Operation not allowed: CREATE VIEW ... AS FROM ... [INSERT INTO ...]+")
-  }
-
-  test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
-    assertEqual("describe table t",
-      DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = false))
-    assertEqual("describe table extended t",
-      DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = true, isFormatted = false))
-    assertEqual("describe table formatted t",
-      DescribeTableCommand(
-        TableIdentifier("t"), Map.empty, isExtended = false, isFormatted = true))
-
-    intercept("explain describe tables x", "Unsupported SQL statement")
+  test("describe query") {
+    val query = "SELECT * FROM t"
+    assertEqual("DESCRIBE QUERY " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
+    assertEqual("DESCRIBE " + query, DescribeQueryCommand(query, parser.parsePlan(query)))
   }
 
   test("analyze table statistics") {
@@ -241,17 +223,33 @@ class SparkSqlParserSuite extends PlanTest {
     assertEqual("analyze table t compute statistics noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
     assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
 
-    // Partitions specified - we currently parse them but don't do anything with it
+    // Partitions specified
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
@@ -263,7 +261,22 @@ class SparkSqlParserSuite extends PlanTest {
     intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
-      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified - should be ignored
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
+      "COMPUTE STATISTICS FOR COLUMNS key, value",
+      AnalyzeColumnCommand(TableIdentifier("t"), Option(Seq("key", "value")), allColumns = false))
+
+    // Partition specified should be ignored in case of COMPUTE STATISTICS FOR ALL COLUMNS
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
+      "COMPUTE STATISTICS FOR ALL COLUMNS",
+      AnalyzeColumnCommand(TableIdentifier("t"), None, allColumns = true))
+
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL COLUMNS key, value",
+      "mismatched input 'key' expecting <EOF>")
+    intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR ALL",
+      "missing 'COLUMNS' at '<EOF>'")
   }
 
   test("query organization") {
@@ -289,5 +302,24 @@ class SparkSqlParserSuite extends PlanTest {
         RepartitionByExpression(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil,
           basePlan,
           numPartitions = newConf.numShufflePartitions)))
+  }
+
+  test("pipeline concatenation") {
+    val concat = Concat(
+      Concat(UnresolvedAttribute("a") :: UnresolvedAttribute("b") :: Nil) ::
+      UnresolvedAttribute("c") ::
+      Nil
+    )
+    assertEqual(
+      "SELECT a || b || c FROM t",
+      Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
+  }
+
+  test("database and schema tokens are interchangeable") {
+    assertEqual("CREATE DATABASE foo", parser.parsePlan("CREATE SCHEMA foo"))
+    assertEqual("DROP DATABASE foo", parser.parsePlan("DROP SCHEMA foo"))
+    assertEqual("ALTER DATABASE foo SET DBPROPERTIES ('x' = 'y')",
+      parser.parsePlan("ALTER SCHEMA foo SET DBPROPERTIES ('x' = 'y')"))
+    assertEqual("DESC DATABASE foo", parser.parsePlan("DESC SCHEMA foo"))
   }
 }

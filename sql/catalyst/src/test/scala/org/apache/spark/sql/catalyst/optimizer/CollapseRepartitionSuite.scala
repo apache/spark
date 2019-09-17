@@ -106,8 +106,8 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized2, correctAnswer)
   }
 
-  test("repartitionBy above repartition") {
-    // Always respects the top repartitionBy amd removes useless repartition
+  test("distribute above repartition") {
+    // Always respects the top distribute and removes useless repartition
     val query1 = testRelation
       .repartition(10)
       .distribute('a)(20)
@@ -123,8 +123,8 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized2, correctAnswer)
   }
 
-  test("repartitionBy above coalesce") {
-    // Always respects the top repartitionBy amd removes useless coalesce below repartition
+  test("distribute above coalesce") {
+    // Always respects the top distribute and removes useless coalesce below repartition
     val query1 = testRelation
       .coalesce(10)
       .distribute('a)(20)
@@ -140,8 +140,8 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized2, correctAnswer)
   }
 
-  test("repartition above repartitionBy") {
-    // Always respects the top repartition amd removes useless distribute below repartition
+  test("repartition above distribute") {
+    // Always respects the top repartition and removes useless distribute below repartition
     val query1 = testRelation
       .distribute('a)(10)
       .repartition(20)
@@ -155,11 +155,10 @@ class CollapseRepartitionSuite extends PlanTest {
 
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
-
   }
 
-  test("coalesce above repartitionBy") {
-    // Remove useless coalesce above repartition
+  test("coalesce above distribute") {
+    // Remove useless coalesce above distribute
     val query1 = testRelation
       .distribute('a)(10)
       .coalesce(20)
@@ -180,8 +179,8 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized2, correctAnswer2)
   }
 
-  test("collapse two adjacent repartitionBys into one") {
-    // Always respects the top repartitionBy
+  test("collapse two adjacent distributes into one") {
+    // Always respects the top distribute
     val query1 = testRelation
       .distribute('b)(10)
       .distribute('a)(20)

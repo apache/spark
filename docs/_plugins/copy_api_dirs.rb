@@ -20,7 +20,7 @@ include FileUtils
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')
-    # Build Scaladoc for Java/Scala
+    # Build Scaladoc for Scala and Javadoc for Java
 
     puts "Moving to project root and building API docs."
     curr_dir = pwd
@@ -37,7 +37,7 @@ if not (ENV['SKIP_API'] == '1')
 
     # Copy over the unified ScalaDoc for all projects to api/scala.
     # This directory will be copied over to _site when `jekyll` command is run.
-    source = "../target/scala-2.11/unidoc"
+    source = "../target/scala-2.12/unidoc"
     dest = "api/scala"
 
     puts "Making directory " + dest
@@ -148,6 +148,33 @@ if not (ENV['SKIP_API'] == '1')
 
     puts "cp ../R/pkg/DESCRIPTION api"
     cp("../R/pkg/DESCRIPTION", "api")
+  end
+
+  if not (ENV['SKIP_SQLDOC'] == '1')
+    # Build SQL API docs
+
+    puts "Moving to project root and building API docs."
+    curr_dir = pwd
+    cd("..")
+
+    puts "Running 'build/sbt clean package' from " + pwd + "; this may take a few minutes..."
+    system("build/sbt clean package") || raise("SQL doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("docs")
+
+    puts "Moving to SQL directory and building docs."
+    cd("../sql")
+    system("./create-docs.sh") || raise("SQL doc generation failed")
+
+    puts "Moving back into docs dir."
+    cd("../docs")
+
+    puts "Making directory api/sql"
+    mkdir_p "api/sql"
+
+    puts "cp -r ../sql/site/. api/sql"
+    cp_r("../sql/site/.", "api/sql")
   end
 
 end

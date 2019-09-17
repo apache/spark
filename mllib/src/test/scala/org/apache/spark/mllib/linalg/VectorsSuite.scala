@@ -17,15 +17,18 @@
 
 package org.apache.spark.mllib.linalg
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance, DenseMatrix => BDM}
 import org.json4s.jackson.JsonMethods.{parse => parseJson}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 
 class VectorsSuite extends SparkFunSuite with Logging {
 
@@ -33,6 +36,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
   val n = 4
   val indices = Array(0, 2, 3)
   val values = Array(0.1, 0.3, 0.4)
+
+  test("kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+
+    val desVec = Vectors.dense(arr).asInstanceOf[DenseVector]
+    val sparVec = Vectors.sparse(n, indices, values).asInstanceOf[SparseVector]
+    check(desVec)
+    check(sparVec)
+  }
 
   test("dense vector construction with varargs") {
     val vec = Vectors.dense(arr).asInstanceOf[DenseVector]
@@ -122,6 +140,13 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     val vec8 = Vectors.sparse(5, Array(1, 2), Array(0.0, -1.0))
     assert(vec8.argmax === 0)
+
+    // Check for case when sparse vector is non-empty but the values are empty
+    val vec9 = Vectors.sparse(100, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec9.argmax === 0)
+
+    val vec10 = Vectors.sparse(1, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
+    assert(vec10.argmax === 0)
   }
 
   test("vector equals") {
@@ -344,11 +369,21 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(dv0s.numActives === 2)
     assert(dv0s === dv0)
 
+    assert(dv0.toSparseWithSize(dv0.numNonzeros) === dv0)
+    val dv0s2 = dv0.toSparseWithSize(dv0.numNonzeros)
+    assert(dv0s2.numActives === 2)
+    assert(dv0s2 === dv0s)
+
     val sv0 = Vectors.sparse(4, Array(0, 1, 2), Array(0.0, 2.0, 3.0))
     assert(sv0.toDense === sv0)
     val sv0s = sv0.toSparse
     assert(sv0s.numActives === 2)
     assert(sv0s === sv0)
+
+    assert(sv0.toSparseWithSize(sv0.numNonzeros) === sv0)
+    val sv0s2 = sv0.toSparseWithSize(sv0.numNonzeros)
+    assert(sv0s2.numActives === 2)
+    assert(sv0s2 === sv0s)
   }
 
   test("Vector.compressed") {
@@ -460,5 +495,19 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     assert(mlDenseVectorToArray(dv) === mlDenseVectorToArray(newDV))
     assert(mlSparseVectorToArray(sv) === mlSparseVectorToArray(newSV))
+  }
+
+  test("sparse vector only support non-negative length") {
+    val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    assert(v1.size === 0)
+    assert(v2.size === 0)
+
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array(1), Array(2.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array((1, 2.0)))
+    }
   }
 }

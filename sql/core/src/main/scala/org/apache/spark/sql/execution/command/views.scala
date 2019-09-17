@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
-import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 
 /**
@@ -97,7 +98,7 @@ case class CreateViewCommand(
 
   import ViewHelper._
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -159,7 +160,9 @@ case class CreateViewCommand(
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
         // Handles `CREATE OR REPLACE VIEW v0 AS SELECT ...`
-        catalog.alterTable(prepareTable(sparkSession, analyzedPlan))
+        // Nothing we need to retain from the old view, so just drop and create a new one
+        catalog.dropTable(viewIdent, ignoreIfNotExists = false, purge = false)
+        catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
       } else {
         // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
         // exists.
@@ -178,6 +181,8 @@ case class CreateViewCommand(
    * Permanent views are not allowed to reference temp objects, including temp function and views
    */
   private def verifyTemporaryObjectsNotExists(sparkSession: SparkSession): Unit = {
+    import sparkSession.sessionState.analyzer.AsTableIdentifier
+
     if (!isTemporary) {
       // This func traverses the unresolved plan `child`. Below are the reasons:
       // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
@@ -187,10 +192,11 @@ case class CreateViewCommand(
       // package (e.g., HiveGenericUDF).
       child.collect {
         // Disallow creating permanent views based on temporary views.
-        case s: UnresolvedRelation
-          if sparkSession.sessionState.catalog.isTemporaryTable(s.tableIdentifier) =>
+        case UnresolvedRelation(AsTableIdentifier(ident))
+            if sparkSession.sessionState.catalog.isTemporaryTable(ident) =>
+          // temporary views are only stored in the session catalog
           throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-            s"referencing a temporary view ${s.tableIdentifier}")
+            s"referencing a temporary view $ident")
         case other if !other.resolved => other.expressions.flatMap(_.collect {
           // Disallow creating permanent views based on temporary UDFs.
           case e: UnresolvedFunction
@@ -230,15 +236,17 @@ case class CreateViewCommand(
       throw new AnalysisException(
         "It is not allowed to create a persisted view from the Dataset API")
     }
-
-    val newProperties = generateViewProperties(properties, session, analyzedPlan)
+    val aliasedSchema = aliasPlan(session, analyzedPlan).schema
+    val newProperties = generateViewProperties(
+      properties, session, analyzedPlan, aliasedSchema.fieldNames)
 
     CatalogTable(
       identifier = name,
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
-      schema = aliasPlan(session, analyzedPlan).schema,
+      schema = aliasedSchema,
       properties = newProperties,
+      viewOriginalText = originalText,
       viewText = originalText,
       comment = comment
     )
@@ -264,7 +272,7 @@ case class AlterViewAsCommand(
 
   import ViewHelper._
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(session: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
@@ -291,11 +299,13 @@ case class AlterViewAsCommand(
     val viewIdent = viewMeta.identifier
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
-    val newProperties = generateViewProperties(viewMeta.properties, session, analyzedPlan)
+    val newProperties = generateViewProperties(
+      viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 
     val updatedViewMeta = viewMeta.copy(
       schema = analyzedPlan.schema,
       properties = newProperties,
+      viewOriginalText = Some(originalText),
       viewText = Some(originalText))
 
     session.sessionState.catalog.alterTable(updatedViewMeta)
@@ -352,16 +362,18 @@ object ViewHelper {
   def generateViewProperties(
       properties: Map[String, String],
       session: SparkSession,
-      analyzedPlan: LogicalPlan): Map[String, String] = {
+      analyzedPlan: LogicalPlan,
+      fieldNames: Array[String]): Map[String, String] = {
+    // for createViewCommand queryOutput may be different from fieldNames
+    val queryOutput = analyzedPlan.schema.fieldNames
+
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    val queryOutput = analyzedPlan.schema.fieldNames
-    assert(queryOutput.distinct.size == queryOutput.size,
-      s"The view output ${queryOutput.mkString("(", ",", ")")} contains duplicate column name.")
+    SchemaUtils.checkColumnNameDuplication(
+      fieldNames, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
-
     removeQueryColumnNames(properties) ++
       generateViewDefaultDatabase(viewDefaultDatabase) ++
       generateQueryColumnNames(queryOutput)

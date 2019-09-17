@@ -2,6 +2,21 @@
 layout: global
 title: "MLlib: Main Guide"
 displayTitle: "Machine Learning Library (MLlib) Guide"
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 MLlib is Spark's machine learning (ML) library.
@@ -18,7 +33,7 @@ At a high level, it provides tools such as:
 
 **The MLlib RDD-based API is now in maintenance mode.**
 
-As of Spark 2.0, the [RDD](programming-guide.html#resilient-distributed-datasets-rdds)-based APIs in the `spark.mllib` package have entered maintenance mode.
+As of Spark 2.0, the [RDD](rdd-programming-guide.html#resilient-distributed-datasets-rdds)-based APIs in the `spark.mllib` package have entered maintenance mode.
 The primary Machine Learning API for Spark is now the [DataFrame](sql-programming-guide.html)-based API in the `spark.ml` package.
 
 *What are the implications?*
@@ -26,7 +41,7 @@ The primary Machine Learning API for Spark is now the [DataFrame](sql-programmin
 * MLlib will still support the RDD-based API in `spark.mllib` with bug fixes.
 * MLlib will not add new features to the RDD-based API.
 * In the Spark 2.x releases, MLlib will add features to the DataFrames-based API to reach feature parity with the RDD-based API.
-* After reaching feature parity (roughly estimated for Spark 2.2), the RDD-based API will be deprecated.
+* After reaching feature parity (roughly estimated for Spark 2.3), the RDD-based API will be deprecated.
 * The RDD-based API is expected to be removed in Spark 3.0.
 
 *Why is MLlib switching to the DataFrame-based API?*
@@ -61,48 +76,44 @@ To configure `netlib-java` / Breeze to use system optimised binaries, include
 project and read the [netlib-java](https://github.com/fommil/netlib-java) documentation for your
 platform's additional installation instructions.
 
+The most popular native BLAS such as [Intel MKL](https://software.intel.com/en-us/mkl), [OpenBLAS](http://www.openblas.net), can use multiple threads in a single operation, which can conflict with Spark's execution model.
+
+Configuring these BLAS implementations to use a single thread for operations may actually improve performance (see [SPARK-21305](https://issues.apache.org/jira/browse/SPARK-21305)). It is usually optimal to match this to the number of cores each Spark task is configured to use, which is 1 by default and typically left at 1.
+
+Please refer to resources like the following to understand how to configure the number of threads these BLAS implementations use: [Intel MKL](https://software.intel.com/en-us/articles/recommended-settings-for-calling-intel-mkl-routines-from-multi-threaded-applications) and [OpenBLAS](https://github.com/xianyi/OpenBLAS/wiki/faq#multi-threaded).
+
 To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 or newer.
 
 [^1]: To learn more about the benefits and background of system optimised natives, you may wish to
     watch Sam Halliday's ScalaX talk on [High Performance Linear Algebra in Scala](http://fommil.github.io/scalax14/#/).
 
-# Migration guide
+# Highlights in 2.3
 
-MLlib is under active development.
-The APIs marked `Experimental`/`DeveloperApi` may change in future releases,
-and the migration guide below will explain all changes between releases.
+The list below highlights some of the new features and enhancements added to MLlib in the `2.3`
+release of Spark:
 
-## From 2.0 to 2.1
+* Built-in support for reading images into a `DataFrame` was added
+([SPARK-21866](https://issues.apache.org/jira/browse/SPARK-21866)).
+* [`OneHotEncoderEstimator`](ml-features.html#onehotencoderestimator) was added, and should be
+used instead of the existing `OneHotEncoder` transformer. The new estimator supports
+transforming multiple columns.
+* Multiple column support was also added to `QuantileDiscretizer` and `Bucketizer`
+([SPARK-22397](https://issues.apache.org/jira/browse/SPARK-22397) and
+[SPARK-20542](https://issues.apache.org/jira/browse/SPARK-20542))
+* A new [`FeatureHasher`](ml-features.html#featurehasher) transformer was added
+ ([SPARK-13969](https://issues.apache.org/jira/browse/SPARK-13969)).
+* Added support for evaluating multiple models in parallel when performing cross-validation using
+[`TrainValidationSplit` or `CrossValidator`](ml-tuning.html)
+([SPARK-19357](https://issues.apache.org/jira/browse/SPARK-19357)).
+* Improved support for custom pipeline components in Python (see
+[SPARK-21633](https://issues.apache.org/jira/browse/SPARK-21633) and 
+[SPARK-21542](https://issues.apache.org/jira/browse/SPARK-21542)).
+* `DataFrame` functions for descriptive summary statistics over vector columns
+([SPARK-19634](https://issues.apache.org/jira/browse/SPARK-19634)).
+* Robust linear regression with Huber loss
+([SPARK-3181](https://issues.apache.org/jira/browse/SPARK-3181)).
 
-### Breaking changes
- 
-**Deprecated methods removed**
+# Migration Guide
 
-* `setLabelCol` in `feature.ChiSqSelectorModel`
-* `numTrees` in `classification.RandomForestClassificationModel` (This now refers to the Param called `numTrees`)
-* `numTrees` in `regression.RandomForestRegressionModel` (This now refers to the Param called `numTrees`)
-* `model` in `regression.LinearRegressionSummary`
-* `validateParams` in `PipelineStage`
-* `validateParams` in `Evaluator`
+The migration guide is now archived [on this page](ml-migration-guide.html).
 
-### Deprecations and changes of behavior
-
-**Deprecations**
-
-* [SPARK-18592](https://issues.apache.org/jira/browse/SPARK-18592):
-  Deprecate all Param setter methods except for input/output column Params for `DecisionTreeClassificationModel`, `GBTClassificationModel`, `RandomForestClassificationModel`, `DecisionTreeRegressionModel`, `GBTRegressionModel` and `RandomForestRegressionModel`
-
-**Changes of behavior**
-
-* [SPARK-17870](https://issues.apache.org/jira/browse/SPARK-17870):
- Fix a bug of `ChiSqSelector` which will likely change its result. Now `ChiSquareSelector` use pValue rather than raw statistic to select a fixed number of top features.
-* [SPARK-3261](https://issues.apache.org/jira/browse/SPARK-3261):
- `KMeans` returns potentially fewer than k cluster centers in cases where k distinct centroids aren't available or aren't selected.
-* [SPARK-17389](https://issues.apache.org/jira/browse/SPARK-17389):
- `KMeans` reduces the default number of steps from 5 to 2 for the k-means|| initialization mode.
-
-## Previous Spark versions
-
-Earlier migration guides are archived [on this page](ml-migration-guides.html).
-
----

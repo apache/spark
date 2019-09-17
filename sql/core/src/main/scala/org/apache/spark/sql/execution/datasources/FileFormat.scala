@@ -26,8 +26,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 /**
@@ -56,7 +57,7 @@ trait FileFormat {
       dataSchema: StructType): OutputWriterFactory
 
   /**
-   * Returns whether this format support returning columnar batch or not.
+   * Returns whether this format supports returning columnar batch or not.
    *
    * TODO: we should just have different traits for the different formats.
    */
@@ -65,7 +66,18 @@ trait FileFormat {
   }
 
   /**
-   * Returns whether a file with `path` could be splitted or not.
+   * Returns concrete column vector class names for each column to be used in a columnar batch
+   * if this format supports returning columnar batch.
+   */
+  def vectorTypes(
+      requiredSchema: StructType,
+      partitionSchema: StructType,
+      sqlConf: SQLConf): Option[Seq[String]] = {
+    None
+  }
+
+  /**
+   * Returns whether a file with `path` could be split or not.
    */
   def isSplitable(
       sparkSession: SparkSession,
@@ -90,7 +102,7 @@ trait FileFormat {
    * @param options A set of string -> string configuration options.
    * @return
    */
-  def buildReader(
+  protected def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -98,8 +110,6 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    // TODO: Remove this default implementation when the other formats have been ported
-    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
   }
 
@@ -122,8 +132,6 @@ trait FileFormat {
     new (PartitionedFile => Iterator[InternalRow]) with Serializable {
       private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
 
-      private val joinedRow = new JoinedRow()
-
       // Using lazy val to avoid serialization
       private lazy val appendPartitionColumns =
         GenerateUnsafeProjection.generate(fullSchema, fullSchema)
@@ -135,13 +143,25 @@ trait FileFormat {
         // Note that we have to apply the converter even though `file.partitionValues` is empty.
         // This is because the converter is also responsible for converting safe `InternalRow`s into
         // `UnsafeRow`s.
-        dataReader(file).map { dataRow =>
-          converter(joinedRow(dataRow, file.partitionValues))
+        if (partitionSchema.isEmpty) {
+          dataReader(file).map { dataRow =>
+            converter(dataRow)
+          }
+        } else {
+          val joinedRow = new JoinedRow()
+          dataReader(file).map { dataRow =>
+            converter(joinedRow(dataRow, file.partitionValues))
+          }
         }
       }
     }
   }
 
+  /**
+   * Returns whether this format supports the given [[DataType]] in read/write path.
+   * By default all data types are supported.
+   */
+  def supportDataType(dataType: DataType): Boolean = true
 }
 
 /**

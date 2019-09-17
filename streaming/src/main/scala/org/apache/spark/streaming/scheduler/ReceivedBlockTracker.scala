@@ -111,11 +111,16 @@ private[streaming] class ReceivedBlockTracker(
    */
   def allocateBlocksToBatch(batchTime: Time): Unit = synchronized {
     if (lastAllocatedBatchTime == null || batchTime > lastAllocatedBatchTime) {
+      // We explicitly create an ArrayBuffer here because at least as of Scala 2.11 and 2.12
+      // a mutable.Queue fails serialization with a StackOverflow error if it has more than
+      // a few thousand elements.  So we explicitly allocate a collection for serialization which
+      // we know doesn't have this issue.  (See SPARK-26734).
       val streamIdToBlocks = streamIds.map { streamId =>
-          (streamId, getReceivedBlockQueue(streamId).dequeueAll(x => true))
+        (streamId, mutable.ArrayBuffer(getReceivedBlockQueue(streamId).clone(): _*))
       }.toMap
       val allocatedBlocks = AllocatedBlocks(streamIdToBlocks)
       if (writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))) {
+        streamIds.foreach(getReceivedBlockQueue(_).clear())
         timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
         lastAllocatedBatchTime = batchTime
       } else {
@@ -193,12 +198,15 @@ private[streaming] class ReceivedBlockTracker(
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     }
 
-    // Insert the recovered block-to-batch allocations and clear the queue of received blocks
-    // (when the blocks were originally allocated to the batch, the queue must have been cleared).
+    // Insert the recovered block-to-batch allocations and removes them from queue of
+    // received blocks.
     def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks) {
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
-      streamIdToUnallocatedBlockQueues.values.foreach { _.clear() }
+      allocatedBlocks.streamIdToAllocatedBlocks.foreach {
+        case (streamId, allocatedBlocksInStream) =>
+          getReceivedBlockQueue(streamId).dequeueAll(allocatedBlocksInStream.toSet)
+      }
       timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
       lastAllocatedBatchTime = batchTime
     }
@@ -227,7 +235,7 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Write an update to the tracker to the write ahead log */
-  private def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
+  private[streaming] def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
     if (isWriteAheadLogEnabled) {
       logTrace(s"Writing record: $record")
       try {

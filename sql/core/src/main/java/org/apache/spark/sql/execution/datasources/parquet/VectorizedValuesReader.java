@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
-import org.apache.spark.sql.execution.vectorized.ColumnVector;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.io.api.Binary;
 
@@ -37,11 +37,11 @@ public interface VectorizedValuesReader {
   /*
    * Reads `total` values into `c` start at `c[rowId]`
    */
-  void readBooleans(int total, ColumnVector c, int rowId);
-  void readBytes(int total, ColumnVector c, int rowId);
-  void readIntegers(int total, ColumnVector c, int rowId);
-  void readLongs(int total, ColumnVector c, int rowId);
-  void readFloats(int total, ColumnVector c, int rowId);
-  void readDoubles(int total, ColumnVector c, int rowId);
-  void readBinary(int total, ColumnVector c, int rowId);
+  void readBooleans(int total, WritableColumnVector c, int rowId);
+  void readBytes(int total, WritableColumnVector c, int rowId);
+  void readIntegers(int total, WritableColumnVector c, int rowId);
+  void readLongs(int total, WritableColumnVector c, int rowId);
+  void readFloats(int total, WritableColumnVector c, int rowId);
+  void readDoubles(int total, WritableColumnVector c, int rowId);
+  void readBinary(int total, WritableColumnVector c, int rowId);
 }

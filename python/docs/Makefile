@@ -1,18 +1,43 @@
 # Makefile for Sphinx documentation
 #
 
-# You can set these variables from the command line.
-SPHINXOPTS    ?=
-SPHINXBUILD   ?= sphinx-build
-PAPER         ?=
-BUILDDIR      ?= _build
+ifndef SPHINXBUILD
+ifndef SPHINXPYTHON
+SPHINXBUILD = sphinx-build
+endif
+endif
 
-export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.4-src.zip)
-
-# User-friendly check for sphinx-build
+ifdef SPHINXBUILD
+# User-friendly check for sphinx-build.
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
 $(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
 endif
+else
+# Note that there is an issue with Python version and Sphinx in PySpark documentation generation.
+# Please remove this check below when this issue is fixed. See SPARK-24530 for more details.
+PYTHON_VERSION_CHECK = $(shell $(SPHINXPYTHON) -c 'import sys; print(sys.version_info < (3, 0, 0))')
+ifeq ($(PYTHON_VERSION_CHECK), True)
+$(error Note that Python 3 is required to generate PySpark documentation correctly for now. Current Python executable was less than Python 3. See SPARK-24530. To force Sphinx to use a specific Python executable, please set SPHINXPYTHON to point to the Python 3 executable.)
+endif
+# Check if Sphinx is installed.
+ifeq ($(shell $(SPHINXPYTHON) -c 'import sphinx' >/dev/null 2>&1; echo $$?), 1)
+$(error Python executable '$(SPHINXPYTHON)' did not have Sphinx installed. Make sure you have Sphinx installed, then set the SPHINXPYTHON environment variable to point to the Python executable having Sphinx installed. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
+endif
+# Use 'SPHINXPYTHON -msphinx' instead of 'sphinx-build'. See https://github.com/sphinx-doc/sphinx/pull/3523 for more details.
+SPHINXBUILD = $(SPHINXPYTHON) -msphinx
+endif
+
+# You can set these variables from the command line.
+SPHINXOPTS    ?=
+PAPER         ?=
+BUILDDIR      ?= _build
+# You can set SPHINXBUILD to specify Sphinx build executable or SPHINXPYTHON to specify the Python executable used in Sphinx.
+# They follow:
+#   1. if SPHINXPYTHON is set, use Python. If SPHINXBUILD is set, use sphinx-build.
+#   2. If both are set, SPHINXBUILD has a higher priority over SPHINXPYTHON
+#   3. By default, SPHINXBUILD is used as 'sphinx-build'.
+
+export PYTHONPATH=$(realpath ..):$(realpath ../lib/py4j-0.10.8.1-src.zip)
 
 # Internal variables.
 PAPEROPT_a4     = -D latex_paper_size=a4

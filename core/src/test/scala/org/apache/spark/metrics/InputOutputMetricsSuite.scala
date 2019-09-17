@@ -34,7 +34,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
   with BeforeAndAfter {
@@ -51,13 +51,13 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     testTempDir.mkdir()
 
     tmpFile = new File(testTempDir, getClass.getSimpleName + ".txt")
-    val pw = new PrintWriter(new FileWriter(tmpFile))
-    for (x <- 1 to numRecords) {
-      // scalastyle:off println
-      pw.println(RandomUtils.nextInt(0, numBuckets))
-      // scalastyle:on println
+    Utils.tryWithResource(new PrintWriter(tmpFile)) { pw =>
+      for (x <- 1 to numRecords) {
+        // scalastyle:off println
+        pw.println(RandomUtils.nextInt(0, numBuckets))
+        // scalastyle:on println
+      }
     }
-    pw.close()
 
     // Path to tmpFile
     tmpFilePath = tmpFile.toURI.toString
@@ -316,6 +316,35 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
     val bytesRead = runAndReturnBytesRead {
       sc.newAPIHadoopFile(tmpFilePath, classOf[NewCombineTextInputFormat], classOf[LongWritable],
         classOf[Text], new Configuration()).count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with old Hadoop API in different thread") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.textFile(tmpFilePath, 4).mapPartitions { iter =>
+        val buf = new ArrayBuffer[String]()
+        ThreadUtils.runInNewThread("testThread", false) {
+          iter.flatMap(_.split(" ")).foreach(buf.append(_))
+        }
+
+        buf.iterator
+      }.count()
+    }
+    assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with new Hadoop API in different thread") {
+    val bytesRead = runAndReturnBytesRead {
+      sc.newAPIHadoopFile(tmpFilePath, classOf[NewTextInputFormat], classOf[LongWritable],
+        classOf[Text]).mapPartitions { iter =>
+        val buf = new ArrayBuffer[String]()
+        ThreadUtils.runInNewThread("testThread", false) {
+          iter.map(_._2.toString).flatMap(_.split(" ")).foreach(buf.append(_))
+        }
+
+        buf.iterator
+      }.count()
     }
     assert(bytesRead >= tmpFile.length())
   }

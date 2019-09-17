@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericInternalRow, Literal}
@@ -270,7 +270,6 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         percentageExpression = percentageExpression,
         accuracyExpression = Literal(100))
 
-      val result = wrongPercentage.checkInputDataTypes()
       assert(
         wrongPercentage.checkInputDataTypes() match {
           case TypeCheckFailure(msg) if msg.contains("must be between 0.0 and 1.0") => true
@@ -281,7 +280,6 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
   test("class ApproximatePercentile, automatically add type casting for parameters") {
     val testRelation = LocalRelation('a.int)
-    val analyzer = SimpleAnalyzer
 
     // Compatible accuracy types: Long type and decimal type
     val accuracyExpressions = Seq(Literal(1000L), DecimalLiteral(10000), Literal(123.0D))
@@ -299,7 +297,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         analyzed match {
           case Alias(agg: ApproximatePercentile, _) =>
             assert(agg.resolved)
-            assert(agg.child.dataType == DoubleType)
+            assert(agg.child.dataType == IntegerType)
             assert(agg.percentageExpression.dataType == DoubleType ||
               agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
             assert(agg.accuracyExpression.dataType == IntegerType)

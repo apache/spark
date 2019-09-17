@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -32,6 +32,12 @@ case class StringLongClass(a: String, b: Long)
 case class StringIntClass(a: String, b: Int)
 
 case class ComplexClass(a: Long, b: StringLongClass)
+
+case class PrimitiveArrayClass(arr: Array[Long])
+
+case class ArrayClass(arr: Seq[StringIntClass])
+
+case class NestedArrayClass(nestedArr: Array[ArrayClass])
 
 class EncoderResolutionSuite extends PlanTest {
   private val str = UTF8String.fromString("hello")
@@ -62,6 +68,75 @@ class EncoderResolutionSuite extends PlanTest {
     encoder.resolveAndBind(attrs).fromRow(InternalRow(InternalRow(str, 1.toByte), 2))
   }
 
+  test("real type doesn't match encoder schema but they are compatible: primitive array") {
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val attrs = Seq('arr.array(IntegerType))
+    val array = new GenericArrayData(Array(1, 2, 3))
+    encoder.resolveAndBind(attrs).fromRow(InternalRow(array))
+  }
+
+  test("the real type is not compatible with encoder schema: primitive array") {
+    val encoder = ExpressionEncoder[PrimitiveArrayClass]
+    val attrs = Seq('arr.array(StringType))
+    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+      s"""
+         |Cannot up cast array element from string to bigint.
+         |The type path of the target object is:
+         |- array element class: "scala.Long"
+         |- field (class: "scala.Array", name: "arr")
+         |- root class: "org.apache.spark.sql.catalyst.encoders.PrimitiveArrayClass"
+         |You can either add an explicit cast to the input data or choose a higher precision type
+       """.stripMargin.trim + " of the field in the target object")
+  }
+
+  test("real type doesn't match encoder schema but they are compatible: array") {
+    val encoder = ExpressionEncoder[ArrayClass]
+    val attrs = Seq('arr.array(new StructType().add("a", "int").add("b", "int").add("c", "int")))
+    val array = new GenericArrayData(Array(InternalRow(1, 2, 3)))
+    encoder.resolveAndBind(attrs).fromRow(InternalRow(array))
+  }
+
+  test("real type doesn't match encoder schema but they are compatible: nested array") {
+    val encoder = ExpressionEncoder[NestedArrayClass]
+    val et = new StructType().add("arr", ArrayType(
+      new StructType().add("a", "int").add("b", "int").add("c", "int")))
+    val attrs = Seq('nestedArr.array(et))
+    val innerArr = new GenericArrayData(Array(InternalRow(1, 2, 3)))
+    val outerArr = new GenericArrayData(Array(InternalRow(innerArr)))
+    encoder.resolveAndBind(attrs).fromRow(InternalRow(outerArr))
+  }
+
+  test("the real type is not compatible with encoder schema: non-array field") {
+    val encoder = ExpressionEncoder[ArrayClass]
+    val attrs = Seq('arr.int)
+    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+      "need an array field but got int")
+  }
+
+  test("the real type is not compatible with encoder schema: array element type") {
+    val encoder = ExpressionEncoder[ArrayClass]
+    val attrs = Seq('arr.array(new StructType().add("c", "int")))
+    assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+      "No such struct field a in c")
+  }
+
+  test("the real type is not compatible with encoder schema: nested array element type") {
+    val encoder = ExpressionEncoder[NestedArrayClass]
+
+    withClue("inner element is not array") {
+      val attrs = Seq('nestedArr.array(new StructType().add("arr", "int")))
+      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+        "need an array field but got int")
+    }
+
+    withClue("nested array element type is not compatible") {
+      val attrs = Seq('nestedArr.array(new StructType()
+        .add("arr", ArrayType(new StructType().add("c", "int")))))
+      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+        "No such struct field a in c")
+    }
+  }
+
   test("nullability of array type element should not fail analysis") {
     val encoder = ExpressionEncoder[Seq[Int]]
     val attrs = 'a.array(IntegerType) :: Nil
@@ -69,7 +144,7 @@ class EncoderResolutionSuite extends PlanTest {
     // It should pass analysis
     val bound = encoder.resolveAndBind(attrs)
 
-    // If no null values appear, it should works fine
+    // If no null values appear, it should work fine
     bound.fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
 
     // If there is null value, it should throw runtime exception
@@ -121,13 +196,28 @@ class EncoderResolutionSuite extends PlanTest {
     encoder.resolveAndBind(attrs)
   }
 
+  test("SPARK-28497: complex type is not compatible with string encoder schema") {
+    val encoder = ExpressionEncoder[String]
+
+    Seq('a.struct('x.long), 'a.array(StringType), 'a.map(StringType, StringType)).foreach { attr =>
+      val attrs = Seq(attr)
+      assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
+        s"""
+           |Cannot up cast `a` from ${attr.dataType.catalogString} to string.
+           |The type path of the target object is:
+           |- root class: "java.lang.String"
+           |You can either add an explicit cast to the input data or choose a higher precision type
+        """.stripMargin.trim + " of the field in the target object")
+    }
+  }
+
   test("throw exception if real type is not compatible with encoder schema") {
     val msg1 = intercept[AnalysisException] {
       ExpressionEncoder[StringIntClass].resolveAndBind(Seq('a.string, 'b.long))
     }.message
     assert(msg1 ==
       s"""
-         |Cannot up cast `b` from bigint to int as it may truncate
+         |Cannot up cast `b` from bigint to int.
          |The type path of the target object is:
          |- field (class: "scala.Int", name: "b")
          |- root class: "org.apache.spark.sql.catalyst.encoders.StringIntClass"
@@ -140,7 +230,7 @@ class EncoderResolutionSuite extends PlanTest {
     }.message
     assert(msg2 ==
       s"""
-         |Cannot up cast `b`.`b` from decimal(38,18) to bigint as it may truncate
+         |Cannot up cast `b`.`b` from decimal(38,18) to bigint.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")

@@ -246,6 +246,7 @@ object GradientDescent extends Logging {
             // c: (grad, loss, count)
             (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
           })
+      bcWeights.destroy()
 
       if (miniBatchSize > 0) {
         /**

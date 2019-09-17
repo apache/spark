@@ -17,23 +17,30 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.sql.InsertIntoStatement
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
+ * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
-    sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
+    sparkSession.sessionState.conf.runSQLonFile && u.multipartIdentifier.size == 2
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
@@ -41,23 +48,24 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       try {
         val dataSource = DataSource(
           sparkSession,
-          paths = u.tableIdentifier.table :: Nil,
-          className = u.tableIdentifier.database.get)
+          paths = u.multipartIdentifier.last :: Nil,
+          className = u.multipartIdentifier.head)
 
         // `dataSource.providingClass` may throw ClassNotFoundException, then the outer try-catch
         // will catch it and return the original plan, so that the analyzer can report table not
         // found later.
         val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
-        if (!isFileFormat || dataSource.className.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+        if (!isFileFormat ||
+            dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
-            s"${u.tableIdentifier.database.get}")
+            s"${dataSource.className}")
         }
         LogicalRelation(dataSource.resolveRelation())
       } catch {
         case _: ClassNotFoundException => u
         case e: Exception =>
           // the provider is valid, but failed to create a logical plan
-          u.failAnalysis(e.getMessage)
+          u.failAnalysis(e.getMessage, e)
       }
   }
 }
@@ -69,7 +77,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   // catalog is a def and not a val/lazy val as the latter would introduce a circular reference
   private def catalog = sparkSession.sessionState.catalog
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // When we CREATE TABLE without specifying the table schema, we should fail the query if
     // bucketing information is specified, as we can't infer bucketing from data files currently.
     // Since the runtime inferred partition columns could be different from what user specified,
@@ -104,14 +112,25 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
 
       // Check if the specified data source match the data source of the existing table.
-      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
-      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
+      val conf = sparkSession.sessionState.conf
+      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get, conf)
+      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
-      if (existingProvider != specifiedProvider) {
+      // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
+      // [[FileFormat]], the two providers are considered compatible.
+      if (fallBackV2ToV1(existingProvider) != fallBackV2ToV1(specifiedProvider)) {
         throw new AnalysisException(s"The format of the existing table $tableName is " +
           s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
           s"`${specifiedProvider.getSimpleName}`.")
+      }
+      tableDesc.storage.locationUri match {
+        case Some(location) if location.getPath != existingTable.location.getPath =>
+          throw new AnalysisException(
+            s"The location of the existing table ${tableIdentWithDB.quotedString} is " +
+              s"`${existingTable.location}`. It doesn't match the specified location " +
+              s"`${tableDesc.location}`.")
+        case _ =>
       }
 
       if (query.schema.length != existingTable.schema.length) {
@@ -171,9 +190,14 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         query
       }
 
+      // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
+      // TODO: use ANSI store assignment policy by default in SPARK-28495.
+      val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
       c.copy(
         tableDesc = existingTable,
-        query = Some(newQuery))
+        query = Some(TableOutputResolver.resolveOutputColumns(
+          tableDesc.qualifiedName, existingTable.schema.toAttributes, newQuery,
+          byName = true, conf, storeAssignmentPolicy)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity
     // config, and do various checks:
@@ -192,6 +216,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         val analyzedQuery = query.get
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
+        DDLUtils.checkDataColNames(tableDesc.copy(schema = analyzedQuery.schema))
+
         val output = analyzedQuery.output
         val partitionAttrs = normalizedTable.partitionColumnNames.map { partCol =>
           output.find(_.name == partCol).get
@@ -205,6 +231,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
+        DDLUtils.checkDataColNames(tableDesc)
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
 
         val partitionSchema = normalizedTable.partitionColumnNames.map { partCol =>
@@ -216,15 +243,58 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
         c.copy(tableDesc = normalizedTable.copy(schema = reorderedSchema))
       }
+
+    case create: V2CreateTablePlan =>
+      val schema = create.tableSchema
+      val partitioning = create.partitioning
+      val identifier = create.tableName
+      val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+      // Check that columns are not duplicated in the schema
+      val flattenedSchema = SchemaUtils.explodeNestedFieldNames(schema)
+      SchemaUtils.checkColumnNameDuplication(
+        flattenedSchema,
+        s"in the table definition of $identifier",
+        isCaseSensitive)
+
+      // Check that columns are not duplicated in the partitioning statement
+      SchemaUtils.checkTransformDuplication(
+        partitioning, "in the partitioning", isCaseSensitive)
+
+      if (schema.isEmpty) {
+        if (partitioning.nonEmpty) {
+          throw new AnalysisException("It is not allowed to specify partitioning when the " +
+            "table schema is not defined.")
+        }
+
+        create
+      } else {
+        // Resolve and normalize partition columns as necessary
+        val resolver = sparkSession.sessionState.conf.resolver
+        val normalizedPartitions = partitioning.map {
+          case transform: RewritableTransform =>
+            val rewritten = transform.references().map { ref =>
+              // Throws an exception if the reference cannot be resolved
+              val position = SchemaUtils.findColumnPosition(ref.fieldNames(), schema, resolver)
+              FieldReference(SchemaUtils.getColumnName(position, schema))
+            }
+            transform.withReferences(rewritten)
+          case other => other
+        }
+
+        create.withPartitioning(normalizedPartitions)
+      }
+  }
+
+  private def fallBackV2ToV1(cls: Class[_]): Class[_] = cls.newInstance match {
+    case f: FileDataSourceV2 => f.fallbackFileFormat
+    case _ => cls
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
-    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      schema.map(_.name)
-    } else {
-      schema.map(_.name.toLowerCase)
-    }
-    checkDuplication(columnNames, "table definition of " + table.identifier)
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      schema,
+      "in the table definition of " + table.identifier,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)
@@ -250,7 +320,10 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       partCols = table.partitionColumnNames,
       resolver = sparkSession.sessionState.conf.resolver)
 
-    checkDuplication(normalizedPartitionCols, "partition")
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartitionCols,
+      "in the partition schema",
+      sparkSession.sessionState.conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (DDLUtils.isHiveTable(table)) {
@@ -266,7 +339,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     schema.filter(f => normalizedPartitionCols.contains(f.name)).map(_.dataType).foreach {
       case _: AtomicType => // OK
-      case other => failAnalysis(s"Cannot use ${other.simpleString} for partition column")
+      case other => failAnalysis(s"Cannot use ${other.catalogString} for partition column")
     }
 
     normalizedPartitionCols
@@ -280,12 +353,19 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
           resolver = sparkSession.sessionState.conf.resolver)
-        checkDuplication(normalizedBucketSpec.bucketColumnNames, "bucket")
-        checkDuplication(normalizedBucketSpec.sortColumnNames, "sort")
+
+        SchemaUtils.checkColumnNameDuplication(
+          normalizedBucketSpec.bucketColumnNames,
+          "in the bucket definition",
+          sparkSession.sessionState.conf.resolver)
+        SchemaUtils.checkColumnNameDuplication(
+          normalizedBucketSpec.sortColumnNames,
+          "in the sort definition",
+          sparkSession.sessionState.conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
-          case other => failAnalysis(s"Cannot use ${other.simpleString} for sorting column")
+          case other => failAnalysis(s"Cannot use ${other.catalogString} for sorting column")
         }
 
         Some(normalizedBucketSpec)
@@ -294,32 +374,23 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
     }
   }
 
-  private def checkDuplication(colNames: Seq[String], colType: String): Unit = {
-    if (colNames.distinct.length != colNames.length) {
-      val duplicateColumns = colNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      failAnalysis(s"Found duplicate column(s) in $colType: ${duplicateColumns.mkString(", ")}")
-    }
-  }
-
   private def failAnalysis(msg: String) = throw new AnalysisException(msg)
 }
 
 /**
- * Preprocess the [[InsertIntoTable]] plan. Throws exception if the number of columns mismatch, or
- * specified partition columns are different from the existing partition columns in the target
+ * Preprocess the [[InsertIntoStatement]] plan. Throws exception if the number of columns mismatch,
+ * or specified partition columns are different from the existing partition columns in the target
  * table. It also does data type casting and field renaming, to make sure that the columns to be
  * inserted have the correct data type and fields have the correct names.
  */
 case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
   private def preprocess(
-      insert: InsertIntoTable,
+      insert: InsertIntoStatement,
       tblName: String,
-      partColNames: Seq[String]): InsertIntoTable = {
+      partColNames: Seq[String]): InsertIntoStatement = {
 
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
-      insert.partition, partColNames, tblName, conf.resolver)
+      insert.partitionSpec, partColNames, tblName, conf.resolver)
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
@@ -332,6 +403,11 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
 
+    // SPARK-28730: for V1 data source, we use the "LEGACY" as default store assignment policy.
+    // TODO: use ANSI store assignment policy by default in SPARK-28495.
+    val storeAssignmentPolicy = conf.storeAssignmentPolicy.getOrElse(StoreAssignmentPolicy.LEGACY)
+    val newQuery = TableOutputResolver.resolveOutputColumns(
+      tblName, expectedColumns, insert.query, byName = false, conf, storeAssignmentPolicy)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -342,50 +418,24 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
            """.stripMargin)
       }
 
-      castAndRenameChildOutput(insert.copy(partition = normalizedPartSpec), expectedColumns)
+      insert.copy(query = newQuery, partitionSpec = normalizedPartSpec)
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      castAndRenameChildOutput(insert, expectedColumns)
-        .copy(partition = partColNames.map(_ -> None).toMap)
+      insert.copy(query = newQuery, partitionSpec = partColNames.map(_ -> None).toMap)
     }
   }
 
-  private def castAndRenameChildOutput(
-      insert: InsertIntoTable,
-      expectedOutput: Seq[Attribute]): InsertIntoTable = {
-    val newChildOutput = expectedOutput.zip(insert.query.output).map {
-      case (expected, actual) =>
-        if (expected.dataType.sameType(actual.dataType) &&
-            expected.name == actual.name &&
-            expected.metadata == actual.metadata) {
-          actual
-        } else {
-          // Renaming is needed for handling the following cases like
-          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
-          // 2) Target tables have column metadata
-          Alias(Cast(actual, expected.dataType), expected.name)(
-            explicitMetadata = Option(expected.metadata))
-        }
-    }
-
-    if (newChildOutput == insert.query.output) {
-      insert
-    } else {
-      insert.copy(query = Project(newChildOutput, insert.query))
-    }
-  }
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case i @ InsertIntoStatement(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
-        case relation: CatalogRelation =>
+        case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
-        case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
+        case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema.map(_.name))
-        case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
+        case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
         case _ => i
@@ -401,10 +451,49 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
     plan.foreach {
       case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
         throw new AnalysisException("Hive support is required to CREATE Hive TABLE (AS SELECT)")
+      case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>
+        throw new AnalysisException(
+          "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format")
       case _ => // OK
     }
   }
 }
+
+
+/**
+ * A rule to do various checks before reading a table.
+ */
+object PreReadCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case operator: LogicalPlan =>
+        operator transformExpressionsUp {
+          case e @ (_: InputFileName | _: InputFileBlockLength | _: InputFileBlockStart) =>
+            checkNumInputFileBlockSources(e, operator)
+            e
+        }
+    }
+  }
+
+  private def checkNumInputFileBlockSources(e: Expression, operator: LogicalPlan): Int = {
+    operator match {
+      case _: HiveTableRelation => 1
+      case _ @ LogicalRelation(_: HadoopFsRelation, _, _, _) => 1
+      case _: LeafNode => 0
+      // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
+      case u: Union =>
+        if (u.children.map(checkNumInputFileBlockSources(e, _)).sum >= 1) 1 else 0
+      case o =>
+        val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
+        if (numInputFileBlockSources > 1) {
+          e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
+        } else {
+          numInputFileBlockSources
+        }
+    }
+  }
+}
+
 
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
@@ -415,10 +504,10 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _), partition, query, _, _) =>
+      case InsertIntoStatement(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src, _, _) => src
+          case LogicalRelation(src, _, _, _) => src
         }
         if (srcRelations.contains(relation)) {
           failAnalysis("Cannot insert into table that is also being read from.")
@@ -437,10 +526,10 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoTable(t, _, _, _, _)
+      case InsertIntoStatement(t, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
-          t == OneRowRelation ||
+          t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 

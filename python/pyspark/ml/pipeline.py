@@ -16,6 +16,7 @@
 #
 
 import sys
+import os
 
 if sys.version > '3':
     basestring = str
@@ -23,7 +24,7 @@ if sys.version > '3':
 from pyspark import since, keyword_only, SparkContext
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import JavaMLWriter, JavaMLReader, MLReadable, MLWritable
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.common import inherit_doc
 
@@ -130,18 +131,16 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     @since("2.0.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
+        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.getStages())
+        if allStagesAreJava:
+            return JavaMLWriter(self)
+        return PipelineWriter(self)
 
     @classmethod
     @since("2.0.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
+        return PipelineReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -177,6 +176,76 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
 
 @inherit_doc
+class PipelineWriter(MLWriter):
+    """
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`Pipeline` types
+    """
+
+    def __init__(self, instance):
+        super(PipelineWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        stages = self.instance.getStages()
+        PipelineSharedReadWrite.validateStages(stages)
+        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
+
+
+@inherit_doc
+class PipelineReader(MLReader):
+    """
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`Pipeline` types
+    """
+
+    def __init__(self, cls):
+        super(PipelineReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        if 'language' not in metadata['paramMap'] or metadata['paramMap']['language'] != 'Python':
+            return JavaMLReader(self.cls).load(path)
+        else:
+            uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
+            return Pipeline(stages=stages)._resetUid(uid)
+
+
+@inherit_doc
+class PipelineModelWriter(MLWriter):
+    """
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`PipelineModel` types
+    """
+
+    def __init__(self, instance):
+        super(PipelineModelWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        stages = self.instance.stages
+        PipelineSharedReadWrite.validateStages(stages)
+        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
+
+
+@inherit_doc
+class PipelineModelReader(MLReader):
+    """
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`PipelineModel` types
+    """
+
+    def __init__(self, cls):
+        super(PipelineModelReader, self).__init__()
+        self.cls = cls
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        if 'language' not in metadata['paramMap'] or metadata['paramMap']['language'] != 'Python':
+            return JavaMLReader(self.cls).load(path)
+        else:
+            uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
+            return PipelineModel(stages=stages)._resetUid(uid)
+
+
+@inherit_doc
 class PipelineModel(Model, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
@@ -209,18 +278,16 @@ class PipelineModel(Model, MLReadable, MLWritable):
     @since("2.0.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
+        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.stages)
+        if allStagesAreJava:
+            return JavaMLWriter(self)
+        return PipelineModelWriter(self)
 
     @classmethod
     @since("2.0.0")
     def read(cls):
         """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
+        return PipelineModelReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):
@@ -252,3 +319,72 @@ class PipelineModel(Model, MLReadable, MLWritable):
             JavaParams._new_java_obj("org.apache.spark.ml.PipelineModel", self.uid, java_stages)
 
         return _java_obj
+
+
+@inherit_doc
+class PipelineSharedReadWrite():
+    """
+    .. note:: DeveloperApi
+
+    Functions for :py:class:`MLReader` and :py:class:`MLWriter` shared between
+    :py:class:`Pipeline` and :py:class:`PipelineModel`
+
+    .. versionadded:: 2.3.0
+    """
+
+    @staticmethod
+    def checkStagesForJava(stages):
+        return all(isinstance(stage, JavaMLWritable) for stage in stages)
+
+    @staticmethod
+    def validateStages(stages):
+        """
+        Check that all stages are Writable
+        """
+        for stage in stages:
+            if not isinstance(stage, MLWritable):
+                raise ValueError("Pipeline write will fail on this pipeline " +
+                                 "because stage %s of type %s is not MLWritable",
+                                 stage.uid, type(stage))
+
+    @staticmethod
+    def saveImpl(instance, stages, sc, path):
+        """
+        Save metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`
+        - save metadata to path/metadata
+        - save stages to stages/IDX_UID
+        """
+        stageUids = [stage.uid for stage in stages]
+        jsonParams = {'stageUids': stageUids, 'language': 'Python'}
+        DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams)
+        stagesDir = os.path.join(path, "stages")
+        for index, stage in enumerate(stages):
+            stage.write().save(PipelineSharedReadWrite
+                               .getStagePath(stage.uid, index, len(stages), stagesDir))
+
+    @staticmethod
+    def load(metadata, sc, path):
+        """
+        Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`
+
+        :return: (UID, list of stages)
+        """
+        stagesDir = os.path.join(path, "stages")
+        stageUids = metadata['paramMap']['stageUids']
+        stages = []
+        for index, stageUid in enumerate(stageUids):
+            stagePath = \
+                PipelineSharedReadWrite.getStagePath(stageUid, index, len(stageUids), stagesDir)
+            stage = DefaultParamsReader.loadParamsInstance(stagePath, sc)
+            stages.append(stage)
+        return (metadata['uid'], stages)
+
+    @staticmethod
+    def getStagePath(stageUid, stageIdx, numStages, stagesDir):
+        """
+        Get path for saving the given stage.
+        """
+        stageIdxDigits = len(str(numStages))
+        stageDir = str(stageIdx).zfill(stageIdxDigits) + "_" + stageUid
+        stagePath = os.path.join(stagesDir, stageDir)
+        return stagePath

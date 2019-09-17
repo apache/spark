@@ -28,7 +28,8 @@ import org.apache.spark.mllib.clustering.PowerIterationClustering
 import org.apache.spark.rdd.RDD
 
 /**
- * An example Power Iteration Clustering http://www.icml2010.org/papers/387.pdf app.
+ * An example Power Iteration Clustering app.
+ * http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf
  * Takes an input of K concentric circles and the number of points in the innermost circle.
  * The output should be K clusters - each cluster containing precisely the points associated
  * with each of the input circles.

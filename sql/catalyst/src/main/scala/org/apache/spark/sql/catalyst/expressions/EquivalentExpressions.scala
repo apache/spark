@@ -41,7 +41,7 @@ class EquivalentExpressions {
   }
 
   // For each expression, the set of equivalent expressions.
-  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.MutableList[Expression]]
+  private val equivalenceMap = mutable.HashMap.empty[Expr, mutable.ArrayBuffer[Expression]]
 
   /**
    * Adds each expression to this data structure, grouping them with existing equivalent
@@ -56,7 +56,7 @@ class EquivalentExpressions {
         f.get += expr
         true
       } else {
-        equivalenceMap.put(e, mutable.MutableList(expr))
+        equivalenceMap.put(e, mutable.ArrayBuffer(expr))
         false
       }
     } else {
@@ -87,8 +87,7 @@ class EquivalentExpressions {
     def childrenToRecurse: Seq[Expression] = expr match {
       case _: CodegenFallback => Nil
       case i: If => i.predicate :: Nil
-      // `CaseWhen` implements `CodegenFallback`, we only need to handle `CaseWhenCodegen` here.
-      case c: CaseWhenCodegen => c.children.head :: Nil
+      case c: CaseWhen => c.children.head :: Nil
       case c: Coalesce => c.children.head :: Nil
       case other => other.children
     }
@@ -103,7 +102,7 @@ class EquivalentExpressions {
    * an empty collection if there are none.
    */
   def getEquivalentExprs(e: Expression): Seq[Expression] = {
-    equivalenceMap.getOrElse(Expr(e), mutable.MutableList())
+    equivalenceMap.getOrElse(Expr(e), Seq.empty)
   }
 
   /**

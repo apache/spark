@@ -101,7 +101,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaDStream<String> mapped = stream.mapPartitions(in -> {
       String out = "";
       while (in.hasNext()) {
-        out = out + in.next().toUpperCase();
+        out = out + in.next().toUpperCase(Locale.ROOT);
       }
       return Arrays.asList(out).iterator();
     });
@@ -806,7 +806,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       ssc, inputData, 1);
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<String, String> mapped = pairStream.mapValues(String::toUpperCase);
+    JavaPairDStream<String, String> mapped =
+        pairStream.mapValues(s -> s.toUpperCase(Locale.ROOT));
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
@@ -840,7 +841,7 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     JavaPairDStream<String, String> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, String> flatMapped =
-      pairStream.flatMapValues(in -> Arrays.asList(in + "1", in + "2"));
+      pairStream.flatMapValues(in -> Arrays.asList(in + "1", in + "2").iterator());
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
     Assert.assertEquals(expected, result);

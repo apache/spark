@@ -27,10 +27,12 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.contrib.udf.example.UDFExampleFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.test.HiveTestUtils
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -200,10 +202,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("Commands using SerDe provided in --jars") {
-    val jarFile =
-      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-        .split("/")
-        .mkString(File.separator)
+    val jarFile = HiveTestUtils.getHiveHcatalogCoreJar.getCanonicalPath
 
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -219,8 +218,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
-      "SELECT count(key) FROM t1;"
-        -> "5",
+      "SELECT collect_list(array(val)) FROM t1;"
+        -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
       "DROP TABLE t1;"
         -> "",
       "DROP TABLE sourceTable;"
@@ -281,6 +280,56 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SET conf2;" -> "1",
       "SET conf3=${hiveconf:conf1};" -> "conftest",
       "SET conf3;" -> "conftest"
+    )
+  }
+
+  test("SPARK-21451: spark.sql.warehouse.dir should respect options in --hiveconf") {
+    runCliWithin(1.minute)("set spark.sql.warehouse.dir;" -> warehousePath.getAbsolutePath)
+  }
+
+  test("SPARK-21451: Apply spark.hadoop.* configurations") {
+    val tmpDir = Utils.createTempDir(namePrefix = "SPARK-21451")
+    runCliWithin(
+      1.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
+      "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
+    tmpDir.delete()
+  }
+
+  test("Support hive.aux.jars.path") {
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      s"CREATE TEMPORARY FUNCTION example_format AS '${classOf[UDFExampleFormat].getName}';" -> "",
+      "SELECT example_format('%o', 93);" -> "135"
+    )
+  }
+
+  test("SPARK-28840 test --jars command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840"
+    )
+  }
+
+  test("SPARK-28840 test --jars and hive.aux.jars.path command") {
+    val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
+    val hiveContribJar = HiveTestUtils.getHiveContribJar.getCanonicalPath
+    runCliWithin(
+      1.minute,
+      Seq("--jars", s"$jarFile", "--conf",
+        s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
+      "CREATE TEMPORARY FUNCTION testjar AS" +
+        " 'org.apache.spark.sql.hive.execution.UDTFStack';" -> "",
+      "SELECT testjar(1,'TEST-SPARK-TEST-jar', 28840);" -> "TEST-SPARK-TEST-jar\t28840",
+      "CREATE TEMPORARY FUNCTION example_max AS " +
+        "'org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax';" -> "",
+      "SELECT concat_ws(',', 'First', example_max(1234321), 'Third');" -> "First,1234321,Third"
     )
   }
 }

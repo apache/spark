@@ -27,7 +27,7 @@ import sys
 
 def _find_spark_home():
     """Find the SPARK_HOME."""
-    # If the enviroment has SPARK_HOME set trust it.
+    # If the environment has SPARK_HOME set trust it.
     if "SPARK_HOME" in os.environ:
         return os.environ["SPARK_HOME"]
 
@@ -68,7 +68,7 @@ def _find_spark_home():
         return next(path for path in paths if is_spark_home(path))
     except StopIteration:
         print("Could not find valid SPARK_HOME while searching {0}".format(paths), file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     print(_find_spark_home())

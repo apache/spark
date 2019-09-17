@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{InputStream, OutputStream}
+import java.lang.reflect.Method
 import java.rmi.server.UID
 
 import scala.collection.JavaConverters._
@@ -28,15 +29,13 @@ import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
+import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
 import org.apache.hadoop.io.Writable
-import org.apache.hive.com.esotericsoftware.kryo.Kryo
-import org.apache.hive.com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
@@ -50,7 +49,7 @@ private[hive] object HiveShim {
   val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
-   * This function in hive-0.13 become private, but we have to do this to walkaround hive bug
+   * This function in hive-0.13 become private, but we have to do this to work around hive bug
    */
   private def appendReadColumnNames(conf: Configuration, cols: Seq[String]) {
     val old: String = conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR, "")
@@ -146,34 +145,60 @@ private[hive] object HiveShim {
       case _ => false
     }
 
-    @transient
-    def deserializeObjectByKryo[T: ClassTag](
-        kryo: Kryo,
-        in: InputStream,
-        clazz: Class[_]): T = {
-      val inp = new Input(in)
-      val t: T = kryo.readObject(inp, clazz).asInstanceOf[T]
-      inp.close()
-      t
-    }
+    private lazy val serUtilClass =
+      Utils.classForName("org.apache.hadoop.hive.ql.exec.SerializationUtilities")
+    private lazy val utilClass = Utils.classForName("org.apache.hadoop.hive.ql.exec.Utilities")
+    private val deserializeMethodName = "deserializeObjectByKryo"
+    private val serializeMethodName = "serializeObjectByKryo"
 
-    @transient
-    def serializeObjectByKryo(
-        kryo: Kryo,
-        plan: Object,
-        out: OutputStream) {
-      val output: Output = new Output(out)
-      kryo.writeObject(output, plan)
-      output.close()
+    private def findMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
+      val method = klass.getDeclaredMethod(name, args: _*)
+      method.setAccessible(true)
+      method
     }
 
     def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[_]): UDFType = {
-      deserializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), is, clazz)
-        .asInstanceOf[UDFType]
+      if (HiveUtils.isHive23) {
+        val borrowKryo = serUtilClass.getMethod("borrowKryo")
+        val kryo = borrowKryo.invoke(serUtilClass)
+        val deserializeObjectByKryo = findMethod(serUtilClass, deserializeMethodName,
+          kryo.getClass.getSuperclass, classOf[InputStream], classOf[Class[_]])
+        try {
+          deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
+        } finally {
+          serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
+        }
+      } else {
+        val runtimeSerializationKryo = utilClass.getField("runtimeSerializationKryo")
+        val threadLocalValue = runtimeSerializationKryo.get(utilClass)
+        val getMethod = threadLocalValue.getClass.getMethod("get")
+        val kryo = getMethod.invoke(threadLocalValue)
+        val deserializeObjectByKryo = findMethod(utilClass, deserializeMethodName,
+          kryo.getClass, classOf[InputStream], classOf[Class[_]])
+        deserializeObjectByKryo.invoke(null, kryo, is, clazz).asInstanceOf[UDFType]
+      }
     }
 
     def serializePlan(function: AnyRef, out: java.io.OutputStream): Unit = {
-      serializeObjectByKryo(Utilities.runtimeSerializationKryo.get(), function, out)
+      if (HiveUtils.isHive23) {
+        val borrowKryo = serUtilClass.getMethod("borrowKryo")
+        val kryo = borrowKryo.invoke(serUtilClass)
+        val serializeObjectByKryo = findMethod(serUtilClass, serializeMethodName,
+          kryo.getClass.getSuperclass, classOf[Object], classOf[OutputStream])
+        try {
+          serializeObjectByKryo.invoke(null, kryo, function, out)
+        } finally {
+          serUtilClass.getMethod("releaseKryo", kryo.getClass.getSuperclass).invoke(null, kryo)
+        }
+      } else {
+        val runtimeSerializationKryo = utilClass.getField("runtimeSerializationKryo")
+        val threadLocalValue = runtimeSerializationKryo.get(utilClass)
+        val getMethod = threadLocalValue.getClass.getMethod("get")
+        val kryo = getMethod.invoke(threadLocalValue)
+        val serializeObjectByKryo = findMethod(utilClass, serializeMethodName,
+          kryo.getClass, classOf[Object], classOf[OutputStream])
+        serializeObjectByKryo.invoke(null, kryo, function, out)
+      }
     }
 
     def writeExternal(out: java.io.ObjectOutput) {
@@ -217,7 +242,7 @@ private[hive] object HiveShim {
         instance.asInstanceOf[UDFType]
       } else {
         val func = Utils.getContextOrSparkClassLoader
-          .loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
+          .loadClass(functionClassName).getConstructor().newInstance().asInstanceOf[UDFType]
         if (!func.isInstanceOf[UDF]) {
           // We cache the function if it's no the Simple UDF,
           // as we always have to create new instance for Simple UDF

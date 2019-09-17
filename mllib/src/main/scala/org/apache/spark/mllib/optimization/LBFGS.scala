@@ -257,11 +257,11 @@ object LBFGS extends Logging {
           (denseGrad1, loss1 + loss2)
        }
 
-      val zeroSparseVector = Vectors.sparse(n, Seq())
+      val zeroSparseVector = Vectors.sparse(n, Seq.empty)
       val (gradientSum, lossSum) = data.treeAggregate((zeroSparseVector, 0.0))(seqOp, combOp)
 
       // broadcasted model is not needed anymore
-      bcW.destroy(blocking = false)
+      bcW.destroy()
 
       /**
        * regVal is sum of weight squares if it's L2 updater;

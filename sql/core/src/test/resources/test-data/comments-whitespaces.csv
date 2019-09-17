@@ -1,0 +1,8 @@
+# The file contains comments, whitespaces and empty lines
+colA
+# empty line
+
+# the line with a few whitespaces
+   
+# int value with leading and trailing whitespaces
+ "a" 

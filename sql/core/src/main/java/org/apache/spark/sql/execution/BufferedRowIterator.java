@@ -62,21 +62,15 @@ public abstract class BufferedRowIterator {
    */
   public abstract void init(int index, Iterator<InternalRow>[] iters);
 
+  /*
+   * Attributes of the following four methods are public. Thus, they can be also accessed from
+   * methods in inner classes. See SPARK-23598
+   */
   /**
    * Append a row to currentRows.
    */
-  protected void append(InternalRow row) {
+  public void append(InternalRow row) {
     currentRows.add(row);
-  }
-
-  /**
-   * Returns whether this iterator should stop fetching next row from [[CodegenSupport#inputRDDs]].
-   *
-   * If it returns true, the caller should exit the loop that [[InputAdapter]] generates.
-   * This interface is mainly used to limit the number of input rows.
-   */
-  protected boolean stopEarly() {
-    return false;
   }
 
   /**
@@ -84,14 +78,14 @@ public abstract class BufferedRowIterator {
    *
    * If it returns true, the caller should exit the loop (return from processNext()).
    */
-  protected boolean shouldStop() {
+  public boolean shouldStop() {
     return !currentRows.isEmpty();
   }
 
   /**
    * Increase the peak execution memory for current task.
    */
-  protected void incPeakExecutionMemory(long size) {
+  public void incPeakExecutionMemory(long size) {
     TaskContext.get().taskMetrics().incPeakExecutionMemory(size);
   }
 

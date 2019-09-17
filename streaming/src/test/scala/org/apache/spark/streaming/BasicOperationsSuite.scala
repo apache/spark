@@ -20,17 +20,15 @@ package org.apache.spark.streaming
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalatest.concurrent.Eventually.eventually
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{HashPartitioner, SparkConf, SparkException}
 import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.{DStream, WindowedDStream}
 import org.apache.spark.util.{Clock, ManualClock}
-import org.apache.spark.HashPartitioner
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -597,8 +595,6 @@ class BasicOperationsSuite extends TestSuiteBase {
       )
 
     val updateStateOperation = (s: DStream[String]) => {
-      class StateObject(var counter: Int = 0, var expireCounter: Int = 0) extends Serializable
-
       // updateFunc clears a state when a StateObject is seen without new values twice in a row
       val updateFunc = (values: Seq[Int], state: Option[StateObject]) => {
         val stateObj = state.getOrElse(new StateObject)
@@ -659,12 +655,12 @@ class BasicOperationsSuite extends TestSuiteBase {
 
     runCleanupTest(
         conf,
-        operation _,
+        operation,
         numExpectedOutput = cleanupTestInput.size / 2,
         rememberDuration = Seconds(3)) { operatedStream =>
       eventually(eventuallyTimeout) {
-        val windowedStream2 = operatedStream.asInstanceOf[WindowedDStream[_]]
-        val windowedStream1 = windowedStream2.dependencies.head.asInstanceOf[WindowedDStream[_]]
+        val windowedStream2 = operatedStream.asInstanceOf[WindowedDStream[Int]]
+        val windowedStream1 = windowedStream2.dependencies.head.asInstanceOf[WindowedDStream[Int]]
         val mappedStream = windowedStream1.dependencies.head
 
         // Checkpoint remember durations
@@ -818,3 +814,5 @@ class BasicOperationsSuite extends TestSuiteBase {
     }
   }
 }
+
+class StateObject(var counter: Int = 0, var expireCounter: Int = 0) extends Serializable

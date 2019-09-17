@@ -17,26 +17,31 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import scala.collection.JavaConverters._
-import scala.language.reflectiveCalls
+import java.io.{File, FileNotFoundException}
+import java.nio.charset.StandardCharsets.UTF_8
 
-import org.apache.mesos.Protos.{Resource, Value}
+import scala.collection.JavaConverters._
+
+import com.google.common.io.Files
+import org.apache.mesos.Protos.{FrameworkInfo, Resource, Value}
 import org.mockito.Mockito._
 import org.scalatest._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
+import org.apache.spark.util.SparkConfWithEnv
 
 class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoSugar {
 
-  // scalastyle:off structural.type
-  // this is the documented way of generating fixtures in scalatest
-  def fixture: Object {val sc: SparkContext; val sparkConf: SparkConf} = new {
+  class SparkConfFixture {
     val sparkConf = new SparkConf
-    val sc = mock[SparkContext]
+    val sc: SparkContext = mock[SparkContext]
     when(sc.conf).thenReturn(sparkConf)
   }
+
+  def fixture: SparkConfFixture = new SparkConfFixture()
 
   private def createTestPortResource(range: (Long, Long), role: Option[String] = None): Resource = {
     val rangeValue = Value.Range.newBuilder()
@@ -73,7 +78,6 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   }
 
   val utils = new MesosSchedulerUtils { }
-  // scalastyle:on structural.type
 
   test("use at-least minimum overhead") {
     val f = fixture
@@ -90,7 +94,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("use spark.mesos.executor.memoryOverhead (if set)") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(1024)
-    f.sparkConf.set("spark.mesos.executor.memoryOverhead", "512")
+    f.sparkConf.set(mesosConfig.EXECUTOR_MEMORY_OVERHEAD, 512)
     utils.executorMemory(f.sc) shouldBe 1536
   }
 
@@ -179,38 +183,23 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   test("Port reservation is done correctly with user specified ports only") {
     val conf = new SparkConf()
-    conf.set("spark.executor.port", "3000" )
     conf.set(BLOCK_MANAGER_PORT, 4000)
     val portResource = createTestPortResource((3000, 5000), Some("my_role"))
 
     val (resourcesLeft, resourcesToBeUsed) = utils
-      .partitionPortResources(List(3000, 4000), List(portResource))
-    resourcesToBeUsed.length shouldBe 2
+      .partitionPortResources(List(4000), List(portResource))
+    resourcesToBeUsed.length shouldBe 1
 
     val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}.toArray
 
-    portsToUse.length shouldBe 2
-    arePortsEqual(portsToUse, Array(3000L, 4000L)) shouldBe true
+    portsToUse.length shouldBe 1
+    arePortsEqual(portsToUse, Array(4000L)) shouldBe true
 
     val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
 
-    val expectedUSed = Array((3000L, 3000L), (4000L, 4000L))
+    val expectedUSed = Array((4000L, 4000L))
 
     arePortsEqual(portRangesToBeUsed.toArray, expectedUSed) shouldBe true
-  }
-
-  test("Port reservation is done correctly with some user specified ports (spark.executor.port)") {
-    val conf = new SparkConf()
-    conf.set("spark.executor.port", "3100" )
-    val portResource = createTestPortResource((3000, 5000), Some("my_role"))
-
-    val (resourcesLeft, resourcesToBeUsed) = utils
-      .partitionPortResources(List(3100), List(portResource))
-
-    val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
-
-    portsToUse.length shouldBe 1
-    portsToUse.contains(3100) shouldBe true
   }
 
   test("Port reservation is done correctly with all random ports") {
@@ -226,21 +215,20 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   test("Port reservation is done correctly with user specified ports only - multiple ranges") {
     val conf = new SparkConf()
-    conf.set("spark.executor.port", "2100" )
-    conf.set("spark.blockManager.port", "4000")
+    conf.set(BLOCK_MANAGER_PORT, 4000)
     val portResourceList = List(createTestPortResource((3000, 5000), Some("my_role")),
       createTestPortResource((2000, 2500), Some("other_role")))
     val (resourcesLeft, resourcesToBeUsed) = utils
-      .partitionPortResources(List(2100, 4000), portResourceList)
+      .partitionPortResources(List(4000), portResourceList)
     val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
 
-    portsToUse.length shouldBe 2
+    portsToUse.length shouldBe 1
     val portsRangesLeft = rangesResourcesToTuple(resourcesLeft)
     val portRangesToBeUsed = rangesResourcesToTuple(resourcesToBeUsed)
 
-    val expectedUsed = Array((2100L, 2100L), (4000L, 4000L))
+    val expectedUsed = Array((4000L, 4000L))
 
-    arePortsEqual(portsToUse.toArray, Array(2100L, 4000L)) shouldBe true
+    arePortsEqual(portsToUse.toArray, Array(4000L)) shouldBe true
     arePortsEqual(portRangesToBeUsed.toArray, expectedUsed) shouldBe true
   }
 
@@ -252,5 +240,158 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
       .partitionPortResources(List(), portResourceList)
     val portsToUse = getRangesFromResources(resourcesToBeUsed).map{r => r._1}
     portsToUse.isEmpty shouldBe true
+  }
+
+  test("Principal specified via spark.mesos.principal") {
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+
+  test("Principal specified via spark.mesos.principal.file") {
+    val pFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
+    pFile.deleteOnExit()
+    Files.write("test-principal".getBytes(UTF_8), pFile)
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL_FILE, pFile.getAbsolutePath())
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+
+  test("Principal specified via spark.mesos.principal.file that does not exist") {
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL_FILE, "/tmp/does-not-exist")
+
+    intercept[FileNotFoundException] {
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+
+  test("Principal specified via SPARK_MESOS_PRINCIPAL") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL" -> "test-principal"))
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+
+  test("Principal specified via SPARK_MESOS_PRINCIPAL_FILE") {
+    val pFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
+    pFile.deleteOnExit()
+    Files.write("test-principal".getBytes(UTF_8), pFile)
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL_FILE" -> pFile.getAbsolutePath()))
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+
+  test("Principal specified via SPARK_MESOS_PRINCIPAL_FILE that does not exist") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL_FILE" -> "/tmp/does-not-exist"))
+
+    intercept[FileNotFoundException] {
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+
+  test("Secret specified via spark.mesos.secret") {
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+    conf.set(mesosConfig.CREDENTIAL_SECRET, "my-secret")
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
+  }
+
+  test("Principal specified via spark.mesos.secret.file") {
+    val sFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
+    sFile.deleteOnExit()
+    Files.write("my-secret".getBytes(UTF_8), sFile)
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+    conf.set(mesosConfig.CREDENTIAL_SECRET_FILE, sFile.getAbsolutePath())
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
+  }
+
+  test("Principal specified via spark.mesos.secret.file that does not exist") {
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+    conf.set(mesosConfig.CREDENTIAL_SECRET_FILE, "/tmp/does-not-exist")
+
+    intercept[FileNotFoundException] {
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+
+  test("Principal specified via SPARK_MESOS_SECRET") {
+    val env = Map("SPARK_MESOS_SECRET" -> "my-secret")
+    val conf = new SparkConfWithEnv(env)
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
+  }
+
+  test("Principal specified via SPARK_MESOS_SECRET_FILE") {
+    val sFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt")
+    sFile.deleteOnExit()
+    Files.write("my-secret".getBytes(UTF_8), sFile)
+
+    val sFilePath = sFile.getAbsolutePath()
+    val env = Map("SPARK_MESOS_SECRET_FILE" -> sFilePath)
+    val conf = new SparkConfWithEnv(env)
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
+  }
+
+  test("Secret specified with no principal") {
+    val conf = new SparkConf()
+    conf.set(mesosConfig.CREDENTIAL_SECRET, "my-secret")
+
+    intercept[SparkException] {
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+
+  test("Principal specification preference") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL" -> "other-principal"))
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+
+  test("Secret specification preference") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_SECRET" -> "other-secret"))
+    conf.set(mesosConfig.CREDENTIAL_PRINCIPAL, "test-principal")
+    conf.set(mesosConfig.CREDENTIAL_SECRET, "my-secret")
+
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
   }
 }

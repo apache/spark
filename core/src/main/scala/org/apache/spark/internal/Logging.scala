@@ -17,7 +17,10 @@
 
 package org.apache.spark.internal
 
-import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
+import scala.collection.JavaConverters._
+
+import org.apache.log4j._
+import org.apache.log4j.spi.{Filter, LoggingEvent}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -96,48 +99,66 @@ trait Logging {
   }
 
   protected def initializeLogIfNecessary(isInterpreter: Boolean): Unit = {
+    initializeLogIfNecessary(isInterpreter, silent = false)
+  }
+
+  protected def initializeLogIfNecessary(
+      isInterpreter: Boolean,
+      silent: Boolean = false): Boolean = {
     if (!Logging.initialized) {
       Logging.initLock.synchronized {
         if (!Logging.initialized) {
-          initializeLogging(isInterpreter)
+          initializeLogging(isInterpreter, silent)
+          return true
         }
       }
     }
+    false
   }
 
-  private def initializeLogging(isInterpreter: Boolean): Unit = {
+  private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
     // Don't use a logger in here, as this is itself occurring during initialization of a logger
     // If Log4j 1.2 is being used, but is not initialized, load a default properties file
-    val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
-    // This distinguishes the log4j 1.2 binding, currently
-    // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
-    // org.apache.logging.slf4j.Log4jLoggerFactory
-    val usingLog4j12 = "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
-    if (usingLog4j12) {
+    if (Logging.isLog4j12()) {
       val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
       // scalastyle:off println
       if (!log4j12Initialized) {
+        Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
         Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
             PropertyConfigurator.configure(url)
-            System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+            if (!silent) {
+              System.err.println(s"Using Spark's default log4j profile: $defaultLogProps")
+            }
           case None =>
             System.err.println(s"Spark was unable to load $defaultLogProps")
         }
       }
 
+      val rootLogger = LogManager.getRootLogger()
+      if (Logging.defaultRootLevel == null) {
+        Logging.defaultRootLevel = rootLogger.getLevel()
+      }
+
       if (isInterpreter) {
         // Use the repl's main class to define the default log level when running the shell,
         // overriding the root logger's config if they're different.
-        val rootLogger = LogManager.getRootLogger()
         val replLogger = LogManager.getLogger(logName)
         val replLevel = Option(replLogger.getLevel()).getOrElse(Level.WARN)
+        // Update the consoleAppender threshold to replLevel
         if (replLevel != rootLogger.getEffectiveLevel()) {
-          System.err.printf("Setting default log level to \"%s\".\n", replLevel)
-          System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
-            "For SparkR, use setLogLevel(newLevel).")
-          rootLogger.setLevel(replLevel)
+          if (!silent) {
+            System.err.printf("Setting default log level to \"%s\".\n", replLevel)
+            System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
+              "For SparkR, use setLogLevel(newLevel).")
+          }
+          Logging.sparkShellThresholdLevel = replLevel
+          rootLogger.getAllAppenders().asScala.foreach {
+            case ca: ConsoleAppender =>
+              ca.addFilter(new SparkShellLoggingFilter())
+            case _ => // no-op
+          }
         }
       }
       // scalastyle:on println
@@ -150,8 +171,12 @@ trait Logging {
   }
 }
 
-private object Logging {
+private[spark] object Logging {
   @volatile private var initialized = false
+  @volatile private var defaultRootLevel: Level = null
+  @volatile private var defaultSparkLog4jConfig = false
+  @volatile private[spark] var sparkShellThresholdLevel: Level = null
+
   val initLock = new Object()
   try {
     // We use reflection here to handle the case where users remove the
@@ -164,5 +189,60 @@ private object Logging {
     }
   } catch {
     case e: ClassNotFoundException => // can't log anything yet so just fail silently
+  }
+
+  /**
+   * Marks the logging system as not initialized. This does a best effort at resetting the
+   * logging system to its initial state so that the next class to use logging triggers
+   * initialization again.
+   */
+  def uninitialize(): Unit = initLock.synchronized {
+    if (isLog4j12()) {
+      if (defaultSparkLog4jConfig) {
+        defaultSparkLog4jConfig = false
+        LogManager.resetConfiguration()
+      } else {
+        val rootLogger = LogManager.getRootLogger()
+        rootLogger.setLevel(defaultRootLevel)
+        sparkShellThresholdLevel = null
+      }
+    }
+    this.initialized = false
+  }
+
+  private def isLog4j12(): Boolean = {
+    // This distinguishes the log4j 1.2 binding, currently
+    // org.slf4j.impl.Log4jLoggerFactory, from the log4j 2.0 binding, currently
+    // org.apache.logging.slf4j.Log4jLoggerFactory
+    val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
+    "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
+  }
+}
+
+private class SparkShellLoggingFilter extends Filter {
+
+  /**
+   * If sparkShellThresholdLevel is not defined, this filter is a no-op.
+   * If log level of event is not equal to root level, the event is allowed. Otherwise,
+   * the decision is made based on whether the log came from root or some custom configuration
+   * @param loggingEvent
+   * @return decision for accept/deny log event
+   */
+  def decide(loggingEvent: LoggingEvent): Int = {
+    if (Logging.sparkShellThresholdLevel == null) {
+      return Filter.NEUTRAL
+    }
+    val rootLevel = LogManager.getRootLogger().getLevel()
+    if (!loggingEvent.getLevel().eq(rootLevel)) {
+      return Filter.NEUTRAL
+    }
+    var logger = loggingEvent.getLogger()
+    while (logger.getParent() != null) {
+      if (logger.getLevel() != null) {
+        return Filter.NEUTRAL
+      }
+      logger = logger.getParent()
+    }
+    return Filter.DENY
   }
 }

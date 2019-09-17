@@ -26,6 +26,7 @@ import java.net.Socket;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
@@ -88,31 +89,25 @@ class LauncherServer implements Closeable {
 
   private static volatile LauncherServer serverInstance;
 
-  /**
-   * Creates a handle for an app to be launched. This method will start a server if one hasn't been
-   * started yet. The server is shared for multiple handles, and once all handles are disposed of,
-   * the server is shut down.
-   */
-  static synchronized ChildProcAppHandle newAppHandle() throws IOException {
-    LauncherServer server = serverInstance != null ? serverInstance : new LauncherServer();
+  static synchronized LauncherServer getOrCreateServer() throws IOException {
+    LauncherServer server;
+    do {
+      server = serverInstance != null ? serverInstance : new LauncherServer();
+    } while (!server.running);
+
     server.ref();
     serverInstance = server;
-
-    String secret = server.createSecret();
-    while (server.pending.containsKey(secret)) {
-      secret = server.createSecret();
-    }
-
-    return server.newAppHandle(secret);
+    return server;
   }
 
-  static LauncherServer getServerInstance() {
+  // For testing.
+  static synchronized LauncherServer getServer() {
     return serverInstance;
   }
 
   private final AtomicLong refCount;
   private final AtomicLong threadIds;
-  private final ConcurrentMap<String, ChildProcAppHandle> pending;
+  private final ConcurrentMap<String, AbstractAppHandle> secretToPendingApps;
   private final List<ServerConnection> clients;
   private final ServerSocket server;
   private final Thread serverThread;
@@ -132,7 +127,7 @@ class LauncherServer implements Closeable {
       this.clients = new ArrayList<>();
       this.threadIds = new AtomicLong();
       this.factory = new NamedThreadFactory(THREAD_NAME_FMT);
-      this.pending = new ConcurrentHashMap<>();
+      this.secretToPendingApps = new ConcurrentHashMap<>();
       this.timeoutTimer = new Timer("LauncherServer-TimeoutTimer", true);
       this.server = server;
       this.running = true;
@@ -149,32 +144,38 @@ class LauncherServer implements Closeable {
   }
 
   /**
-   * Creates a new app handle. The handle will wait for an incoming connection for a configurable
-   * amount of time, and if one doesn't arrive, it will transition to an error state.
+   * Registers a handle with the server, and returns the secret the child app needs to connect
+   * back.
    */
-  ChildProcAppHandle newAppHandle(String secret) {
-    ChildProcAppHandle handle = new ChildProcAppHandle(secret, this);
-    ChildProcAppHandle existing = pending.putIfAbsent(secret, handle);
-    CommandBuilderUtils.checkState(existing == null, "Multiple handles with the same secret.");
-    return handle;
+  synchronized String registerHandle(AbstractAppHandle handle) {
+    String secret = createSecret();
+    secretToPendingApps.put(secret, handle);
+    return secret;
   }
 
   @Override
   public void close() throws IOException {
     synchronized (this) {
-      if (running) {
-        running = false;
-        timeoutTimer.cancel();
-        server.close();
-        synchronized (clients) {
-          List<ServerConnection> copy = new ArrayList<>(clients);
-          clients.clear();
-          for (ServerConnection client : copy) {
-            client.close();
-          }
-        }
+      if (!running) {
+        return;
+      }
+      running = false;
+    }
+
+    synchronized(LauncherServer.class) {
+      serverInstance = null;
+    }
+
+    timeoutTimer.cancel();
+    server.close();
+    synchronized (clients) {
+      List<ServerConnection> copy = new ArrayList<>(clients);
+      clients.clear();
+      for (ServerConnection client : copy) {
+        client.close();
       }
     }
+
     if (serverThread != null) {
       try {
         serverThread.join();
@@ -195,8 +196,6 @@ class LauncherServer implements Closeable {
           close();
         } catch (IOException ioe) {
           // no-op.
-        } finally {
-          serverInstance = null;
         }
       }
     }
@@ -210,8 +209,15 @@ class LauncherServer implements Closeable {
    * Removes the client handle from the pending list (in case it's still there), and unrefs
    * the server.
    */
-  void unregister(ChildProcAppHandle handle) {
-    pending.remove(handle.getSecret());
+  void unregister(AbstractAppHandle handle) {
+    for (Map.Entry<String, AbstractAppHandle> e : secretToPendingApps.entrySet()) {
+      if (e.getValue().equals(handle)) {
+        String secret = e.getKey();
+        secretToPendingApps.remove(secret);
+        break;
+      }
+    }
+
     unref();
   }
 
@@ -232,20 +238,21 @@ class LauncherServer implements Closeable {
         };
         ServerConnection clientConnection = new ServerConnection(client, timeout);
         Thread clientThread = factory.newThread(clientConnection);
-        synchronized (timeout) {
-          clientThread.start();
-          synchronized (clients) {
-            clients.add(clientConnection);
-          }
-          long timeoutMs = getConnectionTimeout();
-          // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
-          // and force an immediate timeout.
-          if (timeoutMs > 0) {
-            timeoutTimer.schedule(timeout, getConnectionTimeout());
-          } else {
-            timeout.run();
-          }
+        clientConnection.setConnectionThread(clientThread);
+        synchronized (clients) {
+          clients.add(clientConnection);
         }
+
+        long timeoutMs = getConnectionTimeout();
+        // 0 is used for testing to avoid issues with clock resolution / thread scheduling,
+        // and force an immediate timeout.
+        if (timeoutMs > 0) {
+          timeoutTimer.schedule(timeout, timeoutMs);
+        } else {
+          timeout.run();
+        }
+
+        clientThread.start();
       }
     } catch (IOException ioe) {
       if (running) {
@@ -260,28 +267,39 @@ class LauncherServer implements Closeable {
   }
 
   private String createSecret() {
-    byte[] secret = new byte[128];
-    RND.nextBytes(secret);
+    while (true) {
+      byte[] secret = new byte[128];
+      RND.nextBytes(secret);
 
-    StringBuilder sb = new StringBuilder();
-    for (byte b : secret) {
-      int ival = b >= 0 ? b : Byte.MAX_VALUE - b;
-      if (ival < 0x10) {
-        sb.append("0");
+      StringBuilder sb = new StringBuilder();
+      for (byte b : secret) {
+        int ival = b >= 0 ? b : Byte.MAX_VALUE - b;
+        if (ival < 0x10) {
+          sb.append("0");
+        }
+        sb.append(Integer.toHexString(ival));
       }
-      sb.append(Integer.toHexString(ival));
+
+      String secretStr = sb.toString();
+      if (!secretToPendingApps.containsKey(secretStr)) {
+        return secretStr;
+      }
     }
-    return sb.toString();
   }
 
-  private class ServerConnection extends LauncherConnection {
+  class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    private ChildProcAppHandle handle;
+    private volatile Thread connectionThread;
+    private volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
       this.timeout = timeout;
+    }
+
+    void setConnectionThread(Thread t) {
+      this.connectionThread = t;
     }
 
     @Override
@@ -291,7 +309,7 @@ class LauncherServer implements Closeable {
           timeout.cancel();
           timeout = null;
           Hello hello = (Hello) msg;
-          ChildProcAppHandle handle = pending.remove(hello.secret);
+          AbstractAppHandle handle = secretToPendingApps.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
             handle.setState(SparkAppHandle.State.CONNECTED);
@@ -300,9 +318,9 @@ class LauncherServer implements Closeable {
             throw new IllegalArgumentException("Received Hello for unknown client.");
           }
         } else {
+          String msgClassName = msg != null ? msg.getClass().getName() : "no message";
           if (handle == null) {
-            throw new IllegalArgumentException("Expected hello, got: " +
-            msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Expected hello, got: " + msgClassName);
           }
           if (msg instanceof SetAppId) {
             SetAppId set = (SetAppId) msg;
@@ -310,8 +328,7 @@ class LauncherServer implements Closeable {
           } else if (msg instanceof SetState) {
             handle.setState(((SetState)msg).state);
           } else {
-            throw new IllegalArgumentException("Invalid message: " +
-              msg != null ? msg.getClass().getName() : null);
+            throw new IllegalArgumentException("Invalid message: " + msgClassName);
           }
         }
       } catch (Exception e) {
@@ -320,6 +337,9 @@ class LauncherServer implements Closeable {
           timeout.cancel();
         }
         close();
+        if (handle != null) {
+          handle.dispose();
+        }
       } finally {
         timeoutTimer.purge();
       }
@@ -327,16 +347,42 @@ class LauncherServer implements Closeable {
 
     @Override
     public void close() throws IOException {
+      if (!isOpen()) {
+        return;
+      }
+
       synchronized (clients) {
         clients.remove(this);
       }
+
       super.close();
-      if (handle != null) {
-        if (!handle.getState().isFinal()) {
-          LOG.log(Level.WARNING, "Lost connection to spark application.");
-          handle.setState(SparkAppHandle.State.LOST);
+    }
+
+    /**
+     * Wait for the remote side to close the connection so that any pending data is processed.
+     * This ensures any changes reported by the child application take effect.
+     *
+     * This method allows a short period for the above to happen (same amount of time as the
+     * connection timeout, which is configurable). This should be fine for well-behaved
+     * applications, where they close the connection arond the same time the app handle detects the
+     * app has finished.
+     *
+     * In case the connection is not closed within the grace period, this method forcefully closes
+     * it and any subsequent data that may arrive will be ignored.
+     */
+    public void waitForClose() throws IOException {
+      Thread connThread = this.connectionThread;
+      if (Thread.currentThread() != connThread) {
+        try {
+          connThread.join(getConnectionTimeout());
+        } catch (InterruptedException ie) {
+          // Ignore.
         }
-        handle.disconnect();
+
+        if (connThread.isAlive()) {
+          LOG.log(Level.WARNING, "Timed out waiting for child connection to close.");
+          close();
+        }
       }
     }
 

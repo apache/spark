@@ -27,9 +27,9 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.unsafe.types.UTF8String;
+import org.apache.spark.internal.config.package$;
 
 import java.util.Random;
 
@@ -55,36 +55,27 @@ public class RowBasedKeyValueBatchSuite {
   }
 
   private UnsafeRow makeKeyRow(long k1, String k2) {
-    UnsafeRow row = new UnsafeRow(2);
-    BufferHolder holder = new BufferHolder(row, 32);
-    UnsafeRowWriter writer = new UnsafeRowWriter(holder, 2);
-    holder.reset();
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
+    writer.reset();
     writer.write(0, k1);
     writer.write(1, UTF8String.fromString(k2));
-    row.setTotalSize(holder.totalSize());
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow makeKeyRow(long k1, long k2) {
-    UnsafeRow row = new UnsafeRow(2);
-    BufferHolder holder = new BufferHolder(row, 0);
-    UnsafeRowWriter writer = new UnsafeRowWriter(holder, 2);
-    holder.reset();
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
+    writer.reset();
     writer.write(0, k1);
     writer.write(1, k2);
-    row.setTotalSize(holder.totalSize());
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow makeValueRow(long v1, long v2) {
-    UnsafeRow row = new UnsafeRow(2);
-    BufferHolder holder = new BufferHolder(row, 0);
-    UnsafeRowWriter writer = new UnsafeRowWriter(holder, 2);
-    holder.reset();
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
+    writer.reset();
     writer.write(0, v1);
     writer.write(1, v2);
-    row.setTotalSize(holder.totalSize());
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow appendRow(RowBasedKeyValueBatch batch, UnsafeRow key, UnsafeRow value) {
@@ -114,9 +105,9 @@ public class RowBasedKeyValueBatchSuite {
   @Before
   public void setup() {
     memoryManager = new TestMemoryManager(new SparkConf()
-            .set("spark.memory.offHeap.enabled", "false")
-            .set("spark.shuffle.spill.compress", "false")
-            .set("spark.shuffle.compress", "false"));
+            .set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false)
+            .set(package$.MODULE$.SHUFFLE_SPILL_COMPRESS(), false)
+            .set(package$.MODULE$.SHUFFLE_COMPRESS(), false));
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   }
 
@@ -133,9 +124,8 @@ public class RowBasedKeyValueBatchSuite {
 
   @Test
   public void emptyBatch() throws Exception {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       Assert.assertEquals(0, batch.numRows());
       try {
         batch.getKeyRow(-1);
@@ -162,31 +152,24 @@ public class RowBasedKeyValueBatchSuite {
         // Expected exception; do nothing.
       }
       Assert.assertFalse(batch.rowIterator().next());
-    } finally {
-      batch.close();
     }
   }
 
   @Test
-  public void batchType() throws Exception {
-    RowBasedKeyValueBatch batch1 = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    RowBasedKeyValueBatch batch2 = RowBasedKeyValueBatch.allocate(fixedKeySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+  public void batchType() {
+    try (RowBasedKeyValueBatch batch1 = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
+         RowBasedKeyValueBatch batch2 = RowBasedKeyValueBatch.allocate(fixedKeySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       Assert.assertEquals(batch1.getClass(), VariableLengthRowBasedKeyValueBatch.class);
       Assert.assertEquals(batch2.getClass(), FixedLengthRowBasedKeyValueBatch.class);
-    } finally {
-      batch1.close();
-      batch2.close();
     }
   }
 
   @Test
   public void setAndRetrieve() {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       UnsafeRow ret1 = appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
       Assert.assertTrue(checkValue(ret1, 1, 1));
       UnsafeRow ret2 = appendRow(batch, makeKeyRow(2, "B"), makeValueRow(2, 2));
@@ -214,33 +197,27 @@ public class RowBasedKeyValueBatchSuite {
       } catch (AssertionError e) {
         // Expected exception; do nothing.
       }
-    } finally {
-      batch.close();
     }
   }
 
   @Test
   public void setUpdateAndRetrieve() {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
       Assert.assertEquals(1, batch.numRows());
       UnsafeRow retrievedValue = batch.getValueRow(0);
       updateValueRow(retrievedValue, 2, 2);
       UnsafeRow retrievedValue2 = batch.getValueRow(0);
       Assert.assertTrue(checkValue(retrievedValue2, 2, 2));
-    } finally {
-      batch.close();
     }
   }
 
 
   @Test
   public void iteratorTest() throws Exception {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       appendRow(batch, makeKeyRow(1, "A"), makeValueRow(1, 1));
       appendRow(batch, makeKeyRow(2, "B"), makeValueRow(2, 2));
       appendRow(batch, makeKeyRow(3, "C"), makeValueRow(3, 3));
@@ -263,16 +240,13 @@ public class RowBasedKeyValueBatchSuite {
       Assert.assertTrue(checkKey(key3, 3, "C"));
       Assert.assertTrue(checkValue(value3, 3, 3));
       Assert.assertFalse(iterator.next());
-    } finally {
-      batch.close();
     }
   }
 
   @Test
   public void fixedLengthTest() throws Exception {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(fixedKeySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(fixedKeySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       appendRow(batch, makeKeyRow(11, 11), makeValueRow(1, 1));
       appendRow(batch, makeKeyRow(22, 22), makeValueRow(2, 2));
       appendRow(batch, makeKeyRow(33, 33), makeValueRow(3, 3));
@@ -303,16 +277,13 @@ public class RowBasedKeyValueBatchSuite {
       Assert.assertTrue(checkKey(key3, 33, 33));
       Assert.assertTrue(checkValue(value3, 3, 3));
       Assert.assertFalse(iterator.next());
-    } finally {
-      batch.close();
     }
   }
 
   @Test
   public void appendRowUntilExceedingCapacity() throws Exception {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, 10);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, 10)) {
       UnsafeRow key = makeKeyRow(1, "A");
       UnsafeRow value = makeValueRow(1, 1);
       for (int i = 0; i < 10; i++) {
@@ -331,8 +302,6 @@ public class RowBasedKeyValueBatchSuite {
         Assert.assertTrue(checkValue(value1, 1, 1));
       }
       Assert.assertFalse(iterator.next());
-    } finally {
-      batch.close();
     }
   }
 
@@ -340,9 +309,8 @@ public class RowBasedKeyValueBatchSuite {
   public void appendRowUntilExceedingPageSize() throws Exception {
     // Use default size or spark.buffer.pageSize if specified
     int pageSizeToUse = (int) memoryManager.pageSizeBytes();
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, pageSizeToUse); //enough capacity
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, pageSizeToUse)) {
       UnsafeRow key = makeKeyRow(1, "A");
       UnsafeRow value = makeValueRow(1, 1);
       int recordLength = 8 + key.getSizeInBytes() + value.getSizeInBytes() + 8;
@@ -366,49 +334,44 @@ public class RowBasedKeyValueBatchSuite {
         Assert.assertTrue(checkValue(value1, 1, 1));
       }
       Assert.assertFalse(iterator.next());
-    } finally {
-      batch.close();
     }
   }
 
   @Test
   public void failureToAllocateFirstPage() throws Exception {
     memoryManager.limit(1024);
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    try {
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
       UnsafeRow key = makeKeyRow(1, "A");
       UnsafeRow value = makeValueRow(11, 11);
       UnsafeRow ret = appendRow(batch, key, value);
       Assert.assertNull(ret);
       Assert.assertFalse(batch.rowIterator().next());
-    } finally {
-      batch.close();
     }
   }
 
   @Test
   public void randomizedTest() {
-    RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
-            valueSchema, taskMemoryManager, DEFAULT_CAPACITY);
-    int numEntry = 100;
-    long[] expectedK1 = new long[numEntry];
-    String[] expectedK2 = new String[numEntry];
-    long[] expectedV1 = new long[numEntry];
-    long[] expectedV2 = new long[numEntry];
+    try (RowBasedKeyValueBatch batch = RowBasedKeyValueBatch.allocate(keySchema,
+        valueSchema, taskMemoryManager, DEFAULT_CAPACITY)) {
+      int numEntry = 100;
+      long[] expectedK1 = new long[numEntry];
+      String[] expectedK2 = new String[numEntry];
+      long[] expectedV1 = new long[numEntry];
+      long[] expectedV2 = new long[numEntry];
 
-    for (int i = 0; i < numEntry; i++) {
-      long k1 = rand.nextLong();
-      String k2 = getRandomString(rand.nextInt(256));
-      long v1 = rand.nextLong();
-      long v2 = rand.nextLong();
-      appendRow(batch, makeKeyRow(k1, k2), makeValueRow(v1, v2));
-      expectedK1[i] = k1;
-      expectedK2[i] = k2;
-      expectedV1[i] = v1;
-      expectedV2[i] = v2;
-    }
-    try {
+      for (int i = 0; i < numEntry; i++) {
+        long k1 = rand.nextLong();
+        String k2 = getRandomString(rand.nextInt(256));
+        long v1 = rand.nextLong();
+        long v2 = rand.nextLong();
+        appendRow(batch, makeKeyRow(k1, k2), makeValueRow(v1, v2));
+        expectedK1[i] = k1;
+        expectedK2[i] = k2;
+        expectedV1[i] = v1;
+        expectedV2[i] = v2;
+      }
+
       for (int j = 0; j < 10000; j++) {
         int rowId = rand.nextInt(numEntry);
         if (rand.nextBoolean()) {
@@ -420,8 +383,6 @@ public class RowBasedKeyValueBatchSuite {
           Assert.assertTrue(checkValue(value, expectedV1[rowId], expectedV2[rowId]));
         }
       }
-    } finally {
-      batch.close();
     }
   }
 }

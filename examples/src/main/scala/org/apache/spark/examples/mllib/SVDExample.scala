@@ -28,6 +28,9 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
 // $example off$
 
+/**
+ * Example for SingularValueDecomposition.
+ */
 object SVDExample {
 
   def main(args: Array[String]): Unit = {
@@ -41,15 +44,15 @@ object SVDExample {
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0))
 
-    val dataRDD = sc.parallelize(data, 2)
+    val rows = sc.parallelize(data)
 
-    val mat: RowMatrix = new RowMatrix(dataRDD)
+    val mat: RowMatrix = new RowMatrix(rows)
 
     // Compute the top 5 singular values and corresponding singular vectors.
     val svd: SingularValueDecomposition[RowMatrix, Matrix] = mat.computeSVD(5, computeU = true)
     val U: RowMatrix = svd.U  // The U factor is a RowMatrix.
-    val s: Vector = svd.s  // The singular values are stored in a local dense vector.
-    val V: Matrix = svd.V  // The V factor is a local dense matrix.
+    val s: Vector = svd.s     // The singular values are stored in a local dense vector.
+    val V: Matrix = svd.V     // The V factor is a local dense matrix.
     // $example off$
     val collect = U.rows.collect()
     println("U factor is:")

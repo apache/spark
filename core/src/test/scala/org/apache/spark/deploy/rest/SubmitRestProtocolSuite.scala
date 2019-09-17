@@ -22,6 +22,7 @@ import java.lang.Boolean
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -86,33 +87,35 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     message.clientSparkVersion = "1.2.3"
     message.appResource = "honey-walnut-cherry.jar"
     message.mainClass = "org.apache.spark.examples.SparkPie"
+    message.appArgs = Array("two slices")
+    message.environmentVariables = Map("PATH" -> "/dev/null")
     val conf = new SparkConf(false)
     conf.set("spark.app.name", "SparkPie")
     message.sparkProperties = conf.getAll.toMap
     message.validate()
     // optional fields
-    conf.set("spark.jars", "mayonnaise.jar,ketchup.jar")
-    conf.set("spark.files", "fireball.png")
+    conf.set(JARS, Seq("mayonnaise.jar", "ketchup.jar"))
+    conf.set(FILES.key, "fireball.png")
     conf.set("spark.driver.memory", s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
-    conf.set("spark.driver.cores", "180")
+    conf.set(DRIVER_CORES, 180)
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
     conf.set("spark.driver.extraClassPath", "food-coloring.jar")
     conf.set("spark.driver.extraLibraryPath", "pickle.jar")
-    conf.set("spark.driver.supervise", "false")
+    conf.set(DRIVER_SUPERVISE, false)
     conf.set("spark.executor.memory", "256m")
-    conf.set("spark.cores.max", "10000")
+    conf.set(CORES_MAX, 10000)
     message.sparkProperties = conf.getAll.toMap
     message.appArgs = Array("two slices", "a hint of cinnamon")
     message.environmentVariables = Map("PATH" -> "/dev/null")
     message.validate()
     // bad fields
-    var badConf = conf.clone().set("spark.driver.cores", "one hundred feet")
+    var badConf = conf.clone().set(DRIVER_CORES.key, "one hundred feet")
     message.sparkProperties = badConf.getAll.toMap
     intercept[SubmitRestProtocolException] { message.validate() }
-    badConf = conf.clone().set("spark.driver.supervise", "nope, never")
+    badConf = conf.clone().set(DRIVER_SUPERVISE.key, "nope, never")
     message.sparkProperties = badConf.getAll.toMap
     intercept[SubmitRestProtocolException] { message.validate() }
-    badConf = conf.clone().set("spark.cores.max", "two men")
+    badConf = conf.clone().set(CORES_MAX.key, "two men")
     message.sparkProperties = badConf.getAll.toMap
     intercept[SubmitRestProtocolException] { message.validate() }
     message.sparkProperties = conf.getAll.toMap
@@ -124,17 +127,17 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     assert(newMessage.appResource === "honey-walnut-cherry.jar")
     assert(newMessage.mainClass === "org.apache.spark.examples.SparkPie")
     assert(newMessage.sparkProperties("spark.app.name") === "SparkPie")
-    assert(newMessage.sparkProperties("spark.jars") === "mayonnaise.jar,ketchup.jar")
-    assert(newMessage.sparkProperties("spark.files") === "fireball.png")
+    assert(newMessage.sparkProperties(JARS.key) === "mayonnaise.jar,ketchup.jar")
+    assert(newMessage.sparkProperties(FILES.key) === "fireball.png")
     assert(newMessage.sparkProperties("spark.driver.memory") === s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
-    assert(newMessage.sparkProperties("spark.driver.cores") === "180")
+    assert(newMessage.sparkProperties(DRIVER_CORES.key) === "180")
     assert(newMessage.sparkProperties("spark.driver.extraJavaOptions") ===
       " -Dslices=5 -Dcolor=mostly_red")
     assert(newMessage.sparkProperties("spark.driver.extraClassPath") === "food-coloring.jar")
     assert(newMessage.sparkProperties("spark.driver.extraLibraryPath") === "pickle.jar")
-    assert(newMessage.sparkProperties("spark.driver.supervise") === "false")
+    assert(newMessage.sparkProperties(DRIVER_SUPERVISE.key) === "false")
     assert(newMessage.sparkProperties("spark.executor.memory") === "256m")
-    assert(newMessage.sparkProperties("spark.cores.max") === "10000")
+    assert(newMessage.sparkProperties(CORES_MAX.key) === "10000")
     assert(newMessage.appArgs === message.appArgs)
     assert(newMessage.sparkProperties === message.sparkProperties)
     assert(newMessage.environmentVariables === message.environmentVariables)

@@ -18,6 +18,7 @@
 package org.apache.spark.ml.util
 
 import java.util.Random
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -105,8 +106,8 @@ class StopwatchSuite extends SparkFunSuite with MLlibTestSparkContext {
 private object StopwatchSuite extends SparkFunSuite {
 
   /**
-   * Checks the input stopwatch on a task that takes a random time (<10ms) to finish. Validates and
-   * returns the duration reported by the stopwatch.
+   * Checks the input stopwatch on a task that takes a random time (less than 10ms) to finish.
+   * Validates and returns the duration reported by the stopwatch.
    */
   def checkStopwatch(sw: Stopwatch): Long = {
     val ubStart = now
@@ -121,5 +122,5 @@ private object StopwatchSuite extends SparkFunSuite {
   }
 
   /** The current time in milliseconds. */
-  private def now: Long = System.currentTimeMillis()
+  private def now: Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime())
 }

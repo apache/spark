@@ -21,16 +21,14 @@ import java.util.concurrent.TimeoutException
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import org.mockito.Matchers._
+import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 import org.apache.spark.util.ManualClock
@@ -88,7 +86,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
     clock.advance(5 * checkpointInterval.milliseconds)
 
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, times(1)).checkpoint(seqNum)
       verify(checkpointerMock, times(1)).checkpoint(otherSeqNum)
     }
@@ -109,7 +107,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
 
     clock.advance(checkpointInterval.milliseconds * 5)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, atMost(1)).checkpoint(anyString())
     }
   }
@@ -124,15 +122,13 @@ class KinesisCheckpointerSuite extends TestSuiteBase
   test("if checkpointing is going on, wait until finished before removing and checkpointing") {
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId))
       .thenReturn(someSeqNum).thenReturn(someOtherSeqNum)
-    when(checkpointerMock.checkpoint(anyString)).thenAnswer(new Answer[Unit] {
-      override def answer(invocations: InvocationOnMock): Unit = {
-        clock.waitTillTime(clock.getTimeMillis() + checkpointInterval.milliseconds / 2)
-      }
-    })
+    when(checkpointerMock.checkpoint(anyString)).thenAnswer { (_: InvocationOnMock) =>
+      clock.waitTillTime(clock.getTimeMillis() + checkpointInterval.milliseconds / 2)
+    }
 
     kinesisCheckpointer.setCheckpointer(shardId, checkpointerMock)
     clock.advance(checkpointInterval.milliseconds)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, times(1)).checkpoint(anyString())
     }
     // don't block test thread
@@ -140,11 +136,13 @@ class KinesisCheckpointerSuite extends TestSuiteBase
       ExecutionContext.global)
 
     intercept[TimeoutException] {
-      Await.ready(f, 50 millis)
+      // scalastyle:off awaitready
+      Await.ready(f, 50.milliseconds)
+      // scalastyle:on awaitready
     }
 
     clock.advance(checkpointInterval.milliseconds / 2)
-    eventually(timeout(1 second)) {
+    eventually(timeout(1.second)) {
       verify(checkpointerMock, times(1)).checkpoint(anyString)
       verify(checkpointerMock, times(1)).checkpoint()
     }

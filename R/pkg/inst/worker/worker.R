@@ -49,7 +49,7 @@ compute <- function(mode, partition, serializer, deserializer, key,
       names(inputData) <- colNames
     } else {
       # Check to see if inputData is a valid data.frame
-      stopifnot(deserializer == "byte")
+      stopifnot(deserializer == "byte" || deserializer == "arrow")
       stopifnot(class(inputData) == "data.frame")
     }
 
@@ -62,13 +62,13 @@ compute <- function(mode, partition, serializer, deserializer, key,
       # Transform the result data.frame back to a list of rows
       output <- split(output, seq(nrow(output)))
     } else {
-      # Serialize the ouput to a byte array
-      stopifnot(serializer == "byte")
+      # Serialize the output to a byte array
+      stopifnot(serializer == "byte" || serializer == "arrow")
     }
   } else {
     output <- computeFunc(partition, inputData)
   }
-  return (output)
+  return(output)
 }
 
 outputResult <- function(serializer, output, outputCon) {
@@ -76,6 +76,8 @@ outputResult <- function(serializer, output, outputCon) {
     SparkR:::writeRawSerialize(outputCon, output)
   } else if (serializer == "row") {
     SparkR:::writeRowSerialize(outputCon, output)
+  } else if (serializer == "arrow") {
+    SparkR:::writeSerializeInArrow(outputCon, output)
   } else {
     # write lines one-by-one with flag
     lapply(output, function(line) SparkR:::writeString(outputCon, line))
@@ -100,9 +102,12 @@ suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
 inputCon <- socketConnection(
-    port = port, blocking = TRUE, open = "rb", timeout = connectionTimeout)
+    port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
+
 outputCon <- socketConnection(
     port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
+SparkR:::doServerAuth(outputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
 # read the index of the current partition inside the RDD
 partition <- SparkR:::readInt(inputCon)
@@ -168,6 +173,16 @@ if (isEmpty != 0) {
       data <- dataWithKeys$data
     } else if (deserializer == "row") {
       data <- SparkR:::readMultipleObjects(inputCon)
+    } else if (deserializer == "arrow" && mode == 2) {
+      dataWithKeys <- SparkR:::readDeserializeWithKeysInArrow(inputCon)
+      keys <- dataWithKeys$keys
+      data <- dataWithKeys$data
+    } else if (deserializer == "arrow" && mode == 1) {
+      data <- SparkR:::readDeserializeInArrow(inputCon)
+      # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
+      # rbind.fill might be an anternative to make it faster if plyr is installed.
+      # Also, note that, 'dapply' applies a function to each partition.
+      data <- do.call("rbind", data)
     }
 
     # Timing reading input data for execution
@@ -178,16 +193,28 @@ if (isEmpty != 0) {
                     colNames, computeFunc, data)
        } else {
         # gapply mode
+        outputs <- list()
         for (i in 1:length(data)) {
           # Timing reading input data for execution
           inputElap <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],
                       colNames, computeFunc, data[[i]])
           computeElap <- elapsedSecs()
-          outputResult(serializer, output, outputCon)
+          if (serializer == "arrow") {
+            outputs[[length(outputs) + 1L]] <- output
+          } else {
+            outputResult(serializer, output, outputCon)
+          }
           outputElap <- elapsedSecs()
           computeInputElapsDiff <-  computeInputElapsDiff + (computeElap - inputElap)
           outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
+        }
+
+        if (serializer == "arrow") {
+          # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
+          # rbind.fill might be an anternative to make it faster if plyr is installed.
+          combined <- do.call("rbind", outputs)
+          SparkR:::writeSerializeInArrow(outputCon, combined)
         }
       }
     } else {

@@ -30,7 +30,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.sketch.CountMinSketch
 
 /**
- * Unit test suite for the count-min sketch SQL aggregate funciton [[CountMinSketchAgg]].
+ * Unit test suite for the count-min sketch SQL aggregate function [[CountMinSketchAgg]].
  */
 class CountMinSketchAggSuite extends SparkFunSuite {
   private val childExpression = BoundReference(0, IntegerType, nullable = true)

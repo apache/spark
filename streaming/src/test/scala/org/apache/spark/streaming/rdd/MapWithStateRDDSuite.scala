@@ -117,7 +117,7 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
             state.remove()
             None
           case None =>
-            assert(state.isTimingOut() === true, "State is not timing out when data = None")
+            assert(state.isTimingOut(), "State is not timing out when data = None")
             timingOutStates += state.get()
             None
           case _ =>
@@ -153,9 +153,9 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester with B
     // Data present, function should be called irrespective of whether state exists
     assertRecordUpdate(initStates = Seq(0), data = Seq("noop"),
       expectedStates = Seq((0, initialTime)))
-    assert(functionCalled === true)
+    assert(functionCalled)
     assertRecordUpdate(initStates = None, data = Some("noop"), expectedStates = None)
-    assert(functionCalled === true)
+    assert(functionCalled)
 
     // Function called with right state data
     assertRecordUpdate(initStates = None, data = Seq("get-state"),

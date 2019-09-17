@@ -68,7 +68,7 @@ object SparkTC {
       nextCount = tc.count()
     } while (nextCount != oldCount)
 
-    println("TC has " + tc.count() + " edges.")
+    println(s"TC has ${tc.count()} edges.")
     spark.stop()
   }
 }

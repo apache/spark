@@ -78,4 +78,26 @@ class CollapseWindowSuite extends PlanTest {
 
     comparePlans(optimized2, correctAnswer2)
   }
+
+  test("Don't collapse adjacent windows with dependent columns") {
+    val query = testRelation
+      .window(Seq(sum(a).as('sum_a)), partitionSpec1, orderSpec1)
+      .window(Seq(max('sum_a).as('max_sum_a)), partitionSpec1, orderSpec1)
+      .analyze
+
+    val expected = query.analyze
+    val optimized = Optimize.execute(query.analyze)
+    comparePlans(optimized, expected)
+  }
+
+  test("Skip windows with empty window expressions") {
+    val query = testRelation
+      .window(Seq(), partitionSpec1, orderSpec1)
+      .window(Seq(sum(a).as('sum_a)), partitionSpec1, orderSpec1)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

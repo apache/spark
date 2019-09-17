@@ -39,8 +39,8 @@ class AttributeSetSuite extends SparkFunSuite {
   }
 
   test("checks by id not name") {
-    assert(aSet.contains(aUpper) === true)
-    assert(aSet.contains(aLower) === true)
+    assert(aSet.contains(aUpper))
+    assert(aSet.contains(aLower))
     assert(aSet.contains(fakeA) === false)
 
     assert(aSet.contains(bUpper) === false)
@@ -48,8 +48,8 @@ class AttributeSetSuite extends SparkFunSuite {
   }
 
   test("++ preserves AttributeSet")  {
-    assert((aSet ++ bSet).contains(aUpper) === true)
-    assert((aSet ++ bSet).contains(aLower) === true)
+    assert((aSet ++ bSet).contains(aUpper))
+    assert((aSet ++ bSet).contains(aLower))
   }
 
   test("extracts all references ") {
@@ -65,7 +65,7 @@ class AttributeSetSuite extends SparkFunSuite {
   }
 
   test("subset") {
-    assert(aSet.subsetOf(aAndBSet) === true)
+    assert(aSet.subsetOf(aAndBSet))
     assert(aAndBSet.subsetOf(aSet) === false)
   }
 
@@ -77,5 +77,45 @@ class AttributeSetSuite extends SparkFunSuite {
 
     assert(aSet == aSet)
     assert(aSet == AttributeSet(aUpper :: Nil))
+  }
+
+  test("SPARK-18394 keep a deterministic output order along with attribute names and exprIds") {
+    // Checks a simple case
+    val attrSeqA = {
+      val attr1 = AttributeReference("c1", IntegerType)(exprId = ExprId(1098))
+      val attr2 = AttributeReference("c2", IntegerType)(exprId = ExprId(107))
+      val attr3 = AttributeReference("c3", IntegerType)(exprId = ExprId(838))
+      val attrSetA = AttributeSet(attr1 :: attr2 :: attr3 :: Nil)
+
+      val attr4 = AttributeReference("c4", IntegerType)(exprId = ExprId(389))
+      val attr5 = AttributeReference("c5", IntegerType)(exprId = ExprId(89329))
+
+      val attrSetB = AttributeSet(attr4 :: attr5 :: Nil)
+      (attrSetA ++ attrSetB).toSeq.map(_.name)
+    }
+
+    val attrSeqB = {
+      val attr1 = AttributeReference("c1", IntegerType)(exprId = ExprId(392))
+      val attr2 = AttributeReference("c2", IntegerType)(exprId = ExprId(92))
+      val attr3 = AttributeReference("c3", IntegerType)(exprId = ExprId(87))
+      val attrSetA = AttributeSet(attr1 :: attr2 :: attr3 :: Nil)
+
+      val attr4 = AttributeReference("c4", IntegerType)(exprId = ExprId(9023920))
+      val attr5 = AttributeReference("c5", IntegerType)(exprId = ExprId(522))
+      val attrSetB = AttributeSet(attr4 :: attr5 :: Nil)
+
+      (attrSetA ++ attrSetB).toSeq.map(_.name)
+    }
+
+    assert(attrSeqA === attrSeqB)
+
+    // Checks the same column names having different exprIds
+    val attr1 = AttributeReference("c", IntegerType)(exprId = ExprId(1098))
+    val attr2 = AttributeReference("c", IntegerType)(exprId = ExprId(107))
+    val attrSetA = AttributeSet(attr1 :: attr2 :: Nil)
+    val attr3 = AttributeReference("c", IntegerType)(exprId = ExprId(389))
+    val attrSetB = AttributeSet(attr3 :: Nil)
+
+    assert((attrSetA ++ attrSetB).toSeq === attr2 :: attr3 :: attr1 :: Nil)
   }
 }

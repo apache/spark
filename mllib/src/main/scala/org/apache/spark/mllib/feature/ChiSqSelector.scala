@@ -23,13 +23,14 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 
 /**
@@ -42,17 +43,6 @@ class ChiSqSelectorModel @Since("1.3.0") (
   @Since("1.3.0") val selectedFeatures: Array[Int]) extends VectorTransformer with Saveable {
 
   private val filterIndices = selectedFeatures.sorted
-
-  @deprecated("not intended for subclasses to use", "2.1.0")
-  protected def isSorted(array: Array[Int]): Boolean = {
-    var i = 1
-    val len = array.length
-    while (i < len) {
-      if (array(i) < array(i-1)) return false
-      i += 1
-    }
-    true
-  }
 
   /**
    * Applies transformation on a vector.
@@ -74,46 +64,52 @@ class ChiSqSelectorModel @Since("1.3.0") (
   private def compress(features: Vector): Vector = {
     features match {
       case SparseVector(size, indices, values) =>
-        val newSize = filterIndices.length
-        val newValues = new ArrayBuilder.ofDouble
-        val newIndices = new ArrayBuilder.ofInt
-        var i = 0
-        var j = 0
-        var indicesIdx = 0
-        var filterIndicesIdx = 0
-        while (i < indices.length && j < filterIndices.length) {
-          indicesIdx = indices(i)
-          filterIndicesIdx = filterIndices(j)
-          if (indicesIdx == filterIndicesIdx) {
-            newIndices += j
-            newValues += values(i)
-            j += 1
-            i += 1
-          } else {
-            if (indicesIdx > filterIndicesIdx) {
-              j += 1
-            } else {
-              i += 1
-            }
-          }
-        }
-        // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
-        Vectors.sparse(newSize, newIndices.result(), newValues.result())
+        val (newIndices, newValues) = compressSparse(indices, values)
+        Vectors.sparse(filterIndices.length, newIndices, newValues)
       case DenseVector(values) =>
-        val values = features.toArray
-        Vectors.dense(filterIndices.map(i => values(i)))
+        Vectors.dense(compressDense(values))
       case other =>
         throw new UnsupportedOperationException(
           s"Only sparse and dense vectors are supported but got ${other.getClass}.")
     }
   }
 
+  private[spark] def compressSparse(indices: Array[Int],
+                                    values: Array[Double]): (Array[Int], Array[Double]) = {
+    val newValues = new ArrayBuilder.ofDouble
+    val newIndices = new ArrayBuilder.ofInt
+    var i = 0
+    var j = 0
+    var indicesIdx = 0
+    var filterIndicesIdx = 0
+    while (i < indices.length && j < filterIndices.length) {
+      indicesIdx = indices(i)
+      filterIndicesIdx = filterIndices(j)
+      if (indicesIdx == filterIndicesIdx) {
+        newIndices += j
+        newValues += values(i)
+        j += 1
+        i += 1
+      } else {
+        if (indicesIdx > filterIndicesIdx) {
+          j += 1
+        } else {
+          i += 1
+        }
+      }
+    }
+    // TODO: Sparse representation might be ineffective if (newSize ~= newValues.size)
+    (newIndices.result(), newValues.result())
+  }
+
+  private[spark] def compressDense(values: Array[Double]): Array[Double] = {
+    filterIndices.map(i => values(i))
+  }
+
   @Since("1.6.0")
   override def save(sc: SparkContext, path: String): Unit = {
     ChiSqSelectorModel.SaveLoadV1_0.save(sc, this, path)
   }
-
-  override protected def formatVersion: String = "1.0"
 }
 
 object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
@@ -144,7 +140,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
       val dataArray = Array.tabulate(model.selectedFeatures.length) { i =>
         Data(model.selectedFeatures(i))
       }
-      spark.createDataFrame(dataArray).repartition(1).write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(sc.makeRDD(dataArray, 1)).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
@@ -272,13 +268,16 @@ class ChiSqSelector @Since("2.1.0") () extends Serializable {
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
         val tempRes = chiSqTestResult
           .sortBy { case (res, _) => res.pValue }
-        val maxIndex = tempRes
+        val selected = tempRes
           .zipWithIndex
           .filter { case ((res, _), index) =>
             res.pValue <= fdr * (index + 1) / chiSqTestResult.length }
-          .map { case (_, index) => index }
-          .max
-        tempRes.take(maxIndex + 1)
+        if (selected.isEmpty) {
+          Array.empty[(ChiSqTestResult, Int)]
+        } else {
+          val maxIndex = selected.map(_._2).max
+          tempRes.take(maxIndex + 1)
+        }
       case ChiSqSelector.FWE =>
         chiSqTestResult
           .filter { case (res, _) => res.pValue < fwe / chiSqTestResult.length }

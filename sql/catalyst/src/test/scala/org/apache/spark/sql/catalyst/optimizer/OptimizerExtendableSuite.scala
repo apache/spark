@@ -47,7 +47,7 @@ class OptimizerExtendableSuite extends SparkFunSuite {
         DummyRule) :: Nil
     }
 
-    override def batches: Seq[Batch] = super.batches ++ myBatches
+    override def defaultBatches: Seq[Batch] = super.defaultBatches ++ myBatches
   }
 
   test("Extending batches possible") {

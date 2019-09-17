@@ -16,11 +16,16 @@
  */
 package org.apache.spark.security
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io._
+import java.nio.ByteBuffer
+import java.nio.channels.{Channels, ReadableByteChannel}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.UUID
+import java.nio.file.Files
+import java.util.{Arrays, Random, UUID}
 
 import com.google.common.io.ByteStreams
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
@@ -70,8 +75,8 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
   test("serializer manager integration") {
     val conf = createConf()
-      .set("spark.shuffle.compress", "true")
-      .set("spark.shuffle.spill.compress", "true")
+      .set(SHUFFLE_COMPRESS, true)
+      .set(SHUFFLE_SPILL_COMPRESS, true)
 
     val plainStr = "hello world"
     val blockId = new TempShuffleBlockId(UUID.randomUUID())
@@ -119,6 +124,77 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
     } finally {
       sc.stop()
     }
+  }
+
+  test("crypto stream wrappers") {
+    val testData = new Array[Byte](128 * 1024)
+    new Random().nextBytes(testData)
+
+    val conf = createConf()
+    val key = createKey(conf)
+    val file = Files.createTempFile("crypto", ".test").toFile()
+    file.deleteOnExit()
+
+    val outStream = createCryptoOutputStream(new FileOutputStream(file), conf, key)
+    try {
+      ByteStreams.copy(new ByteArrayInputStream(testData), outStream)
+    } finally {
+      outStream.close()
+    }
+
+    val inStream = createCryptoInputStream(new FileInputStream(file), conf, key)
+    try {
+      val inStreamData = ByteStreams.toByteArray(inStream)
+      assert(Arrays.equals(inStreamData, testData))
+    } finally {
+      inStream.close()
+    }
+
+    val outChannel = createWritableChannel(new FileOutputStream(file).getChannel(), conf, key)
+    try {
+      val inByteChannel = Channels.newChannel(new ByteArrayInputStream(testData))
+      ByteStreams.copy(inByteChannel, outChannel)
+    } finally {
+      outChannel.close()
+    }
+
+    val inChannel = createReadableChannel(new FileInputStream(file).getChannel(), conf, key)
+    try {
+      val inChannelData = ByteStreams.toByteArray(Channels.newInputStream(inChannel))
+      assert(Arrays.equals(inChannelData, testData))
+    } finally {
+      inChannel.close()
+    }
+  }
+
+  test("error handling wrapper") {
+    val wrapped = mock(classOf[ReadableByteChannel])
+    val decrypted = mock(classOf[ReadableByteChannel])
+    val errorHandler = new CryptoStreamUtils.ErrorHandlingReadableChannel(decrypted, wrapped)
+
+    when(decrypted.read(any(classOf[ByteBuffer])))
+      .thenThrow(new IOException())
+      .thenThrow(new InternalError())
+      .thenReturn(1)
+
+    val out = ByteBuffer.allocate(1)
+    intercept[IOException] {
+      errorHandler.read(out)
+    }
+    intercept[InternalError] {
+      errorHandler.read(out)
+    }
+
+    val e = intercept[IOException] {
+      errorHandler.read(out)
+    }
+    assert(e.getMessage().contains("is closed"))
+    errorHandler.close()
+
+    verify(decrypted, times(2)).read(any(classOf[ByteBuffer]))
+    verify(wrapped, never()).read(any(classOf[ByteBuffer]))
+    verify(decrypted, never()).close()
+    verify(wrapped, times(1)).close()
   }
 
   private def createConf(extra: (String, String)*): SparkConf = {

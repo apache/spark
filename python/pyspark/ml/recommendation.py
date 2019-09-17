@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
@@ -55,7 +57,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
 
     For implicit preference data, the algorithm used is based on
     `"Collaborative Filtering for Implicit Feedback Datasets",
-    <http://dx.doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
+    <https://doi.org/10.1109/ICDM.2008.22>`_, adapted for the blocked
     approach used here.
 
     Essentially instead of finding the low-rank approximations to the
@@ -77,11 +79,27 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> test = spark.createDataFrame([(0, 2), (1, 0), (2, 0)], ["user", "item"])
     >>> predictions = sorted(model.transform(test).collect(), key=lambda r: r[0])
     >>> predictions[0]
-    Row(user=0, item=2, prediction=-0.13807615637779236)
+    Row(user=0, item=2, prediction=0.6929101347923279)
     >>> predictions[1]
-    Row(user=1, item=0, prediction=2.6258413791656494)
+    Row(user=1, item=0, prediction=3.47356915473938)
     >>> predictions[2]
-    Row(user=2, item=0, prediction=-1.5018409490585327)
+    Row(user=2, item=0, prediction=-0.8991986513137817)
+    >>> user_recs = model.recommendForAllUsers(3)
+    >>> user_recs.where(user_recs.user == 0)\
+        .select("recommendations.item", "recommendations.rating").collect()
+    [Row(item=[0, 1, 2], rating=[3.910..., 1.997..., 0.692...])]
+    >>> item_recs = model.recommendForAllItems(3)
+    >>> item_recs.where(item_recs.item == 2)\
+        .select("recommendations.user", "recommendations.rating").collect()
+    [Row(user=[2, 1, 0], rating=[4.892..., 3.991..., 0.692...])]
+    >>> user_subset = df.where(df.user == 2)
+    >>> user_subset_recs = model.recommendForUserSubset(user_subset, 3)
+    >>> user_subset_recs.select("recommendations.item", "recommendations.rating").first()
+    Row(item=[2, 1, 0], rating=[4.892..., 1.076..., -0.899...])
+    >>> item_subset = df.where(df.item == 0)
+    >>> item_subset_recs = model.recommendForItemSubset(item_subset, 3)
+    >>> item_subset_recs.select("recommendations.user", "recommendations.rating").first()
+    Row(user=[0, 1, 2], rating=[3.910..., 3.473..., -0.899...])
     >>> als_path = temp_path + "/als"
     >>> als.save(als_path)
     >>> als2 = ALS.load(als_path)
@@ -384,6 +402,58 @@ class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("itemFactors")
 
+    @since("2.2.0")
+    def recommendForAllUsers(self, numItems):
+        """
+        Returns top `numItems` items recommended for each user, for all users.
+
+        :param numItems: max number of recommendations for each user
+        :return: a DataFrame of (userCol, recommendations), where recommendations are
+                 stored as an array of (itemCol, rating) Rows.
+        """
+        return self._call_java("recommendForAllUsers", numItems)
+
+    @since("2.2.0")
+    def recommendForAllItems(self, numUsers):
+        """
+        Returns top `numUsers` users recommended for each item, for all items.
+
+        :param numUsers: max number of recommendations for each item
+        :return: a DataFrame of (itemCol, recommendations), where recommendations are
+                 stored as an array of (userCol, rating) Rows.
+        """
+        return self._call_java("recommendForAllItems", numUsers)
+
+    @since("2.3.0")
+    def recommendForUserSubset(self, dataset, numItems):
+        """
+        Returns top `numItems` items recommended for each user id in the input data set. Note that
+        if there are duplicate ids in the input dataset, only one set of recommendations per unique
+        id will be returned.
+
+        :param dataset: a Dataset containing a column of user ids. The column name must match
+                        `userCol`.
+        :param numItems: max number of recommendations for each user
+        :return: a DataFrame of (userCol, recommendations), where recommendations are
+                 stored as an array of (itemCol, rating) Rows.
+        """
+        return self._call_java("recommendForUserSubset", dataset, numItems)
+
+    @since("2.3.0")
+    def recommendForItemSubset(self, dataset, numUsers):
+        """
+        Returns top `numUsers` users recommended for each item id in the input data set. Note that
+        if there are duplicate ids in the input dataset, only one set of recommendations per unique
+        id will be returned.
+
+        :param dataset: a Dataset containing a column of item ids. The column name must match
+                        `itemCol`.
+        :param numUsers: max number of recommendations for each item
+        :return: a DataFrame of (itemCol, recommendations), where recommendations are
+                 stored as an array of (userCol, rating) Rows.
+        """
+        return self._call_java("recommendForItemSubset", dataset, numUsers)
+
 
 if __name__ == "__main__":
     import doctest
@@ -412,4 +482,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

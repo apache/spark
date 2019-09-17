@@ -24,6 +24,7 @@ import com.google.common.io.Files
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config
 
 /**
  * Continuously appends data from input stream into the given file, and rolls
@@ -44,10 +45,8 @@ private[spark] class RollingFileAppender(
     bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE
   ) extends FileAppender(inputStream, activeFile, bufferSize) {
 
-  import RollingFileAppender._
-
-  private val maxRetainedFiles = conf.getInt(RETAINED_FILES_PROPERTY, -1)
-  private val enableCompression = conf.getBoolean(ENABLE_COMPRESSION, false)
+  private val maxRetainedFiles = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES)
+  private val enableCompression = conf.get(config.EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION)
 
   /** Stop the appender */
   override def stop() {
@@ -82,7 +81,7 @@ private[spark] class RollingFileAppender(
   // Roll the log file and compress if enableCompression is true.
   private def rotateFile(activeFile: File, rolloverFile: File): Unit = {
     if (enableCompression) {
-      val gzFile = new File(rolloverFile.getAbsolutePath + GZIP_LOG_SUFFIX)
+      val gzFile = new File(rolloverFile.getAbsolutePath + RollingFileAppender.GZIP_LOG_SUFFIX)
       var gzOutputStream: GZIPOutputStream = null
       var inputStream: InputStream = null
       try {
@@ -103,7 +102,7 @@ private[spark] class RollingFileAppender(
 
   // Check if the rollover file already exists.
   private def rolloverFileExist(file: File): Boolean = {
-    file.exists || new File(file.getAbsolutePath + GZIP_LOG_SUFFIX).exists
+    file.exists || new File(file.getAbsolutePath + RollingFileAppender.GZIP_LOG_SUFFIX).exists
   }
 
   /** Move the active log file to a new rollover file */
@@ -164,15 +163,7 @@ private[spark] class RollingFileAppender(
  * names of configurations that configure rolling file appenders.
  */
 private[spark] object RollingFileAppender {
-  val STRATEGY_PROPERTY = "spark.executor.logs.rolling.strategy"
-  val STRATEGY_DEFAULT = ""
-  val INTERVAL_PROPERTY = "spark.executor.logs.rolling.time.interval"
-  val INTERVAL_DEFAULT = "daily"
-  val SIZE_PROPERTY = "spark.executor.logs.rolling.maxSize"
-  val SIZE_DEFAULT = (1024 * 1024).toString
-  val RETAINED_FILES_PROPERTY = "spark.executor.logs.rolling.maxRetainedFiles"
   val DEFAULT_BUFFER_SIZE = 8192
-  val ENABLE_COMPRESSION = "spark.executor.logs.rolling.enableCompression"
 
   val GZIP_LOG_SUFFIX = ".gz"
 

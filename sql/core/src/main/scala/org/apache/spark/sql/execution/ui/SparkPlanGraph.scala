@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils
 
 import org.apache.spark.sql.execution.{SparkPlanInfo, WholeStageCodegenExec}
 
@@ -96,6 +96,15 @@ object SparkPlanGraph {
       case "InputAdapter" =>
         buildSparkPlanGraphNode(
           planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case "BroadcastQueryStage" | "ShuffleQueryStage" =>
+        if (exchanges.contains(planInfo.children.head)) {
+          // Point to the re-used exchange
+          val node = exchanges(planInfo.children.head)
+          edges += SparkPlanGraphEdge(node.id, parent.id)
+        } else {
+          buildSparkPlanGraphNode(
+            planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+        }
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
         buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
@@ -103,6 +112,11 @@ object SparkPlanGraph {
         // Point to the re-used subquery
         val node = exchanges(planInfo)
         edges += SparkPlanGraphEdge(node.id, parent.id)
+      case "ReusedSubquery" =>
+        // Re-used subquery might appear before the original subquery, so skip this node and let
+        // the previous `case` make sure the re-used and the original point to the same node.
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, subgraph, exchanges)
       case "ReusedExchange" if exchanges.contains(planInfo.children.head) =>
         // Point to the re-used exchange
         val node = exchanges(planInfo.children.head)
@@ -113,7 +127,7 @@ object SparkPlanGraph {
         }
         val node = new SparkPlanGraphNode(
           nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
-          planInfo.simpleString, planInfo.metadata, metrics)
+          planInfo.simpleString, metrics)
         if (subgraph == null) {
           nodes += node
         } else {
@@ -143,7 +157,6 @@ private[ui] class SparkPlanGraphNode(
     val id: Long,
     val name: String,
     val desc: String,
-    val metadata: Map[String, String],
     val metrics: Seq[SQLPlanMetric]) {
 
   def makeDotNode(metricsValue: Map[Long, String]): String = {
@@ -177,7 +190,7 @@ private[ui] class SparkPlanGraphCluster(
     desc: String,
     val nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
     metrics: Seq[SQLPlanMetric])
-  extends SparkPlanGraphNode(id, name, desc, Map.empty, metrics) {
+  extends SparkPlanGraphNode(id, name, desc, metrics) {
 
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     val duration = metrics.filter(_.name.startsWith(WholeStageCodegenExec.PIPELINE_DURATION_METRIC))
@@ -185,7 +198,7 @@ private[ui] class SparkPlanGraphCluster(
       require(duration.length == 1)
       val id = duration(0).accumulatorId
       if (metricsValue.contains(duration(0).accumulatorId)) {
-        name + "\n\n" + metricsValue.get(id).get
+        name + "\n\n" + metricsValue(id)
       } else {
         name
       }
@@ -203,7 +216,7 @@ private[ui] class SparkPlanGraphCluster(
 
 
 /**
- * Represent an edge in the SparkPlan tree. `fromId` is the parent node id, and `toId` is the child
+ * Represent an edge in the SparkPlan tree. `fromId` is the child node id, and `toId` is the parent
  * node id.
  */
 private[ui] case class SparkPlanGraphEdge(fromId: Long, toId: Long) {

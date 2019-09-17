@@ -21,12 +21,12 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.2.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-docker-integration-tests_2.11</artifactId>
+  <artifactId>spark-docker-integration-tests_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Docker Integration Tests</name>
   <url>http://spark.apache.org/</url>
@@ -76,6 +76,13 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-catalyst_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
@@ -142,6 +149,12 @@
       <artifactId>db2jcc4</artifactId>
       <version>10.5.0.5</version>
       <type>jar</type>
+    </dependency>
+    <dependency>
+      <groupId>com.microsoft.sqlserver</groupId>
+      <artifactId>mssql-jdbc</artifactId>
+      <version>7.2.1.jre8</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

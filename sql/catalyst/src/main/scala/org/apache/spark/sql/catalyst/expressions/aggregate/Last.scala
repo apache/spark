@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -32,8 +33,17 @@ import org.apache.spark.sql.types._
 @ExpressionDescription(
   usage = """
     _FUNC_(expr[, isIgnoreNull]) - Returns the last value of `expr` for a group of rows.
-      If `isIgnoreNull` is true, returns only non-null values.
-  """)
+      If `isIgnoreNull` is true, returns only non-null values""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(col) FROM VALUES (10), (5), (20) AS tab(col);
+       20
+      > SELECT _FUNC_(col) FROM VALUES (10), (5), (NULL) AS tab(col);
+       NULL
+      > SELECT _FUNC_(col, true) FROM VALUES (10), (5), (NULL) AS tab(col);
+       5
+  """,
+  since = "2.0.0")
 case class Last(child: Expression, ignoreNullsExpr: Expression)
   extends DeclarativeAggregate with ExpectsInputTypes {
 
@@ -44,7 +54,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
   override def nullable: Boolean = true
 
   // Last is not a deterministic function.
-  override def deterministic: Boolean = false
+  override lazy val deterministic: Boolean = false
 
   // Return data type.
   override def dataType: DataType = child.dataType
@@ -80,8 +90,8 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
   override lazy val updateExpressions: Seq[Expression] = {
     if (ignoreNulls) {
       Seq(
-        /* last = */ If(IsNull(child), last, child),
-        /* valueSet = */ Or(valueSet, IsNotNull(child))
+        /* last = */ If(child.isNull, last, child),
+        /* valueSet = */ valueSet || child.isNotNull
       )
     } else {
       Seq(
@@ -95,7 +105,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
     // Prefer the right hand expression if it has been set.
     Seq(
       /* last = */ If(valueSet.right, last.right, last.left),
-      /* valueSet = */ Or(valueSet.right, valueSet.left)
+      /* valueSet = */ valueSet.right || valueSet.left
     )
   }
 

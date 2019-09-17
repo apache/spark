@@ -27,6 +27,7 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
@@ -40,9 +41,12 @@ import org.json4s.JsonAST._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
+import org.apache.spark.util.Utils
 
 object Literal {
   val TrueLiteral: Literal = Literal(true, BooleanType)
@@ -57,14 +61,18 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
+    case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
     case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
+    case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
+    case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
       val elementType = componentTypeToDataType(a.getClass.getComponentType())
       val dataType = ArrayType(elementType)
@@ -93,7 +101,9 @@ object Literal {
     case JavaBoolean.TYPE => BooleanType
 
     // java classes
+    case _ if clz == classOf[LocalDate] => DateType
     case _ if clz == classOf[Date] => DateType
+    case _ if clz == classOf[Instant] => TimestampType
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
@@ -122,34 +132,6 @@ object Literal {
    */
   def fromObject(obj: Any, objType: DataType): Literal = new Literal(obj, objType)
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
-
-  def fromJSON(json: JValue): Literal = {
-    val dataType = DataType.parseDataType(json \ "dataType")
-    json \ "value" match {
-      case JNull => Literal.create(null, dataType)
-      case JString(str) =>
-        val value = dataType match {
-          case BooleanType => str.toBoolean
-          case ByteType => str.toByte
-          case ShortType => str.toShort
-          case IntegerType => str.toInt
-          case LongType => str.toLong
-          case FloatType => str.toFloat
-          case DoubleType => str.toDouble
-          case StringType => UTF8String.fromString(str)
-          case DateType => java.sql.Date.valueOf(str)
-          case TimestampType => java.sql.Timestamp.valueOf(str)
-          case CalendarIntervalType => CalendarInterval.fromString(str)
-          case t: DecimalType =>
-            val d = Decimal(str)
-            assert(d.changePrecision(t.precision, t.scale))
-            d
-          case _ => null
-        }
-        Literal.create(value, dataType)
-      case other => sys.error(s"$other is not a valid Literal json value")
-    }
-  }
 
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
@@ -185,9 +167,50 @@ object Literal {
     case map: MapType => create(Map(), map)
     case struct: StructType =>
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
-    case udt: UserDefinedType[_] => default(udt.sqlType)
+    case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
       throw new RuntimeException(s"no default for type $dataType")
+  }
+
+  private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
+    def doValidate(v: Any, dataType: DataType): Boolean = dataType match {
+      case _ if v == null => true
+      case BooleanType => v.isInstanceOf[Boolean]
+      case ByteType => v.isInstanceOf[Byte]
+      case ShortType => v.isInstanceOf[Short]
+      case IntegerType | DateType => v.isInstanceOf[Int]
+      case LongType | TimestampType => v.isInstanceOf[Long]
+      case FloatType => v.isInstanceOf[Float]
+      case DoubleType => v.isInstanceOf[Double]
+      case _: DecimalType => v.isInstanceOf[Decimal]
+      case CalendarIntervalType => v.isInstanceOf[CalendarInterval]
+      case BinaryType => v.isInstanceOf[Array[Byte]]
+      case StringType => v.isInstanceOf[UTF8String]
+      case st: StructType =>
+        v.isInstanceOf[InternalRow] && {
+          val row = v.asInstanceOf[InternalRow]
+          st.fields.map(_.dataType).zipWithIndex.forall {
+            case (dt, i) => doValidate(row.get(i, dt), dt)
+          }
+        }
+      case at: ArrayType =>
+        v.isInstanceOf[ArrayData] && {
+          val ar = v.asInstanceOf[ArrayData]
+          ar.numElements() == 0 || doValidate(ar.get(0, at.elementType), at.elementType)
+        }
+      case mt: MapType =>
+        v.isInstanceOf[MapData] && {
+          val map = v.asInstanceOf[MapData]
+          doValidate(map.keyArray(), ArrayType(mt.keyType)) &&
+            doValidate(map.valueArray(), ArrayType(mt.valueType))
+        }
+      case ObjectType(cls) => cls.isInstance(v)
+      case udt: UserDefinedType[_] => doValidate(v, udt.sqlType)
+      case _ => false
+    }
+    require(doValidate(value, dataType),
+      s"Literal must have a corresponding value to ${dataType.catalogString}, " +
+      s"but class ${Utils.getSimpleName(value.getClass)} found.")
   }
 }
 
@@ -233,6 +256,8 @@ object DecimalLiteral {
  */
 case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
+  Literal.validateLiteralValue(value, dataType)
+
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
@@ -277,40 +302,45 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    // change the isNull and primitive to consts, to inline them
+    val javaType = CodeGenerator.javaType(dataType)
     if (value == null) {
-      ev.isNull = "true"
-      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
+      ExprCode.forNullValue(dataType)
     } else {
-      ev.isNull = "false"
+      def toExprCode(code: String): ExprCode = {
+        ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
+      }
       dataType match {
         case BooleanType | IntegerType | DateType =>
-          ev.copy(code = "", value = value.toString)
+          toExprCode(value.toString)
         case FloatType =>
-          val v = value.asInstanceOf[Float]
-          if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceMinorObj(v)
-            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
-            ev.copy(code = code)
-          } else {
-            ev.copy(code = "", value = s"${value}f")
+          value.asInstanceOf[Float] match {
+            case v if v.isNaN =>
+              toExprCode("Float.NaN")
+            case Float.PositiveInfinity =>
+              toExprCode("Float.POSITIVE_INFINITY")
+            case Float.NegativeInfinity =>
+              toExprCode("Float.NEGATIVE_INFINITY")
+            case _ =>
+              toExprCode(s"${value}F")
           }
         case DoubleType =>
-          val v = value.asInstanceOf[Double]
-          if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceMinorObj(v)
-            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
-            ev.copy(code = code)
-          } else {
-            ev.copy(code = "", value = s"${value}D")
+          value.asInstanceOf[Double] match {
+            case v if v.isNaN =>
+              toExprCode("Double.NaN")
+            case Double.PositiveInfinity =>
+              toExprCode("Double.POSITIVE_INFINITY")
+            case Double.NegativeInfinity =>
+              toExprCode("Double.NEGATIVE_INFINITY")
+            case _ =>
+              toExprCode(s"${value}D")
           }
         case ByteType | ShortType =>
-          ev.copy(code = "", value = s"($javaType)$value")
+          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
         case TimestampType | LongType =>
-          ev.copy(code = "", value = s"${value}L")
-        case other =>
-          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
+          toExprCode(s"${value}L")
+        case _ =>
+          val constRef = ctx.addReferenceObj("literal", value, javaType)
+          ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
       }
     }
   }
@@ -341,8 +371,11 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ => v + "D"
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
-    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
-    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Int, DateType) => s"DATE '${DateFormatter().format(v)}'"
+    case (v: Long, TimestampType) =>
+      val formatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"TIMESTAMP('${formatter.format(v)}')"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }

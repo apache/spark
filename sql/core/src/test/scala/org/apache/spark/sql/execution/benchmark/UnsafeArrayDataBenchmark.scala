@@ -19,20 +19,21 @@ package org.apache.spark.sql.execution.benchmark
 
 import scala.util.Random
 
+import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter}
-import org.apache.spark.util.Benchmark
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 
 /**
  * Benchmark [[UnsafeArrayDataBenchmark]] for UnsafeArrayData
- * To run this:
- *  1. replace ignore(...) with test(...)
- *  2. build/sbt "sql/test-only *benchmark.UnsafeArrayDataBenchmark"
- *
- * Benchmarks in this file are skipped in normal builds.
+ * To run this benchmark:
+ * {{{
+ *   1. without sbt: bin/spark-submit --class <this class> <spark sql test jar>
+ *   2. build/sbt "sql/test:runMain <this class>"
+ *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
+ *      Results will be written to "benchmarks/UnsafeArrayDataBenchmark-results.txt".
+ * }}}
  */
-class UnsafeArrayDataBenchmark extends BenchmarkBase {
+object UnsafeArrayDataBenchmark extends BenchmarkBase {
 
   def calculateHeaderPortionInBytes(count: Int) : Int = {
     /* 4 + 4 * count // Use this expression for SPARK-15962 */
@@ -77,18 +78,10 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
       }
     }
 
-    val benchmark = new Benchmark("Read UnsafeArrayData", count * iters)
+    val benchmark = new Benchmark("Read UnsafeArrayData", count * iters, output = output)
     benchmark.addCase("Int")(readIntArray)
     benchmark.addCase("Double")(readDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Read UnsafeArrayData:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            252 /  260        666.1           1.5       1.0X
-    Double                                         281 /  292        597.7           1.7       0.9X
-    */
   }
 
   def writeUnsafeArray(iters: Int): Unit = {
@@ -121,18 +114,10 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
       doubleTotalLength = len
     }
 
-    val benchmark = new Benchmark("Write UnsafeArrayData", count * iters)
+    val benchmark = new Benchmark("Write UnsafeArrayData", count * iters, output = output)
     benchmark.addCase("Int")(writeIntArray)
     benchmark.addCase("Double")(writeDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Write UnsafeArrayData:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            196 /  249        107.0           9.3       1.0X
-    Double                                         227 /  367         92.3          10.8       0.9X
-    */
   }
 
   def getPrimitiveArray(iters: Int): Unit = {
@@ -167,18 +152,11 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
       doubleTotalLength = len
     }
 
-    val benchmark = new Benchmark("Get primitive array from UnsafeArrayData", count * iters)
+    val benchmark =
+      new Benchmark("Get primitive array from UnsafeArrayData", count * iters, output = output)
     benchmark.addCase("Int")(readIntArray)
     benchmark.addCase("Double")(readDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Get primitive array from UnsafeArrayData: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)  Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            151 /  198        415.8           2.4       1.0X
-    Double                                         214 /  394        293.6           3.4       0.7X
-    */
   }
 
   def putPrimitiveArray(iters: Int): Unit = {
@@ -209,24 +187,19 @@ class UnsafeArrayDataBenchmark extends BenchmarkBase {
       doubleTotalLen = len
     }
 
-    val benchmark = new Benchmark("Create UnsafeArrayData from primitive array", count * iters)
+    val benchmark =
+      new Benchmark("Create UnsafeArrayData from primitive array", count * iters, output = output)
     benchmark.addCase("Int")(createIntArray)
     benchmark.addCase("Double")(createDoubleArray)
     benchmark.run
-    /*
-    OpenJDK 64-Bit Server VM 1.8.0_91-b14 on Linux 4.4.11-200.fc22.x86_64
-    Intel Xeon E3-12xx v2 (Ivy Bridge)
-    Create UnsafeArrayData from primitive array: Best/Avg Time(ms) Rate(M/s)   Per Row(ns)  Relative
-    ------------------------------------------------------------------------------------------------
-    Int                                            206 /  211        306.0           3.3       1.0X
-    Double                                         232 /  406        271.6           3.7       0.9X
-    */
   }
 
-  ignore("Benchmark UnsafeArrayData") {
-    readUnsafeArray(10)
-    writeUnsafeArray(10)
-    getPrimitiveArray(5)
-    putPrimitiveArray(5)
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    runBenchmark("Benchmark UnsafeArrayData") {
+      readUnsafeArray(10)
+      writeUnsafeArray(10)
+      getPrimitiveArray(5)
+      putPrimitiveArray(5)
+    }
   }
 }

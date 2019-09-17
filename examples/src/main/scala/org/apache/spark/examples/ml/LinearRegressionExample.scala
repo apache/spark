@@ -18,8 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import scala.language.reflectiveCalls
-
 import scopt.OptionParser
 
 import org.apache.spark.examples.mllib.AbstractParams

@@ -2,6 +2,21 @@
 layout: global
 title: Frequent Pattern Mining - RDD-based API
 displayTitle: Frequent Pattern Mining - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Mining frequent items, itemsets, subsequences, or other substructures is usually among the
@@ -15,7 +30,7 @@ a popular algorithm to mining frequent itemsets.
 ## FP-growth
 
 The FP-growth algorithm is described in the paper
-[Han et al., Mining frequent patterns without candidate generation](http://dx.doi.org/10.1145/335191.335372),
+[Han et al., Mining frequent patterns without candidate generation](https://doi.org/10.1145/335191.335372),
 where "FP" stands for frequent pattern.
 Given a dataset of transactions, the first step of FP-growth is to calculate item frequencies and identify frequent items.
 Different from [Apriori-like](http://en.wikipedia.org/wiki/Apriori_algorithm) algorithms designed for the same purpose,
@@ -23,8 +38,8 @@ the second step of FP-growth uses a suffix tree (FP-tree) structure to encode tr
 explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
 In `spark.mllib`, we implemented a parallel version of FP-growth called PFP,
-as described in [Li et al., PFP: Parallel FP-growth for query recommendation](http://dx.doi.org/10.1145/1454008.1454027).
-PFP distributes the work of growing FP-trees based on the suffices of transactions,
+as described in [Li et al., PFP: Parallel FP-growth for query recommendation](https://doi.org/10.1145/1454008.1454027).
+PFP distributes the work of growing FP-trees based on the suffixes of transactions,
 and hence more scalable than a single-machine implementation.
 We refer users to the papers for more details.
 
@@ -41,7 +56,7 @@ We refer users to the papers for more details.
 
 [`FPGrowth`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowth) implements the
 FP-growth algorithm.
-It take a `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
+It takes an `RDD` of transactions, where each transaction is an `Array` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/scala/index.html#org.apache.spark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.  The following
@@ -60,7 +75,7 @@ Refer to the [`FPGrowth` Scala docs](api/scala/index.html#org.apache.spark.mllib
 
 [`FPGrowth`](api/java/org/apache/spark/mllib/fpm/FPGrowth.html) implements the
 FP-growth algorithm.
-It take an `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
+It takes a `JavaRDD` of transactions, where each transaction is an `Iterable` of items of a generic type.
 Calling `FPGrowth.run` with transactions returns an
 [`FPGrowthModel`](api/java/org/apache/spark/mllib/fpm/FPGrowthModel.html)
 that stores the frequent itemsets with their frequencies.  The following
@@ -79,7 +94,7 @@ Refer to the [`FPGrowth` Java docs](api/java/org/apache/spark/mllib/fpm/FPGrowth
 
 [`FPGrowth`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowth) implements the
 FP-growth algorithm.
-It take an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
+It takes an `RDD` of transactions, where each transaction is an `List` of items of a generic type.
 Calling `FPGrowth.train` with transactions returns an
 [`FPGrowthModel`](api/python/pyspark.mllib.html#pyspark.mllib.fpm.FPGrowthModel)
 that stores the frequent itemsets with their frequencies.
@@ -122,7 +137,7 @@ Refer to the [`AssociationRules` Java docs](api/java/org/apache/spark/mllib/fpm/
 
 PrefixSpan is a sequential pattern mining algorithm described in
 [Pei et al., Mining Sequential Patterns by Pattern-Growth: The
-PrefixSpan Approach](http://dx.doi.org/10.1109%2FTKDE.2004.77). We refer
+PrefixSpan Approach](https://doi.org/10.1109%2FTKDE.2004.77). We refer
 the reader to the referenced paper for formalizing the sequential
 pattern mining problem.
 

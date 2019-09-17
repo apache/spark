@@ -18,17 +18,15 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import scala.language.reflectiveCalls
-
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{impurity, DecisionTree, RandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, RandomForestModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -211,7 +209,7 @@ object DecisionTreeRunner {
       case Regression =>
         (origExamples, null, 0)
       case _ =>
-        throw new IllegalArgumentException("Algo ${params.algo} not supported.")
+        throw new IllegalArgumentException(s"Algo $algo not supported.")
     }
 
     // Create training, test sets.
@@ -247,7 +245,7 @@ object DecisionTreeRunner {
     val numTest = test.count()
     println(s"numTraining = $numTraining, numTest = $numTest.")
 
-    examples.unpersist(blocking = false)
+    examples.unpersist()
 
     (training, test, numClasses)
   }
@@ -349,19 +347,17 @@ object DecisionTreeRunner {
 
   /**
    * Calculates the mean squared error for regression.
-   *
-   * This is just for demo purpose. In general, don't copy this code because it is NOT efficient
-   * due to the use of structural types, which leads to one reflection call per record.
    */
-  // scalastyle:off structural.type
-  private[mllib] def meanSquaredError(
-      model: { def predict(features: Vector): Double },
-      data: RDD[LabeledPoint]): Double = {
+  private[mllib] def meanSquaredError(model: RandomForestModel, data: RDD[LabeledPoint]): Double =
     data.map { y =>
       val err = model.predict(y.features) - y.label
       err * err
     }.mean()
-  }
-  // scalastyle:on structural.type
+
+  private[mllib] def meanSquaredError(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double =
+    data.map { y =>
+      val err = model.predict(y.features) - y.label
+      err * err
+    }.mean()
 }
 // scalastyle:on println

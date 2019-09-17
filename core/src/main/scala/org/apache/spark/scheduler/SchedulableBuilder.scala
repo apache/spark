@@ -18,13 +18,14 @@
 package org.apache.spark.scheduler
 
 import java.io.{FileInputStream, InputStream}
-import java.util.{NoSuchElementException, Properties}
+import java.util.{Locale, NoSuchElementException, Properties}
 
 import scala.util.control.NonFatal
 import scala.xml.{Node, XML}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
@@ -56,10 +57,9 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   extends SchedulableBuilder with Logging {
 
-  val SCHEDULER_ALLOCATION_FILE_PROPERTY = "spark.scheduler.allocation.file"
-  val schedulerAllocFile = conf.getOption(SCHEDULER_ALLOCATION_FILE_PROPERTY)
+  val schedulerAllocFile = conf.get(SCHEDULER_ALLOCATION_FILE)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
-  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
+  val FAIR_SCHEDULER_PROPERTIES = SparkContext.SPARK_SCHEDULER_POOL
   val DEFAULT_POOL_NAME = "default"
   val MINIMUM_SHARES_PROPERTY = "minShare"
   val SCHEDULING_MODE_PROPERTY = "schedulingMode"
@@ -85,7 +85,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         } else {
           logWarning("Fair Scheduler configuration file not found so jobs will be scheduled in " +
             s"FIFO order. To use fair scheduling, configure pools in $DEFAULT_SCHEDULER_FILE or " +
-            s"set $SCHEDULER_ALLOCATION_FILE_PROPERTY to a file that contains the configuration.")
+            s"set ${SCHEDULER_ALLOCATION_FILE.key} to a file that contains the configuration.")
           None
         }
       }
@@ -142,7 +142,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       defaultValue: SchedulingMode,
       fileName: String): SchedulingMode = {
 
-    val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase
+    val xmlSchedulingMode =
+      (poolNode \ SCHEDULING_MODE_PROPERTY).text.trim.toUpperCase(Locale.ROOT)
     val warningMessage = s"Unsupported schedulingMode: $xmlSchedulingMode found in " +
       s"Fair Scheduler configuration file: $fileName, using " +
       s"the default schedulingMode: $defaultValue for pool: $poolName"
@@ -180,20 +181,23 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   }
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
-    var poolName = DEFAULT_POOL_NAME
-    var parentPool = rootPool.getSchedulableByName(poolName)
-    if (properties != null) {
-      poolName = properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
-      parentPool = rootPool.getSchedulableByName(poolName)
-      if (parentPool == null) {
-        // we will create a new pool that user has configured in app
-        // instead of being defined in xml file
-        parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
-          DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
-        rootPool.addSchedulable(parentPool)
-        logInfo("Created pool: %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-          poolName, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+    val poolName = if (properties != null) {
+        properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
+      } else {
+        DEFAULT_POOL_NAME
       }
+    var parentPool = rootPool.getSchedulableByName(poolName)
+    if (parentPool == null) {
+      // we will create a new pool that user has configured in app
+      // instead of being defined in xml file
+      parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
+        DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+      rootPool.addSchedulable(parentPool)
+      logWarning(s"A job was submitted with scheduler pool $poolName, which has not been " +
+        "configured. This can happen when the file that pools are read from isn't set, or " +
+        s"when that file doesn't contain $poolName. Created $poolName with default " +
+        s"configuration (schedulingMode: $DEFAULT_SCHEDULING_MODE, " +
+        s"minShare: $DEFAULT_MINIMUM_SHARE, weight: $DEFAULT_WEIGHT)")
     }
     parentPool.addSchedulable(manager)
     logInfo("Added task set " + manager.name + " tasks to pool " + poolName)

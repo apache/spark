@@ -2,6 +2,21 @@
 layout: global
 title: Optimization - RDD-based API
 displayTitle: Optimization - RDD-based API
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * Table of contents
@@ -116,12 +131,12 @@ is a stochastic gradient. Here `$S$` is the sampled subset of size `$|S|=$ miniB
 $\cdot n$`.
 
 In each iteration, the sampling over the distributed dataset
-([RDD](programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
+([RDD](rdd-programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
 computation of the sum of the partial results from each worker machine is performed by the
 standard spark routines.
 
 If the fraction of points `miniBatchFraction` is set to 1 (default), then the resulting step in
-each iteration is exact (sub)gradient descent. In this case there is no randomness and no
+each iteration is exact (sub)gradient descent. In this case, there is no randomness and no
 variance in the used step directions.
 On the other extreme, if `miniBatchFraction` is chosen very small, such that only a single point
 is sampled, i.e. `$|S|=$ miniBatchFraction $\cdot n = 1$`, then the algorithm is equivalent to
@@ -135,7 +150,7 @@ algorithm in the family of quasi-Newton methods to solve the optimization proble
 quadratic without evaluating the second partial derivatives of the objective function to construct the 
 Hessian matrix. The Hessian matrix is approximated by previous gradient evaluations, so there is no 
 vertical scalability issue (the number of training features) when computing the Hessian matrix 
-explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
+explicitly in Newton's method. As a result, L-BFGS often achieves more rapid convergence compared with
 other first-order optimization. 
 
 ### Choosing an Optimization Method

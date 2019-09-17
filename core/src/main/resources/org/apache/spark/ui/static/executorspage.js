@@ -25,13 +25,31 @@ function getThreadDumpEnabled() {
     return threadDumpEnabled;
 }
 
-function formatStatus(status, type) {
-    if (type !== 'display') return status;
-    if (status) {
-        return "Active"
-    } else {
-        return "Dead"
+function formatStatus(status, type, row) {
+    if (row.isBlacklisted) {
+        return "Blacklisted";
     }
+
+    if (status) {
+        if (row.blacklistedInStages.length == 0) {
+            return "Active"
+        }
+        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
+    }
+    return "Dead"
+}
+
+function formatResourceCells(resources) {
+    var result = ""
+    var count = 0
+    $.each(resources, function (name, resInfo) {
+        if (count > 0) {
+            result += ", "
+        }
+        result += name + ': [' + resInfo.addresses.join(", ") + ']'
+        count += 1
+    });
+    return result
 }
 
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
@@ -53,78 +71,6 @@ $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
-
-function createTemplateURI(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    ind = words.indexOf("history");
-    if(ind > 0) {
-        var baseURI = words.slice(0, ind).join('/') + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    return location.origin + "/static/executorspage-template.html";
-}
-
-function getStandAloneppId(cb) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    //Looks like Web UI is running in standalone mode
-    //Let's get application-id using REST End Point
-    $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
-        if (response && response.length > 0) {
-            var appId = response[0].id
-            cb(appId);
-            return;
-        }
-    });
-}
-
-function createRESTEndPoint(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var newBaseURI = words.slice(0, ind + 2).join('/');
-        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var attemptId = words[ind + 2];
-        var newBaseURI = words.slice(0, ind).join('/');
-        if (isNaN(attemptId)) {
-            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
-        } else {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
-        }
-    }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
-}
-
-function formatLogsCells(execLogs, type) {
-    if (type !== 'display') return Object.keys(execLogs);
-    if (!execLogs) return;
-    var result = '';
-    $.each(execLogs, function (logName, logUrl) {
-        result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
-    });
-    return result;
-}
 
 function logsExist(execs) {
     return execs.some(function(exec) {
@@ -172,24 +118,44 @@ function totalDurationColor(totalGCTime, totalDuration) {
     return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
 }
 
+var sumOptionalColumns = [3, 4];
+var execOptionalColumns = [5, 6, 9];
+var execDataTable;
+var sumDataTable;
+
+function reselectCheckboxesBasedOnTaskTableState() {
+    var allChecked = true;
+    if (typeof execDataTable !== "undefined") {
+        for (var k = 0; k < execOptionalColumns.length; k++) {
+            if (execDataTable.column(execOptionalColumns[k]).visible()) {
+                $("[data-exec-col-idx=" + execOptionalColumns[k] + "]").prop("checked", true);
+            } else {
+                allChecked = false;
+            }
+        }
+    }
+    if (allChecked) {
+        $("#select-all-box").prop("checked", true);
+    }
+}
+
 $(document).ready(function () {
-    $.extend($.fn.dataTable.defaults, {
-        stateSave: true,
-        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
-        pageLength: 20
-    });
+    setDataTableDefaults();
 
-    executorsSummary = $("#active-executors");
+    var executorsSummary = $("#active-executors");
 
-    getStandAloneppId(function (appId) {
+    getStandAloneAppId(function (appId) {
 
-        var endPoint = createRESTEndPoint(appId);
+        var endPoint = createRESTEndPointForExecutorsPage(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
-            var summary = [];
             var allExecCnt = 0;
             var allRDDBlocks = 0;
             var allMemoryUsed = 0;
             var allMaxMemory = 0;
+            var allOnHeapMemoryUsed = 0;
+            var allOnHeapMaxMemory = 0;
+            var allOffHeapMemoryUsed = 0;
+            var allOffHeapMaxMemory = 0;
             var allDiskUsed = 0;
             var allTotalCores = 0;
             var allMaxTasks = 0;
@@ -208,6 +174,10 @@ $(document).ready(function () {
             var activeRDDBlocks = 0;
             var activeMemoryUsed = 0;
             var activeMaxMemory = 0;
+            var activeOnHeapMemoryUsed = 0;
+            var activeOnHeapMaxMemory = 0;
+            var activeOffHeapMemoryUsed = 0;
+            var activeOffHeapMaxMemory = 0;
             var activeDiskUsed = 0;
             var activeTotalCores = 0;
             var activeMaxTasks = 0;
@@ -226,6 +196,10 @@ $(document).ready(function () {
             var deadRDDBlocks = 0;
             var deadMemoryUsed = 0;
             var deadMaxMemory = 0;
+            var deadOnHeapMemoryUsed = 0;
+            var deadOnHeapMaxMemory = 0;
+            var deadOffHeapMemoryUsed = 0;
+            var deadOffHeapMaxMemory = 0;
             var deadDiskUsed = 0;
             var deadTotalCores = 0;
             var deadMaxTasks = 0;
@@ -241,10 +215,25 @@ $(document).ready(function () {
             var deadTotalBlacklisted = 0;
 
             response.forEach(function (exec) {
+                var memoryMetrics = {
+                    usedOnHeapStorageMemory: 0,
+                    usedOffHeapStorageMemory: 0,
+                    totalOnHeapStorageMemory: 0,
+                    totalOffHeapStorageMemory: 0
+                };
+
+                exec.memoryMetrics = exec.hasOwnProperty('memoryMetrics') ? exec.memoryMetrics : memoryMetrics;
+            });
+
+            response.forEach(function (exec) {
                 allExecCnt += 1;
                 allRDDBlocks += exec.rddBlocks;
                 allMemoryUsed += exec.memoryUsed;
                 allMaxMemory += exec.maxMemory;
+                allOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                allOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                allOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                allOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                 allDiskUsed += exec.diskUsed;
                 allTotalCores += exec.totalCores;
                 allMaxTasks += exec.maxTasks;
@@ -263,6 +252,10 @@ $(document).ready(function () {
                     activeRDDBlocks += exec.rddBlocks;
                     activeMemoryUsed += exec.memoryUsed;
                     activeMaxMemory += exec.maxMemory;
+                    activeOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    activeOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    activeOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    activeOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     activeDiskUsed += exec.diskUsed;
                     activeTotalCores += exec.totalCores;
                     activeMaxTasks += exec.maxTasks;
@@ -281,6 +274,10 @@ $(document).ready(function () {
                     deadRDDBlocks += exec.rddBlocks;
                     deadMemoryUsed += exec.memoryUsed;
                     deadMaxMemory += exec.maxMemory;
+                    deadOnHeapMemoryUsed += exec.memoryMetrics.usedOnHeapStorageMemory;
+                    deadOnHeapMaxMemory += exec.memoryMetrics.totalOnHeapStorageMemory;
+                    deadOffHeapMemoryUsed += exec.memoryMetrics.usedOffHeapStorageMemory;
+                    deadOffHeapMaxMemory += exec.memoryMetrics.totalOffHeapStorageMemory;
                     deadDiskUsed += exec.diskUsed;
                     deadTotalCores += exec.totalCores;
                     deadMaxTasks += exec.maxTasks;
@@ -302,6 +299,10 @@ $(document).ready(function () {
                 "allRDDBlocks": allRDDBlocks,
                 "allMemoryUsed": allMemoryUsed,
                 "allMaxMemory": allMaxMemory,
+                "allOnHeapMemoryUsed": allOnHeapMemoryUsed,
+                "allOnHeapMaxMemory": allOnHeapMaxMemory,
+                "allOffHeapMemoryUsed": allOffHeapMemoryUsed,
+                "allOffHeapMaxMemory": allOffHeapMaxMemory,
                 "allDiskUsed": allDiskUsed,
                 "allTotalCores": allTotalCores,
                 "allMaxTasks": allMaxTasks,
@@ -321,6 +322,10 @@ $(document).ready(function () {
                 "allRDDBlocks": activeRDDBlocks,
                 "allMemoryUsed": activeMemoryUsed,
                 "allMaxMemory": activeMaxMemory,
+                "allOnHeapMemoryUsed": activeOnHeapMemoryUsed,
+                "allOnHeapMaxMemory": activeOnHeapMaxMemory,
+                "allOffHeapMemoryUsed": activeOffHeapMemoryUsed,
+                "allOffHeapMaxMemory": activeOffHeapMaxMemory,
                 "allDiskUsed": activeDiskUsed,
                 "allTotalCores": activeTotalCores,
                 "allMaxTasks": activeMaxTasks,
@@ -340,6 +345,10 @@ $(document).ready(function () {
                 "allRDDBlocks": deadRDDBlocks,
                 "allMemoryUsed": deadMemoryUsed,
                 "allMaxMemory": deadMaxMemory,
+                "allOnHeapMemoryUsed": deadOnHeapMemoryUsed,
+                "allOnHeapMaxMemory": deadOnHeapMaxMemory,
+                "allOffHeapMemoryUsed": deadOffHeapMemoryUsed,
+                "allOffHeapMaxMemory": deadOffHeapMaxMemory,
                 "allDiskUsed": deadDiskUsed,
                 "allTotalCores": deadTotalCores,
                 "allMaxTasks": deadMaxTasks,
@@ -356,7 +365,7 @@ $(document).ready(function () {
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
-            $.get(createTemplateURI(appId), function (template) {
+            $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
                 executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
                 var selector = "#active-executors-table";
@@ -369,20 +378,43 @@ $(document).ready(function () {
                             }
                         },
                         {data: 'hostPort'},
-                        {data: 'isActive', render: function (data, type, row) {
-                            if (type !== 'display') return data;
-                            if (row.isBlacklisted) return "Blacklisted";
-                            else return formatStatus (data, type);
+                        {
+                            data: 'isActive',
+                            render: function (data, type, row) {
+                                return formatStatus (data, type, row);
                             }
                         },
                         {data: 'rddBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.memoryUsed, type) + ' / ' + formatBytes(row.maxMemory, type)) : row.memoryUsed;
+                                if (type !== 'display')
+                                    return row.memoryUsed;
+                                else
+                                    return (formatBytes(row.memoryUsed, type) + ' / ' +
+                                        formatBytes(row.maxMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.memoryMetrics.usedOnHeapStorageMemory;
+                                else
+                                    return (formatBytes(row.memoryMetrics.usedOnHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOnHeapStorageMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.memoryMetrics.usedOffHeapStorageMemory;
+                                else
+                                    return (formatBytes(row.memoryMetrics.usedOffHeapStorageMemory, type) + ' / ' +
+                                        formatBytes(row.memoryMetrics.totalOffHeapStorageMemory, type));
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
                         {data: 'totalCores'},
+                        {name: 'resourcesCol', data: 'resources', render: formatResourceCells, orderable: false},
                         {
                             data: 'activeTasks',
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
@@ -417,24 +449,25 @@ $(document).ready(function () {
                         {data: 'totalInputBytes', render: formatBytes},
                         {data: 'totalShuffleRead', render: formatBytes},
                         {data: 'totalShuffleWrite', render: formatBytes},
-                        {data: 'executorLogs', render: formatLogsCells},
+                        {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
                         {
+                            name: 'threadDumpCol',
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
                         }
                     ],
+                    "order": [[0, "asc"]],
                     "columnDefs": [
-                        {
-                            "targets": [ 16 ],
-                            "visible": getThreadDumpEnabled()
-                        }
-                    ],
-                    "order": [[0, "asc"]]
+                        {"visible": false, "targets": 5},
+                        {"visible": false, "targets": 6},
+                        {"visible": false, "targets": 9}
+                    ]
                 };
-    
-                var dt = $(selector).DataTable(conf);
-                dt.column(15).visible(logsExist(response));
+
+                execDataTable = $(selector).DataTable(conf);
+                execDataTable.column('executorLogsCol:name').visible(logsExist(response));
+                execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
@@ -450,7 +483,29 @@ $(document).ready(function () {
                         {data: 'allRDDBlocks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatBytes(row.allMemoryUsed, type) + ' / ' + formatBytes(row.allMaxMemory, type)) : row.allMemoryUsed;
+                                if (type !== 'display')
+                                    return row.allMemoryUsed
+                                else
+                                    return (formatBytes(row.allMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allMaxMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.allOnHeapMemoryUsed;
+                                else
+                                    return (formatBytes(row.allOnHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allOnHeapMaxMemory, type));
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                if (type !== 'display')
+                                    return row.allOffHeapMemoryUsed;
+                                else
+                                    return (formatBytes(row.allOffHeapMemoryUsed, type) + ' / ' +
+                                        formatBytes(row.allOffHeapMaxMemory, type));
                             }
                         },
                         {data: 'allDiskUsed', render: formatBytes},
@@ -477,7 +532,7 @@ $(document).ready(function () {
                         {data: 'allTotalTasks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatDuration(row.allTotalDuration, type) + ' (' + formatDuration(row.allTotalGCTime, type) + ')') : row.allTotalDuration
+                                return type === 'display' ? (formatDuration(row.allTotalDuration) + ' (' + formatDuration(row.allTotalGCTime) + ')') : row.allTotalDuration
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 if (oData.allTotalDuration > 0) {
@@ -493,13 +548,72 @@ $(document).ready(function () {
                     ],
                     "paging": false,
                     "searching": false,
-                    "info": false
+                    "info": false,
+                    "columnDefs": [
+                        {"visible": false, "targets": 3},
+                        {"visible": false, "targets": 4}
+                    ]
 
                 };
     
-                $(sumSelector).DataTable(sumConf);
+                sumDataTable = $(sumSelector).DataTable(sumConf);
                 $('#execSummary [data-toggle="tooltip"]').tooltip();
-    
+
+                $("#showAdditionalMetrics").append(
+                    "<div><a id='additionalMetrics'>" +
+                    "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle-optional-metrics'></span>" +
+                    "Show Additional Metrics" +
+                    "</a></div>" +
+                    "<div class='container-fluid container-fluid-div' id='toggle-metrics' hidden>" +
+                    "<div><input type='checkbox' class='toggle-vis' id='select-all-box'>Select All</div>" +
+                    "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'>On Heap Memory</div>" +
+                    "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'>Off Heap Memory</div>" +
+                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'>Resources</div>" +
+                    "</div>");
+
+                reselectCheckboxesBasedOnTaskTableState();
+
+                $("#additionalMetrics").click(function() {
+                    $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
+                    $("#toggle-metrics").toggle();
+                    if (window.localStorage) {
+                        window.localStorage.setItem("arrowtoggle-optional-metrics-class", $("#arrowtoggle-optional-metrics").attr('class'));
+                    }
+                });
+
+                $(".toggle-vis").on("click", function() {
+                    var thisBox = $(this);
+                    if (thisBox.is("#select-all-box")) {
+                        var sumColumn = sumDataTable.columns(sumOptionalColumns);
+                        var execColumn = execDataTable.columns(execOptionalColumns);
+                        if (thisBox.is(":checked")) {
+                            $(".toggle-vis").prop("checked", true);
+                            sumColumn.visible(true);
+                            execColumn.visible(true);
+                        } else {
+                            $(".toggle-vis").prop("checked", false);
+                            sumColumn.visible(false);
+                            execColumn.visible(false);
+                        }
+                    } else {
+                        var execColIdx = thisBox.attr("data-exec-col-idx");
+                        var execCol = execDataTable.column(execColIdx);
+                        execCol.visible(!execCol.visible());
+                        var sumColIdx = thisBox.attr("data-sum-col-idx");
+                        if (sumColIdx) {
+                            var sumCol = sumDataTable.column(sumColIdx);
+                            sumCol.visible(!sumCol.visible());
+                        }
+                    }
+                });
+
+                if (window.localStorage) {
+                    if (window.localStorage.getItem("arrowtoggle-optional-metrics-class") != null &&
+                        window.localStorage.getItem("arrowtoggle-optional-metrics-class").includes("arrow-open")) {
+                        $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
+                        $("#toggle-metrics").toggle();
+                    }
+                }
             });
         });
     });

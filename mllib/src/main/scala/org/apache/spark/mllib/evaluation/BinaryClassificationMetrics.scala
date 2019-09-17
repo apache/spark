@@ -21,12 +21,12 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Evaluator for binary classification.
  *
- * @param scoreAndLabels an RDD of (score, label) pairs.
+ * @param scoreAndLabels an RDD of (score, label) or (score, label, weight) tuples.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
  *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
  *                This is useful because the curve contains a point for each distinct score
@@ -41,9 +41,19 @@ import org.apache.spark.sql.DataFrame
  *                partition boundaries.
  */
 @Since("1.0.0")
-class BinaryClassificationMetrics @Since("1.3.0") (
-    @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
-    @Since("1.3.0") val numBins: Int) extends Logging {
+class BinaryClassificationMetrics @Since("3.0.0") (
+    @Since("1.3.0") val scoreAndLabels: RDD[_ <: Product],
+    @Since("1.3.0") val numBins: Int = 1000)
+  extends Logging {
+  val scoreLabelsWeight: RDD[(Double, (Double, Double))] = scoreAndLabels.map {
+    case (prediction: Double, label: Double, weight: Double) =>
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
+      (prediction, (label, weight))
+    case (prediction: Double, label: Double) =>
+      (prediction, (label, 1.0))
+    case other =>
+      throw new IllegalArgumentException(s"Expected tuples, got $other")
+  }
 
   require(numBins >= 0, "numBins must be nonnegative")
 
@@ -58,7 +68,14 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * @param scoreAndLabels a DataFrame with two double columns: score and label
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
-    this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(scoreAndLabels.rdd.map {
+      case Row(prediction: Double, label: Double, weight: Double) =>
+        (prediction, label, weight)
+      case Row(prediction: Double, label: Double) =>
+        (prediction, label, 1.0)
+      case other =>
+        throw new IllegalArgumentException(s"Expected Row of tuples, got $other")
+    })
 
   /**
    * Unpersist intermediate RDDs used in the computation.
@@ -98,16 +115,16 @@ class BinaryClassificationMetrics @Since("1.3.0") (
 
   /**
    * Returns the precision-recall curve, which is an RDD of (recall, precision),
-   * NOT (precision, recall), with (0.0, 1.0) prepended to it.
+   * NOT (precision, recall), with (0.0, p) prepended to it, where p is the precision
+   * associated with the lowest recall on the curve.
    * @see <a href="http://en.wikipedia.org/wiki/Precision_and_recall">
    * Precision and recall (Wikipedia)</a>
    */
   @Since("1.0.0")
   def pr(): RDD[(Double, Double)] = {
     val prCurve = createCurve(Recall, Precision)
-    val sc = confusions.context
-    val first = sc.makeRDD(Seq((0.0, 1.0)), 1)
-    first.union(prCurve)
+    val (_, firstPrecision) = prCurve.first()
+    confusions.context.parallelize(Seq((0.0, firstPrecision)), 1).union(prCurve)
   }
 
   /**
@@ -146,11 +163,13 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   private lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
     confusions: RDD[(Double, BinaryConfusionMatrix)]) = {
-    // Create a bin for each distinct score value, count positives and negatives within each bin,
-    // and then sort by score values in descending order.
-    val counts = scoreAndLabels.combineByKey(
-      createCombiner = (label: Double) => new BinaryLabelCounter(0L, 0L) += label,
-      mergeValue = (c: BinaryLabelCounter, label: Double) => c += label,
+    // Create a bin for each distinct score value, count weighted positives and
+    // negatives within each bin, and then sort by score values in descending order.
+    val counts = scoreLabelsWeight.combineByKey(
+      createCombiner = (labelAndWeight: (Double, Double)) =>
+        new BinaryLabelCounter(0.0, 0.0) += (labelAndWeight._1, labelAndWeight._2),
+      mergeValue = (c: BinaryLabelCounter, labelAndWeight: (Double, Double)) =>
+        c += (labelAndWeight._1, labelAndWeight._2),
       mergeCombiners = (c1: BinaryLabelCounter, c2: BinaryLabelCounter) => c1 += c2
     ).sortByKey(ascending = false)
 
@@ -175,12 +194,15 @@ class BinaryClassificationMetrics @Since("1.3.0") (
             grouping = Int.MaxValue
           }
           counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
-            // The score of the combined point will be just the first one's score
-            val firstScore = pairs.head._1
-            // The point will contain all counts in this chunk
+            // The score of the combined point will be just the last one's score, which is also
+            // the minimal in each chunk since all scores are already sorted in descending.
+            val lastScore = pairs.last._1
+            // The combined point will contain all counts in this chunk. Thus, calculated
+            // metrics (like precision, recall, etc.) on its score (or so-called threshold) are
+            // the same as those without sampling.
             val agg = new BinaryLabelCounter()
             pairs.foreach(pair => agg += pair._2)
-            (firstScore, agg)
+            (lastScore, agg)
           })
         }
       }

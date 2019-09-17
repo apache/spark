@@ -17,7 +17,7 @@
 
 <!DOCTYPE module PUBLIC
           "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
-          "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+          "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!--
 
@@ -52,20 +52,6 @@
       <property name="file" value="dev/checkstyle-suppressions.xml"/>
     </module>
 
-    <!--
-    If you wish to turn off checking for a section of code, you can put a comment in the source
-    before and after the section, with the following syntax:
-
-      // checkstyle:off no.XXX (such as checkstyle.off: NoFinalizer)
-      ...  // stuff that breaks the styles
-      // checkstyle:on
-    -->
-    <module name="SuppressionCommentFilter">
-        <property name="offCommentFormat" value="checkstyle.off\: ([\w\|]+)"/>
-        <property name="onCommentFormat" value="checkstyle.on\: ([\w\|]+)"/>
-        <property name="checkFormat" value="$1"/>
-    </module>
-
     <!-- Checks for whitespace                               -->
     <!-- See http://checkstyle.sf.net/config_whitespace.html -->
     <module name="FileTabCharacter">
@@ -81,6 +67,19 @@
     <module name="NewlineAtEndOfFile"/>
 
     <module name="TreeWalker">
+        <!--
+        If you wish to turn off checking for a section of code, you can put a comment in the source
+        before and after the section, with the following syntax:
+
+          // checkstyle.off: XXX (such as checkstyle.off: NoFinalizer)
+          ...  // stuff that breaks the styles
+          // checkstyle.on: XXX (such as checkstyle.on: NoFinalizer)
+        -->
+        <module name="SuppressionCommentFilter">
+            <property name="offCommentFormat" value="checkstyle\.off\: ([\w\|]+)"/>
+            <property name="onCommentFormat" value="checkstyle\.on\: ([\w\|]+)"/>
+            <property name="checkFormat" value="$1"/>
+        </module>
         <module name="OuterTypeFilename"/>
         <module name="IllegalTokenText">
             <property name="tokens" value="STRING_LITERAL, CHAR_LITERAL"/>
@@ -132,7 +131,6 @@
             <message key="name.invalidPattern"
              value="Method type name ''{0}'' must match pattern ''{1}''."/>
         </module>
-        <module name="NoFinalizer"/>
         <module name="GenericWhitespace">
             <message key="ws.followed"
              value="GenericWhitespace ''{0}'' is followed by whitespace."/>
@@ -182,6 +180,10 @@
         <module name="UnusedImports"/>
         <module name="RedundantImport"/>
         <module name="RedundantModifier"/>
-        <module name="FileContentsHolder"/>
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="throw new \w+Error\("/>
+            <property name="message" value="Avoid throwing error in application code."/>
+        </module>
+
     </module>
 </module>

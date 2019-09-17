@@ -24,14 +24,12 @@ import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 import com.amazonaws.services.kinesis.model.Record
-import org.mockito.Matchers._
-import org.mockito.Matchers.{eq => meq}
-import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.{anyList, anyString, eq => meq}
+import org.mockito.Mockito.{never, times, verify, when}
 import org.scalatest.{BeforeAndAfter, Matchers}
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
-import org.apache.spark.util.Utils
 
 /**
  * Suite of Kinesis streaming receiver tests focusing mostly on the KinesisRecordProcessor
@@ -60,28 +58,6 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
-  }
-
-  test("check serializability of credential provider classes") {
-    Utils.deserialize[BasicCredentialsProvider](
-      Utils.serialize(BasicCredentialsProvider(
-        awsAccessKeyId = "x",
-        awsSecretKey = "y")))
-
-    Utils.deserialize[STSCredentialsProvider](
-      Utils.serialize(STSCredentialsProvider(
-        stsRoleArn = "fakeArn",
-        stsSessionName = "fakeSessionName",
-        stsExternalId = Some("fakeExternalId"))))
-
-    Utils.deserialize[STSCredentialsProvider](
-      Utils.serialize(STSCredentialsProvider(
-        stsRoleArn = "fakeArn",
-        stsSessionName = "fakeSessionName",
-        stsExternalId = Some("fakeExternalId"),
-        longLivedCredsProvider = BasicCredentialsProvider(
-          awsAccessKeyId = "x",
-          awsSecretKey = "y"))))
   }
 
   test("process records including store and set checkpointer") {
@@ -119,7 +95,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     recordProcessor.processRecords(batch, checkpointerMock)
 
     verify(receiverMock, times(1)).isStopped()
-    verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
+    verify(receiverMock, never).addRecords(anyString, anyList())
     verify(receiverMock, never).setCheckpointer(anyString, meq(checkpointerMock))
   }
 
@@ -127,7 +103,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.isStopped()).thenReturn(false)
     when(receiverMock.getCurrentLimit).thenReturn(Int.MaxValue)
     when(
-      receiverMock.addRecords(anyString, anyListOf(classOf[Record]))
+      receiverMock.addRecords(anyString, anyList())
     ).thenThrow(new RuntimeException())
 
     intercept[RuntimeException] {

@@ -40,11 +40,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val AM_PORT =
-    ConfigBuilder("spark.yarn.am.port")
-      .intConf
-      .createWithDefault(0)
-
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
@@ -127,12 +122,7 @@ package object config {
     .intConf
     .createOptional
 
-  private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
-    .doc("Staging directory used while submitting applications.")
-    .stringConf
-    .createOptional
-
-  /* Cluster-mode launcher configuration. */
+  /* Launcher configuration. */
 
   private[spark] val WAIT_FOR_APP_COMPLETION = ConfigBuilder("spark.yarn.submit.waitAppCompletion")
     .doc("In cluster mode, whether to wait for the application to finish before exiting the " +
@@ -141,15 +131,26 @@ package object config {
     .createWithDefault(true)
 
   private[spark] val REPORT_INTERVAL = ConfigBuilder("spark.yarn.report.interval")
-    .doc("Interval between reports of the current app status in cluster mode.")
+    .doc("Interval between reports of the current app status.")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("1s")
+
+  private[spark] val CLIENT_LAUNCH_MONITOR_INTERVAL =
+    ConfigBuilder("spark.yarn.clientLaunchMonitorInterval")
+      .doc("Interval between requests for status the client mode AM when starting the app.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1s")
 
   /* Shared Client-mode AM / Driver configuration. */
 
   private[spark] val AM_MAX_WAIT_TIME = ConfigBuilder("spark.yarn.am.waitTime")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("100s")
+
+  private[spark] val YARN_METRICS_NAMESPACE = ConfigBuilder("spark.yarn.metrics.namespace")
+    .doc("The root namespace for AM metrics reporting.")
+    .stringConf
+    .createOptional
 
   private[spark] val AM_NODE_LABEL_EXPRESSION = ConfigBuilder("spark.yarn.am.nodeLabelExpression")
     .doc("Node label expression for the AM.")
@@ -180,11 +181,11 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("200ms")
 
-  private[spark] val SCHEDULER_SERVICES = ConfigBuilder("spark.yarn.services")
-    .doc("A comma-separated list of class names of services to add to the scheduler.")
-    .stringConf
-    .toSequence
-    .createWithDefault(Nil)
+  private[spark] val AM_FINAL_MSG_LIMIT = ConfigBuilder("spark.yarn.am.finalMessageLimit")
+    .doc("The limit size of final diagnostic message for our ApplicationMaster to unregister from" +
+      " the ResourceManager.")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("1m")
 
   /* Client-mode AM configuration. */
 
@@ -212,23 +213,11 @@ package object config {
 
   /* Driver configuration. */
 
-  private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
-    .intConf
-    .createWithDefault(1)
-
-  private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.driver.memoryOverhead")
-    .bytesConf(ByteUnit.MiB)
+  private[spark] val DRIVER_APP_UI_ADDRESS = ConfigBuilder("spark.driver.appUIAddress")
+    .stringConf
     .createOptional
 
   /* Executor configuration. */
-
-  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
-    .intConf
-    .createWithDefault(1)
-
-  private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.executor.memoryOverhead")
-    .bytesConf(ByteUnit.MiB)
-    .createOptional
 
   private[spark] val EXECUTOR_NODE_LABEL_EXPRESSION =
     ConfigBuilder("spark.yarn.executor.nodeLabelExpression")
@@ -236,29 +225,13 @@ package object config {
       .stringConf
       .createOptional
 
-  /* Security configuration. */
+  /* Unmanaged AM configuration. */
 
-  private[spark] val CREDENTIAL_FILE_MAX_COUNT =
-    ConfigBuilder("spark.yarn.credentials.file.retention.count")
-      .intConf
-      .createWithDefault(5)
-
-  private[spark] val CREDENTIALS_FILE_MAX_RETENTION =
-    ConfigBuilder("spark.yarn.credentials.file.retention.days")
-      .intConf
-      .createWithDefault(5)
-
-  private[spark] val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
-    .doc("Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
-      "fs.defaultFS does not need to be listed here.")
-    .stringConf
-    .toSequence
-    .createWithDefault(Nil)
-
-  private[spark] val FILESYSTEMS_TO_ACCESS = ConfigBuilder("spark.yarn.access.hadoopFileSystems")
-    .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
-      "that hosts fs.defaultFS does not need to be listed here.")
-    .fallbackConf(NAMENODES_TO_ACCESS)
+  private[spark] val YARN_UNMANAGED_AM = ConfigBuilder("spark.yarn.unmanagedAM.enabled")
+    .doc("In client mode, whether to launch the Application Master service as part of the client " +
+      "using unmanaged am.")
+    .booleanConf
+    .createWithDefault(false)
 
   /* Rolled log aggregation configuration. */
 
@@ -277,11 +250,6 @@ package object config {
       .createOptional
 
   /* Private configs. */
-
-  private[spark] val CREDENTIALS_FILE_PATH = ConfigBuilder("spark.yarn.credentials.file")
-    .internal()
-    .stringConf
-    .createWithDefault(null)
 
   // Internal config to propagate the location of the user's jar to the driver/executors
   private[spark] val APP_JAR = ConfigBuilder("spark.yarn.user.jar")
@@ -336,24 +304,20 @@ package object config {
     .stringConf
     .createOptional
 
-  private[spark] val CREDENTIALS_RENEWAL_TIME = ConfigBuilder("spark.yarn.credentials.renewalTime")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefault(Long.MaxValue)
+  /* YARN allocator-level blacklisting related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
+      .booleanConf
+      .createWithDefault(false)
 
-  private[spark] val CREDENTIALS_UPDATE_TIME = ConfigBuilder("spark.yarn.credentials.updateTime")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefault(Long.MaxValue)
+  /* Initially blacklisted YARN nodes. */
+  private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
-  // The list of cache-related config entries. This is used by Client and the AM to clean
-  // up the environment so that these settings do not appear on the web UI.
-  private[yarn] val CACHE_CONFIGS = Seq(
-    CACHED_FILES,
-    CACHED_FILES_SIZES,
-    CACHED_FILES_TIMESTAMPS,
-    CACHED_FILES_VISIBILITIES,
-    CACHED_FILES_TYPES,
-    CACHED_CONF_ARCHIVE)
+  private[yarn] val YARN_EXECUTOR_RESOURCE_TYPES_PREFIX = "spark.yarn.executor.resource."
+  private[yarn] val YARN_DRIVER_RESOURCE_TYPES_PREFIX = "spark.yarn.driver.resource."
+  private[yarn] val YARN_AM_RESOURCE_TYPES_PREFIX = "spark.yarn.am.resource."
 
 }

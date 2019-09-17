@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.hive.test.TestHiveContext
 
 class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -27,7 +28,7 @@ class ConcurrentHiveSuite extends SparkFunSuite with BeforeAndAfterAll {
     test("Multiple Hive Instances") {
       (1 to 10).map { i =>
         val conf = new SparkConf()
-        conf.set("spark.ui.enabled", "false")
+        conf.set(UI_ENABLED, false)
         val ts =
           new TestHiveContext(new SparkContext("local", s"TestSQLContext$i", conf))
         ts.sparkSession.sql("SHOW TABLES").collect()

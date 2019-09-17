@@ -19,17 +19,17 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.11</artifactId>
-    <version>2.2.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.12</artifactId>
+    <version>3.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>spark-yarn_2.11</artifactId>
+  <artifactId>spark-yarn_2.12</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
-    <jersey-1.version>1.9</jersey-1.version>
+    <jersey-1.version>1.19</jersey-1.version>
   </properties>
 
   <dependencies>
@@ -166,30 +166,35 @@
        <scope>test</scope>
        <version>${jersey-1.version}</version>
      </dependency>
+     <dependency>
+       <groupId>com.sun.jersey</groupId>
+       <artifactId>jersey-servlet</artifactId>
+       <scope>test</scope>
+       <version>${jersey-1.version}</version>
+     </dependency>
 
-    <!--
-     Testing Hive reflection needs hive on the test classpath only.
-     It doesn't need the spark hive modules, so the -Phive flag is not checked.
-      -->
+    <!-- These dependencies are duplicated from core, because dependencies in the "provided"
+    scope are not transitive.-->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-      <scope>test</scope>
+      <classifier>${hive.classifier}</classifier>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libthrift</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.thrift</groupId>
       <artifactId>libfb303</artifactId>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 

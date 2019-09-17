@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Job Scheduling
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -23,7 +38,7 @@ run tasks and store data for that application. If multiple users need to share y
 different options to manage allocation, depending on the cluster manager.
 
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
-this approach, each application is given a maximum amount of resources it can use, and holds onto them
+this approach, each application is given a maximum amount of resources it can use and holds onto them
 for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
 and [YARN](running-on-yarn.html) modes, as well as the
 [coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
@@ -230,12 +245,12 @@ properties:
 * `minShare`: Apart from an overall weight, each pool can be given a _minimum shares_ (as a number of
   CPU cores) that the administrator would like it to have. The fair scheduler always attempts to meet
   all active pools' minimum shares before redistributing extra resources according to the weights.
-  The `minShare` property can therefore be another way to ensure that a pool can always get up to a
+  The `minShare` property can, therefore, be another way to ensure that a pool can always get up to a
   certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
   of the cluster. By default, each pool's `minShare` is 0.
 
 The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
-and setting a `spark.scheduler.allocation.file` property in your
+and either putting a file named `fairscheduler.xml` on the classpath, or setting `spark.scheduler.allocation.file` property in your
 [SparkConf](configuration.html#spark-properties).
 
 {% highlight scala %}
@@ -264,3 +279,11 @@ within it for the various settings. For example:
 A full example is also available in `conf/fairscheduler.xml.template`. Note that any pools not
 configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
 weight 1, and minShare 0).
+
+## Scheduling using JDBC Connections
+To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
+users can set the `spark.sql.thriftserver.scheduler.pool` variable:
+
+{% highlight SQL %}
+SET spark.sql.thriftserver.scheduler.pool=accounting;
+{% endhighlight %}

@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
+import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -33,6 +35,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.unsafe.sort.*;
@@ -56,7 +59,7 @@ public final class UnsafeKVExternalSorter {
       BlockManager blockManager,
       SerializerManager serializerManager,
       long pageSizeBytes,
-      long numElementsForSpillThreshold) throws IOException {
+      int numElementsForSpillThreshold) throws IOException {
     this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
       numElementsForSpillThreshold, null);
   }
@@ -67,7 +70,7 @@ public final class UnsafeKVExternalSorter {
       BlockManager blockManager,
       SerializerManager serializerManager,
       long pageSizeBytes,
-      long numElementsForSpillThreshold,
+      int numElementsForSpillThreshold,
       @Nullable BytesToBytesMap map) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
@@ -76,7 +79,8 @@ public final class UnsafeKVExternalSorter {
     prefixComputer = SortPrefixUtils.createPrefixGenerator(keySchema);
     PrefixComparator prefixComparator = SortPrefixUtils.getPrefixComparator(keySchema);
     BaseOrdering ordering = GenerateOrdering.create(keySchema);
-    KVComparator recordComparator = new KVComparator(ordering, keySchema.length());
+    Supplier<RecordComparator> comparatorSupplier =
+      () -> new KVComparator(ordering, keySchema.length());
     boolean canUseRadixSort = keySchema.length() == 1 &&
       SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0));
 
@@ -88,23 +92,40 @@ public final class UnsafeKVExternalSorter {
         blockManager,
         serializerManager,
         taskContext,
-        recordComparator,
+        comparatorSupplier,
         prefixComparator,
-        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
-                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+        (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
         canUseRadixSort);
     } else {
-      // The array will be used to do in-place sort, which require half of the space to be empty.
-      // Note: each record in the map takes two entries in the array, one is record pointer,
-      // another is the key prefix.
-      assert(map.numKeys() * 2 <= map.getArray().size() / 2);
-      // During spilling, the array in map will not be used, so we can borrow that and use it
-      // as the underlying array for in-memory sorter (it's always large enough).
-      // Since we will not grow the array, it's fine to pass `null` as consumer.
+      // During spilling, the pointer array in `BytesToBytesMap` will not be used, so we can borrow
+      // that and use it as the pointer array for `UnsafeInMemorySorter`.
+      LongArray pointerArray = map.getArray();
+      // `BytesToBytesMap`'s pointer array is only guaranteed to hold all the distinct keys, but
+      // `UnsafeInMemorySorter`'s pointer array need to hold all the entries. Since
+      // `BytesToBytesMap` can have duplicated keys, here we need a check to make sure the pointer
+      // array can hold all the entries in `BytesToBytesMap`.
+      // The pointer array will be used to do in-place sort, which requires half of the space to be
+      // empty. Note: each record in the map takes two entries in the pointer array, one is record
+      // pointer, another is key prefix. So the required size of pointer array is `numRecords * 4`.
+      // TODO: It's possible to change UnsafeInMemorySorter to have multiple entries with same key,
+      // so that we can always reuse the pointer array.
+      if (map.numValues() > pointerArray.size() / 4) {
+        // Here we ask the map to allocate memory, so that the memory manager won't ask the map
+        // to spill, if the memory is not enough.
+        pointerArray = map.allocateArray(map.numValues() * 4L);
+      }
+
+      // Since the pointer array(either reuse the one in the map, or create a new one) is guaranteed
+      // to be large enough, it's fine to pass `null` as consumer because we won't allocate more
+      // memory.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
+        null,
+        taskMemoryManager,
+        comparatorSupplier.get(),
+        prefixComparator,
+        pointerArray,
         canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
@@ -137,10 +158,9 @@ public final class UnsafeKVExternalSorter {
         blockManager,
         serializerManager,
         taskContext,
-        new KVComparator(ordering, keySchema.length()),
+        comparatorSupplier,
         prefixComparator,
-        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
-                                     UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
+        (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
         inMemSorter);
@@ -227,21 +247,25 @@ public final class UnsafeKVExternalSorter {
     private final BaseOrdering ordering;
     private final UnsafeRow row1;
     private final UnsafeRow row2;
-    private final int numKeyFields;
 
     KVComparator(BaseOrdering ordering, int numKeyFields) {
-      this.numKeyFields = numKeyFields;
       this.row1 = new UnsafeRow(numKeyFields);
       this.row2 = new UnsafeRow(numKeyFields);
       this.ordering = ordering;
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
-      // Note that since ordering doesn't need the total length of the record, we just pass -1
+    public int compare(
+        Object baseObj1,
+        long baseOff1,
+        int baseLen1,
+        Object baseObj2,
+        long baseOff2,
+        int baseLen2) {
+      // Note that since ordering doesn't need the total length of the record, we just pass 0
       // into the row.
-      row1.pointTo(baseObj1, baseOff1 + 4, -1);
-      row2.pointTo(baseObj2, baseOff2 + 4, -1);
+      row1.pointTo(baseObj1, baseOff1 + 4, 0);
+      row2.pointTo(baseObj2, baseOff2 + 4, 0);
       return ordering.compare(row1, row2);
     }
   }

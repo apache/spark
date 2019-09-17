@@ -17,11 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Date, PreparedStatement, ResultSet, SQLException, Timestamp}
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
 
 import scala.util.control.NonFatal
-
-import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
@@ -53,15 +51,16 @@ object JDBCRDD extends Logging {
    */
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
-    val table = options.table
+    val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
       val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
       try {
+        statement.setQueryTimeout(options.queryTimeout)
         val rs = statement.executeQuery()
         try {
-          JdbcUtils.getSchema(rs, dialect)
+          JdbcUtils.getSchema(rs, dialect, alwaysNullable = true)
         } finally {
           rs.close()
         }
@@ -82,23 +81,9 @@ object JDBCRDD extends Logging {
    * @return A Catalyst schema corresponding to columns in the given order.
    */
   private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields.map(x => x.metadata.getString("name") -> x): _*)
+    val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
     new StructType(columns.map(name => fieldMap(name)))
   }
-
-  /**
-   * Converts value to SQL expression.
-   */
-  private def compileValue(value: Any): Any = value match {
-    case stringValue: String => s"'${escapeSql(stringValue)}'"
-    case timestampValue: Timestamp => "'" + timestampValue + "'"
-    case dateValue: Date => "'" + dateValue + "'"
-    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
-    case _ => value
-  }
-
-  private def escapeSql(value: String): String =
-    if (value == null) null else StringUtils.replace(value, "'", "''")
 
   /**
    * Turns a single Filter into a String representing a SQL expression.
@@ -108,15 +93,16 @@ object JDBCRDD extends Logging {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
 
     Option(f match {
-      case EqualTo(attr, value) => s"${quote(attr)} = ${compileValue(value)}"
+      case EqualTo(attr, value) => s"${quote(attr)} = ${dialect.compileValue(value)}"
       case EqualNullSafe(attr, value) =>
         val col = quote(attr)
-        s"(NOT ($col != ${compileValue(value)} OR $col IS NULL OR " +
-          s"${compileValue(value)} IS NULL) OR ($col IS NULL AND ${compileValue(value)} IS NULL))"
-      case LessThan(attr, value) => s"${quote(attr)} < ${compileValue(value)}"
-      case GreaterThan(attr, value) => s"${quote(attr)} > ${compileValue(value)}"
-      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${compileValue(value)}"
-      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${compileValue(value)}"
+        s"(NOT ($col != ${dialect.compileValue(value)} OR $col IS NULL OR " +
+          s"${dialect.compileValue(value)} IS NULL) OR " +
+          s"($col IS NULL AND ${dialect.compileValue(value)} IS NULL))"
+      case LessThan(attr, value) => s"${quote(attr)} < ${dialect.compileValue(value)}"
+      case GreaterThan(attr, value) => s"${quote(attr)} > ${dialect.compileValue(value)}"
+      case LessThanOrEqual(attr, value) => s"${quote(attr)} <= ${dialect.compileValue(value)}"
+      case GreaterThanOrEqual(attr, value) => s"${quote(attr)} >= ${dialect.compileValue(value)}"
       case IsNull(attr) => s"${quote(attr)} IS NULL"
       case IsNotNull(attr) => s"${quote(attr)} IS NOT NULL"
       case StringStartsWith(attr, value) => s"${quote(attr)} LIKE '${value}%'"
@@ -124,7 +110,7 @@ object JDBCRDD extends Logging {
       case StringContains(attr, value) => s"${quote(attr)} LIKE '%${value}%'"
       case In(attr, value) if value.isEmpty =>
         s"CASE WHEN ${quote(attr)} IS NULL THEN NULL ELSE FALSE END"
-      case In(attr, value) => s"${quote(attr)} IN (${compileValue(value)})"
+      case In(attr, value) => s"${quote(attr)} IN (${dialect.compileValue(value)})"
       case Not(f) => compileFilter(f, dialect).map(p => s"(NOT ($p))").getOrElse(null)
       case Or(f1, f2) =>
         // We can't compile Or filter unless both sub-filters are compiled successfully.
@@ -279,14 +265,30 @@ private[jdbc] class JDBCRDD(
       closed = true
     }
 
-    context.addTaskCompletionListener{ context => close() }
+    context.addTaskCompletionListener[Unit]{ context => close() }
 
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection()
     val dialect = JdbcDialects.get(url)
     import scala.collection.JavaConverters._
-    dialect.beforeFetch(conn, options.asConnectionProperties.asScala.toMap)
+    dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
+
+    // This executes a generic SQL statement (or PL/SQL block) before reading
+    // the table/query via JDBC. Use this feature to initialize the database
+    // session environment, e.g. for optimizations and/or troubleshooting.
+    options.sessionInitStatement match {
+      case Some(sql) =>
+        val statement = conn.prepareStatement(sql)
+        logInfo(s"Executing sessionInitStatement: $sql")
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          statement.execute()
+        } finally {
+          statement.close()
+        }
+      case None =>
+    }
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a
     // fully-qualified table name in the SELECT statement.  I don't know how to
@@ -294,10 +296,11 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM ${options.table} $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)
+    stmt.setQueryTimeout(options.queryTimeout)
     rs = stmt.executeQuery()
     val rowsIterator = JdbcUtils.resultSetToSparkInternalRows(rs, schema, inputMetrics)
 

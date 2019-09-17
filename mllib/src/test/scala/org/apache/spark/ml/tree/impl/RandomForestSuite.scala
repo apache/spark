@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.tree.impl
 
+import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.TestingUtils._
@@ -43,7 +45,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   /////////////////////////////////////////////////////////////////////////////
 
   test("Binary classification with continuous features: split calculation") {
-    val arr = OldDTSuite.generateOrderedLabeledPointsWithLabel1().map(_.asML)
+    val arr = OldDTSuite.generateOrderedLabeledPointsWithLabel1().map(_.asML.toInstance)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, 3, 2, 100)
@@ -55,7 +57,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Binary classification with binary (ordered) categorical features: split calculation") {
-    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML)
+    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, maxDepth = 2, numClasses = 2,
@@ -72,7 +74,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("Binary classification with 3-ary (ordered) categorical features," +
     " with no samples for one category: split calculation") {
-    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML)
+    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, maxDepth = 2, numClasses = 2,
@@ -90,12 +92,12 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("find splits for a continuous feature") {
     // find splits for normal case
     {
-      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+      val fakeMetadata = new DecisionTreeMetadata(1, 200000, 200000.0, 0, 0,
         Map(), Set(),
         Array(6), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamples = Array.fill(200000)(math.random)
+      val featureSamples = Array.fill(10000)((1.0, math.random)).filter(_._2 != 0.0)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 5)
       assert(fakeMetadata.numSplits(0) === 5)
@@ -104,64 +106,114 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(splits.distinct.length === splits.length)
     }
 
+    // SPARK-16957: Use midpoints for split values.
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 8, 8.0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0.0, 0, 0
+      )
+
+      // possibleSplits <= numSplits
+      {
+        val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1)
+          .map(x => (1.0, x.toDouble)).filter(_._2 != 0.0)
+        val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+        val expectedSplits = Array((0.0 + 1.0) / 2)
+        assert(splits === expectedSplits)
+      }
+
+      // possibleSplits > numSplits
+      {
+        val featureSamples = Array(0, 0, 1, 1, 2, 2, 3, 3)
+          .map(x => (1.0, x.toDouble)).filter(_._2 != 0.0)
+        val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+        val expectedSplits = Array((0.0 + 1.0) / 2, (2.0 + 3.0) / 2)
+        assert(splits === expectedSplits)
+      }
+    }
+
     // find splits should not return identical splits
     // when there are not enough split candidates, reduce the number of splits in metadata
     {
-      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+      val fakeMetadata = new DecisionTreeMetadata(1, 12, 12.0, 0, 0,
         Map(), Set(),
         Array(5), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
+      val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3).map(x => (1.0, x.toDouble))
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array(1.0, 2.0))
+      val expectedSplits = Array((1.0 + 2.0) / 2, (2.0 + 3.0) / 2)
+      assert(splits === expectedSplits)
       // check returned splits are distinct
       assert(splits.distinct.length === splits.length)
     }
 
     // find splits when most samples close to the minimum
     {
-      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+      val fakeMetadata = new DecisionTreeMetadata(1, 18, 18.0, 0, 0,
         Map(), Set(),
         Array(3), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
+      val featureSamples =
+        Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(x => (1.0, x.toDouble))
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array(2.0, 3.0))
+      val expectedSplits = Array((2.0 + 3.0) / 2, (3.0 + 4.0) / 2)
+      assert(splits === expectedSplits)
     }
 
     // find splits when most samples close to the maximum
     {
-      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+      val fakeMetadata = new DecisionTreeMetadata(1, 17, 17.0, 0, 0,
         Map(), Set(),
         Array(2), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
+      val featureSamples =
+        Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(x => (1.0, x.toDouble))
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array(1.0))
+      val expectedSplits = Array((1.0 + 2.0) / 2)
+      assert(splits === expectedSplits)
     }
 
-    // find splits for constant feature
+    // find splits for arbitrarily scaled data
     {
-      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0.0, 0, 0,
+        Map(), Set(),
+        Array(6), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0.0, 0, 0
+      )
+      val featureSamplesUnitWeight = Array.fill(10)((1.0, math.random))
+      val featureSamplesSmallWeight = featureSamplesUnitWeight.map { case (w, x) => (w * 0.001, x)}
+      val featureSamplesLargeWeight = featureSamplesUnitWeight.map { case (w, x) => (w * 1000, x)}
+      val splitsUnitWeight = RandomForest
+        .findSplitsForContinuousFeature(featureSamplesUnitWeight, fakeMetadata, 0)
+      val splitsSmallWeight = RandomForest
+        .findSplitsForContinuousFeature(featureSamplesSmallWeight, fakeMetadata, 0)
+      val splitsLargeWeight = RandomForest
+        .findSplitsForContinuousFeature(featureSamplesLargeWeight, fakeMetadata, 0)
+      assert(splitsUnitWeight === splitsSmallWeight)
+      assert(splitsUnitWeight === splitsLargeWeight)
+    }
+
+    // find splits when most weight is close to the minimum
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0.0, 0, 0,
         Map(), Set(),
         Array(3), Gini, QuantileStrategy.Sort,
-        0, 0, 0.0, 0, 0
+        0, 0, 0.0, 0.0, 0, 0
       )
-      val featureSamples = Array(0, 0, 0).map(_.toDouble)
-      val featureSamplesEmpty = Array.empty[Double]
+      val featureSamples = Array((10, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6)).map {
+        case (w, x) => (w.toDouble, x.toDouble)
+      }
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
-      assert(splits === Array.empty[Double])
-      val splitsEmpty =
-        RandomForest.findSplitsForContinuousFeature(featureSamplesEmpty, fakeMetadata, 0)
-      assert(splitsEmpty === Array.empty[Double])
+      assert(splits === Array(1.5, 2.5, 3.5, 4.5, 5.5))
     }
   }
 
   test("train with empty arrays") {
-    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double]))
+    val lp = LabeledPoint(1.0, Vectors.dense(Array.empty[Double])).toInstance
     val data = Array.fill(5)(lp)
     val rdd = sc.parallelize(data)
 
@@ -176,8 +228,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("train with constant features") {
-    val lp = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0))
-    val data = Array.fill(5)(lp)
+    val instance = LabeledPoint(1.0, Vectors.dense(0.0, 0.0, 0.0)).toInstance
+    val data = Array.fill(5)(instance)
     val rdd = sc.parallelize(data)
     val strategy = new OldStrategy(
           OldAlgo.Classification,
@@ -189,7 +241,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val Array(tree) = RandomForest.run(rdd, strategy, 1, "all", 42L, instr = None)
     assert(tree.rootNode.impurity === -1.0)
     assert(tree.depth === 0)
-    assert(tree.rootNode.prediction === lp.label)
+    assert(tree.rootNode.prediction === instance.label)
 
     // Test with no categorical features
     val strategy2 = new OldStrategy(
@@ -200,11 +252,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val Array(tree2) = RandomForest.run(rdd, strategy2, 1, "all", 42L, instr = None)
     assert(tree2.rootNode.impurity === -1.0)
     assert(tree2.depth === 0)
-    assert(tree2.rootNode.prediction === lp.label)
+    assert(tree2.rootNode.prediction === instance.label)
   }
 
   test("Multiclass classification with unordered categorical features: split calculations") {
-    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML)
+    val arr = OldDTSuite.generateCategoricalDataPoints().map(_.asML.toInstance)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(
@@ -245,7 +297,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("Multiclass classification with ordered categorical features: split calculations") {
-    val arr = OldDTSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures().map(_.asML)
+    val arr = OldDTSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
+      .map(_.asML.toInstance)
     assert(arr.length === 3000)
     val rdd = sc.parallelize(arr)
     val strategy = new OldStrategy(OldAlgo.Classification, Gini, maxDepth = 2, numClasses = 100,
@@ -277,7 +330,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
-    val input = sc.parallelize(arr)
+    val input = sc.parallelize(arr.map(_.toInstance))
 
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 1,
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
@@ -291,11 +344,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.isLeaf === false)
     assert(topNode.stats === null)
 
-    val nodesForGroup = Map((0, Array(topNode)))
-    val treeToNodeToIndexInfo = Map((0, Map(
-      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
-    )))
-    val nodeStack = new mutable.Stack[(Int, LearningNode)]
+    val nodesForGroup = Map(0 -> Array(topNode))
+    val treeToNodeToIndexInfo = Map(0 -> Map(
+      topNode.id -> new RandomForest.NodeIndexInfo(0, None)
+    ))
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
@@ -319,7 +372,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(1.0, Vectors.dense(0.0, 1.0, 1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 0.0, 0.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.0, 1.0)))
-    val input = sc.parallelize(arr)
+    val input = sc.parallelize(arr.map(_.toInstance))
 
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 5,
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
@@ -333,11 +386,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(topNode.isLeaf === false)
     assert(topNode.stats === null)
 
-    val nodesForGroup = Map((0, Array(topNode)))
-    val treeToNodeToIndexInfo = Map((0, Map(
-      (topNode.id, new RandomForest.NodeIndexInfo(0, None))
-    )))
-    val nodeStack = new mutable.Stack[(Int, LearningNode)]
+    val nodesForGroup = Map(0 -> Array(topNode))
+    val treeToNodeToIndexInfo = Map(0 -> Map(
+      topNode.id -> new RandomForest.NodeIndexInfo(0, None)
+    ))
+    val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
     RandomForest.findBestSplits(baggedInput, metadata, Map(0 -> topNode),
       nodesForGroup, treeToNodeToIndexInfo, splits, nodeStack)
 
@@ -371,26 +424,27 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(0.0, Vectors.dense(2.0)),
       LabeledPoint(1.0, Vectors.dense(2.0)))
-    val input = sc.parallelize(arr)
+    val input = sc.parallelize(arr.map(_.toInstance))
 
     // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
     val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 1,
       numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3), maxBins = 3)
 
     val model = RandomForest.run(input, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = 42, instr = None).head
+      seed = 42, instr = None, prune = false).head
+
     model.rootNode match {
       case n: InternalNode => n.split match {
         case s: CategoricalSplit =>
           assert(s.leftCategories === Array(1.0))
-        case _ => throw new AssertionError("model.rootNode.split was not a CategoricalSplit")
+        case _ => fail("model.rootNode.split was not a CategoricalSplit")
       }
-      case _ => throw new AssertionError("model.rootNode was not an InternalNode")
+      case _ => fail("model.rootNode was not an InternalNode")
     }
   }
 
   test("Second level node building with vs. without groups") {
-    val arr = OldDTSuite.generateOrderedLabeledPoints().map(_.asML)
+    val arr = OldDTSuite.generateOrderedLabeledPoints().map(_.asML.toInstance)
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     // For tree with 1 group
@@ -410,7 +464,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         assert(n.leftChild.isInstanceOf[InternalNode])
         assert(n.rightChild.isInstanceOf[InternalNode])
         Array(n.leftChild.asInstanceOf[InternalNode], n.rightChild.asInstanceOf[InternalNode])
-      case _ => throw new AssertionError("rootNode was not an InternalNode")
+      case _ => fail("rootNode was not an InternalNode")
     }
 
     // Single group second level tree construction.
@@ -434,7 +488,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   def binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy: OldStrategy) {
     val numFeatures = 50
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures, 1000)
-    val rdd = sc.parallelize(arr).map(_.asML)
+    val rdd = sc.parallelize(arr).map(_.asML.toInstance)
 
     // Select feature subset for top nodes.  Return true if OK.
     def checkFeatureSubsetStrategy(
@@ -449,11 +503,11 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         val failString = s"Failed on test with:" +
           s"numTrees=$numTrees, featureSubsetStrategy=$featureSubsetStrategy," +
           s" numFeaturesPerNode=$numFeaturesPerNode, seed=$seed"
-        val nodeStack = new mutable.Stack[(Int, LearningNode)]
+        val nodeStack = new mutable.ListBuffer[(Int, LearningNode)]
         val topNodes: Array[LearningNode] = new Array[LearningNode](numTrees)
         Range(0, numTrees).foreach { treeIndex =>
           topNodes(treeIndex) = LearningNode.emptyNode(nodeIndex = 1)
-          nodeStack.push((treeIndex, topNodes(treeIndex)))
+          nodeStack.prepend((treeIndex, topNodes(treeIndex)))
         }
         val rng = new scala.util.Random(seed = seed)
         val (nodesForGroup: Map[Int, Array[LearningNode]],
@@ -547,16 +601,16 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       left2       parent
                 left  right
      */
-    val leftImp = new GiniCalculator(Array(3.0, 2.0, 1.0))
+    val leftImp = new GiniCalculator(Array(3.0, 2.0, 1.0), 6L)
     val left = new LeafNode(0.0, leftImp.calculate(), leftImp)
 
-    val rightImp = new GiniCalculator(Array(1.0, 2.0, 5.0))
+    val rightImp = new GiniCalculator(Array(1.0, 2.0, 5.0), 8L)
     val right = new LeafNode(2.0, rightImp.calculate(), rightImp)
 
     val parent = TreeTests.buildParentNode(left, right, new ContinuousSplit(0, 0.5))
     val parentImp = parent.impurityStats
 
-    val left2Imp = new GiniCalculator(Array(1.0, 6.0, 1.0))
+    val left2Imp = new GiniCalculator(Array(1.0, 6.0, 1.0), 8L)
     val left2 = new LeafNode(0.0, left2Imp.calculate(), left2Imp)
 
     val grandParent = TreeTests.buildParentNode(left2, parent, new ContinuousSplit(1, 1.0))
@@ -602,13 +656,139 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
     val expected = Map(0 -> 1.0 / 3.0, 2 -> 2.0 / 3.0)
     assert(mapToVec(map.toMap) ~== mapToVec(expected) relTol 0.01)
   }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // Tests for pruning of redundant subtrees (generated by a split improving the
+  // impurity measure, but always leading to the same prediction).
+  ///////////////////////////////////////////////////////////////////////////////
+
+  test("SPARK-3159 tree model redundancy - classification") {
+    // The following dataset is set up such that splitting over feature_1 for points having
+    // feature_0 = 0 improves the impurity measure, despite the prediction will always be 0
+    // in both branches.
+    val arr = Array(
+      Instance(0.0, 1.0, Vectors.dense(0.0, 1.0)),
+      Instance(1.0, 1.0, Vectors.dense(0.0, 1.0)),
+      Instance(0.0, 1.0, Vectors.dense(0.0, 0.0)),
+      Instance(1.0, 1.0, Vectors.dense(1.0, 0.0)),
+      Instance(0.0, 1.0, Vectors.dense(1.0, 0.0)),
+      Instance(1.0, 1.0, Vectors.dense(1.0, 1.0))
+    )
+    val rdd = sc.parallelize(arr)
+
+    val numClasses = 2
+    val strategy = new OldStrategy(algo = OldAlgo.Classification, impurity = Gini, maxDepth = 4,
+      numClasses = numClasses, maxBins = 32)
+
+    val prunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
+      seed = 42, instr = None).head
+
+    val unprunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
+      seed = 42, instr = None, prune = false).head
+
+    assert(prunedTree.numNodes === 5)
+    assert(unprunedTree.numNodes === 7)
+
+    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.size)
+  }
+
+  test("SPARK-3159 tree model redundancy - regression") {
+    // The following dataset is set up such that splitting over feature_0 for points having
+    // feature_1 = 1 improves the impurity measure, despite the prediction will always be 0.5
+    // in both branches.
+    val arr = Array(
+      Instance(0.0, 1.0, Vectors.dense(0.0, 1.0)),
+      Instance(1.0, 1.0, Vectors.dense(0.0, 1.0)),
+      Instance(0.0, 1.0, Vectors.dense(0.0, 0.0)),
+      Instance(0.0, 1.0, Vectors.dense(1.0, 0.0)),
+      Instance(1.0, 1.0, Vectors.dense(1.0, 1.0)),
+      Instance(0.0, 1.0, Vectors.dense(1.0, 1.0)),
+      Instance(0.5, 1.0, Vectors.dense(1.0, 1.0))
+    )
+    val rdd = sc.parallelize(arr)
+
+    val strategy = new OldStrategy(algo = OldAlgo.Regression, impurity = Variance, maxDepth = 4,
+      numClasses = 0, maxBins = 32)
+
+    val prunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
+      seed = 42, instr = None).head
+
+    val unprunedTree = RandomForest.run(rdd, strategy, numTrees = 1, featureSubsetStrategy = "auto",
+      seed = 42, instr = None, prune = false).head
+
+    assert(prunedTree.numNodes === 3)
+    assert(unprunedTree.numNodes === 5)
+    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.size)
+  }
+
+  test("weights at arbitrary scale") {
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(3, 10)
+    val rddWithUnitWeights = sc.parallelize(arr.map(_.asML.toInstance))
+    val rddWithSmallWeights = rddWithUnitWeights.map { inst =>
+      Instance(inst.label, 0.001, inst.features)
+    }
+    val rddWithBigWeights = rddWithUnitWeights.map { inst =>
+      Instance(inst.label, 1000, inst.features)
+    }
+    val strategy = new OldStrategy(OldAlgo.Classification, Gini, 3, 2)
+    val unitWeightTrees = RandomForest.run(rddWithUnitWeights, strategy, 3, "all", 42L, None)
+
+    val smallWeightTrees = RandomForest.run(rddWithSmallWeights, strategy, 3, "all", 42L, None)
+    unitWeightTrees.zip(smallWeightTrees).foreach { case (unitTree, smallWeightTree) =>
+      TreeTests.checkEqual(unitTree, smallWeightTree)
+    }
+
+    val bigWeightTrees = RandomForest.run(rddWithBigWeights, strategy, 3, "all", 42L, None)
+    unitWeightTrees.zip(bigWeightTrees).foreach { case (unitTree, bigWeightTree) =>
+      TreeTests.checkEqual(unitTree, bigWeightTree)
+    }
+  }
+
+  test("minWeightFraction and minInstancesPerNode") {
+    val data = Array(
+      Instance(0.0, 1.0, Vectors.dense(0.0)),
+      Instance(0.0, 1.0, Vectors.dense(0.0)),
+      Instance(0.0, 1.0, Vectors.dense(0.0)),
+      Instance(0.0, 1.0, Vectors.dense(0.0)),
+      Instance(1.0, 0.1, Vectors.dense(1.0))
+    )
+    val rdd = sc.parallelize(data)
+    val strategy = new OldStrategy(OldAlgo.Classification, Gini, 3, 2,
+      minWeightFractionPerNode = 0.5)
+    val Array(tree1) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
+    assert(tree1.depth === 0)
+
+    strategy.minWeightFractionPerNode = 0.0
+    val Array(tree2) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
+    assert(tree2.depth === 1)
+
+    strategy.minInstancesPerNode = 2
+    val Array(tree3) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
+    assert(tree3.depth === 0)
+
+    strategy.minInstancesPerNode = 1
+    val Array(tree4) = RandomForest.run(rdd, strategy, 1, "all", 42L, None)
+    assert(tree4.depth === 1)
+  }
 }
 
 private object RandomForestSuite {
-
   def mapToVec(map: Map[Int, Double]): Vector = {
     val size = (map.keys.toSeq :+ 0).max + 1
     val (indices, values) = map.toSeq.sortBy(_._1).unzip
     Vectors.sparse(size, indices.toArray, values.toArray)
+  }
+
+  @tailrec
+  private def getSumLeafCounters(nodes: List[Node], acc: Long = 0): Long = {
+    if (nodes.isEmpty) {
+      acc
+    }
+    else {
+      nodes.head match {
+        case i: InternalNode => getSumLeafCounters(i.leftChild :: i.rightChild :: nodes.tail, acc)
+        case l: LeafNode => getSumLeafCounters(nodes.tail, acc + l.impurityStats.rawCount)
+      }
+    }
   }
 }

@@ -19,9 +19,12 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
@@ -39,59 +42,69 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     in.map(ExpressionCanonicalizer.execute)
 
   protected def bind(in: Seq[Expression], inputSchema: Seq[Attribute]): Seq[Expression] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+    bindReferences(in, inputSchema)
 
   private def createCodeForStruct(
       ctx: CodegenContext,
       input: String,
       schema: StructType): ExprCode = {
-    val tmp = ctx.freshName("tmp")
+    // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
+    val tmpInput = ctx.freshName("tmpInput")
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
-    // These expressions could be split into multiple functions
-    ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
-      val converter = convertToSafe(ctx, ctx.getValue(tmp, dt, i.toString), dt)
+      val converter = convertToSafe(
+        ctx,
+        JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt),
+        dt)
       s"""
-        if (!$tmp.isNullAt($i)) {
+        if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
           $values[$i] = ${converter.value};
         }
       """
     }
-    val allFields = ctx.splitExpressions(tmp, fieldWriters)
-    val code = s"""
-      final InternalRow $tmp = $input;
-      this.$values = new Object[${schema.length}];
-      $allFields
-      final InternalRow $output = new $rowClass($values);
-      this.$values = null;
-    """
+    val allFields = ctx.splitExpressions(
+      expressions = fieldWriters,
+      funcName = "writeFields",
+      arguments = Seq("InternalRow" -> tmpInput, "Object[]" -> values)
+    )
+    val code =
+      code"""
+         |final InternalRow $tmpInput = $input;
+         |final Object[] $values = new Object[${schema.length}];
+         |$allFields
+         |final InternalRow $output = new $rowClass($values);
+       """.stripMargin
 
-    ExprCode(code, "false", output)
+    ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[InternalRow]))
   }
 
   private def createCodeForArray(
       ctx: CodegenContext,
       input: String,
       elementType: DataType): ExprCode = {
-    val tmp = ctx.freshName("tmp")
+    // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
+    val tmpInput = ctx.freshName("tmpInput")
     val output = ctx.freshName("safeArray")
     val values = ctx.freshName("values")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
     val arrayClass = classOf[GenericArrayData].getName
 
-    val elementConverter = convertToSafe(ctx, ctx.getValue(tmp, elementType, index), elementType)
-    val code = s"""
-      final ArrayData $tmp = $input;
-      final int $numElements = $tmp.numElements();
+    val elementConverter = convertToSafe(
+      ctx,
+      JavaCode.expression(CodeGenerator.getValue(tmpInput, elementType, index), elementType),
+      elementType)
+    val code = code"""
+      final ArrayData $tmpInput = $input;
+      final int $numElements = $tmpInput.numElements();
       final Object[] $values = new Object[$numElements];
       for (int $index = 0; $index < $numElements; $index++) {
-        if (!$tmp.isNullAt($index)) {
+        if (!$tmpInput.isNullAt($index)) {
           ${elementConverter.code}
           $values[$index] = ${elementConverter.value};
         }
@@ -99,7 +112,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    ExprCode(code, "false", output)
+    ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[ArrayData]))
   }
 
   private def createCodeForMap(
@@ -107,34 +120,32 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       input: String,
       keyType: DataType,
       valueType: DataType): ExprCode = {
-    val tmp = ctx.freshName("tmp")
+    val tmpInput = ctx.freshName("tmpInput")
     val output = ctx.freshName("safeMap")
     val mapClass = classOf[ArrayBasedMapData].getName
 
-    val keyConverter = createCodeForArray(ctx, s"$tmp.keyArray()", keyType)
-    val valueConverter = createCodeForArray(ctx, s"$tmp.valueArray()", valueType)
-    val code = s"""
-      final MapData $tmp = $input;
+    val keyConverter = createCodeForArray(ctx, s"$tmpInput.keyArray()", keyType)
+    val valueConverter = createCodeForArray(ctx, s"$tmpInput.valueArray()", valueType)
+    val code = code"""
+      final MapData $tmpInput = $input;
       ${keyConverter.code}
       ${valueConverter.code}
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    ExprCode(code, "false", output)
+    ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[MapData]))
   }
 
   @tailrec
   private def convertToSafe(
       ctx: CodegenContext,
-      input: String,
+      input: ExprValue,
       dataType: DataType): ExprCode = dataType match {
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
-    // UTF8String act as a pointer if it's inside UnsafeRow, so copy it to make it safe.
-    case StringType => ExprCode("", "false", s"$input.clone()")
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-    case _ => ExprCode("", "false", input)
+    case _ => ExprCode(FalseLiteral, input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {
@@ -150,11 +161,11 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
               mutableRow.setNullAt($i);
             } else {
               ${converter.code}
-              ${ctx.setColumn("mutableRow", e.dataType, i, converter.value)};
+              ${CodeGenerator.setColumn("mutableRow", e.dataType, i, converter.value)};
             }
           """
     }
-    val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
+    val allExpressions = ctx.splitExpressionsWithCurrentInputs(expressionCodes)
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
@@ -177,13 +188,13 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
           $allExpressions
           return mutableRow;
         }
+
+        ${ctx.declareAddedFunctions()}
       }
     """
 
@@ -191,8 +202,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
+    val (clazz, _) = CodeGenerator.compile(code)
     val resultRow = new SpecificInternalRow(expressions.map(_.dataType))
-    c.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
+    clazz.generate(ctx.references.toArray :+ resultRow).asInstanceOf[Projection]
   }
 }

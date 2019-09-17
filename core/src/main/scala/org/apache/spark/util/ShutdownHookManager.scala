@@ -143,7 +143,7 @@ private[spark] object ShutdownHookManager extends Logging {
   }
 
   /**
-   * Adds a shutdown hook with the given priority. Hooks with lower priority values run
+   * Adds a shutdown hook with the given priority. Hooks with higher priority values run
    * first.
    *
    * @param hook The code to run during shutdown.

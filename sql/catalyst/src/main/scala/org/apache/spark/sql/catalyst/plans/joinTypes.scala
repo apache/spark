@@ -17,25 +17,27 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.expressions.Attribute
 
 object JoinType {
-  def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
+  def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
     case "inner" => Inner
     case "outer" | "full" | "fullouter" => FullOuter
     case "leftouter" | "left" => LeftOuter
     case "rightouter" | "right" => RightOuter
-    case "leftsemi" => LeftSemi
-    case "leftanti" => LeftAnti
+    case "leftsemi" | "semi" => LeftSemi
+    case "leftanti" | "anti" => LeftAnti
     case "cross" => Cross
     case _ =>
       val supported = Seq(
         "inner",
-        "outer", "full", "fullouter",
-        "leftouter", "left",
-        "rightouter", "right",
-        "leftsemi",
-        "leftanti",
+        "outer", "full", "fullouter", "full_outer",
+        "leftouter", "left", "left_outer",
+        "rightouter", "right", "right_outer",
+        "leftsemi", "left_semi", "semi",
+        "leftanti", "left_anti", "anti",
         "cross")
 
       throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +
@@ -109,6 +111,13 @@ object LeftExistence {
   def unapply(joinType: JoinType): Option[JoinType] = joinType match {
     case LeftSemi | LeftAnti => Some(joinType)
     case j: ExistenceJoin => Some(joinType)
+    case _ => None
+  }
+}
+
+object LeftSemiOrAnti {
+  def unapply(joinType: JoinType): Option[JoinType] = joinType match {
+    case LeftSemi | LeftAnti => Some(joinType)
     case _ => None
   }
 }

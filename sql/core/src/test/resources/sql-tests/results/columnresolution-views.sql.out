@@ -85,10 +85,9 @@ struct<i1:int>
 -- !query 10
 SELECT global_temp.view1.* FROM global_temp.view1
 -- !query 10 schema
-struct<>
+struct<i1:int>
 -- !query 10 output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'global_temp.view1.*' give input columns 'i1';
+1
 
 
 -- !query 11
@@ -102,10 +101,9 @@ struct<i1:int>
 -- !query 12
 SELECT global_temp.view1.i1 FROM global_temp.view1
 -- !query 12 schema
-struct<>
+struct<i1:int>
 -- !query 12 output
-org.apache.spark.sql.AnalysisException
-cannot resolve '`global_temp.view1.i1`' given input columns: [i1]; line 1 pos 7
+1
 
 
 -- !query 13

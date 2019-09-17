@@ -41,4 +41,6 @@ private object DerbyDialect extends JdbcDialect {
       Option(JdbcType("DECIMAL(31,5)", java.sql.Types.DECIMAL))
     case _ => None
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

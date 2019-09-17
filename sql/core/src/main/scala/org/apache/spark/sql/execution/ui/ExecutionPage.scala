@@ -21,23 +21,41 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging {
 
-  private val listener = parent.listener
+  private val sqlStore = parent.sqlStore
 
-  override def render(request: HttpServletRequest): Seq[Node] = listener.synchronized {
+  override def render(request: HttpServletRequest): Seq[Node] = {
     val parameterExecutionId = request.getParameter("id")
     require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
       "Missing execution id parameter")
 
     val executionId = parameterExecutionId.toLong
-    val content = listener.getExecution(executionId).map { executionUIData =>
+    val content = sqlStore.execution(executionId).map { executionUIData =>
       val currentTime = System.currentTimeMillis()
-      val duration =
-        executionUIData.completionTime.getOrElse(currentTime) - executionUIData.submissionTime
+      val duration = executionUIData.completionTime.map(_.getTime()).getOrElse(currentTime) -
+        executionUIData.submissionTime
+
+      def jobLinks(status: JobExecutionStatus, label: String): Seq[Node] = {
+        val jobs = executionUIData.jobs.flatMap { case (jobId, jobStatus) =>
+          if (jobStatus == status) Some(jobId) else None
+        }
+        if (jobs.nonEmpty) {
+          <li>
+            <strong>{label} </strong>
+            {jobs.toSeq.sorted.map { jobId =>
+              <a href={jobURL(request, jobId.intValue())}>{jobId.toString}</a><span>&nbsp;</span>
+            }}
+          </li>
+        } else {
+          Nil
+        }
+      }
+
 
       val summary =
         <div>
@@ -48,57 +66,41 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
             <li>
               <strong>Duration: </strong>{UIUtils.formatDuration(duration)}
             </li>
-            {if (executionUIData.runningJobs.nonEmpty) {
-              <li>
-                <strong>Running Jobs: </strong>
-                {executionUIData.runningJobs.sorted.map { jobId =>
-                <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
-              }}
-              </li>
-            }}
-            {if (executionUIData.succeededJobs.nonEmpty) {
-              <li>
-                <strong>Succeeded Jobs: </strong>
-                {executionUIData.succeededJobs.sorted.map { jobId =>
-                  <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
-                }}
-              </li>
-            }}
-            {if (executionUIData.failedJobs.nonEmpty) {
-              <li>
-                <strong>Failed Jobs: </strong>
-                {executionUIData.failedJobs.sorted.map { jobId =>
-                  <a href={jobURL(jobId)}>{jobId.toString}</a><span>&nbsp;</span>
-                }}
-              </li>
-            }}
+            {jobLinks(JobExecutionStatus.RUNNING, "Running Jobs:")}
+            {jobLinks(JobExecutionStatus.SUCCEEDED, "Succeeded Jobs:")}
+            {jobLinks(JobExecutionStatus.FAILED, "Failed Jobs:")}
           </ul>
         </div>
 
-      val metrics = listener.getExecutionMetrics(executionId)
+      val metrics = sqlStore.executionMetrics(executionId)
+      val graph = sqlStore.planGraph(executionId)
 
       summary ++
-        planVisualization(metrics, executionUIData.physicalPlanGraph) ++
+        planVisualization(request, metrics, graph) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription)
     }.getOrElse {
-      <div>No information to display for Plan {executionId}</div>
+      <div>No information to display for query {executionId}</div>
     }
 
-    UIUtils.headerSparkPage(s"Details for Query $executionId", content, parent, Some(5000))
+    UIUtils.headerSparkPage(
+      request, s"Details for Query $executionId", content, parent)
   }
 
 
-  private def planVisualizationResources: Seq[Node] = {
+  private def planVisualizationResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
-    <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.css")} type="text/css"/>
-    <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/dagre-d3.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/graphlib-dot.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.js")}></script>
+    <link rel="stylesheet" href={UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.css")} type="text/css"/>
+    <script src={UIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
+    <script src={UIUtils.prependBaseUri(request, "/static/dagre-d3.min.js")}></script>
+    <script src={UIUtils.prependBaseUri(request, "/static/graphlib-dot.min.js")}></script>
+    <script src={UIUtils.prependBaseUri(request, "/static/sql/spark-sql-viz.js")}></script>
     // scalastyle:on
   }
 
-  private def planVisualization(metrics: Map[Long, String], graph: SparkPlanGraph): Seq[Node] = {
+  private def planVisualization(
+      request: HttpServletRequest,
+      metrics: Map[Long, String],
+      graph: SparkPlanGraph): Seq[Node] = {
     val metadata = graph.allNodes.flatMap { node =>
       val nodeId = s"plan-meta-data-${node.id}"
       <div id={nodeId}>{node.desc}</div>
@@ -113,13 +115,13 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
         <div id="plan-viz-metadata-size">{graph.allNodes.size.toString}</div>
         {metadata}
       </div>
-      {planVisualizationResources}
+      {planVisualizationResources(request)}
       <script>$(function() {{ renderPlanViz(); }})</script>
     </div>
   }
 
-  private def jobURL(jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+  private def jobURL(request: HttpServletRequest, jobId: Long): String =
+    "%s/jobs/job/?id=%s".format(UIUtils.prependBaseUri(request, parent.basePath), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

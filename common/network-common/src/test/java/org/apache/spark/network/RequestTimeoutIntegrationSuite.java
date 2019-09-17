@@ -48,6 +48,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class RequestTimeoutIntegrationSuite {
 
+  private TransportContext context;
   private TransportServer server;
   private TransportClientFactory clientFactory;
 
@@ -79,6 +80,9 @@ public class RequestTimeoutIntegrationSuite {
     if (clientFactory != null) {
       clientFactory.close();
     }
+    if (context !=  null) {
+      context.close();
+    }
   }
 
   // Basic suite: First request completes quickly, and second waits for longer than network timeout.
@@ -106,7 +110,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
@@ -153,7 +157,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
 
@@ -204,7 +208,7 @@ public class RequestTimeoutIntegrationSuite {
       }
     };
 
-    TransportContext context = new TransportContext(conf, handler);
+    context = new TransportContext(conf, handler);
     server = context.createServer();
     clientFactory = context.createClientFactory();
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
@@ -225,6 +229,8 @@ public class RequestTimeoutIntegrationSuite {
     callback0.latch.await(60, TimeUnit.SECONDS);
     assertTrue(callback0.failure instanceof IOException);
 
+    // make sure callback1 is called.
+    callback1.latch.await(60, TimeUnit.SECONDS);
     // failed at same time as previous
     assertTrue(callback1.failure instanceof IOException);
   }

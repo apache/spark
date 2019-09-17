@@ -1,10 +1,25 @@
 ---
 layout: global
 title: Spark Streaming Custom Receivers
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Spark Streaming can receive streaming data from any arbitrary data source beyond
-the ones for which it has built-in support (that is, beyond Flume, Kafka, Kinesis, files, sockets, etc.).
+the ones for which it has built-in support (that is, beyond Kafka, Kinesis, files, sockets, etc.).
 This requires the developer to implement a *receiver* that is customized for receiving data from
 the concerned data source. This guide walks through the process of implementing a custom receiver
 and using it in a Spark Streaming application. Note that custom receivers can be implemented
@@ -175,7 +190,7 @@ an input DStream using data received by the instance of custom receiver, as show
 {% highlight scala %}
 // Assuming ssc is the StreamingContext
 val customReceiverStream = ssc.receiverStream(new CustomReceiver(host, port))
-val words = lines.flatMap(_.split(" "))
+val words = customReceiverStream.flatMap(_.split(" "))
 ...
 {% endhighlight %}
 
@@ -187,7 +202,7 @@ The full source code is in the example [CustomReceiver.scala]({{site.SPARK_GITHU
 {% highlight java %}
 // Assuming ssc is the JavaStreamingContext
 JavaDStream<String> customReceiverStream = ssc.receiverStream(new JavaCustomReceiver(host, port));
-JavaDStream<String> words = lines.flatMap(s -> ...);
+JavaDStream<String> words = customReceiverStream.flatMap(s -> ...);
 ...
 {% endhighlight %}
 

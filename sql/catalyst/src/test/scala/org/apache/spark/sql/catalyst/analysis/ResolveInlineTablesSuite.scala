@@ -22,6 +22,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal, Rand}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.{LongType, NullType, TimestampType}
 
 /**
@@ -91,12 +92,13 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   test("convert TimeZoneAwareExpression") {
     val table = UnresolvedInlineTable(Seq("c1"),
       Seq(Seq(Cast(lit("1991-12-06 00:00:00.0"), TimestampType))))
-    val converted = ResolveInlineTables(conf).convert(table)
+    val withTimeZone = ResolveTimeZone(conf).apply(table)
+    val LocalRelation(output, data, _) = ResolveInlineTables(conf).apply(withTimeZone)
     val correct = Cast(lit("1991-12-06 00:00:00.0"), TimestampType)
       .withTimeZone(conf.sessionLocalTimeZone).eval().asInstanceOf[Long]
-    assert(converted.output.map(_.dataType) == Seq(TimestampType))
-    assert(converted.data.size == 1)
-    assert(converted.data(0).getLong(0) == correct)
+    assert(output.map(_.dataType) == Seq(TimestampType))
+    assert(data.size == 1)
+    assert(data.head.getLong(0) == correct)
   }
 
   test("nullability inference in convert") {

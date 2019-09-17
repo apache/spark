@@ -32,12 +32,14 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
+import org.apache.spark.sql.execution.HiveResult
 import org.apache.spark.sql.execution.command.SetCommand
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
@@ -69,11 +71,11 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  def close(): Unit = {
+  override def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    sqlContext.sparkContext.clearJobGroup()
-    logDebug(s"CLOSING $statementId")
+    logInfo(s"Close statement with $statementId")
     cleanup(OperationState.CLOSED)
+    HiveThriftServer2.listener.onOperationClosed(statementId)
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -102,17 +104,20 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Timestamp](ordinal)
       case BinaryType =>
         to += from.getAs[Array[Byte]](ordinal)
-      case _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = HiveUtils.toHiveString((from.get(ordinal), dataTypes(ordinal)))
+      case CalendarIntervalType =>
+        to += HiveResult.toHiveString((from.getAs[CalendarInterval](ordinal), CalendarIntervalType))
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
+        val hiveString = HiveResult.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
   }
 
-  def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
+  def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = withSchedulerPool {
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
     setHasResultSet(true)
-    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet =
+      ThriftserverShimUtils.resultRowSet(getResultSetSchema, getProtocolVersion)
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {
@@ -156,6 +161,14 @@ private[hive] class SparkExecuteStatementOperation(
 
   override def runInternal(): Unit = {
     setState(OperationState.PENDING)
+    statementId = UUID.randomUUID().toString
+    logInfo(s"Submitting query '$statement' with $statementId")
+    HiveThriftServer2.listener.onStatementStart(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      statement,
+      statementId,
+      parentSession.getUsername)
     setHasResultSet(true) // avoid no resultset for async run
 
     if (!runInBackground) {
@@ -170,6 +183,7 @@ private[hive] class SparkExecuteStatementOperation(
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
+              registerCurrentOperationLog()
               try {
                 execute()
               } catch {
@@ -197,43 +211,45 @@ private[hive] class SparkExecuteStatementOperation(
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
+          logError("Error submitting query in background, query rejected", rejected)
           setState(OperationState.ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, rejected.getMessage, SparkUtils.exceptionString(rejected))
           throw new HiveSQLException("The background threadpool cannot accept" +
             " new task for execution, please retry the operation", rejected)
         case NonFatal(e) =>
           logError(s"Error executing query in background", e)
           setState(OperationState.ERROR)
-          throw e
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
+          throw new HiveSQLException(e)
       }
     }
   }
 
-  private def execute(): Unit = {
-    statementId = UUID.randomUUID().toString
-    logInfo(s"Running query '$statement' with $statementId")
-    setState(OperationState.RUNNING)
-    // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
-    Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      statement,
-      statementId,
-      parentSession.getUsername)
-    sqlContext.sparkContext.setJobGroup(statementId, statement)
-    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
-    if (pool != null) {
-      sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
-    }
+  private def execute(): Unit = withSchedulerPool {
     try {
+      synchronized {
+        if (getStatus.getState.isTerminal) {
+          logInfo(s"Query with $statementId in terminal state before it started running")
+          return
+        } else {
+          logInfo(s"Running query with $statementId")
+          setState(OperationState.RUNNING)
+        }
+      }
+      // Always use the latest class loader provided by executionHive's state.
+      val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+      Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
+
+      sqlContext.sparkContext.setJobGroup(statementId, statement)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
           sessionToActivePool.put(parentSession.getSessionHandle, value)
-          logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
+          logInfo(s"Setting ${SparkContext.SPARK_SCHEDULER_POOL}=$value for future statements " +
+            "in this session.")
         case _ =>
       }
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
@@ -248,33 +264,43 @@ private[hive] class SparkExecuteStatementOperation(
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
-      case e: HiveSQLException =>
-        if (getStatus().getState() == OperationState.CANCELED) {
-          return
-        } else {
-          setState(OperationState.ERROR)
-          throw e
-        }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
         val currentState = getStatus().getState()
-        logError(s"Error executing query, currentState $currentState, ", e)
-        setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        throw new HiveSQLException(e.toString)
+        if (currentState.isTerminal) {
+          // This may happen if the execution was cancelled, and then closed from another thread.
+          logWarning(s"Ignore exception in terminal state with $statementId: $e")
+        } else {
+          logError(s"Error executing query with $statementId, currentState $currentState, ", e)
+          setState(OperationState.ERROR)
+          HiveThriftServer2.listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
+          if (e.isInstanceOf[HiveSQLException]) {
+            throw e.asInstanceOf[HiveSQLException]
+          } else {
+            throw new HiveSQLException("Error running query: " + e.toString, e)
+          }
+        }
+    } finally {
+      synchronized {
+        if (!getStatus.getState.isTerminal) {
+          setState(OperationState.FINISHED)
+          HiveThriftServer2.listener.onStatementFinish(statementId)
+        }
+      }
+      sqlContext.sparkContext.clearJobGroup()
     }
-    setState(OperationState.FINISHED)
-    HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 
   override def cancel(): Unit = {
-    logInfo(s"Cancel '$statement' with $statementId")
-    if (statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(statementId)
+    synchronized {
+      if (!getStatus.getState.isTerminal) {
+        logInfo(s"Cancel query with $statementId")
+        cleanup(OperationState.CANCELED)
+        HiveThriftServer2.listener.onStatementCanceled(statementId)
+      }
     }
-    cleanup(OperationState.CANCELED)
   }
 
   private def cleanup(state: OperationState) {
@@ -285,14 +311,35 @@ private[hive] class SparkExecuteStatementOperation(
         backgroundHandle.cancel(true)
       }
     }
+    if (statementId != null) {
+      sqlContext.sparkContext.cancelJobGroup(statementId)
+    }
+  }
+
+  private def withSchedulerPool[T](body: => T): T = {
+    val pool = sessionToActivePool.get(parentSession.getSessionHandle)
+    if (pool != null) {
+      sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
+    }
+    try {
+      body
+    } finally {
+      if (pool != null) {
+        sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, null)
+      }
+    }
   }
 }
 
 object SparkExecuteStatementOperation {
   def getTableSchema(structType: StructType): TableSchema = {
     val schema = structType.map { field =>
-      val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
-      new FieldSchema(field.name, attrTypeString, "")
+      val attrTypeString = field.dataType match {
+        case NullType => "void"
+        case CalendarIntervalType => StringType.catalogString
+        case other => other.catalogString
+      }
+      new FieldSchema(field.name, attrTypeString, field.getComment.getOrElse(""))
     }
     new TableSchema(schema.asJava)
   }

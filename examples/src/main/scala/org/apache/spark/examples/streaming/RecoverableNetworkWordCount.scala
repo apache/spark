@@ -130,10 +130,10 @@ object RecoverableNetworkWordCount {
           true
         }
       }.collect().mkString("[", ", ", "]")
-      val output = "Counts at time " + time + " " + counts
+      val output = s"Counts at time $time $counts"
       println(output)
-      println("Dropped " + droppedWordsCounter.value + " word(s) totally")
-      println("Appending to " + outputFile.getAbsolutePath)
+      println(s"Dropped ${droppedWordsCounter.value} word(s) totally")
+      println(s"Appending to ${outputFile.getAbsolutePath}")
       Files.append(output + "\n", outputFile, Charset.defaultCharset())
     }
     ssc
@@ -141,7 +141,7 @@ object RecoverableNetworkWordCount {
 
   def main(args: Array[String]) {
     if (args.length != 4) {
-      System.err.println("Your arguments were " + args.mkString("[", ", ", "]"))
+      System.err.println(s"Your arguments were ${args.mkString("[", ", ", "]")}")
       System.err.println(
         """
           |Usage: RecoverableNetworkWordCount <hostname> <port> <checkpoint-directory>

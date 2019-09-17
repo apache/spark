@@ -201,99 +201,61 @@
    limitations under the License.
 
 
-=======================================================================
-Apache Spark Subcomponents:
-
-The Apache Spark project contains subcomponents with separate copyright
-notices and license terms. Your use of the source code for the these
-subcomponents is subject to the terms and conditions of the following
-licenses.
+------------------------------------------------------------------------------------
+This product bundles various third-party components under other open source licenses.
+This section summarizes those components and their licenses. See licenses/
+for text of these licenses.
 
 
-========================================================================
-For heapq (pyspark/heapq3.py):
-========================================================================
+Apache Software Foundation License 2.0
+--------------------------------------
 
-See license/LICENSE-heapq.txt
+common/network-common/src/main/java/org/apache/spark/network/util/LimitedInputStream.java
+core/src/main/java/org/apache/spark/util/collection/TimSort.java
+core/src/main/resources/org/apache/spark/ui/static/bootstrap*
+core/src/main/resources/org/apache/spark/ui/static/jsonFormatter*
+core/src/main/resources/org/apache/spark/ui/static/vis*
+docs/js/vendor/bootstrap.js
 
-========================================================================
-For SnapTree:
-========================================================================
 
-See license/LICENSE-SnapTree.txt
+Python Software Foundation License
+----------------------------------
 
-========================================================================
-For jbcrypt:
-========================================================================
+pyspark/heapq3.py
+python/docs/_static/copybutton.js
 
-See license/LICENSE-jbcrypt.txt
+BSD 3-Clause
+------------
 
-========================================================================
-BSD-style licenses
-========================================================================
+python/lib/py4j-*-src.zip
+python/pyspark/cloudpickle.py
+python/pyspark/join.py
+core/src/main/resources/org/apache/spark/ui/static/d3.min.js
 
-The following components are provided under a BSD-style license. See project link for details.
-The text of each license is also included at licenses/LICENSE-[project].txt.
+The CSS style for the navigation sidebar of the documentation was originally
+submitted by Óscar Nájera for the scikit-learn project. The scikit-learn project
+is distributed under the 3-Clause BSD license.
 
-     (BSD 3 Clause) netlib core (com.github.fommil.netlib:core:1.1.2 - https://github.com/fommil/netlib-java/core)
-     (BSD 3 Clause) JPMML-Model (org.jpmml:pmml-model:1.2.7 - https://github.com/jpmml/jpmml-model)
-     (BSD License) AntLR Parser Generator (antlr:antlr:2.7.7 - http://www.antlr.org/)
-     (BSD License) ANTLR 4.5.2-1 (org.antlr:antlr4:4.5.2-1 - http://wwww.antlr.org/)
-     (BSD licence) ANTLR ST4 4.0.4 (org.antlr:ST4:4.0.4 - http://www.stringtemplate.org)
-     (BSD licence) ANTLR StringTemplate (org.antlr:stringtemplate:3.2.1 - http://www.stringtemplate.org)
-     (BSD License) Javolution (javolution:javolution:5.5.1 - http://javolution.org)
-     (BSD) JLine (jline:jline:0.9.94 - http://jline.sourceforge.net)
-     (BSD) ParaNamer Core (com.thoughtworks.paranamer:paranamer:2.3 - http://paranamer.codehaus.org/paranamer)
-     (BSD) ParaNamer Core (com.thoughtworks.paranamer:paranamer:2.6 - http://paranamer.codehaus.org/paranamer)
-     (BSD 3 Clause) Scala (http://www.scala-lang.org/download/#License)
-        (Interpreter classes (all .scala files in repl/src/main/scala
-        except for Main.Scala, SparkHelper.scala and ExecutorClassLoader.scala),
-        and for SerializableMapWrapper in JavaUtils.scala)
-     (BSD-like) Scala Actors library (org.scala-lang:scala-actors:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Compiler (org.scala-lang:scala-compiler:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Compiler (org.scala-lang:scala-reflect:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scala Library (org.scala-lang:scala-library:2.11.7 - http://www.scala-lang.org/)
-     (BSD-like) Scalap (org.scala-lang:scalap:2.11.7 - http://www.scala-lang.org/)
-     (BSD-style) scalacheck (org.scalacheck:scalacheck_2.11:1.10.0 - http://www.scalacheck.org)
-     (BSD-style) spire (org.spire-math:spire_2.11:0.7.1 - http://spire-math.org)
-     (BSD-style) spire-macros (org.spire-math:spire-macros_2.11:0.7.1 - http://spire-math.org)
-     (New BSD License) Kryo (com.esotericsoftware:kryo:3.0.3 - https://github.com/EsotericSoftware/kryo)
-     (New BSD License) MinLog (com.esotericsoftware:minlog:1.3.0 - https://github.com/EsotericSoftware/minlog)
-     (New BSD license) Protocol Buffer Java API (com.google.protobuf:protobuf-java:2.5.0 - http://code.google.com/p/protobuf)
-     (New BSD license) Protocol Buffer Java API (org.spark-project.protobuf:protobuf-java:2.4.1-shaded - http://code.google.com/p/protobuf)
-     (The BSD License) Fortran to Java ARPACK (net.sourceforge.f2j:arpack_combined_all:0.1 - http://f2j.sourceforge.net)
-     (The BSD License) xmlenc Library (xmlenc:xmlenc:0.52 - http://xmlenc.sourceforge.net)
-     (The New BSD License) Py4J (net.sf.py4j:py4j:0.10.4 - http://py4j.sourceforge.net/)
-     (Two-clause BSD-style license) JUnit-Interface (com.novocode:junit-interface:0.10 - http://github.com/szeiger/junit-interface/)
-     (BSD licence) sbt and sbt-launch-lib.bash
-     (BSD 3 Clause) d3.min.js (https://github.com/mbostock/d3/blob/master/LICENSE)
-     (BSD 3 Clause) DPark (https://github.com/douban/dpark/blob/master/LICENSE)
-     (BSD 3 Clause) CloudPickle (https://github.com/cloudpipe/cloudpickle/blob/master/LICENSE)
 
-========================================================================
-MIT licenses
-========================================================================
+MIT License
+-----------
 
-The following components are provided under the MIT License. See project link for details.
-The text of each license is also included at licenses/LICENSE-[project].txt.
+core/src/main/resources/org/apache/spark/ui/static/dagre-d3.min.js
+core/src/main/resources/org/apache/spark/ui/static/*dataTables*
+core/src/main/resources/org/apache/spark/ui/static/graphlib-dot.min.js
+ore/src/main/resources/org/apache/spark/ui/static/jquery*
+core/src/main/resources/org/apache/spark/ui/static/sorttable.js
+docs/js/vendor/anchor.min.js
+docs/js/vendor/jquery*
+docs/js/vendor/modernizer*
 
-     (MIT License) JCL 1.1.1 implemented over SLF4J (org.slf4j:jcl-over-slf4j:1.7.5 - http://www.slf4j.org)
-     (MIT License) JUL to SLF4J bridge (org.slf4j:jul-to-slf4j:1.7.5 - http://www.slf4j.org)
-     (MIT License) SLF4J API Module (org.slf4j:slf4j-api:1.7.5 - http://www.slf4j.org)
-     (MIT License) SLF4J LOG4J-12 Binding (org.slf4j:slf4j-log4j12:1.7.5 - http://www.slf4j.org)
-     (MIT License) pyrolite (org.spark-project:pyrolite:2.0.1 - http://pythonhosted.org/Pyro4/)
-     (MIT License) scopt (com.github.scopt:scopt_2.11:3.2.0 - https://github.com/scopt/scopt)
-     (The MIT License) Mockito (org.mockito:mockito-core:1.9.5 - http://www.mockito.org)
-     (MIT License) jquery (https://jquery.org/license/)
-     (MIT License) AnchorJS (https://github.com/bryanbraun/anchorjs)
-     (MIT License) graphlib-dot (https://github.com/cpettitt/graphlib-dot)
-     (MIT License) dagre-d3 (https://github.com/cpettitt/dagre-d3)
-     (MIT License) sorttable (https://github.com/stuartlangridge/sorttable)
-     (MIT License) boto (https://github.com/boto/boto/blob/develop/LICENSE)
-     (MIT License) datatables (http://datatables.net/license)
-     (MIT License) mustache (https://github.com/mustache/mustache/blob/master/LICENSE)
-     (MIT License) cookies (http://code.google.com/p/cookies/wiki/License)
-     (MIT License) blockUI (http://jquery.malsup.com/block/)
-     (MIT License) RowsGroup (http://datatables.net/license/mit)
-     (MIT License) jsonFormatter (http://www.jqueryscript.net/other/jQuery-Plugin-For-Pretty-JSON-Formatting-jsonFormatter.html)
-     (MIT License) modernizr (https://github.com/Modernizr/Modernizr/blob/master/LICENSE)
+
+Creative Commons CC0 1.0 Universal Public Domain Dedication
+-----------------------------------------------------------
+(see LICENSE-CC0.txt)
+
+data/mllib/images/kittens/29.5.a_b_EGDP022204.jpg
+data/mllib/images/kittens/54893.jpg
+data/mllib/images/kittens/DP153539.jpg
+data/mllib/images/kittens/DP802813.jpg
+data/mllib/images/multi-channel/chr30.4.184.jpg

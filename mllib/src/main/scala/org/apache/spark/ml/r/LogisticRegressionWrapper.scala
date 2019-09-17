@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.ml.r.RWrapperUtils._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -40,13 +40,13 @@ private[r] class LogisticRegressionWrapper private (
   private val lrModel: LogisticRegressionModel =
     pipeline.stages(1).asInstanceOf[LogisticRegressionModel]
 
-  val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
+  lazy val rFeatures: Array[String] = if (lrModel.getFitIntercept) {
     Array("(Intercept)") ++ features
   } else {
     features
   }
 
-  val rCoefficients: Array[Double] = {
+  lazy val rCoefficients: Array[Double] = {
     val numRows = lrModel.coefficientMatrix.numRows
     val numCols = lrModel.coefficientMatrix.numCols
     val numColsWithIntercept = if (lrModel.getFitIntercept) numCols + 1 else numCols
@@ -97,12 +97,20 @@ private[r] object LogisticRegressionWrapper
       standardization: Boolean,
       thresholds: Array[Double],
       weightCol: String,
-      aggregationDepth: Int
+      aggregationDepth: Int,
+      numRowsOfBoundsOnCoefficients: Int,
+      numColsOfBoundsOnCoefficients: Int,
+      lowerBoundsOnCoefficients: Array[Double],
+      upperBoundsOnCoefficients: Array[Double],
+      lowerBoundsOnIntercepts: Array[Double],
+      upperBoundsOnIntercepts: Array[Double],
+      handleInvalid: String
       ): LogisticRegressionWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
@@ -132,6 +140,30 @@ private[r] object LogisticRegressionWrapper
     }
 
     if (weightCol != null) lr.setWeightCol(weightCol)
+
+    if (numRowsOfBoundsOnCoefficients != 0 &&
+      numColsOfBoundsOnCoefficients != 0 && lowerBoundsOnCoefficients != null) {
+      val coef = Matrices.dense(numRowsOfBoundsOnCoefficients,
+        numColsOfBoundsOnCoefficients, lowerBoundsOnCoefficients)
+      lr.setLowerBoundsOnCoefficients(coef)
+    }
+
+    if (numRowsOfBoundsOnCoefficients != 0 &&
+      numColsOfBoundsOnCoefficients != 0 && upperBoundsOnCoefficients != null) {
+      val coef = Matrices.dense(numRowsOfBoundsOnCoefficients,
+        numColsOfBoundsOnCoefficients, upperBoundsOnCoefficients)
+      lr.setUpperBoundsOnCoefficients(coef)
+    }
+
+    if (lowerBoundsOnIntercepts != null) {
+      val intercept = Vectors.dense(lowerBoundsOnIntercepts)
+      lr.setLowerBoundsOnIntercepts(intercept)
+    }
+
+    if (upperBoundsOnIntercepts != null) {
+      val intercept = Vectors.dense(upperBoundsOnIntercepts)
+      lr.setUpperBoundsOnIntercepts(intercept)
+    }
 
     val idxToStr = new IndexToString()
       .setInputCol(PREDICTED_LABEL_INDEX_COL)

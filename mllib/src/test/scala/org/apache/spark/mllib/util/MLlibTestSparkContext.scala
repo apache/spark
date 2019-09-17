@@ -60,7 +60,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
    * A helper object for importing SQL implicits.
    *
    * Note that the alternative of importing `spark.implicits._` is not possible here.
-   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * This is because we create the `SQLContext` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {

@@ -22,8 +22,10 @@ import scala.collection.mutable
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -100,7 +102,7 @@ case class UserDefinedGenerator(
     inputRow = new InterpretedProjection(children)
     convertToScala = {
       val inputSchema = StructType(children.map { e =>
-        StructField(e.simpleString, e.dataType, nullable = true)
+        StructField(e.simpleString(SQLConf.get.maxToStringFields), e.dataType, nullable = true)
       })
       CatalystTypeConverters.createToScalaConverter(inputSchema)
     }.asInstanceOf[InternalRow => Row]
@@ -125,18 +127,27 @@ case class UserDefinedGenerator(
  *   3      NULL
  * }}}
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows.",
-  extended = """
+  usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
+  examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
        1  2
        3  NULL
   """)
+// scalastyle:on line.size.limit
 case class Stack(children: Seq[Expression]) extends Generator {
 
   private lazy val numRows = children.head.eval().asInstanceOf[Int]
   private lazy val numFields = Math.ceil((children.length - 1.0) / numRows).toInt
+
+  /**
+   * Return true iff the first child exists and has a foldable IntegerType.
+   */
+  def hasFoldableNumRows: Boolean = {
+    children.nonEmpty && children.head.dataType == IntegerType && children.head.foldable
+  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
@@ -148,12 +159,24 @@ case class Stack(children: Seq[Expression]) extends Generator {
         val j = (i - 1) % numFields
         if (children(i).dataType != elementSchema.fields(j).dataType) {
           return TypeCheckResult.TypeCheckFailure(
-            s"Argument ${j + 1} (${elementSchema.fields(j).dataType}) != " +
-              s"Argument $i (${children(i).dataType})")
+            s"Argument ${j + 1} (${elementSchema.fields(j).dataType.catalogString}) != " +
+              s"Argument $i (${children(i).dataType.catalogString})")
         }
       }
       TypeCheckResult.TypeCheckSuccess
     }
+  }
+
+  def findDataType(index: Int): DataType = {
+    // Find the first data type except NullType.
+    val firstDataIndex = ((index - 1) % numFields) + 1
+    for (i <- firstDataIndex until children.length by numFields) {
+      if (children(i).dataType != NullType) {
+        return children(i).dataType
+      }
+    }
+    // If all values of the column are NullType, use it.
+    NullType
   }
 
   override def elementSchema: StructType =
@@ -180,26 +203,52 @@ case class Stack(children: Seq[Expression]) extends Generator {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Rows - we write these into an array.
-    val rowData = ctx.freshName("rows")
-    ctx.addMutableState("InternalRow[]", rowData, s"this.$rowData = new InternalRow[$numRows];")
+    val rowData = ctx.addMutableState("InternalRow[]", "rows",
+      v => s"$v = new InternalRow[$numRows];")
     val values = children.tail
     val dataTypes = values.take(numFields).map(_.dataType)
-    val code = ctx.splitExpressions(ctx.INPUT_ROW, Seq.tabulate(numRows) { row =>
+    val code = ctx.splitExpressionsWithCurrentInputs(Seq.tabulate(numRows) { row =>
       val fields = Seq.tabulate(numFields) { col =>
         val index = row * numFields + col
         if (index < values.length) values(index) else Literal(null, dataTypes(col))
       }
       val eval = CreateStruct(fields).genCode(ctx)
-      s"${eval.code}\nthis.$rowData[$row] = ${eval.value};"
+      s"${eval.code}\n$rowData[$row] = ${eval.value};"
     })
 
     // Create the collection.
     val wrapperClass = classOf[mutable.WrappedArray[_]].getName
-    ctx.addMutableState(
-      s"$wrapperClass<InternalRow>",
-      ev.value,
-      s"this.${ev.value} = $wrapperClass$$.MODULE$$.make(this.$rowData);")
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code =
+      code"""
+         |$code
+         |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
+       """.stripMargin, isNull = FalseLiteral)
+  }
+}
+
+/**
+ * Replicate the row N times. N is specified as the first argument to the function.
+ * This is an internal function solely used by optimizer to rewrite EXCEPT ALL AND
+ * INTERSECT ALL queries.
+ */
+case class ReplicateRows(children: Seq[Expression]) extends Generator with CodegenFallback {
+  private lazy val numColumns = children.length - 1 // remove the multiplier value from output.
+
+  override def elementSchema: StructType =
+    StructType(children.tail.zipWithIndex.map {
+      case (e, index) => StructField(s"col$index", e.dataType)
+    })
+
+  override def eval(input: InternalRow): TraversableOnce[InternalRow] = {
+    val numRows = children.head.eval(input).asInstanceOf[Long]
+    val values = children.tail.map(_.eval(input)).toArray
+    Range.Long(0, numRows, 1).map { _ =>
+      val fields = new Array[Any](numColumns)
+      for (col <- 0 until numColumns) {
+        fields.update(col, values(col))
+      }
+      InternalRow(fields: _*)
+    }
   }
 }
 
@@ -212,7 +261,7 @@ case class GeneratorOuter(child: Generator) extends UnaryExpression with Generat
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
 
   override def elementSchema: StructType = child.elementSchema
 
@@ -230,7 +279,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
-        s"input to function explode should be array or map type, not ${child.dataType}")
+        "input to function explode should be array or map type, " +
+          s"not ${child.dataType.catalogString}")
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
@@ -304,8 +354,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns.",
-  extended = """
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
        10
@@ -327,8 +377,8 @@ case class Explode(child: Expression) extends ExplodeBase {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions.",
-  extended = """
+  usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
        0  10
@@ -342,14 +392,16 @@ case class PosExplode(child: Expression) extends ExplodeBase {
 /**
  * Explodes an array of structs into a table.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Explodes an array of structs into a table.",
-  extended = """
+  usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
+  examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
        1  a
        2  b
   """)
+// scalastyle:on line.size.limit
 case class Inline(child: Expression) extends UnaryExpression with CollectionGenerator {
   override val inline: Boolean = true
   override val position: Boolean = false
@@ -359,7 +411,8 @@ case class Inline(child: Expression) extends UnaryExpression with CollectionGene
       TypeCheckResult.TypeCheckSuccess
     case _ =>
       TypeCheckResult.TypeCheckFailure(
-        s"input to function $prettyName should be array of struct type, not ${child.dataType}")
+        s"input to function $prettyName should be array of struct type, " +
+          s"not ${child.dataType.catalogString}")
   }
 
   override def elementSchema: StructType = child.dataType match {

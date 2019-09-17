@@ -19,7 +19,6 @@
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 

@@ -21,11 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Text}
 
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.SparkContext
+import org.apache.spark.ui.{SparkUITab, UIUtils, WebUIPage}
 
-private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage("threadDump") {
-
-  private val sc = parent.sc
+private[ui] class ExecutorThreadDumpPage(
+    parent: SparkUITab,
+    sc: Option[SparkContext]) extends WebUIPage("threadDump") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val executorId = Option(request.getParameter("executorId")).map { executorId =>
@@ -37,19 +38,10 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
     val maybeThreadDump = sc.get.getExecutorThreadDump(executorId)
 
     val content = maybeThreadDump.map { threadDump =>
-      val dumpRows = threadDump.sortWith {
-        case (threadTrace1, threadTrace2) =>
-          val v1 = if (threadTrace1.threadName.contains("Executor task launch")) 1 else 0
-          val v2 = if (threadTrace2.threadName.contains("Executor task launch")) 1 else 0
-          if (v1 == v2) {
-            threadTrace1.threadName.toLowerCase < threadTrace2.threadName.toLowerCase
-          } else {
-            v1 > v2
-          }
-      }.map { thread =>
+      val dumpRows = threadDump.map { thread =>
         val threadId = thread.threadId
         val blockedBy = thread.blockedByThreadId match {
-          case Some(blockedByThreadId) =>
+          case Some(_) =>
             <div>
               Blocked by <a href={s"#${thread.blockedByThreadId}_td_id"}>
               Thread {thread.blockedByThreadId} {thread.blockedByLock}</a>
@@ -66,7 +58,7 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
           <td id={s"${threadId}_td_locking"}>{blockedBy}{heldLocks}</td>
-          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace}</td>
+          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace.html}</td>
         </tr>
       }
 
@@ -103,6 +95,6 @@ private[ui] class ExecutorThreadDumpPage(parent: ExecutorsTab) extends WebUIPage
       </table>
     </div>
     }.getOrElse(Text("Error fetching thread dump"))
-    UIUtils.headerSparkPage(s"Thread dump for executor $executorId", content, parent)
+    UIUtils.headerSparkPage(request, s"Thread dump for executor $executorId", content, parent)
   }
 }

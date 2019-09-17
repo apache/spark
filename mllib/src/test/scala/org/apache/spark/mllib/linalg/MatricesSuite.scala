@@ -20,16 +20,43 @@ package org.apache.spark.mllib.linalg
 import java.util.Random
 
 import scala.collection.mutable.{Map => MutableMap}
+import scala.reflect.ClassTag
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mock.MockitoSugar._
+import org.scalatest.mockito.MockitoSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.serializer.KryoSerializer
 
 class MatricesSuite extends SparkFunSuite {
+  test("kryo class register") {
+    val conf = new SparkConf(false)
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
+
+    val ser = new KryoSerializer(conf).newInstance()
+
+    def check[T: ClassTag](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+    }
+
+    val m = 3
+    val n = 2
+    val denseValues = Array(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    val denseMat = Matrices.dense(m, n, denseValues).asInstanceOf[DenseMatrix]
+
+    val sparseValues = Array(1.0, 2.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(1, 2, 1, 2)
+    val sparseMat =
+      Matrices.sparse(m, n, colPtrs, rowIndices, sparseValues).asInstanceOf[SparseMatrix]
+    check(denseMat)
+    check(sparseMat)
+  }
+
   test("dense matrix construction") {
     val m = 3
     val n = 2
@@ -241,22 +268,22 @@ class MatricesSuite extends SparkFunSuite {
       dnMap.put((i, j), value)
     }
     assert(dnMap.size === 6)
-    assert(dnMap(0, 0) === 1.0)
-    assert(dnMap(1, 0) === 2.0)
-    assert(dnMap(2, 0) === 0.0)
-    assert(dnMap(0, 1) === 0.0)
-    assert(dnMap(1, 1) === 4.0)
-    assert(dnMap(2, 1) === 5.0)
+    assert(dnMap((0, 0)) === 1.0)
+    assert(dnMap((1, 0)) === 2.0)
+    assert(dnMap((2, 0)) === 0.0)
+    assert(dnMap((0, 1)) === 0.0)
+    assert(dnMap((1, 1)) === 4.0)
+    assert(dnMap((2, 1)) === 5.0)
 
     val spMap = MutableMap[(Int, Int), Double]()
     sp.foreachActive { (i, j, value) =>
       spMap.put((i, j), value)
     }
     assert(spMap.size === 4)
-    assert(spMap(0, 0) === 1.0)
-    assert(spMap(1, 0) === 2.0)
-    assert(spMap(1, 1) === 4.0)
-    assert(spMap(2, 1) === 5.0)
+    assert(spMap((0, 0)) === 1.0)
+    assert(spMap((1, 0)) === 2.0)
+    assert(spMap((1, 1)) === 4.0)
+    assert(spMap((2, 1)) === 5.0)
   }
 
   test("horzcat, vertcat, eye, speye") {
@@ -485,10 +512,10 @@ class MatricesSuite extends SparkFunSuite {
     mat.toString(0, 0)
     mat.toString(Int.MinValue, Int.MinValue)
     mat.toString(Int.MaxValue, Int.MaxValue)
-    var lines = mat.toString(6, 50).lines.toArray
+    var lines = mat.toString(6, 50).split('\n')
     assert(lines.size == 5 && lines.forall(_.size <= 50))
 
-    lines = mat.toString(5, 100).lines.toArray
+    lines = mat.toString(5, 100).split('\n')
     assert(lines.size == 5 && lines.forall(_.size <= 100))
   }
 
@@ -511,6 +538,26 @@ class MatricesSuite extends SparkFunSuite {
       Array(1.0, 2, 2, 4), 3, 3, Array(0, 0, 2, 4), Array(1, 2, 1, 2))
     val sum = bm1 + bm2
     Matrices.fromBreeze(sum)
+  }
+
+  test("Test FromBreeze when Breeze.CSCMatrix.rowIndices has trailing zeros. - SPARK-20687") {
+    // (2, 0, 0)
+    // (2, 0, 0)
+    val mat1Brz = Matrices.sparse(2, 3, Array(0, 2, 2, 2), Array(0, 1), Array(2, 2)).asBreeze
+    // (2, 1E-15, 1E-15)
+    // (2, 1E-15, 1E-15)
+    val mat2Brz = Matrices.sparse(2, 3,
+      Array(0, 2, 4, 6),
+      Array(0, 0, 0, 1, 1, 1),
+      Array(2, 1E-15, 1E-15, 2, 1E-15, 1E-15)).asBreeze
+    val t1Brz = mat1Brz - mat2Brz
+    val t2Brz = mat2Brz - mat1Brz
+    // The following operations raise exceptions on un-patch Matrices.fromBreeze
+    val t1 = Matrices.fromBreeze(t1Brz)
+    val t2 = Matrices.fromBreeze(t2Brz)
+    // t1 == t1Brz && t2 == t2Brz
+    assert((t1.asBreeze - t1Brz).iterator.map((x) => math.abs(x._2)).sum < 1E-15)
+    assert((t2.asBreeze - t2Brz).iterator.map((x) => math.abs(x._2)).sum < 1E-15)
   }
 
   test("row/col iterator") {

@@ -17,8 +17,6 @@
 
 package org.apache.spark.util.collection
 
-import java.util.Comparator
-
 import scala.collection.mutable.HashSet
 
 import org.apache.spark.SparkFunSuite
@@ -113,7 +111,7 @@ class AppendOnlyMapSuite extends SparkFunSuite {
     assert(map.size === 100)
     for (i <- 1 to 100) {
       val res = map.changeValue("" + i, (hadValue, oldValue) => {
-        assert(hadValue === true)
+        assert(hadValue)
         assert(oldValue === "" + i)
         oldValue + "!"
       })
@@ -136,7 +134,7 @@ class AppendOnlyMapSuite extends SparkFunSuite {
     })
     assert(map.size === 401)
     map.changeValue(null, (hadValue, oldValue) => {
-      assert(hadValue === true)
+      assert(hadValue)
       assert(oldValue === "null!")
       "null!!"
     })
@@ -170,20 +168,18 @@ class AppendOnlyMapSuite extends SparkFunSuite {
       case e: IllegalStateException => fail()
     }
 
-    val it = map.destructiveSortedIterator(new Comparator[String] {
-      def compare(key1: String, key2: String): Int = {
-        val x = if (key1 != null) key1.toInt else Int.MinValue
-        val y = if (key2 != null) key2.toInt else Int.MinValue
-        x.compareTo(y)
-      }
+    val it = map.destructiveSortedIterator((key1: String, key2: String) => {
+      val x = if (key1 != null) key1.toInt else Int.MinValue
+      val y = if (key2 != null) key2.toInt else Int.MinValue
+      x.compareTo(y)
     })
 
     // Should be sorted by key
     assert(it.hasNext)
     var previous = it.next()
-    assert(previous == (null, "happy new year!"))
+    assert(previous == ((null, "happy new year!")))
     previous = it.next()
-    assert(previous == ("1", "2014"))
+    assert(previous == (("1", "2014")))
     while (it.hasNext) {
       val kv = it.next()
       assert(kv._1.toInt > previous._1.toInt)

@@ -26,6 +26,25 @@ import org.apache.spark.unsafe.Platform;
  */
 public class MemoryBlock extends MemoryLocation {
 
+  /** Special `pageNumber` value for pages which were not allocated by TaskMemoryManagers */
+  public static final int NO_PAGE_NUMBER = -1;
+
+  /**
+   * Special `pageNumber` value for marking pages that have been freed in the TaskMemoryManager.
+   * We set `pageNumber` to this value in TaskMemoryManager.freePage() so that MemoryAllocator
+   * can detect if pages which were allocated by TaskMemoryManager have been freed in the TMM
+   * before being passed to MemoryAllocator.free() (it is an error to allocate a page in
+   * TaskMemoryManager and then directly free it in a MemoryAllocator without going through
+   * the TMM freePage() call).
+   */
+  public static final int FREED_IN_TMM_PAGE_NUMBER = -2;
+
+  /**
+   * Special `pageNumber` value for pages that have been freed by the MemoryAllocator. This allows
+   * us to detect double-frees.
+   */
+  public static final int FREED_IN_ALLOCATOR_PAGE_NUMBER = -3;
+
   private final long length;
 
   /**
@@ -33,7 +52,7 @@ public class MemoryBlock extends MemoryLocation {
    * TaskMemoryManager. This field is public so that it can be modified by the TaskMemoryManager,
    * which lives in a different package.
    */
-  public int pageNumber = -1;
+  public int pageNumber = NO_PAGE_NUMBER;
 
   public MemoryBlock(@Nullable Object obj, long offset, long length) {
     super(obj, offset);

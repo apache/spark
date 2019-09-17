@@ -33,15 +33,15 @@ export FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 export SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/..; pwd)"
 
 # Required for setting SPARK_SCALA_VERSION
-. "${SPARK_HOME}"/bin/load-spark-env.sh
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 echo "Using Scala $SPARK_SCALA_VERSION"
 
-pushd $FWDIR > /dev/null
-. $FWDIR/find-r.sh
+pushd "$FWDIR" > /dev/null
+. "$FWDIR/find-r.sh"
 
 # Install the package (this will also generate the Rd files)
-. $FWDIR/install-dev.sh
+. "$FWDIR/install-dev.sh"
 
 # Now create HTML files
 
@@ -49,7 +49,7 @@ pushd $FWDIR > /dev/null
 mkdir -p pkg/html
 pushd pkg/html
 
-"$R_SCRIPT_PATH/"Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
 
 popd
 

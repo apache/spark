@@ -98,7 +98,7 @@ class RawNetworkReceiver(host: String, port: Int, storageLevel: StorageLevel)
 
   /** Read a buffer fully from a given Channel */
   private def readFully(channel: ReadableByteChannel, dest: ByteBuffer) {
-    while (dest.position < dest.limit) {
+    while (dest.position() < dest.limit()) {
       if (channel.read(dest) == -1) {
         throw new EOFException("End of channel")
       }

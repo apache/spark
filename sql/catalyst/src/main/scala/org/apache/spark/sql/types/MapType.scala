@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.annotation.Stable
 
 /**
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
@@ -31,7 +31,7 @@ import org.apache.spark.annotation.InterfaceStability
  * @param valueType The data type of map values.
  * @param valueContainsNull Indicates if map values have `null` values.
  */
-@InterfaceStability.Stable
+@Stable
 case class MapType(
   keyType: DataType,
   valueType: DataType,
@@ -42,9 +42,9 @@ case class MapType(
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(s"$prefix-- key: ${keyType.typeName}\n")
+    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
     builder.append(s"$prefix-- value: ${valueType.typeName} " +
       s"(valueContainsNull = $valueContainsNull)\n")
-    DataType.buildFormattedString(keyType, s"$prefix    |", builder)
     DataType.buildFormattedString(valueType, s"$prefix    |", builder)
   }
 
@@ -78,7 +78,7 @@ case class MapType(
 /**
  * @since 1.3.0
  */
-@InterfaceStability.Stable
+@Stable
 object MapType extends AbstractDataType {
 
   override private[sql] def defaultConcreteType: DataType = apply(NullType, NullType)

@@ -136,7 +136,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         // this dummy directory should not already exist otherwise the WAL will try to recover
         // past events from the directory and throw errors.
         val nonExistentDirectory = new File(
-          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
+          System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).toURI.toString
         writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
           SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
         dataRead = writeAheadLog.read(partition.walRecordHandle)
@@ -158,16 +158,14 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
       logInfo(s"Read partition data of $this from write ahead log, record handle " +
         partition.walRecordHandle)
       if (storeInBlockManager) {
-        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel,
-          encrypt = true)
+        blockManager.putBytes(blockId, new ChunkedByteBuffer(dataRead.duplicate()), storageLevel)
         logDebug(s"Stored partition data of $this into block manager with level $storageLevel")
         dataRead.rewind()
       }
       serializerManager
         .dataDeserializeStream(
           blockId,
-          new ChunkedByteBuffer(dataRead).toInputStream(),
-          maybeEncrypted = false)(elementClassTag)
+          new ChunkedByteBuffer(dataRead).toInputStream())(elementClassTag)
         .asInstanceOf[Iterator[T]]
     }
 

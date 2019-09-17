@@ -17,7 +17,8 @@
 
 package org.apache.spark.streaming.kafka010
 
-import java.{ lang => jl, util => ju }
+import java.{lang => jl, util => ju}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 
@@ -25,11 +26,10 @@ import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
+import org.apache.spark.kafka010.KafkaConfigUpdater
 
 /**
- * :: Experimental ::
  * Choice of how to create and configure underlying Kafka Consumers on driver and executors.
  * See [[ConsumerStrategies]] to obtain instances.
  * Kafka 0.10 consumers can require additional, sometimes complex, setup after object
@@ -37,7 +37,6 @@ import org.apache.spark.internal.Logging
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
-@Experimental
 abstract class ConsumerStrategy[K, V] {
   /**
    * Kafka <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
@@ -56,6 +55,15 @@ abstract class ConsumerStrategy[K, V] {
    * checkpoint.
    */
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V]
+
+  /**
+   * Updates the parameters with security if needed.
+   * Added a function to hide internals and reduce code duplications because all strategy uses it.
+   */
+  protected def setAuthenticationConfigIfNeeded(kafkaParams: ju.Map[String, Object]) =
+    KafkaConfigUpdater("source", kafkaParams.asScala.toMap)
+      .setAuthenticationConfigIfNeeded()
+      .build()
 }
 
 /**
@@ -80,7 +88,8 @@ private case class Subscribe[K, V](
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
-    val consumer = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
     consumer.subscribe(topics)
     val toSeek = if (currentOffsets.isEmpty) {
       offsets
@@ -93,7 +102,8 @@ private case class Subscribe[K, V](
       // but cant seek to a position before poll, because poll is what gets subscription partitions
       // So, poll, suppress the first exception, then seek
       val aor = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)
-      val shouldSuppress = aor != null && aor.asInstanceOf[String].toUpperCase == "NONE"
+      val shouldSuppress =
+        aor != null && aor.asInstanceOf[String].toUpperCase(Locale.ROOT) == "NONE"
       try {
         consumer.poll(0)
       } catch {
@@ -135,7 +145,8 @@ private case class SubscribePattern[K, V](
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
-    val consumer = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
     consumer.subscribe(pattern, new NoOpConsumerRebalanceListener())
     val toSeek = if (currentOffsets.isEmpty) {
       offsets
@@ -145,7 +156,8 @@ private case class SubscribePattern[K, V](
     if (!toSeek.isEmpty) {
       // work around KAFKA-3370 when reset is none, see explanation in Subscribe above
       val aor = kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG)
-      val shouldSuppress = aor != null && aor.asInstanceOf[String].toUpperCase == "NONE"
+      val shouldSuppress =
+        aor != null && aor.asInstanceOf[String].toUpperCase(Locale.ROOT) == "NONE"
       try {
         consumer.poll(0)
       } catch {
@@ -186,7 +198,8 @@ private case class Assign[K, V](
   def executorKafkaParams: ju.Map[String, Object] = kafkaParams
 
   def onStart(currentOffsets: ju.Map[TopicPartition, jl.Long]): Consumer[K, V] = {
-    val consumer = new KafkaConsumer[K, V](kafkaParams)
+    val updatedKafkaParams = setAuthenticationConfigIfNeeded(kafkaParams)
+    val consumer = new KafkaConsumer[K, V](updatedKafkaParams)
     consumer.assign(topicPartitions)
     val toSeek = if (currentOffsets.isEmpty) {
       offsets
@@ -205,13 +218,10 @@ private case class Assign[K, V](
 }
 
 /**
- * :: Experimental ::
- * object for obtaining instances of [[ConsumerStrategy]]
+ * Object for obtaining instances of [[ConsumerStrategy]]
  */
-@Experimental
 object ConsumerStrategies {
   /**
-   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -224,7 +234,6 @@ object ConsumerStrategies {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
-  @Experimental
   def Subscribe[K, V](
       topics: Iterable[jl.String],
       kafkaParams: collection.Map[String, Object],
@@ -232,11 +241,10 @@ object ConsumerStrategies {
     new Subscribe[K, V](
       new ju.ArrayList(topics.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).asJava))
   }
 
   /**
-   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -246,7 +254,6 @@ object ConsumerStrategies {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
-  @Experimental
   def Subscribe[K, V](
       topics: Iterable[jl.String],
       kafkaParams: collection.Map[String, Object]): ConsumerStrategy[K, V] = {
@@ -257,7 +264,6 @@ object ConsumerStrategies {
   }
 
   /**
-   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -270,7 +276,6 @@ object ConsumerStrategies {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
-  @Experimental
   def Subscribe[K, V](
       topics: ju.Collection[jl.String],
       kafkaParams: ju.Map[String, Object],
@@ -279,7 +284,6 @@ object ConsumerStrategies {
   }
 
   /**
-   *  :: Experimental ::
    * Subscribe to a collection of topics.
    * @param topics collection of topics to subscribe
    * @param kafkaParams Kafka
@@ -289,14 +293,13 @@ object ConsumerStrategies {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
-  @Experimental
   def Subscribe[K, V](
       topics: ju.Collection[jl.String],
       kafkaParams: ju.Map[String, Object]): ConsumerStrategy[K, V] = {
     new Subscribe[K, V](topics, kafkaParams, ju.Collections.emptyMap[TopicPartition, jl.Long]())
   }
 
-  /** :: Experimental ::
+  /**
    * Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
    * The pattern matching will be done periodically against topics existing at the time of check.
    * @param pattern pattern to subscribe to
@@ -310,7 +313,6 @@ object ConsumerStrategies {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
-  @Experimental
   def SubscribePattern[K, V](
       pattern: ju.regex.Pattern,
       kafkaParams: collection.Map[String, Object],
@@ -318,10 +320,10 @@ object ConsumerStrategies {
     new SubscribePattern[K, V](
       pattern,
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).asJava))
   }
 
-  /** :: Experimental ::
+  /**
    * Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
    * The pattern matching will be done periodically against topics existing at the time of check.
    * @param pattern pattern to subscribe to
@@ -332,7 +334,6 @@ object ConsumerStrategies {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
-  @Experimental
   def SubscribePattern[K, V](
       pattern: ju.regex.Pattern,
       kafkaParams: collection.Map[String, Object]): ConsumerStrategy[K, V] = {
@@ -342,7 +343,7 @@ object ConsumerStrategies {
       ju.Collections.emptyMap[TopicPartition, jl.Long]())
   }
 
-  /** :: Experimental ::
+  /**
    * Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
    * The pattern matching will be done periodically against topics existing at the time of check.
    * @param pattern pattern to subscribe to
@@ -356,7 +357,6 @@ object ConsumerStrategies {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
-  @Experimental
   def SubscribePattern[K, V](
       pattern: ju.regex.Pattern,
       kafkaParams: ju.Map[String, Object],
@@ -364,7 +364,7 @@ object ConsumerStrategies {
     new SubscribePattern[K, V](pattern, kafkaParams, offsets)
   }
 
-  /** :: Experimental ::
+  /**
    * Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
    * The pattern matching will be done periodically against topics existing at the time of check.
    * @param pattern pattern to subscribe to
@@ -375,7 +375,6 @@ object ConsumerStrategies {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
-  @Experimental
   def SubscribePattern[K, V](
       pattern: ju.regex.Pattern,
       kafkaParams: ju.Map[String, Object]): ConsumerStrategy[K, V] = {
@@ -386,7 +385,6 @@ object ConsumerStrategies {
   }
 
   /**
-   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -399,7 +397,6 @@ object ConsumerStrategies {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
-  @Experimental
   def Assign[K, V](
       topicPartitions: Iterable[TopicPartition],
       kafkaParams: collection.Map[String, Object],
@@ -407,11 +404,10 @@ object ConsumerStrategies {
     new Assign[K, V](
       new ju.ArrayList(topicPartitions.asJavaCollection),
       new ju.HashMap[String, Object](kafkaParams.asJava),
-      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(l => new jl.Long(l)).asJava))
+      new ju.HashMap[TopicPartition, jl.Long](offsets.mapValues(jl.Long.valueOf).asJava))
   }
 
   /**
-   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -421,7 +417,6 @@ object ConsumerStrategies {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
-  @Experimental
   def Assign[K, V](
       topicPartitions: Iterable[TopicPartition],
       kafkaParams: collection.Map[String, Object]): ConsumerStrategy[K, V] = {
@@ -432,7 +427,6 @@ object ConsumerStrategies {
   }
 
   /**
-   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -445,7 +439,6 @@ object ConsumerStrategies {
    * TopicPartition, the committed offset (if applicable) or kafka param
    * auto.offset.reset will be used.
    */
-  @Experimental
   def Assign[K, V](
       topicPartitions: ju.Collection[TopicPartition],
       kafkaParams: ju.Map[String, Object],
@@ -454,7 +447,6 @@ object ConsumerStrategies {
   }
 
   /**
-   *  :: Experimental ::
    * Assign a fixed collection of TopicPartitions
    * @param topicPartitions collection of TopicPartitions to assign
    * @param kafkaParams Kafka
@@ -464,7 +456,6 @@ object ConsumerStrategies {
    *  Requires "bootstrap.servers" to be set
    * with Kafka broker(s) specified in host1:port1,host2:port2 form.
    */
-  @Experimental
   def Assign[K, V](
       topicPartitions: ju.Collection[TopicPartition],
       kafkaParams: ju.Map[String, Object]): ConsumerStrategy[K, V] = {

@@ -19,13 +19,12 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Network._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
@@ -55,25 +54,22 @@ private[spark] class KafkaRDD[K, V](
     useConsumerCache: Boolean
 ) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
 
-  assert("none" ==
+  require("none" ==
     kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String],
     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
       " must be set to none for executor kafka params, else messages may not match offsetRange")
 
-  assert(false ==
+  require(false ==
     kafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
     ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG +
       " must be set to false for executor kafka params, else offsets may commit before processing")
 
   // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
-  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms",
-    conf.getTimeAsMs("spark.network.timeout", "120s"))
-  private val cacheInitialCapacity =
-    conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
-  private val cacheMaxCapacity =
-    conf.getInt("spark.streaming.kafka.consumer.cache.maxCapacity", 64)
-  private val cacheLoadFactor =
-    conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
+  private val pollTimeout = conf.get(CONSUMER_POLL_MS).getOrElse(conf.get(NETWORK_TIMEOUT) * 1000L)
+  private val cacheInitialCapacity = conf.get(CONSUMER_CACHE_INITIAL_CAPACITY)
+  private val cacheMaxCapacity = conf.get(CONSUMER_CACHE_MAX_CAPACITY)
+  private val cacheLoadFactor = conf.get(CONSUMER_CACHE_LOAD_FACTOR).toFloat
+  private val compacted = conf.get(ALLOW_NON_CONSECUTIVE_OFFSETS)
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -87,47 +83,62 @@ private[spark] class KafkaRDD[K, V](
     }.toArray
   }
 
-  override def count(): Long = offsetRanges.map(_.count).sum
+  override def count(): Long =
+    if (compacted) {
+      super.count()
+    } else {
+      offsetRanges.map(_.count).sum
+    }
 
   override def countApprox(
       timeout: Long,
       confidence: Double = 0.95
-  ): PartialResult[BoundedDouble] = {
-    val c = count
-    new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
-  }
-
-  override def isEmpty(): Boolean = count == 0L
-
-  override def take(num: Int): Array[ConsumerRecord[K, V]] = {
-    val nonEmptyPartitions = this.partitions
-      .map(_.asInstanceOf[KafkaRDDPartition])
-      .filter(_.count > 0)
-
-    if (num < 1 || nonEmptyPartitions.isEmpty) {
-      return new Array[ConsumerRecord[K, V]](0)
+  ): PartialResult[BoundedDouble] =
+    if (compacted) {
+      super.countApprox(timeout, confidence)
+    } else {
+      val c = count
+      new PartialResult(new BoundedDouble(c, 1.0, c, c), true)
     }
 
-    // Determine in advance how many messages need to be taken from each partition
-    val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
-      val remain = num - result.values.sum
-      if (remain > 0) {
-        val taken = Math.min(remain, part.count)
-        result + (part.index -> taken.toInt)
+  override def isEmpty(): Boolean =
+    if (compacted) {
+      super.isEmpty()
+    } else {
+      count == 0L
+    }
+
+  override def take(num: Int): Array[ConsumerRecord[K, V]] =
+    if (compacted) {
+      super.take(num)
+    } else if (num < 1) {
+      Array.empty[ConsumerRecord[K, V]]
+    } else {
+      val nonEmptyPartitions = this.partitions
+        .map(_.asInstanceOf[KafkaRDDPartition])
+        .filter(_.count > 0)
+
+      if (nonEmptyPartitions.isEmpty) {
+        Array.empty[ConsumerRecord[K, V]]
       } else {
-        result
+        // Determine in advance how many messages need to be taken from each partition
+        val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
+          val remain = num - result.values.sum
+          if (remain > 0) {
+            val taken = Math.min(remain, part.count)
+            result + (part.index -> taken.toInt)
+          } else {
+            result
+          }
+        }
+
+        context.runJob(
+          this,
+          (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
+          it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
+        ).flatten
       }
     }
-
-    val buf = new ArrayBuffer[ConsumerRecord[K, V]]
-    val res = context.runJob(
-      this,
-      (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
-      it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
-    )
-    res.foreach(buf ++= _)
-    buf.toArray
-  }
 
   private def executors(): Array[ExecutorCacheTaskLocation] = {
     val bm = sparkContext.env.blockManager
@@ -156,7 +167,7 @@ private[spark] class KafkaRDD[K, V](
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
     if (execs.isEmpty) {
-      Seq()
+      Seq.empty
     } else {
       // execs is sorted, tp.hashCode depends only on topic and partition, so consistent index
       val index = Math.floorMod(tp.hashCode, execs.length)
@@ -172,57 +183,130 @@ private[spark] class KafkaRDD[K, V](
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[ConsumerRecord[K, V]] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
+    require(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
       logInfo(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
-      new KafkaRDDIterator(part, context)
+      logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
+        s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+      if (compacted) {
+        new CompactedKafkaRDDIterator[K, V](
+          part,
+          context,
+          kafkaParams,
+          useConsumerCache,
+          pollTimeout,
+          cacheInitialCapacity,
+          cacheMaxCapacity,
+          cacheLoadFactor
+        )
+      } else {
+        new KafkaRDDIterator[K, V](
+          part,
+          context,
+          kafkaParams,
+          useConsumerCache,
+          pollTimeout,
+          cacheInitialCapacity,
+          cacheMaxCapacity,
+          cacheLoadFactor
+        )
+      }
+    }
+  }
+}
+
+/**
+ * An iterator that fetches messages directly from Kafka for the offsets in partition.
+ * Uses a cached consumer where possible to take advantage of prefetching
+ */
+private class KafkaRDDIterator[K, V](
+  part: KafkaRDDPartition,
+  context: TaskContext,
+  kafkaParams: ju.Map[String, Object],
+  useConsumerCache: Boolean,
+  pollTimeout: Long,
+  cacheInitialCapacity: Int,
+  cacheMaxCapacity: Int,
+  cacheLoadFactor: Float
+) extends Iterator[ConsumerRecord[K, V]] {
+
+  context.addTaskCompletionListener[Unit](_ => closeIfNeeded())
+
+  val consumer = {
+    KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
+    KafkaDataConsumer.acquire[K, V](part.topicPartition(), kafkaParams, context, useConsumerCache)
+  }
+
+  var requestOffset = part.fromOffset
+
+  def closeIfNeeded(): Unit = {
+    if (consumer != null) {
+      consumer.release()
     }
   }
 
-  /**
-   * An iterator that fetches messages directly from Kafka for the offsets in partition.
-   * Uses a cached consumer where possible to take advantage of prefetching
-   */
-  private class KafkaRDDIterator(
-      part: KafkaRDDPartition,
-      context: TaskContext) extends Iterator[ConsumerRecord[K, V]] {
+  override def hasNext(): Boolean = requestOffset < part.untilOffset
 
-    logInfo(s"Computing topic ${part.topic}, partition ${part.partition} " +
-      s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+  override def next(): ConsumerRecord[K, V] = {
+    if (!hasNext) {
+      throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
+    }
+    val r = consumer.get(requestOffset, pollTimeout)
+    requestOffset += 1
+    r
+  }
+}
 
-    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+/**
+ * An iterator that fetches messages directly from Kafka for the offsets in partition.
+ * Uses a cached consumer where possible to take advantage of prefetching.
+ * Intended for compacted topics, or other cases when non-consecutive offsets are ok.
+ */
+private class CompactedKafkaRDDIterator[K, V](
+    part: KafkaRDDPartition,
+    context: TaskContext,
+    kafkaParams: ju.Map[String, Object],
+    useConsumerCache: Boolean,
+    pollTimeout: Long,
+    cacheInitialCapacity: Int,
+    cacheMaxCapacity: Int,
+    cacheLoadFactor: Float
+  ) extends KafkaRDDIterator[K, V](
+    part,
+    context,
+    kafkaParams,
+    useConsumerCache,
+    pollTimeout,
+    cacheInitialCapacity,
+    cacheMaxCapacity,
+    cacheLoadFactor
+  ) {
 
-    context.addTaskCompletionListener{ context => closeIfNeeded() }
+  consumer.compactedStart(part.fromOffset, pollTimeout)
 
-    val consumer = if (useConsumerCache) {
-      CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-      if (context.attemptNumber > 1) {
-        // just in case the prior attempt failures were cache related
-        CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
-      }
-      CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, kafkaParams)
+  private var nextRecord = consumer.compactedNext(pollTimeout)
+
+  private var okNext: Boolean = true
+
+  override def hasNext(): Boolean = okNext
+
+  override def next(): ConsumerRecord[K, V] = {
+    if (!hasNext) {
+      throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
+    }
+    val r = nextRecord
+    if (r.offset + 1 >= part.untilOffset) {
+      okNext = false
     } else {
-      CachedKafkaConsumer.getUncached[K, V](groupId, part.topic, part.partition, kafkaParams)
-    }
-
-    var requestOffset = part.fromOffset
-
-    def closeIfNeeded(): Unit = {
-      if (!useConsumerCache && consumer != null) {
-        consumer.close
+      nextRecord = consumer.compactedNext(pollTimeout)
+      if (nextRecord.offset >= part.untilOffset) {
+        okNext = false
+        consumer.compactedPrevious()
       }
     }
-
-    override def hasNext(): Boolean = requestOffset < part.untilOffset
-
-    override def next(): ConsumerRecord[K, V] = {
-      assert(hasNext(), "Can't call getNext() once untilOffset has been reached")
-      val r = consumer.get(requestOffset, pollTimeout)
-      requestOffset += 1
-      r
-    }
+    r
   }
 }

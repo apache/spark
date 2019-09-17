@@ -20,8 +20,9 @@ package org.apache.spark.deploy.mesos
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.util.{IntParam, Utils}
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkSubmitUtils
+import org.apache.spark.util.{IntParam, Utils}
 
 private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
   var host: String = Utils.localHostName()
@@ -59,7 +60,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--host" | "-h") :: value :: tail =>
-      Utils.checkHost(value, "Please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 
@@ -95,9 +96,8 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
       parse(tail)
 
     case ("--conf") :: value :: tail =>
-      val pair = MesosClusterDispatcher.
-        parseSparkConfProperty(value)
-        confProperties(pair._1) = pair._2
+      val (k, v) = SparkSubmitUtils.parseSparkConfProperty(value)
+      confProperties(k) = v
       parse(tail)
 
     case ("--help") :: tail =>

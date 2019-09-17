@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
 /**
  * (private[classification])  Params for probabilistic classification.
  */
-private[classification] trait ProbabilisticClassifierParams
+private[ml] trait ProbabilisticClassifierParams
   extends ClassifierParams with HasProbabilityCol with HasThresholds {
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -147,8 +147,8 @@ abstract class ProbabilisticClassificationModel[
     }
 
     if (numColsOutput == 0) {
-      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() was called as NOOP" +
-        " since no output columns were set.")
+      this.logWarning(s"$uid: ProbabilisticClassificationModel.transform() does nothing" +
+        " because no output columns were set.")
     }
     outputData.toDF
   }
@@ -230,21 +230,23 @@ private[ml] object ProbabilisticClassificationModel {
    * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
    *
    * The input raw predictions should be nonnegative.
-   * The output vector sums to 1, unless the input vector is all-0 (in which case the output is
-   * all-0 too).
+   * The output vector sums to 1.
    *
    * NOTE: This is NOT applicable to all models, only ones which effectively use class
    *       instance counts for raw predictions.
+   *
+   * @throws IllegalArgumentException if the input vector is all-0 or including negative values
    */
   def normalizeToProbabilitiesInPlace(v: DenseVector): Unit = {
+    v.values.foreach(value => require(value >= 0,
+      "The input raw predictions should be nonnegative."))
     val sum = v.values.sum
-    if (sum != 0) {
-      var i = 0
-      val size = v.size
-      while (i < size) {
-        v.values(i) /= sum
-        i += 1
-      }
+    require(sum > 0, "Can't normalize the 0-vector.")
+    var i = 0
+    val size = v.size
+    while (i < size) {
+      v.values(i) /= sum
+      i += 1
     }
   }
 }

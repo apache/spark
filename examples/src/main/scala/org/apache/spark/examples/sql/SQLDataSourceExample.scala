@@ -49,9 +49,45 @@ object SQLDataSourceExample {
     val peopleDF = spark.read.format("json").load("examples/src/main/resources/people.json")
     peopleDF.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
     // $example off:manual_load_options$
+    // $example on:manual_load_options_csv$
+    val peopleDFCsv = spark.read.format("csv")
+      .option("sep", ";")
+      .option("inferSchema", "true")
+      .option("header", "true")
+      .load("examples/src/main/resources/people.csv")
+    // $example off:manual_load_options_csv$
+    // $example on:load_with_path_glob_filter$
+    val partitionedUsersDF = spark.read.format("orc")
+      .option("pathGlobFilter", "*.orc")
+      .load("examples/src/main/resources/partitioned_users.orc")
+    // $example off:load_with_path_glob_filter$
+    // $example on:manual_save_options_orc$
+    usersDF.write.format("orc")
+      .option("orc.bloom.filter.columns", "favorite_color")
+      .option("orc.dictionary.key.threshold", "1.0")
+      .option("orc.column.encoding.direct", "name")
+      .save("users_with_options.orc")
+    // $example off:manual_save_options_orc$
+
     // $example on:direct_sql$
     val sqlDF = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     // $example off:direct_sql$
+    // $example on:write_sorting_and_bucketing$
+    peopleDF.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
+    // $example off:write_sorting_and_bucketing$
+    // $example on:write_partitioning$
+    usersDF.write.partitionBy("favorite_color").format("parquet").save("namesPartByColor.parquet")
+    // $example off:write_partitioning$
+    // $example on:write_partition_and_bucket$
+    usersDF
+      .write
+      .partitionBy("favorite_color")
+      .bucketBy(42, "name")
+      .saveAsTable("users_partitioned_bucketed")
+    // $example off:write_partition_and_bucket$
+
+    spark.sql("DROP TABLE IF EXISTS people_bucketed")
+    spark.sql("DROP TABLE IF EXISTS users_partitioned_bucketed")
   }
 
   private def runBasicParquetExample(spark: SparkSession): Unit = {
@@ -139,7 +175,7 @@ object SQLDataSourceExample {
     // +------+
 
     // Alternatively, a DataFrame can be created for a JSON dataset represented by
-    // an Dataset[String] storing one JSON object per string
+    // a Dataset[String] storing one JSON object per string
     val otherPeopleDataset = spark.createDataset(
       """{"name":"Yin","address":{"city":"Columbus","state":"Ohio"}}""" :: Nil)
     val otherPeople = spark.read.json(otherPeopleDataset)
@@ -169,6 +205,10 @@ object SQLDataSourceExample {
     connectionProperties.put("password", "password")
     val jdbcDF2 = spark.read
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
+    // Specifying the custom data types of the read schema
+    connectionProperties.put("customSchema", "id DECIMAL(38, 0), name STRING")
+    val jdbcDF3 = spark.read
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
 
     // Saving data to a JDBC source
     jdbcDF.write
@@ -180,6 +220,11 @@ object SQLDataSourceExample {
       .save()
 
     jdbcDF2.write
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
+
+    // Specifying create table column data types on write
+    jdbcDF.write
+      .option("createTableColumnTypes", "name CHAR(64), comments VARCHAR(1024)")
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
     // $example off:jdbc_dataset$
   }

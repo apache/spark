@@ -256,15 +256,39 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
-class HasNumFeatures(Params):
+class HasOutputCols(Params):
     """
-    Mixin for param numFeatures: number of features.
+    Mixin for param outputCols: output column names.
     """
 
-    numFeatures = Param(Params._dummy(), "numFeatures", "number of features.", typeConverter=TypeConverters.toInt)
+    outputCols = Param(Params._dummy(), "outputCols", "output column names.", typeConverter=TypeConverters.toListString)
+
+    def __init__(self):
+        super(HasOutputCols, self).__init__()
+
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def getOutputCols(self):
+        """
+        Gets the value of outputCols or its default value.
+        """
+        return self.getOrDefault(self.outputCols)
+
+
+class HasNumFeatures(Params):
+    """
+    Mixin for param numFeatures: Number of features. Should be greater than 0.
+    """
+
+    numFeatures = Param(Params._dummy(), "numFeatures", "Number of features. Should be greater than 0.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
+        self._setDefault(numFeatures=262144)
 
     def setNumFeatures(self, value):
         """
@@ -281,10 +305,10 @@ class HasNumFeatures(Params):
 
 class HasCheckpointInterval(Params):
     """
-    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
     """
 
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", typeConverter=TypeConverters.toInt)
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -608,91 +632,119 @@ class HasAggregationDepth(Params):
         return self.getOrDefault(self.aggregationDepth)
 
 
-class DecisionTreeParams(Params):
+class HasParallelism(Params):
     """
-    Mixin for Decision Tree parameters.
+    Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
     """
 
-    maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.", typeConverter=TypeConverters.toInt)
-    maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.", typeConverter=TypeConverters.toInt)
-    minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.", typeConverter=TypeConverters.toInt)
-    minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.", typeConverter=TypeConverters.toFloat)
-    maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its aggregates may exceed this size.", typeConverter=TypeConverters.toInt)
-    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.", typeConverter=TypeConverters.toBoolean)
-    
+    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms (>= 1).", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
-        super(DecisionTreeParams, self).__init__()
+        super(HasParallelism, self).__init__()
+        self._setDefault(parallelism=1)
 
-    def setMaxDepth(self, value):
+    def setParallelism(self, value):
         """
-        Sets the value of :py:attr:`maxDepth`.
+        Sets the value of :py:attr:`parallelism`.
         """
-        return self._set(maxDepth=value)
+        return self._set(parallelism=value)
 
-    def getMaxDepth(self):
+    def getParallelism(self):
         """
-        Gets the value of maxDepth or its default value.
+        Gets the value of parallelism or its default value.
         """
-        return self.getOrDefault(self.maxDepth)
+        return self.getOrDefault(self.parallelism)
 
-    def setMaxBins(self, value):
-        """
-        Sets the value of :py:attr:`maxBins`.
-        """
-        return self._set(maxBins=value)
 
-    def getMaxBins(self):
-        """
-        Gets the value of maxBins or its default value.
-        """
-        return self.getOrDefault(self.maxBins)
+class HasCollectSubModels(Params):
+    """
+    Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
+    """
 
-    def setMinInstancesPerNode(self, value):
-        """
-        Sets the value of :py:attr:`minInstancesPerNode`.
-        """
-        return self._set(minInstancesPerNode=value)
+    collectSubModels = Param(Params._dummy(), "collectSubModels", "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.", typeConverter=TypeConverters.toBoolean)
 
-    def getMinInstancesPerNode(self):
-        """
-        Gets the value of minInstancesPerNode or its default value.
-        """
-        return self.getOrDefault(self.minInstancesPerNode)
+    def __init__(self):
+        super(HasCollectSubModels, self).__init__()
+        self._setDefault(collectSubModels=False)
 
-    def setMinInfoGain(self, value):
+    def setCollectSubModels(self, value):
         """
-        Sets the value of :py:attr:`minInfoGain`.
+        Sets the value of :py:attr:`collectSubModels`.
         """
-        return self._set(minInfoGain=value)
+        return self._set(collectSubModels=value)
 
-    def getMinInfoGain(self):
+    def getCollectSubModels(self):
         """
-        Gets the value of minInfoGain or its default value.
+        Gets the value of collectSubModels or its default value.
         """
-        return self.getOrDefault(self.minInfoGain)
+        return self.getOrDefault(self.collectSubModels)
 
-    def setMaxMemoryInMB(self, value):
-        """
-        Sets the value of :py:attr:`maxMemoryInMB`.
-        """
-        return self._set(maxMemoryInMB=value)
 
-    def getMaxMemoryInMB(self):
-        """
-        Gets the value of maxMemoryInMB or its default value.
-        """
-        return self.getOrDefault(self.maxMemoryInMB)
+class HasLoss(Params):
+    """
+    Mixin for param loss: the loss function to be optimized.
+    """
 
-    def setCacheNodeIds(self, value):
-        """
-        Sets the value of :py:attr:`cacheNodeIds`.
-        """
-        return self._set(cacheNodeIds=value)
+    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
 
-    def getCacheNodeIds(self):
-        """
-        Gets the value of cacheNodeIds or its default value.
-        """
-        return self.getOrDefault(self.cacheNodeIds)
+    def __init__(self):
+        super(HasLoss, self).__init__()
 
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    def getLoss(self):
+        """
+        Gets the value of loss or its default value.
+        """
+        return self.getOrDefault(self.loss)
+
+
+class HasDistanceMeasure(Params):
+    """
+    Mixin for param distanceMeasure: the distance measure. Supported options: 'euclidean' and 'cosine'.
+    """
+
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "the distance measure. Supported options: 'euclidean' and 'cosine'.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasDistanceMeasure, self).__init__()
+        self._setDefault(distanceMeasure='euclidean')
+
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    def getDistanceMeasure(self):
+        """
+        Gets the value of distanceMeasure or its default value.
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
+
+class HasValidationIndicatorCol(Params):
+    """
+    Mixin for param validationIndicatorCol: name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.
+    """
+
+    validationIndicatorCol = Param(Params._dummy(), "validationIndicatorCol", "name of the column that indicates whether each row is for training or for validation. False indicates training; true indicates validation.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasValidationIndicatorCol, self).__init__()
+
+    def setValidationIndicatorCol(self, value):
+        """
+        Sets the value of :py:attr:`validationIndicatorCol`.
+        """
+        return self._set(validationIndicatorCol=value)
+
+    def getValidationIndicatorCol(self):
+        """
+        Gets the value of validationIndicatorCol or its default value.
+        """
+        return self.getOrDefault(self.validationIndicatorCol)

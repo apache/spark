@@ -21,9 +21,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.IntegralType
 
 class IntegralDeltaSuite extends SparkFunSuite {
+  val nullValue = -1
   testIntegralDelta(new IntColumnStats, INT, IntDelta)
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 
@@ -44,6 +46,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
         (input.tail, input.init).zipped.map {
           case (x: Int, y: Int) => (x - y).toLong
           case (x: Long, y: Long) => x - y
+          case other => fail(s"Unexpected input $other")
         }
       }
 
@@ -109,6 +112,53 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
+    def skeletonForDecompress(input: Seq[I#InternalType]) {
+      val builder = TestCompressibleColumnBuilder(columnStats, columnType, scheme)
+      val row = new GenericInternalRow(1)
+      val nullRow = new GenericInternalRow(1)
+      nullRow.setNullAt(0)
+      input.foreach { value =>
+        if (value == nullValue) {
+          builder.appendFrom(nullRow, 0)
+        } else {
+          columnType.setField(row, 0, value)
+          builder.appendFrom(row, 0)
+        }
+      }
+      val buffer = builder.build()
+
+      // ----------------
+      // Tests decompress
+      // ----------------
+      // Rewinds, skips column header and 4 more bytes for compression scheme ID
+      val headerSize = CompressionScheme.columnHeaderSize(buffer)
+      buffer.position(headerSize)
+      assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
+
+      val decoder = scheme.decoder(buffer, columnType)
+      val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
+      decoder.decompress(columnVector, input.length)
+
+      if (input.nonEmpty) {
+        input.zipWithIndex.foreach {
+          case (expected: Any, index: Int) if expected == nullValue =>
+            assertResult(true, s"Wrong null ${index}th-position") {
+              columnVector.isNullAt(index)
+            }
+          case (expected: Int, index: Int) =>
+            assertResult(expected, s"Wrong ${index}-th decoded int value") {
+              columnVector.getInt(index)
+            }
+          case (expected: Long, index: Int) =>
+            assertResult(expected, s"Wrong ${index}-th decoded long value") {
+              columnVector.getLong(index)
+            }
+          case _ =>
+            fail("Unsupported type")
+        }
+      }
+    }
+
     test(s"$scheme: empty column") {
       skeleton(Seq.empty)
     }
@@ -126,6 +176,29 @@ class IntegralDeltaSuite extends SparkFunSuite {
       // Have to workaround with `Any` since no `ClassTag[I#JvmType]` available here.
       val input = Array.fill[Any](10000)(makeRandomValue(columnType))
       skeleton(input.map(_.asInstanceOf[I#InternalType]))
+    }
+
+
+    test(s"$scheme: empty column for decompress()") {
+      skeletonForDecompress(Seq.empty)
+    }
+
+    test(s"$scheme: simple case for decompress()") {
+      val input = columnType match {
+        case INT => Seq(2: Int, 1: Int, 2: Int, 130: Int)
+        case LONG => Seq(2: Long, 1: Long, 2: Long, 130: Long)
+      }
+
+      skeletonForDecompress(input.map(_.asInstanceOf[I#InternalType]))
+    }
+
+    test(s"$scheme: simple case with null for decompress()") {
+      val input = columnType match {
+        case INT => Seq(2: Int, 1: Int, 2: Int, nullValue: Int, 5: Int)
+        case LONG => Seq(2: Long, 1: Long, 2: Long, nullValue: Long, 5: Long)
+      }
+
+      skeletonForDecompress(input.map(_.asInstanceOf[I#InternalType]))
     }
   }
 }

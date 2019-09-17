@@ -151,7 +151,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext {
     // Check: topTopicAssignments
     // Make sure it assigns a topic to each term appearing in each doc.
     val topTopicAssignments: Map[Long, (Array[Int], Array[Int])] =
-      model.topicAssignments.collect().map(x => x._1 -> (x._2, x._3)).toMap
+      model.topicAssignments.collect().map(x => x._1 -> ((x._2, x._3))).toMap
     assert(topTopicAssignments.keys.max < tinyCorpus.length)
     tinyCorpus.foreach { case (docID: Long, doc: Vector) =>
       if (topTopicAssignments.contains(docID)) {

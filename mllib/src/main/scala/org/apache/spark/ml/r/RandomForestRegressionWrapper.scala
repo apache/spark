@@ -42,6 +42,7 @@ private[r] class RandomForestRegressorWrapper private (
   lazy val featureImportances: Vector = rfrModel.featureImportances
   lazy val numTrees: Int = rfrModel.getNumTrees
   lazy val treeWeights: Array[Double] = rfrModel.treeWeights
+  lazy val maxDepth: Int = rfrModel.getMaxDepth
 
   def summary: String = rfrModel.toDebugString
 

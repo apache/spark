@@ -20,14 +20,13 @@ package org.apache.spark.rdd
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 
 /**
  * The references to rdd and splitIndex are transient because redundant information is stored
@@ -143,8 +142,10 @@ class CoGroupedRDD[K: ClassTag](
 
       case shuffleDependency: ShuffleDependency[_, _, _] =>
         // Read map outputs of shuffle
+        val metrics = context.taskMetrics().createTempShuffleReadMetrics()
         val it = SparkEnv.get.shuffleManager
-          .getReader(shuffleDependency.shuffleHandle, split.index, split.index + 1, context)
+          .getReader(
+            shuffleDependency.shuffleHandle, split.index, split.index + 1, context, metrics)
           .read()
         rddIterators += ((it, depNum))
     }
