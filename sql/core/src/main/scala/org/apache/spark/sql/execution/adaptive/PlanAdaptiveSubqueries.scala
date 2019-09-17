@@ -29,7 +29,7 @@ case class PlanAdaptiveSubqueries(
     plan.transformAllExpressions {
       case expressions.ScalarSubquery(_, _, exprId) =>
         subqueryMap(exprId.id)
-      case expressions.InSubquery(_, ListQuery(_, _, exprId, _)) =>
+      case expressions.InSubquery(_, ListQuery(_, _, exprId, _), _) =>
         subqueryMap(exprId.id)
     }
   }
