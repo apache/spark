@@ -1216,7 +1216,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.snappy.blockSize</code></td>
   <td>32k</td>
   <td>
-    Block size in Snappy compression, in the case when Snappy compression codecis used. 
+    Block size in Snappy compression, in the case when Snappy compression codec is used. 
     Lowering this block size will also lower shuffle memory usage when Snappy is used.
     Default unit is bytes, unless otherwise specified.
   </td>
@@ -1386,7 +1386,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory which can be used for off-heap allocation,in bytes unless otherwise specified.
+    The absolute amount of memory which can be used for off-heap allocation, in bytes unless otherwise specified.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption 
     must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
