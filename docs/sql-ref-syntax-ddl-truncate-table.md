@@ -20,9 +20,9 @@ license: |
 ---
 
 ### Description
-The `TRUNCATE TABLE` statement removes all the rows from a table or partition(s). The table must not be a 
-temporary table, an external table, or a view. User can specify partial partition_spec for 
-truncating multiple partitions at once, omitting partition_spec will truncate all partitions in the table.
+The `TRUNCATE TABLE` statement removes all the rows from a table or partition(s). The table must not be a view 
+or an external/temporary table. Inorder to truncate multiple partitions at once, user can specify the partitions 
+in partition_spec. If no partition_spec is specified it will remove all partitions in the table.
 
 ### Syntax
 {% highlight sql %}
