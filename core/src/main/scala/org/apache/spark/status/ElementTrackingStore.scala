@@ -17,6 +17,7 @@
 
 package org.apache.spark.status
 
+import java.util
 import java.util.Collection
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -197,6 +198,9 @@ private[spark] class ElementTrackingStore(store: KVStore, conf: SparkConf) exten
       threshold: Long,
       action: Long => Unit)
 
+  override def metadataType(): Class[_] = store.metadataType()
+
+  override def types(): util.Set[Class[_]] = store.types()
 }
 
 private[spark] object ElementTrackingStore {
