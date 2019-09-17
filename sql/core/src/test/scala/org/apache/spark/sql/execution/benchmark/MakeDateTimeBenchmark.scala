@@ -92,6 +92,11 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
     run(
       benchmark,
       cardinality,
+      "make_timestamp(*, *, *, *, *, 0)",
+      s"make_timestamp(" + (ymdExprs ++ hmExprs).mkString(", ") + ", 0)")
+    run(
+      benchmark,
+      cardinality,
       "make_timestamp(*, *, *, *, *, 60.0)",
       s"make_timestamp(" + (ymdExprs ++ hmExprs).mkString(", ") + ", 60.0)")
     run(
