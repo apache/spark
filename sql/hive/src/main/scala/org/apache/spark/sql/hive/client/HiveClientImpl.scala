@@ -222,7 +222,7 @@ private[hive] class HiveClientImpl(
     hiveConf
   }
 
-  private val userName = UserGroupInformation.getCurrentUser.getShortUserName
+  override val userName = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
