@@ -19,6 +19,7 @@ package org.apache.spark.internal.io
 
 import java.io.IOException
 import java.util.{Date, UUID}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.util.Try
@@ -29,6 +30,7 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
+import org.apache.spark.InsertDataSourceConflictException
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 
@@ -90,6 +92,31 @@ class HadoopMapReduceCommitProtocol(
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
   private def stagingDir = new Path(path, ".spark-staging-" + jobId)
+
+  // The job attempt path when dynamicPartitionOverwrite is false,
+  // please keep it consistent with `FileOutputCommitter`.`getJobAttemptPath`.
+  private def staticJobAttemptPath = new Path(path, "_temporary")
+
+  private def checkStaticInsertConflict(jobContext: JobContext): Unit = {
+    val fs = new Path(path).getFileSystem(jobContext.getConfiguration)
+    if (fs.exists(staticJobAttemptPath)) {
+      val fileStatus = fs.getFileStatus(staticJobAttemptPath)
+      val accessTime = new Date(fileStatus.getAccessTime)
+      val modificationTime = new Date(fileStatus.getModificationTime)
+      val lastedTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() -
+        fileStatus.getModificationTime)
+      throw InsertDataSourceConflictException(
+        s"""
+           | The staging dir for non DynamicPartitionOverwrite is existed, its create time is
+           | $accessTime, and its modified time is $modificationTime, already $lastedTime seconds
+           | from now. There may be two possibilities:
+           | 1. Another InsertDataSource operation is executing, you need wait for it to complete.
+           | 2. The staging dir is belong to a killed application and not be cleaned up gracefully,
+           | please refer to its modification time and it need be cleaned up manually.
+           | Please process this staging dir according to above information.
+           |""".stripMargin)
+    }
+  }
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -163,6 +190,7 @@ class HadoopMapReduceCommitProtocol(
     // For dynamic partition overwrite, it has specific job attempt path, so we don't need
     // committer.setupJob here. Same with the commitJob and abortJob operations below.
     if (!dynamicPartitionOverwrite) {
+      checkStaticInsertConflict(jobContext)
       committer.setupJob(jobContext)
     }
   }
