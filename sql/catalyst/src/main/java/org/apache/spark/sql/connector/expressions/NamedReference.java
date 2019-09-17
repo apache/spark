@@ -25,7 +25,6 @@ import java.util.Map;
  * Represents a field or column reference in the public logical expression API.
  */
 @Experimental
-<<<<<<< HEAD:sql/catalyst/src/main/java/org/apache/spark/sql/connector/expressions/NamedReference.java
 public interface NamedReference extends Expression {
   /**
    * Returns the referenced field name as an array of String parts.
@@ -33,12 +32,4 @@ public interface NamedReference extends Expression {
    * Each string in the returned array represents a field name.
    */
   String[] fieldNames();
-=======
-public interface ShuffleExecutorComponents {
-  void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs);
-
-  ShuffleWriteSupport writes();
-
-  ShuffleReadSupport reads();
->>>>>>> ab9131d66a... [SPARK-25299] Driver lifecycle api (#533):core/src/main/java/org/apache/spark/api/shuffle/ShuffleExecutorComponents.java
 }

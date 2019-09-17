@@ -41,9 +41,18 @@ import org.apache.spark.annotation.Private;
 @Private
 public interface ShuffleDataIO {
 
+  // TODO (yifeih): write docs
+  String SHUFFLE_SPARK_CONF_PREFIX = "spark.shuffle.plugin.";
+
   /**
    * Called once on executor processes to bootstrap the shuffle data storage modules that
    * are only invoked on the executors.
    */
   ShuffleExecutorComponents executor();
+
+  /**
+   * Called once on driver process to bootstrap the shuffle metadata modules that
+   * are maintained by the driver.
+   */
+  ShuffleDriverComponents driver();
 }

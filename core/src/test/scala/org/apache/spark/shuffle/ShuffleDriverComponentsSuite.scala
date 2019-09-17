@@ -22,8 +22,9 @@ import java.util
 import com.google.common.collect.ImmutableMap
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
-import org.apache.spark.api.shuffle.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents, ShuffleWriteSupport}
+import org.apache.spark.api.shuffle.{ShuffleDataIO, ShuffleExecutorComponents, ShuffleWriteSupport}
 import org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS
+import org.apache.spark.shuffle.api.ShuffleDriverComponents
 import org.apache.spark.shuffle.sort.io.DefaultShuffleWriteSupport
 
 class ShuffleDriverComponentsSuite extends SparkFunSuite with LocalSparkContext {

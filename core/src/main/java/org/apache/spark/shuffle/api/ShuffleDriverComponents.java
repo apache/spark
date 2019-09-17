@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.shuffle;
+package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
 import java.util.Map;
 
+// TODO (yifeih): write docs.
 public interface ShuffleDriverComponents {
 
   /**

@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle.api;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Optional;
 
 import org.apache.spark.annotation.Private;
@@ -34,8 +35,10 @@ public interface ShuffleExecutorComponents {
   /**
    * Called once per executor to bootstrap this module with state that is specific to
    * that executor, specifically the application ID and executor ID.
+   *
+   * TODO (yifeih): write docs for extra configs
    */
-  void initializeExecutor(String appId, String execId);
+  void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs);
 
   /**
    * Called once per map task to create a writer that will be responsible for persisting all the

@@ -27,9 +27,8 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
-
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -39,12 +38,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
 import org.apache.spark.annotation.DeveloperApi
-<<<<<<< HEAD
-=======
-import org.apache.spark.api.conda.CondaEnvironment
-import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
-import org.apache.spark.api.shuffle.{ShuffleDataIO, ShuffleDriverComponents}
->>>>>>> ab9131d66a... [SPARK-25299] Driver lifecycle api (#533)
+import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.deploy.StandaloneResourceUtils._
@@ -222,11 +216,8 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _shutdownHookRef: AnyRef = _
   private var _statusStore: AppStatusStore = _
   private var _heartbeater: Heartbeater = _
-<<<<<<< HEAD
   private var _resources: scala.collection.immutable.Map[String, ResourceInformation] = _
-=======
   private var _shuffleDriverComponents: ShuffleDriverComponents = _
->>>>>>> ab9131d66a... [SPARK-25299] Driver lifecycle api (#533)
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -594,7 +585,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _cleaner =
       if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
-        Some(new ContextCleaner(this))
+        Some(new ContextCleaner(this, _shuffleDriverComponents))
       } else {
         None
       }
@@ -616,17 +607,6 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     _executorAllocationManager.foreach(_.start())
 
-<<<<<<< HEAD
-=======
-    _cleaner =
-      if (_conf.get(CLEANER_REFERENCE_TRACKING)) {
-        Some(new ContextCleaner(this, _shuffleDriverComponents))
-      } else {
-        None
-      }
-    _cleaner.foreach(_.start())
-
->>>>>>> ab9131d66a... [SPARK-25299] Driver lifecycle api (#533)
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
