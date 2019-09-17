@@ -29,6 +29,7 @@ import org.apache.hadoop.hdfs.client.HdfsDataOutputStream
 import org.apache.log4j.{FileAppender => Log4jFileAppender, _}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
@@ -113,7 +114,8 @@ private[spark] class DriverLogger(conf: SparkConf) extends Logging {
         + DriverLogger.DRIVER_LOG_FILE_SUFFIX).getAbsolutePath()
       try {
         inStream = new BufferedInputStream(new FileInputStream(localLogFile))
-        outputStream = fileSystem.create(new Path(dfsLogFile), true)
+        outputStream = SparkHadoopUtil.createFile(fileSystem, new Path(dfsLogFile),
+          conf.get(DRIVER_LOG_ALLOW_EC))
         fileSystem.setPermission(new Path(dfsLogFile), LOG_FILE_PERMISSIONS)
       } catch {
         case e: Exception =>

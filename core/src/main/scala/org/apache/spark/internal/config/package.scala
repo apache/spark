@@ -106,6 +106,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val DRIVER_LOG_ALLOW_EC =
+    ConfigBuilder("spark.driver.log.allowErasureCoding")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
     .booleanConf
     .createWithDefault(false)
