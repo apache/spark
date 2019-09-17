@@ -31,7 +31,8 @@ private[kafka010] class KafkaBatch(
     specifiedKafkaParams: Map[String, String],
     failOnDataLoss: Boolean,
     startingOffsets: KafkaOffsetRangeLimit,
-    endingOffsets: KafkaOffsetRangeLimit)
+    endingOffsets: KafkaOffsetRangeLimit,
+    includeHeaders: Boolean)
   extends Batch with Logging {
   assert(startingOffsets != LatestOffsetRangeLimit,
     "Starting offset not allowed to be set to latest offsets.")
@@ -90,7 +91,7 @@ private[kafka010] class KafkaBatch(
       KafkaSourceProvider.kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId)
     offsetRanges.map { range =>
       new KafkaBatchInputPartition(
-        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, includeHeaders)
     }.toArray
   }
 

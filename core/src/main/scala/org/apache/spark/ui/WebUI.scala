@@ -236,4 +236,8 @@ private[spark] class DelegatingServletContextHandler(handler: ServletContextHand
   def filterCount(): Int = {
     handler.getServletHandler.getFilters.length
   }
+
+  def getContextPath(): String = {
+    handler.getContextPath
+  }
 }
