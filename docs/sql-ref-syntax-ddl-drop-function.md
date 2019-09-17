@@ -52,7 +52,7 @@ DROP [TEMPORARY] FUNCTION [IF EXISTS] [db_name.]function_name;
 CREATE FUNCTION test_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
 
 -- List user functions
-SHOW user functions;
+SHOW USER FUNCTIONS;
   +-------------------+
   |     function      |
   +-------------------+
@@ -65,6 +65,12 @@ DROP FUNCTION test_avg;
   | Result  |
   +---------+
   +---------+
+
+-- Try to drop Permanent function which is not present
+DROP FUNCTION test_avg;
+  Error: Error running query:
+  org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException:
+  Function 'default.test_avg' not found in database 'default'; (state=,code=0)
 
 -- Create Temporary function `temp_avg`
 CREATE TEMPORARY FUNCTION temp_avg as 'org.apache.hadoop.hive.ql.udf.generic.GenericUDAFAverage';
