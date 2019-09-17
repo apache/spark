@@ -42,6 +42,9 @@ public interface ShuffleDriverComponents {
    */
   default void cleanupApplication() throws IOException {}
 
+  /**
+   * Called once per shuffle id when the shuffle id is first generated for a shuffle stage.
+   */
   default void registerShuffle(int shuffleId) throws IOException {}
 
   /**
@@ -50,5 +53,5 @@ public interface ShuffleDriverComponents {
    * @param shuffleId The unique identifier for the shuffle stage.
    * @param blocking Whether this call should block on the deletion of the data.
    */
-  void removeShuffle(int shuffleId, boolean blocking) throws IOException;
+  default void removeShuffle(int shuffleId, boolean blocking) throws IOException {}
 }

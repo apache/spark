@@ -47,7 +47,7 @@ class TestShuffleDriverComponents extends ShuffleDriverComponents {
 }
 
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
-  private var delegate = new LocalDiskShuffleDataIO(sparkConf)
+  private val delegate = new LocalDiskShuffleDataIO(sparkConf)
 
   override def driver(): ShuffleDriverComponents = new TestShuffleDriverComponents()
 

@@ -321,6 +321,8 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = ds
   }
 
+  private[spark] def shuffleDriverComponents: ShuffleDriverComponents = _shuffleDriverComponents
+
   /**
    * A unique identifier for the Spark application.
    * Its format depends on the scheduler implementation.
