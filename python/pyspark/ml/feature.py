@@ -1962,7 +1962,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols, HasOutputCols,
                           HasHandleInvalid, JavaMLReadable, JavaMLWritable):
     """
-    `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
+    :py:class:`QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
     categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
     It is possible that the number of buckets used will be less than this value, for example, if
     there are too few distinct values of the input to create enough distinct quantiles.
@@ -1973,7 +1973,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
     should be the same across columns, :py:attr:`numBuckets` can be set as a convenience.
 
     NaN handling: Note also that
-    QuantileDiscretizer will raise an error when it finds NaN values in the dataset, but the user
+    :py:class:`QuantileDiscretizer` will raise an error when it finds NaN values in the dataset, but the user
     can also choose to either keep or remove NaN values within the dataset by setting
     :py:attr:`handleInvalid` parameter. If the user chooses to keep NaN values, they will be
     handled specially and placed into their own bucket, for example, if 4 buckets are used, then
@@ -2058,10 +2058,10 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasInputCols
     handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
                           "Options are skip (filter out rows with invalid values), " +
                           "error (throw an error), or keep (keep invalid values in a special " +
-                          "additional bucket). Note that in the multiple column " +
+                          "additional bucket). Note that in the multiple columns " +
                           "case, the invalid handling is applied to all columns. That said " +
                           "for 'error' it will throw an error if any invalids are found in " +
-                          "any column, for 'skip' it will skip rows with any invalids in " +
+                          "any columns, for 'skip' it will skip rows with any invalids in " +
                           "any columns, etc.",
                           typeConverter=TypeConverters.toString)
 
