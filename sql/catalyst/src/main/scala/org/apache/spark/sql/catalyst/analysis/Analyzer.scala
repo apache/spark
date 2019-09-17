@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.plans.logical.sql._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, LookupCatalog, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{BaseSessionCatalog, CatalogManager, CatalogPlugin, Identifier, LookupCatalog, NamespaceChange, Table, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
@@ -60,7 +60,7 @@ object SimpleAnalyzer extends Analyzer(
   },
   new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
 
-object FakeV2SessionCatalog extends TableCatalog {
+object FakeV2SessionCatalog extends BaseSessionCatalog {
   private def fail() = throw new UnsupportedOperationException
   override def listTables(namespace: Array[String]): Array[Identifier] = fail()
   override def loadTable(ident: Identifier): Table = {
@@ -76,6 +76,16 @@ object FakeV2SessionCatalog extends TableCatalog {
   override def renameTable(oldIdent: Identifier, newIdent: Identifier): Unit = fail()
   override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = fail()
   override def name(): String = "fake_v2_session"
+  override val defaultNamespace: Array[String] = Array("default")
+  override def namespaceExists(namespace: Array[String]): Boolean = fail()
+  override def listNamespaces(): Array[Array[String]] = fail()
+  override def listNamespaces(namespace: Array[String]): Array[Array[String]] = fail()
+  override def loadNamespaceMetadata(namespace: Array[String]): util.Map[String, String] = fail()
+  override def createNamespace(
+      namespace: Array[String],
+      metadata: util.Map[String, String]): Unit = fail()
+  override def alterNamespace(namespace: Array[String], changes: NamespaceChange*): Unit = fail()
+  override def dropNamespace(namespace: Array[String]): Boolean = fail()
 }
 
 /**
@@ -119,7 +129,7 @@ object AnalysisContext {
  */
 class Analyzer(
     catalog: SessionCatalog,
-    v2SessionCatalog: TableCatalog,
+    v2SessionCatalog: BaseSessionCatalog,
     conf: SQLConf,
     maxIterations: Int)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
@@ -129,7 +139,7 @@ class Analyzer(
     this(catalog, FakeV2SessionCatalog, conf, conf.optimizerMaxIterations)
   }
 
-  def this(catalog: SessionCatalog, v2SessionCatalog: TableCatalog, conf: SQLConf) = {
+  def this(catalog: SessionCatalog, v2SessionCatalog: BaseSessionCatalog, conf: SQLConf) = {
     this(catalog, v2SessionCatalog, conf, conf.optimizerMaxIterations)
   }
 

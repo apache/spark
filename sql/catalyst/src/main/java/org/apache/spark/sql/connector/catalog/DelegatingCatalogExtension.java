@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
+import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
@@ -34,13 +35,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * override {@code createTable}, do something else before calling {@code super.createTable}.
  */
 @Experimental
-public abstract class DelegatingCatalogExtension implements CatalogExtension {
+public abstract class DelegatingCatalogExtension implements BaseSessionCatalog {
 
-  private TableCatalog delegate;
-
-  public final void setDelegateCatalog(TableCatalog delegate) {
-    this.delegate = delegate;
-  }
+  private CatalogExtension delegate;
 
   @Override
   public String name() {
@@ -96,5 +93,49 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       Identifier oldIdent,
       Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {
     delegate.renameTable(oldIdent, newIdent);
+  }
+
+  @Override
+  public String[] defaultNamespace() {
+    return delegate.defaultNamespace();
+  }
+
+  @Override
+  public String[][] listNamespaces() throws NoSuchNamespaceException {
+    return delegate.listNamespaces();
+  }
+
+  @Override
+  public String[][] listNamespaces(String[] namespace) throws NoSuchNamespaceException {
+    return delegate.listNamespaces(namespace);
+  }
+
+  @Override
+  public boolean namespaceExists(String[] namespace) {
+    return delegate.namespaceExists(namespace);
+  }
+
+  @Override
+  public Map<String, String> loadNamespaceMetadata(String[] namespace) throws NoSuchNamespaceException {
+    return delegate.loadNamespaceMetadata(namespace);
+  }
+
+  @Override
+  public void createNamespace(
+      String[] namespace,
+      Map<String, String> metadata) throws NamespaceAlreadyExistsException {
+    delegate.createNamespace(namespace, metadata);
+  }
+
+  @Override
+  public void alterNamespace(
+      String[] namespace,
+      NamespaceChange... changes) throws NoSuchNamespaceException {
+    delegate.alterNamespace(namespace, changes);
+  }
+
+  @Override
+  public boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException {
+    return delegate.dropNamespace(namespace);
   }
 }

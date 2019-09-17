@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  * the caller to look up a catalog by name.
  */
 private[sql]
-class CatalogManager(conf: SQLConf, defaultSessionCatalog: TableCatalog) extends Logging {
+class CatalogManager(conf: SQLConf, defaultSessionCatalog: BaseSessionCatalog) extends Logging {
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
@@ -78,7 +78,7 @@ class CatalogManager(conf: SQLConf, defaultSessionCatalog: TableCatalog) extends
 
   private def getDefaultNamespace(c: CatalogPlugin) = c match {
     case c: SupportsNamespaces => c.defaultNamespace()
-    case _ => Array("default") // The builtin catalog use "default" as the default database.
+    case _ => Array.empty[String]
   }
 
   private var _currentNamespace: Option[Array[String]] = None
