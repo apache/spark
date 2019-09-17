@@ -36,6 +36,9 @@ object MimaExcludes {
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-28091[CORE] Extend Spark metrics system with user-defined metrics using executor plugins
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExecutorPlugin.init"),
+
     // [SPARK-][SQL][CORE][MLLIB] Remove more old deprecated items in Spark 3
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SQLContext.createExternalTable"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.createExternalTable"),
