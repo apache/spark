@@ -8,7 +8,7 @@ make_date(*, *, *)                                 3180           3339         1
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_202-b08 on Mac OS X 10.14.6
 Intel(R) Core(TM) i7-4850HQ CPU @ 2.30GHz
-make_date():                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+make_timestamp():                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
 prepare make_timestamp()                           2950           3025          96          0.3        2950.3       1.0X
 make_timestamp(2019, 1, 2, 3, 4, 50.123456)             45             47           1         22.1          45.2      65.3X
