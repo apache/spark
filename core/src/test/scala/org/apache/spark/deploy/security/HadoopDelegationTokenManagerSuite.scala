@@ -74,7 +74,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     assert(manager.isProviderLoaded("hbase"))
   }
 
-  test("do not fail if current user does not have credentials") {
+  test("SPARK-29082: do not fail if current user does not have credentials") {
     // SparkHadoopUtil overrides the UGI configuration during initialization. That normally
     // happens early in the Spark application, but here it may affect the test depending on
     // how it's run, so force its initialization.
