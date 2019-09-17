@@ -2139,7 +2139,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == makeQualifiedPath(newDir))
+        assert(table1.location == makeQualifiedPath(newDir.toString))
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
