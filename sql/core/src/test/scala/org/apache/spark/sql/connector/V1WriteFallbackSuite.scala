@@ -28,6 +28,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SQLCo
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -114,8 +115,12 @@ private object InMemoryV1Provider {
   }
 }
 
-class InMemoryV1Provider extends TableProvider with DataSourceRegister {
+class InMemoryV1Provider
+  extends TableProvider
+  with DataSourceRegister
+  with CreatableRelationProvider {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
+
     InMemoryV1Provider.tables.getOrElse(options.get("name"), {
       new InMemoryTableWithV1Fallback(
         "InMemoryTableWithV1Fallback",
@@ -127,6 +132,45 @@ class InMemoryV1Provider extends TableProvider with DataSourceRegister {
   }
 
   override def shortName(): String = "in-memory"
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val _sqlContext = sqlContext
+
+    val partitioning = parameters.get(DataSourceUtils.PARTITIONING_COLUMNS_KEY).map { value =>
+      DataSourceUtils.decodePartitioningColumns(value).map { partitioningColumn =>
+
+      }
+    }
+
+    val table = new InMemoryTableWithV1Fallback(
+      "InMemoryTableWithV1Fallback",
+      data.schema.asNullable,
+      Array.empty,
+      Map.empty[String, String].asJava
+    )
+
+    def getRelation: BaseRelation = new BaseRelation {
+      override def sqlContext: SQLContext = _sqlContext
+      override def schema: StructType = table.schema
+    }
+
+    if (mode == SaveMode.ErrorIfExists && dataMap.nonEmpty) {
+      throw new AnalysisException("Table already exists")
+    } else if (mode == SaveMode.Ignore && dataMap.nonEmpty) {
+      // do nothing
+      return getRelation
+    }
+    val writer = new FallbackWriteBuilder(new CaseInsensitiveStringMap(parameters.asJava))
+    if (mode == SaveMode.Overwrite) {
+      writer.truncate()
+    }
+    writer.buildForV1Write().insert(data, overwrite = false)
+    getRelation
+  }
 }
 
 class InMemoryTableWithV1Fallback(
@@ -135,8 +179,7 @@ class InMemoryTableWithV1Fallback(
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
   extends Table
-  with SupportsWrite
-  with CreatableRelationProvider {
+  with SupportsWrite {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -157,24 +200,6 @@ class InMemoryTableWithV1Fallback(
 
   override def newWriteBuilder(options: CaseInsensitiveStringMap): WriteBuilder = {
     new FallbackWriteBuilder(options)
-  }
-
-  override def createRelation(
-      sqlContext: SQLContext,
-      mode: SaveMode,
-      parameters: Map[String, String],
-      data: DataFrame): BaseRelation = {
-    if (mode == SaveMode.ErrorIfExists && dataMap.nonEmpty) {
-      throw new AnalysisException("Table already exists")
-    } else if (mode == SaveMode.Ignore && dataMap.nonEmpty) {
-      // do nothing
-    } else if (mode == SaveMode.Overwrite) {
-      val writer = new FallbackWriteBuilder(new CaseInsensitiveStringMap(parameters.asJava))
-      writer.truncate()
-      writer.buildForV1Write().insert(data, overwrite = false)
-    } else {
-
-    }
   }
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)
