@@ -42,7 +42,7 @@ SET property_key[ = property_value ]
 
 <dl>
   <dt><code><em>property_key=property_value</em></code></dt>
-  <dd>The new value overrides any existing value for the specified property key.</dd>
+  <dd>Sets the value for a given property key. If an old value exists for a given property key, then it gets overridden by the new value.</dd>
 </dl>
 
 ### Examples
