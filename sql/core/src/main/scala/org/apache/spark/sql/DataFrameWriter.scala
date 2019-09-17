@@ -256,7 +256,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         provider, df.sparkSession.sessionState.conf)
       val options = sessionOptions ++ extraOptions
       val dsOptions = new CaseInsensitiveStringMap(options.asJava)
-
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       provider match {
         case supportsCreate: SupportsCreateTable =>
           val canCreate = supportsCreate.canCreateTable(dsOptions)
@@ -266,12 +266,26 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             // do nothing
             return
           }
-          val table = supportsCreate.buildTable(
+          supportsCreate.buildTable(
             dsOptions,
             df.schema.asNullable,
             getV2Transforms(),
-            Map.empty[String, String].asJava)
-          saveToV2Source(table, dsOptions)
+            Map.empty[String, String].asJava) match {
+            case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+              lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+              modeForDSV1 match {
+                case SaveMode.Append | SaveMode.ErrorIfExists | SaveMode.Ignore =>
+                  runCommand(df.sparkSession, "save") {
+                    AppendData.byName(relation, df.logicalPlan)
+                  }
+
+                case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
+                  // truncate the table
+                  runCommand(df.sparkSession, "save") {
+                    OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+                  }
+              }
+          }
 
         case _: TableProvider =>
           if (partitioningColumns.nonEmpty) {
@@ -280,7 +294,32 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           }
           assertNotBucketed("save")
 
-          saveToV2Source(provider.getTable(dsOptions), dsOptions)
+          provider.getTable(dsOptions) match {
+            case table: SupportsWrite if table.supports(BATCH_WRITE) =>
+              lazy val relation = DataSourceV2Relation.create(table, dsOptions)
+              modeForDSV2 match {
+                case SaveMode.Append =>
+                  runCommand(df.sparkSession, "save") {
+                    AppendData.byName(relation, df.logicalPlan)
+                  }
+
+                case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
+                  // truncate the table
+                  runCommand(df.sparkSession, "save") {
+                    OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
+                  }
+
+                case other =>
+                  throw new AnalysisException(s"TableProvider implementation $source cannot be " +
+                    s"written with $other mode, please use Append or Overwrite " +
+                    "modes instead.")
+              }
+
+            // Streaming also uses the data source V2 API. So it may be that the data source
+            // implements v2, but has no v2 implementation for batch writes. In that case, we fall
+            // back to saving as though it's a V1 source.
+            case _ => saveToV1Source()
+          }
       }
     } else {
       assertNotBucketed("save")
@@ -301,36 +340,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap).planForWriting(modeForDSV1, df.logicalPlan)
-    }
-  }
-
-  private def saveToV2Source(table: Table, options: CaseInsensitiveStringMap): Unit = {
-    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    table match {
-      case table: SupportsWrite if table.supports(BATCH_WRITE) =>
-        lazy val relation = DataSourceV2Relation.create(table, options)
-        modeForDSV2 match {
-          case SaveMode.Append =>
-            runCommand(df.sparkSession, "save") {
-              AppendData.byName(relation, df.logicalPlan)
-            }
-
-          case SaveMode.Overwrite if table.supportsAny(TRUNCATE, OVERWRITE_BY_FILTER) =>
-            // truncate the table
-            runCommand(df.sparkSession, "save") {
-              OverwriteByExpression.byName(relation, df.logicalPlan, Literal(true))
-            }
-
-          case other =>
-            throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-              s"written with $other mode, please use Append or Overwrite " +
-              "modes instead.")
-        }
-
-      // Streaming also uses the data source V2 API. So it may be that the data source
-      // implements v2, but has no v2 implementation for batch writes. In that case, we fall
-      // back to saving as though it's a V1 source.
-      case _ => saveToV1Source()
     }
   }
 

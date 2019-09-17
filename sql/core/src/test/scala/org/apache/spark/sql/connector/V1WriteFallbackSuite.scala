@@ -26,7 +26,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter, InsertableRelation}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -162,8 +162,8 @@ class InMemoryTableWithV1Fallback(
     override val properties: util.Map[String, String]) extends Table with SupportsWrite {
 
   partitioning.foreach { t =>
-    if (!t.isInstanceOf[IdentityTransform]) {
-      throw new IllegalArgumentException(s"Transform $t must be IdentityTransform")
+    if (!t.isInstanceOf[IdentityTransform] && !t.isInstanceOf[BucketTransform]) {
+      throw new IllegalArgumentException(s"Transform $t must be IdentityTransform or Bucketing")
     }
   }
 
