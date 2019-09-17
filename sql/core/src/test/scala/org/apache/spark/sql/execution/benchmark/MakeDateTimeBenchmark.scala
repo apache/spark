@@ -33,7 +33,9 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  */
 object MakeDateTimeBenchmark extends SqlBasedBenchmark {
-  private def doBenchmark(cardinality: Long, exprs: String*): Unit = {
+  private val cardinality: Long = 100000000L
+
+  private def doBenchmark(exprs: String*): Unit = {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       spark
         .range(0, cardinality, 1, 1)
@@ -44,35 +46,60 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  private def run(
-      benchmark: Benchmark,
-      cardinality: Long,
-      name: String,
-      exprs: String*): Unit = {
-    benchmark.addCase(name, numIters = 3) { _ =>
-      doBenchmark(cardinality, exprs: _*)
-    }
+  private def run(benchmark: Benchmark, name: String, exprs: String*): Unit = {
+    benchmark.addCase(name, numIters = 3) { _ => doBenchmark(exprs: _*) }
   }
 
-  private def benchmarkMakeDate(cardinality: Long): Unit = {
-    val benchmark = new Benchmark(s"make_date()", cardinality, output = output)
-    val ymdExprs = Seq("(1900 + (id % 200))", "((id % 12) + 1)", "((id % 27) + 1)")
+  private val ymdExprs = Seq("(1900 + (id % 200))", "((id % 12) + 1)", "((id % 27) + 1)")
 
-    run(benchmark, cardinality, "prepare make_date()", ymdExprs: _*)
+  private def benchmarkMakeDate(): Unit = {
+    val benchmark = new Benchmark(s"make_date()", cardinality, output = output)
+    val args = ymdExprs
+
+    run(benchmark, "prepare make_date()", args: _*)
     val foldableExpr = "make_date(2019, 9, 16)"
-    run(benchmark, cardinality, foldableExpr, foldableExpr)
+    run(benchmark, foldableExpr, foldableExpr)
     run(
       benchmark,
-      cardinality,
-      "make_date(1900..2099, 1..12, 1..28)",
-      "make_date" + ymdExprs.mkString("(", ",", ")"))
+      "make_date(*, *, *)",
+      "make_date" + args.mkString("(", ",", ")"))
+
+    benchmark.run()
+  }
+
+  private def benchmarkMakeTimestamp(): Unit = {
+    val benchmark = new Benchmark(s"make_date()", cardinality, output = output)
+    val hmsExprs = Seq("id % 24", "id % 60", "cast(id % 60000000 as decimal(8, 6))")
+    val args = ymdExprs ++ hmsExprs
+
+    run(
+      benchmark,
+      "prepare make_timestamp()",
+      args: _*)
+    var foldableExpr = "make_timestamp(2019, 1, 2, 3, 4, 50.123456)"
+    run(benchmark, foldableExpr, foldableExpr)
+    foldableExpr = "make_timestamp(2019, 1, 2, 3, 4, 60.000000)"
+    run(benchmark, foldableExpr, foldableExpr)
+    foldableExpr = "make_timestamp(2019, 12, 31, 23, 59, 60.00)"
+    run(benchmark, foldableExpr, foldableExpr)
+    run(
+      benchmark,
+      "make_timestamp(2019, 1, 2, *, *, *)",
+      s"make_timestamp(2019, 1, 2, ${hmsExprs.mkString(",")})")
+    run(
+      benchmark,
+      "make_timestamp(*, *, *, 3, 4, 50.123456)",
+      s"make_timestamp(${ymdExprs.mkString(",")}, 3, 4, 50.123456)")
+    run(
+      benchmark,
+      "make_timestamp(*, *, *, *, *, *)",
+      s"make_timestamp" + args.mkString("(", ", ", ")"))
 
     benchmark.run()
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val N = 100000000L
-
-    benchmarkMakeDate(N)
+    benchmarkMakeDate()
+    benchmarkMakeTimestamp()
   }
 }
