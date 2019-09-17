@@ -52,7 +52,7 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
   private val ymdExprs = Seq("(2000 + (id % 30))", "((id % 12) + 1)", "((id % 27) + 1)")
 
   private def benchmarkMakeDate(cardinality: Long): Unit = {
-    val benchmark = new Benchmark(s"make_date()", cardinality, output = output)
+    val benchmark = new Benchmark("make_date()", cardinality, output = output)
     val args = ymdExprs
 
     run(benchmark, cardinality, "prepare make_date()", args: _*)
@@ -68,7 +68,7 @@ object MakeDateTimeBenchmark extends SqlBasedBenchmark {
   }
 
   private def benchmarkMakeTimestamp(cardinality: Long): Unit = {
-    val benchmark = new Benchmark(s"make_timestamp()", cardinality, output = output)
+    val benchmark = new Benchmark("make_timestamp()", cardinality, output = output)
     val hmExprs = Seq("id % 24", "id % 60")
     val hmsExprs = hmExprs ++ Seq("cast((id % 60000000) / 1000000.0 as decimal(8, 6))")
     val args = ymdExprs ++ hmsExprs
