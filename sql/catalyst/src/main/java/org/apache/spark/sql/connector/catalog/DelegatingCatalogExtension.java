@@ -35,9 +35,13 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * override {@code createTable}, do something else before calling {@code super.createTable}.
  */
 @Experimental
-public abstract class DelegatingCatalogExtension implements BaseSessionCatalog {
+public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
-  private CatalogExtension delegate;
+  private BaseSessionCatalog delegate;
+
+  public final void setDelegateCatalog(BaseSessionCatalog delegate) {
+    this.delegate = delegate;
+  }
 
   @Override
   public String name() {
