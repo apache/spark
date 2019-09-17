@@ -25,7 +25,7 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SaveMode, SparkSession}
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability, TableProvider}
+import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.connector.write.{SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter, InsertableRelation}
@@ -114,19 +114,45 @@ private object InMemoryV1Provider {
   }
 }
 
-class InMemoryV1Provider extends TableProvider with DataSourceRegister {
+class InMemoryV1Provider extends TableProvider with DataSourceRegister with SupportsCreateTable {
   override def getTable(options: CaseInsensitiveStringMap): Table = {
-    InMemoryV1Provider.tables.getOrElseUpdate(options.get("name"), {
+    InMemoryV1Provider.tables.getOrElse(options.get("name"), {
       new InMemoryTableWithV1Fallback(
-        "InMemoryTableWithV1Fallback",
-        new StructType().add("a", IntegerType).add("b", StringType),
-        Array(IdentityTransform(FieldReference(Seq("a")))),
+        "EmptyInMemoryTableWithV1Fallback",
+        new StructType(),
+        Array.empty,
         options.asCaseSensitiveMap()
       )
     })
   }
 
   override def shortName(): String = "in-memory"
+
+  override def canCreateTable(options: CaseInsensitiveStringMap): Boolean = {
+    !InMemoryV1Provider.tables.contains(options.get("name"))
+  }
+
+  override def buildTable(
+      options: CaseInsensitiveStringMap,
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    val t = InMemoryV1Provider.tables.getOrElseUpdate(options.get("name"), {
+      new InMemoryTableWithV1Fallback(
+        "InMemoryTableWithV1Fallback",
+        schema,
+        partitioning,
+        properties
+      )
+    })
+    if (t.schema != schema) {
+      throw new IllegalArgumentException("Wrong schema provided")
+    }
+    if (!t.partitioning.sameElements(partitioning)) {
+      throw new IllegalArgumentException("Wrong partitioning provided")
+    }
+    t
+  }
 }
 
 class InMemoryTableWithV1Fallback(
