@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.PredictorParams
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -137,17 +138,14 @@ class NaiveBayes @Since("1.5.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val modelTypeValue = $(modelType)
-    val requireValues: Vector => Unit = {
-      modelTypeValue match {
-        case Multinomial =>
-          requireNonnegativeValues
-        case Bernoulli =>
-          requireZeroOneBernoulliValues
-        case _ =>
-          // This should never happen.
-          throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
-      }
+    val validateInstance = $(modelType) match {
+      case Multinomial =>
+        (instance: Instance) => requireNonnegativeValues(instance.features)
+      case Bernoulli =>
+        (instance: Instance) => requireZeroOneBernoulliValues(instance.features)
+      case _ =>
+        // This should never happen.
+        throw new IllegalArgumentException(s"Invalid modelType: ${$(modelType)}.")
     }
 
     instr.logParams(this, labelCol, featuresCol, weightCol, predictionCol, rawPredictionCol,
@@ -159,12 +157,11 @@ class NaiveBayes @Since("1.5.0") (
     // Aggregates term frequencies per label.
     // TODO: Calling aggregateByKey and collect creates two stages, we can implement something
     // TODO: similar to reduceByKeyLocally to save one stage.
-    val aggregated = extractInstances(dataset).map { instance =>
+    val aggregated = extractInstances(dataset, validateInstance).map { instance =>
       (instance.label, (instance.weight, instance.features))
     }.aggregateByKey[(Double, DenseVector, Long)]((0.0, Vectors.zeros(numFeatures).toDense, 0L))(
       seqOp = {
          case ((weightSum, featureSum, count), (weight, features)) =>
-           requireValues(features)
            BLAS.axpy(weight, features, featureSum)
            (weightSum + weight, featureSum, count + 1)
       },
