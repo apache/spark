@@ -161,7 +161,7 @@ private[hive] class HiveClientImpl(
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
     // the initial value will be the current thread's context class loader
     // (i.e. initClassLoader at here).
-    // We call initialConf.setClassLoader(initClassLoader) at here to make
+    // We call hiveConf.setClassLoader(initClassLoader) at here to make
     // this action explicit.
     hiveConf.setClassLoader(initClassLoader)
 
@@ -190,6 +190,12 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
+    // For hive version higher then 2.3, when we initial SessionState, it will set
+    // a new UDFClassLoader to hiveConf's classLoader, when we use ADDJarCommand to
+    // add jar, it will be added to clientLoader.classLoader, then the jar won't be find
+    // in hiveConf's ClassLoader, here we rest it with clientLoader.ClassLoader which contains
+    // jars passed by --jars loaded by main thread ClassLoader. Thus we can load all jars
+    // passed by --jars and AddJarCommand.
     state.getConf.setClassLoader(initClassLoader)
     SessionState.start(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
