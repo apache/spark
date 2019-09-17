@@ -33,5 +33,4 @@ public interface SingleSpillShuffleMapOutputWriter {
    * Transfer a file that contains the bytes of all the partitions written by this map task.
    */
   void transferMapSpillFile(File mapOutputFile, long[] partitionLengths) throws IOException;
-
 }

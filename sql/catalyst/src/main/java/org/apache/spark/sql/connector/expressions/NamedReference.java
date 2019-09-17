@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Experimental;
 
-import java.util.Map;
-
 /**
  * Represents a field or column reference in the public logical expression API.
  */

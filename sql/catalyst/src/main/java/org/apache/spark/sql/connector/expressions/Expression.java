@@ -23,17 +23,9 @@ import org.apache.spark.annotation.Experimental;
  * Base class of the public logical expression API.
  */
 @Experimental
-<<<<<<< HEAD:sql/catalyst/src/main/java/org/apache/spark/sql/connector/expressions/Expression.java
 public interface Expression {
   /**
    * Format the expression as a human readable SQL-like string.
    */
   String describe();
-=======
-public interface ShuffleDataIO {
-  String SHUFFLE_SPARK_CONF_PREFIX = "spark.shuffle.plugin.";
-
-  ShuffleDriverComponents driver();
-  ShuffleExecutorComponents executor();
->>>>>>> ab9131d66a... [SPARK-25299] Driver lifecycle api (#533):core/src/main/java/org/apache/spark/api/shuffle/ShuffleDataIO.java
 }
