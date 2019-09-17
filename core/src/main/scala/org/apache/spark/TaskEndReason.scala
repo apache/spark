@@ -83,7 +83,7 @@ case object Resubmitted extends TaskFailedReason {
 case class FetchFailed(
     bmAddress: BlockManagerId,  // Note that bmAddress can be null
     shuffleId: Int,
-    mapTaskId: Long,
+    mapId: Long,
     mapIndex: Int,
     reduceId: Int,
     message: String)
@@ -91,7 +91,7 @@ case class FetchFailed(
   override def toErrorString: String = {
     val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
     s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapIndex=$mapIndex, " +
-      s"mapTaskId=$mapTaskId, reduceId=$reduceId, message=\n$message\n)"
+      s"mapId=$mapId, reduceId=$reduceId, message=\n$message\n)"
   }
 
   /**

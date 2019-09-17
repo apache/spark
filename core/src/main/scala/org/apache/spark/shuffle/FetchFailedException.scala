@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 private[spark] class FetchFailedException(
     bmAddress: BlockManagerId,
     shuffleId: Int,
-    mapTaskId: Long,
+    mapId: Long,
     mapIndex: Int,
     reduceId: Int,
     message: String,
@@ -59,7 +59,7 @@ private[spark] class FetchFailedException(
   Option(TaskContext.get()).map(_.setFetchFailed(this))
 
   def toTaskFailedReason: TaskFailedReason = FetchFailed(
-    bmAddress, shuffleId, mapTaskId, mapIndex, reduceId, Utils.exceptionString(this))
+    bmAddress, shuffleId, mapId, mapIndex, reduceId, Utils.exceptionString(this))
 }
 
 /**

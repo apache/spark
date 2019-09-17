@@ -731,7 +731,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       case (Resubmitted, Resubmitted) =>
       case (r1: FetchFailed, r2: FetchFailed) =>
         assert(r1.shuffleId === r2.shuffleId)
-        assert(r1.mapTaskId === r2.mapTaskId)
+        assert(r1.mapId === r2.mapId)
         assert(r1.mapIndex === r2.mapIndex)
         assert(r1.reduceId === r2.reduceId)
         assert(r1.bmAddress === r2.bmAddress)

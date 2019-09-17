@@ -316,12 +316,12 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
-          val mapTaskId = 0L
+          val mapId = 0L
           val mapIndex = 0
           val reduceId = taskContext.partitionId()
           val message = "Simulated fetch failure"
           throw new FetchFailedException(
-            bmAddress, shuffleId, mapTaskId, mapIndex, reduceId, message)
+            bmAddress, shuffleId, mapId, mapIndex, reduceId, message)
         } else {
           x
         }
