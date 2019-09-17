@@ -120,7 +120,8 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   }
 
   @Override
-  public Map<String, String> loadNamespaceMetadata(String[] namespace) throws NoSuchNamespaceException {
+  public Map<String, String> loadNamespaceMetadata(
+      String[] namespace) throws NoSuchNamespaceException {
     return delegate.loadNamespaceMetadata(namespace);
   }
 
