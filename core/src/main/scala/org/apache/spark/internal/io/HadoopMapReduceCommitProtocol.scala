@@ -160,6 +160,8 @@ class HadoopMapReduceCommitProtocol(
 
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
+    // For dynamic partition overwrite, it has specific job attempt path, so we don't need
+    // committer.setupJob here. Same with the commitJob and abortJob operations below.
     if (!dynamicPartitionOverwrite) {
       committer.setupJob(jobContext)
     }
