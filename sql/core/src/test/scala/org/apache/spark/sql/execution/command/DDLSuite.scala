@@ -2139,11 +2139,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-<<<<<<< HEAD
         assert(table1.location == makeQualifiedPath(newDir))
-=======
-        assert(table1.location == newDir)
->>>>>>> master
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -2508,7 +2504,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
-<<<<<<< HEAD
         spark.sql(s"ALTER TABLE t SET LOCATION '$dir'")
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location.toString.startsWith("file:/"))
@@ -2516,11 +2511,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
-=======
         // The parser does not recognize the backslashes on Windows as they are.
         // These currently should be escaped.
         val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
->>>>>>> master
         spark.sql(
           s"""
              |CREATE TABLE t1(a string, b string)
@@ -2534,7 +2527,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-<<<<<<< HEAD
   test("the qualified path of a partition is stored in the catalog") {
     withTable("t") {
       withTempDir { dir =>
@@ -2562,7 +2554,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         val part = spark.sessionState.catalog.getPartition(TableIdentifier("t"), Map("b" -> "2"))
         assert(part.storage.locationUri.contains(makeQualifiedPath(dir.getAbsolutePath)))
         assert(part.storage.locationUri.get.toString.startsWith("file:/"))
-=======
+      }
+    }
+  }
+
   protected def testAddColumn(provider: String): Unit = {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int) USING $provider")
@@ -2796,7 +2791,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM foo.first")
           checkAnswer(spark.table("foo.first"), Row("second"))
         }
->>>>>>> master
       }
     }
   }
