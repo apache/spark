@@ -112,7 +112,7 @@ private[codegen] case class NewFunctionSpec(
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
-class CodegenContext {
+class CodegenContext extends Logging {
 
   import CodeGenerator._
 
@@ -1038,13 +1038,67 @@ class CodegenContext {
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
-    val codes = commonExprs.map { e =>
-      val expr = e.head
-      // Generate the code for this expression tree.
-      val eval = expr.genCode(this)
-      val state = SubExprEliminationState(eval.isNull, eval.value)
-      e.foreach(localSubExprEliminationExprs.put(_, state))
-      eval.code.toString
+    val commonExprVals = commonExprs.map(_.head.genCode(this))
+
+    lazy val nonSplitExprCode = {
+      commonExprs.zip(commonExprVals).map { case (exprs, eval) =>
+        // Generate the code for this expression tree.
+        val state = SubExprEliminationState(eval.isNull, eval.value)
+        exprs.foreach(localSubExprEliminationExprs.put(_, state))
+        eval.code.toString
+      }
+    }
+
+    val codes = if (commonExprVals.map(_.code.length).sum > SQLConf.get.methodSplitThreshold) {
+      if (commonExprs.map(calculateParamLength).forall(isValidParamLength)) {
+        commonExprs.zipWithIndex.map { case (exprs, i) =>
+          val expr = exprs.head
+          val eval = commonExprVals(i)
+
+          val isNullLiteral = eval.isNull match {
+            case TrueLiteral | FalseLiteral => true
+            case _ => false
+          }
+          val (isNull, isNullEvalCode) = if (!isNullLiteral) {
+            val v = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+            (JavaCode.isNullGlobal(v), s"$v = ${eval.isNull};")
+          } else {
+            (eval.isNull, "")
+          }
+
+          // Generate the code for this expression tree and wrap it in a function.
+          val fnName = freshName("subExpr")
+          val inputVars = getLocalInputVariableValues(this, expr).toSeq
+          val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
+          val returnType = javaType(expr.dataType)
+          val fn =
+            s"""
+               |private $returnType $fnName(${argList.mkString(", ")}) {
+               |  ${eval.code}
+               |  $isNullEvalCode
+               |  return ${eval.value};
+               |}
+               """.stripMargin
+
+          val value = freshName("subExprValue")
+          val state = SubExprEliminationState(isNull, JavaCode.variable(value, expr.dataType))
+          exprs.foreach(localSubExprEliminationExprs.put(_, state))
+          val inputVariables = inputVars.map(_.variableName).mkString(", ")
+          s"$returnType $value = ${addNewFunction(fnName, fn)}($inputVariables);"
+        }
+      } else {
+        val errMsg = "Failed to split subexpression code into small functions because the " +
+          "parameter length of at least one split function went over the JVM limit: " +
+          MAX_JVM_METHOD_PARAMS_LENGTH
+        if (Utils.isTesting) {
+          throw new IllegalStateException(errMsg)
+        } else {
+          logInfo(errMsg)
+          nonSplitExprCode
+        }
+      }
+    } else {
+      nonSplitExprCode
     }
     SubExprCodes(codes, localSubExprEliminationExprs.toMap)
   }
@@ -1646,7 +1700,7 @@ object CodeGenerator extends Logging {
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState]): Set[VariableValue] = {
+      subExprs: Map[Expression, SubExprEliminationState] = Map.empty): Set[VariableValue] = {
     val argSet = mutable.Set[VariableValue]()
     if (ctx.INPUT_ROW != null) {
       argSet += JavaCode.variable(ctx.INPUT_ROW, classOf[InternalRow])
@@ -1801,6 +1855,10 @@ object CodeGenerator extends Logging {
    * length less than a pre-defined constant.
    */
   def isValidParamLength(paramLength: Int): Boolean = {
-    paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
+    // This config is only for testing
+    SQLConf.get.getConfString("spark.sql.CodeGenerator.validParamLength", null) match {
+      case null | "" => paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
+      case validLength => paramLength <= validLength.toInt
+    }
   }
 }
