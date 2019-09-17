@@ -1175,11 +1175,17 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42,
     ...     leafCol="leafId")
     >>> model = rf.fit(td)
+    >>> model.getLabelCol()
+    'indexed'
+    >>> model.setFeaturesCol("features")
+    RandomForestClassificationModel...
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
     True
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> model.predict(test0.head().features)
+    0.0
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
