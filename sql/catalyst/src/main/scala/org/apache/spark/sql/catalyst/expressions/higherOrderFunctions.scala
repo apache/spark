@@ -310,10 +310,10 @@ case class ArraySorting(
     function: Expression)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
 
-  @transient lazy val elementType: DataType =
+  @transient lazy val argumenType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
 
-  override def dataType: ArrayType = ArrayType(elementType, argument.nullable)
+  override def dataType: ArrayType = ArrayType(argumenType, argument.nullable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     checkArgumentDataTypes() match {
@@ -331,13 +331,8 @@ case class ArraySorting(
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySorting = {
     val ArrayType(elementType, containsNull) = argument.dataType
-    function match {
-      case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
         copy(function =
           f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
-      case _ =>
-        copy(function = f(function, (elementType, containsNull) :: Nil))
-    }
   }
 
   @transient lazy val (firstParam, secondParam) = {
@@ -371,8 +366,8 @@ case class ArraySorting(
   }
 
   def sortEval(array: Any, comparator: Comparator[Any]): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
-    if (elementType!= NullType) {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](argumenType)
+    if (argumenType!= NullType) {
       java.util.Arrays.sort(data, comparator)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])

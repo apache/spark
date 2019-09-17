@@ -454,7 +454,7 @@ object FunctionRegistry {
     expression[ArrayRemove]("array_remove"),
     expression[ArrayDistinct]("array_distinct"),
     expression[ArrayTransform]("transform"),
-    expression[ArraySorting]("array_sort"),
+    expression[ArraySorting]("sort"),
     expression[MapFilter]("map_filter"),
     expression[ArrayFilter]("filter"),
     expression[ArrayExists]("exists"),
