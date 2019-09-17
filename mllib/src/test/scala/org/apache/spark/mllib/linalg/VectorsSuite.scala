@@ -510,4 +510,29 @@ class VectorsSuite extends SparkFunSuite with Logging {
       Vectors.sparse(-1, Array((1, 2.0)))
     }
   }
+
+  test("dot product only supports vectors of same size") {
+    intercept[IllegalArgumentException]{ Vectors.dot(Vectors.dense(arr), Vectors.zeros(1)) }
+  }
+
+  test("dense vector dot product") {
+    val dv = Vectors.dense(arr)
+    assert(Vectors.dot(dv, dv) === 0.26)
+    assert(dv.dot(dv) === 0.26)
+  }
+
+  test("sparse vector dot product") {
+    val sv = Vectors.sparse(n, indices, values)
+    assert(Vectors.dot(sv, sv) === 0.26)
+    assert(sv.dot(sv) === 0.26)
+  }
+
+  test("mixed sparse and dense vector dot product") {
+    val sv = Vectors.sparse(n, indices, values)
+    val dv = Vectors.dense(arr)
+    assert(Vectors.dot(sv, dv) === 0.26)
+    assert(Vectors.dot(dv, sv) === 0.26)
+    assert(sv.dot(dv) === 0.26)
+    assert(dv.dot(sv) === 0.26)
+  }
 }
