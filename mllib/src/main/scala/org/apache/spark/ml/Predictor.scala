@@ -78,7 +78,7 @@ private[ml] trait PredictorParams extends Params
       case _ => lit(1.0)
     }
 
-    dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
+    dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
       case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
     }
