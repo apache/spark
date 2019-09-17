@@ -20,8 +20,7 @@ license: |
 ---
 
 ### Description
-Drops the specified `VIEW`, which was created by `CREATE VIEW` statement. `DROP VIEW` only involves
-changes in metadata from the metastore database.
+DROP VIEW removes the metadata associated with a specified view from the catalog.
 
 ### Syntax
 {% highlight sql %}
@@ -36,11 +35,11 @@ DROP VIEW [IF EXISTS] [database_name.]view_name
   </dd>
   <dt><code><em>database_name</em></code></dt>
   <dd>
-     Database name where view is present.
+     Specifies the database name where view is present.
   </dd>
   <dt><code><em>view_name</em></code></dt>
   <dd>
-     view name to be dropped.
+     Specifies the view name to be dropped.
   </dd>
 </dl>
 

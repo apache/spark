@@ -22,10 +22,9 @@ license: |
 ### Description
 
 Deletes the table and removes the directory associated with this table from the file system
-if this is not `EXTERNAL` table. If the table is not present it throws exception.
+if this is not `EXTERNAL` table. If the table is not present it throws an exception.
 
-In case of External table it only deletes the metadata from metastore database and it will not remove the directory 
-associated with this table.
+In case of External table, only the associated metadata information are removed from the metastore database.
 
 ### Syntax
 {% highlight sql %}
@@ -40,11 +39,11 @@ DROP TABLE [IF EXISTS] [database_name.]table_name
   </dd>
   <dt><code><em>database_name</em></code></dt>
   <dd>
-     Database name where table is present.
+     Specifies the database name where table is present.
   </dd>
   <dt><code><em>table_name</em></code></dt>
   <dd>
-     table name to be dropped.
+     Specifies the table name to be dropped.
   </dd>
 </dl>
 
