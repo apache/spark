@@ -21,11 +21,10 @@ import java.util
 
 import com.google.common.collect.ImmutableMap
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
-import org.apache.spark.api.shuffle.{ShuffleDataIO, ShuffleExecutorComponents, ShuffleWriteSupport}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.SHUFFLE_IO_PLUGIN_CLASS
-import org.apache.spark.shuffle.api.ShuffleDriverComponents
-import org.apache.spark.shuffle.sort.io.DefaultShuffleWriteSupport
+import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleDriverComponents, ShuffleExecutorComponents, ShuffleMapOutputWriter}
+import org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO
 
 class ShuffleDriverComponentsSuite extends SparkFunSuite with LocalSparkContext {
   test(s"test serialization of shuffle initialization conf to executors") {
@@ -52,21 +51,28 @@ class TestShuffleDriverComponents extends ShuffleDriverComponents {
 }
 
 class TestShuffleDataIO(sparkConf: SparkConf) extends ShuffleDataIO {
+  private var delegate = new LocalDiskShuffleDataIO(sparkConf)
+
   override def driver(): ShuffleDriverComponents = new TestShuffleDriverComponents()
 
   override def executor(): ShuffleExecutorComponents =
-    new TestShuffleExecutorComponents(sparkConf)
+    new TestShuffleExecutorComponents(delegate.executor())
 }
 
-class TestShuffleExecutorComponents(sparkConf: SparkConf) extends ShuffleExecutorComponents {
+class TestShuffleExecutorComponents(delegate: ShuffleExecutorComponents)
+  extends ShuffleExecutorComponents {
+
   override def initializeExecutor(appId: String, execId: String,
                                   extraConfigs: util.Map[String, String]): Unit = {
     assert(extraConfigs.get("test-key") == "test-value")
+    delegate.initializeExecutor(appId, execId, extraConfigs)
   }
 
-  override def writes(): ShuffleWriteSupport = {
-    val blockManager = SparkEnv.get.blockManager
-    val blockResolver = new IndexShuffleBlockResolver(sparkConf, blockManager)
-    new DefaultShuffleWriteSupport(sparkConf, blockResolver)
+  override def createMapOutputWriter(
+      shuffleId: Int,
+      mapId: Int,
+      mapTaskAttemptId: Long,
+      numPartitions: Int): ShuffleMapOutputWriter = {
+    delegate.createMapOutputWriter(shuffleId, mapId, mapTaskAttemptId, numPartitions);
   }
 }
