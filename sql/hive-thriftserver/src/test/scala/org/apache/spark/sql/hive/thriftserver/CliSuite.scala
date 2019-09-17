@@ -235,21 +235,21 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(
       3.minute,
       Seq("--conf", s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
-      """CREATE TABLE t1(key string, val string)
+      """CREATE TABLE addJarWithHiveAux(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
         -> "",
-      "CREATE TABLE sourceTable (key INT, val STRING);"
+      "CREATE TABLE sourceTableForWithHiveAux (key INT, val STRING);"
         -> "",
-      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
+      s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTableForWithHiveAux;"
         -> "",
-      "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
+      "INSERT INTO TABLE addJarWithHiveAux SELECT key, val FROM sourceTableForWithHiveAux;"
         -> "",
-      "SELECT collect_list(array(val)) FROM t1;"
+      "SELECT collect_list(array(val)) FROM addJarWithHiveAux;"
         -> """[["val_238"],["val_86"],["val_311"],["val_27"],["val_165"]]""",
-      "DROP TABLE t1;"
+      "DROP TABLE addJarWithHiveAux;"
         -> "",
-      "DROP TABLE sourceTable;"
+      "DROP TABLE sourceTableForWithHiveAux;"
         -> ""
     )
   }
