@@ -21,9 +21,9 @@ import scala.collection.immutable.IndexedSeq
 
 import org.scalatest.Suite
 
-class HiveClientSuites extends Suite with HiveClientVersions {
+class HivePartitionFilteringSuites extends Suite with HiveClientVersions {
   override def nestedSuites: IndexedSeq[Suite] = {
     // Hive 0.12 does not provide the partition filtering API we call
-    versions.filterNot(_ == "0.12").map(new HiveClientSuite(_))
+    versions.filterNot(_ == "0.12").map(new HivePartitionFilteringSuite(_))
   }
 }
