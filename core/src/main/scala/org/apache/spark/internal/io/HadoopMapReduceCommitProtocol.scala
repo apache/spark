@@ -161,7 +161,7 @@ class HadoopMapReduceCommitProtocol(
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
     if (!dynamicPartitionOverwrite) {
-      committer.setupJob(jobContext)
+      committer.setupJob(jobContext )
     }
   }
 
