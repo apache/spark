@@ -21,8 +21,8 @@ license: |
 
 ### Description
 The `TRUNCATE TABLE` statement removes all the rows from a table or partition(s). The table must not be a view 
-or an external/temporary table. Inorder to truncate multiple partitions at once, user can specify the partitions 
-in partition_spec. If no partition_spec is specified it will remove all partitions in the table.
+or an external/temporary table. In order to truncate multiple partitions at once, the user can specify the partitions 
+in `partition_spec`. If no `partition_spec` is specified it will remove all partitions in the table.
 
 ### Syntax
 {% highlight sql %}
@@ -59,7 +59,7 @@ SELECT * from Student;
 -- Removes all rows from the table in the partion specified
 TRUNCATE TABLE Student partition(age=10);
 
---After truncate execution, records belonging to partition age=10 is removed
+--After truncate execution, records belonging to partition age=10 are removed
 SELECT * from Student;
 +-------+---------+------+--+
 | name  | rollno  | age  |
