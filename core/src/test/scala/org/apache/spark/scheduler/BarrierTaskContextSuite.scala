@@ -32,7 +32,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
       // call is actually useful.
       .setMaster("local-cluster[4, 1, 1024]")
       .setAppName("test-cluster")
-      .set("spark.barrier.sync.timeout", "1")
       .set(TEST_NO_STAGE_RETRY, true)
     sc = new SparkContext(conf)
   }
@@ -81,6 +80,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("throw exception on barrier() call timeout") {
     initLocalClusterSparkContext()
+    sc.conf.set("spark.barrier.sync.timeout", "1")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -101,6 +101,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("throw exception if barrier() call doesn't happen on every task") {
     initLocalClusterSparkContext()
+    sc.conf.set("spark.barrier.sync.timeout", "1")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -119,6 +120,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
     initLocalClusterSparkContext()
+    sc.conf.set("spark.barrier.sync.timeout", "1")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
