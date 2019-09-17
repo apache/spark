@@ -36,7 +36,10 @@ public interface ShuffleExecutorComponents {
    * Called once per executor to bootstrap this module with state that is specific to
    * that executor, specifically the application ID and executor ID.
    *
-   * TODO (yifeih): write docs for extra configs
+   * @param appId The Spark application id
+   * @param execId The unique identifier of the executor being initialized
+   * @param extraConfigs Extra configs that were returned by
+   *                     {@link ShuffleDriverComponents#initializeApplication()}
    */
   void initializeExecutor(String appId, String execId, Map<String, String> extraConfigs);
 

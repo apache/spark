@@ -17,18 +17,36 @@
 
 package org.apache.spark.shuffle.api;
 
+import org.apache.spark.annotation.Private;
+
 import java.io.IOException;
 import java.util.Map;
 
-// TODO (yifeih): write docs.
+/**
+ * :: Private ::
+ * An interface for building shuffle support modules for the Driver.
+ */
+@Private
 public interface ShuffleDriverComponents {
 
   /**
-   * @return additional SparkConf values necessary for the executors.
+   * Called once in the driver to bootstrap this module that is specific
+   * to this application.
+   *
+   * @return additional SparkConf settings necessary for initializing the executors.
    */
   Map<String, String> initializeApplication();
 
+  /**
+   * Called once at the end of the Spark application to clean up any existing shuffle state.
+   */
   void cleanupApplication() throws IOException;
 
+  /**
+   * Removes shuffle data associated with the given shuffle Id.
+   *
+   * @param shuffleId The unique identifier for the shuffle stage.
+   * @param blocking Whether this call should block on the deletion of the data.
+   */
   void removeShuffleData(int shuffleId, boolean blocking) throws IOException;
 }
