@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.MyDoubleAvg
 import test.org.apache.spark.sql.MyDoubleSum
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, UnsafeRow}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -1017,6 +1017,16 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val agg1 = df.groupBy($"text").agg(avg($"number").as("avg_res"))
     val agg2 = agg1.groupBy($"text").agg(sum($"avg_res"))
     checkAnswer(agg2, Row("a", BigDecimal("11.9999999994857142860000")))
+  }
+
+  test("SPARK-29122: hash-based aggregates for unfixed-length decimals in the interpreter mode") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString) {
+      withTable("t") {
+        spark.range(3).selectExpr("CAST(id AS decimal(38, 0)) a").write.saveAsTable("t")
+        checkAnswer(sql("SELECT SUM(a) FROM t"), Row(java.math.BigDecimal.valueOf(3)))
+      }
+    }
   }
 }
 
