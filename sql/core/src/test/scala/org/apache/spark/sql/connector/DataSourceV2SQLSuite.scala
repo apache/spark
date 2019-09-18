@@ -795,7 +795,7 @@ class DataSourceV2SQLSuite
     spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
 
     // The current catalog is resolved to a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq())
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
   }
 
   test("ShowNamespaces: default v2 catalog doesn't support namespace") {
@@ -835,7 +835,7 @@ class DataSourceV2SQLSuite
     sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
 
     // Initially, the current catalog is a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq())
+    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
 
     // Update the current catalog to 'testcat'.
     sql("USE CATALOG testcat")
@@ -843,7 +843,8 @@ class DataSourceV2SQLSuite
 
     // Update the current namespace to 'ns1'.
     sql("USE ns1")
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1.ns2"))
+    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
+    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
   }
 
   private def testShowNamespaces(

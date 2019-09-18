@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  * the caller to look up a catalog by name.
  */
 private[sql]
-class CatalogManager(conf: SQLConf, defaultSessionCatalog: BaseSessionCatalog) extends Logging {
+class CatalogManager(conf: SQLConf, defaultSessionCatalog: CatalogPlugin) extends Logging {
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 

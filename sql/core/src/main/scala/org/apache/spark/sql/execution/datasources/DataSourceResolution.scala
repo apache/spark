@@ -170,10 +170,7 @@ case class DataSourceResolution(
       DeleteFromTable(aliased, delete.condition)
 
     case ShowNamespacesStatement(None, pattern) =>
-      ShowNamespaces(
-        currentCatalog.asNamespaceCatalog,
-        Some(catalogManager.currentNamespace),
-        pattern)
+      ShowNamespaces(currentCatalog.asNamespaceCatalog, None, pattern)
 
     case ShowNamespacesStatement(Some(namespace), pattern) =>
       val DefaultCatalogAndNamespace(maybeCatalog, ns) = namespace

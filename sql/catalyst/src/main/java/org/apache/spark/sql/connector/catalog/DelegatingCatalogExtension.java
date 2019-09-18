@@ -37,9 +37,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 @Experimental
 public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
-  private BaseSessionCatalog delegate;
+  private CatalogPlugin delegate;
 
-  public final void setDelegateCatalog(BaseSessionCatalog delegate) {
+  public final void setDelegateCatalog(CatalogPlugin delegate) {
     this.delegate = delegate;
   }
 
@@ -53,22 +53,22 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   @Override
   public Identifier[] listTables(String[] namespace) throws NoSuchNamespaceException {
-    return delegate.listTables(namespace);
+    return ((TableCatalog)delegate).listTables(namespace);
   }
 
   @Override
   public Table loadTable(Identifier ident) throws NoSuchTableException {
-    return delegate.loadTable(ident);
+    return ((TableCatalog)delegate).loadTable(ident);
   }
 
   @Override
   public void invalidateTable(Identifier ident) {
-    delegate.invalidateTable(ident);
+    ((TableCatalog)delegate).invalidateTable(ident);
   }
 
   @Override
   public boolean tableExists(Identifier ident) {
-    return delegate.tableExists(ident);
+    return ((TableCatalog)delegate).tableExists(ident);
   }
 
   @Override
@@ -77,70 +77,70 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       StructType schema,
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
-    return delegate.createTable(ident, schema, partitions, properties);
+    return ((TableCatalog)delegate).createTable(ident, schema, partitions, properties);
   }
 
   @Override
   public Table alterTable(
       Identifier ident,
       TableChange... changes) throws NoSuchTableException {
-    return delegate.alterTable(ident, changes);
+    return ((TableCatalog)delegate).alterTable(ident, changes);
   }
 
   @Override
   public boolean dropTable(Identifier ident) {
-    return delegate.dropTable(ident);
+    return ((TableCatalog)delegate).dropTable(ident);
   }
 
   @Override
   public void renameTable(
       Identifier oldIdent,
       Identifier newIdent) throws NoSuchTableException, TableAlreadyExistsException {
-    delegate.renameTable(oldIdent, newIdent);
+    ((TableCatalog)delegate).renameTable(oldIdent, newIdent);
   }
 
   @Override
   public String[] defaultNamespace() {
-    return delegate.defaultNamespace();
+    return ((SupportsNamespaces)delegate).defaultNamespace();
   }
 
   @Override
   public String[][] listNamespaces() throws NoSuchNamespaceException {
-    return delegate.listNamespaces();
+    return ((SupportsNamespaces)delegate).listNamespaces();
   }
 
   @Override
   public String[][] listNamespaces(String[] namespace) throws NoSuchNamespaceException {
-    return delegate.listNamespaces(namespace);
+    return ((SupportsNamespaces)delegate).listNamespaces(namespace);
   }
 
   @Override
   public boolean namespaceExists(String[] namespace) {
-    return delegate.namespaceExists(namespace);
+    return ((SupportsNamespaces)delegate).namespaceExists(namespace);
   }
 
   @Override
   public Map<String, String> loadNamespaceMetadata(
       String[] namespace) throws NoSuchNamespaceException {
-    return delegate.loadNamespaceMetadata(namespace);
+    return ((SupportsNamespaces)delegate).loadNamespaceMetadata(namespace);
   }
 
   @Override
   public void createNamespace(
       String[] namespace,
       Map<String, String> metadata) throws NamespaceAlreadyExistsException {
-    delegate.createNamespace(namespace, metadata);
+    ((SupportsNamespaces)delegate).createNamespace(namespace, metadata);
   }
 
   @Override
   public void alterNamespace(
       String[] namespace,
       NamespaceChange... changes) throws NoSuchNamespaceException {
-    delegate.alterNamespace(namespace, changes);
+    ((SupportsNamespaces)delegate).alterNamespace(namespace, changes);
   }
 
   @Override
   public boolean dropNamespace(String[] namespace) throws NoSuchNamespaceException {
-    return delegate.dropNamespace(namespace);
+    return ((SupportsNamespaces)delegate).dropNamespace(namespace);
   }
 }

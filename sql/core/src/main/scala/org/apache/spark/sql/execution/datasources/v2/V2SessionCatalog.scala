@@ -26,7 +26,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogDatabase, CatalogTable, CatalogTableType, CatalogUtils, SessionCatalog}
-import org.apache.spark.sql.connector.catalog.{BaseSessionCatalog, CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.NamespaceChange.RemoveProperty
 import org.apache.spark.sql.connector.expressions.{BucketTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -38,7 +38,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * A [[TableCatalog]] that translates calls to the v1 SessionCatalog.
  */
 class V2SessionCatalog(catalog: SessionCatalog, conf: SQLConf)
-  extends BaseSessionCatalog {
+  extends TableCatalog with SupportsNamespaces {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import V2SessionCatalog._
 

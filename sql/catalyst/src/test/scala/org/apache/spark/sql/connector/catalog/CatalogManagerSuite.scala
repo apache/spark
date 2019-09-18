@@ -30,7 +30,8 @@ class CatalogManagerSuite extends SparkFunSuite {
     val conf = new SQLConf
     val catalogManager = new CatalogManager(conf, FakeV2SessionCatalog)
     assert(catalogManager.currentCatalog.name == "fake_v2_session")
-    assert(catalogManager.currentNamespace.sameElements(Array("default")))
+    // FakeV2SessionCatalog does not support namespaces.
+    assert(catalogManager.currentNamespace.sameElements(Array.empty[String]))
 
     conf.setConfString("spark.sql.catalog.dummy", classOf[DummyCatalog].getName)
     conf.setConfString(SQLConf.DEFAULT_V2_CATALOG.key, "dummy")
