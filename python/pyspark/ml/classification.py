@@ -160,8 +160,10 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
     ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
     >>> svm = LinearSVC(maxIter=5, regParam=0.01)
     >>> model = svm.fit(df)
-    >>> model.setPredictionCol("prediction")
+    >>> model.setPredictionCol("newPrediction")
     LinearSVC...
+    >>> model.getPredictionCol()
+    'newPrediction'
     >>> model.coefficients
     DenseVector([0.0, -0.2792, -0.1833])
     >>> model.intercept
@@ -174,7 +176,7 @@ class LinearSVC(JavaClassifier, HasMaxIter, HasRegParam, HasTol,
     >>> model.predict(test0.head().features)
     1.0
     >>> result = model.transform(test0).head()
-    >>> result.prediction
+    >>> result.newPrediction
     1.0
     >>> result.rawPrediction
     DenseVector([-1.4831, 1.4831])
@@ -282,6 +284,10 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.setFeaturesCol("features")
     LogisticRegressionModel...
+    >>> blorModel.setProbabilityCol("newProbability")
+    LogisticRegressionModel...
+    >>> blorModel.getProbabilityCol()
+    'newProbability'
     >>> blorModel.coefficients
     DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
@@ -300,7 +306,7 @@ class LogisticRegression(JavaProbabilisticClassifier, HasMaxIter, HasRegParam, H
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
     1.0
-    >>> result.probability
+    >>> result.newProbability
     DenseVector([0.02..., 0.97...])
     >>> result.rawPrediction
     DenseVector([-3.54..., 3.54...])
@@ -1179,6 +1185,10 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
     'indexed'
     >>> model.setFeaturesCol("features")
     RandomForestClassificationModel...
+    >>> model.setRawPredictionCol("newRawPrediction")
+    RandomForestClassificationModel...
+    >>> model.getRawPredictionCol()
+    'newRawPrediction'
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
@@ -1191,7 +1201,7 @@ class RandomForestClassifier(JavaProbabilisticClassifier, HasSeed, RandomForestP
     0.0
     >>> numpy.argmax(result.probability)
     0
-    >>> numpy.argmax(result.rawPrediction)
+    >>> numpy.argmax(result.newRawPrediction)
     0
     >>> result.leafId
     DenseVector([0.0, 0.0, 0.0])
@@ -1417,6 +1427,10 @@ class GBTClassifier(JavaProbabilisticClassifier, GBTClassifierParams, HasCheckpo
     'indexed'
     >>> model.setFeaturesCol("features")
     GBTClassificationModel...
+    >>> model.setThresholds([0.3, 0.7])
+    GBTClassificationModel...
+    >>> model.getThresholds()
+    [0.3, 0.7]
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
@@ -1650,6 +1664,10 @@ class NaiveBayes(JavaProbabilisticClassifier, HasThresholds, HasWeightCol,
     >>> model = nb.fit(df)
     >>> model.setFeaturesCol("features")
     NaiveBayes_...
+    >>> model.setLabelCol("newLabel")
+    NaiveBayes_...
+    >>> model.getLabelCol()
+    'newLabel'
     >>> model.pi
     DenseVector([-0.81..., -0.58...])
     >>> model.theta
@@ -2003,6 +2021,8 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> ovr = OneVsRest(classifier=lr)
     >>> ovr.getRawPredictionCol()
     'rawPrediction'
+    >>> ovr.setPredictionCol("newPrediction")
+    OneVsRest...
     >>> model = ovr.fit(df)
     >>> model.models[0].coefficients
     DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
@@ -2013,21 +2033,21 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
     >>> [x.intercept for x in model.models]
     [-2.7..., -2.5..., -1.3...]
     >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
-    >>> model.transform(test0).head().prediction
+    >>> model.transform(test0).head().newPrediction
     0.0
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(4, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
+    >>> model.transform(test1).head().newPrediction
     2.0
     >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4, 0.3, 0.2))]).toDF()
-    >>> model.transform(test2).head().prediction
+    >>> model.transform(test2).head().newPrediction
     0.0
     >>> model_path = temp_path + "/ovr_model"
     >>> model.save(model_path)
     >>> model2 = OneVsRestModel.load(model_path)
-    >>> model2.transform(test0).head().prediction
+    >>> model2.transform(test0).head().newPrediction
     0.0
     >>> model.transform(test2).columns
-    ['features', 'rawPrediction', 'prediction']
+    ['features', 'rawPrediction', 'newPrediction']
 
     .. versionadded:: 2.0.0
     """

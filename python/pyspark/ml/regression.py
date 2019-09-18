@@ -68,17 +68,19 @@ class LinearRegression(JavaPredictor, HasMaxIter, HasRegParam, HasTol, HasElasti
     >>> model = lr.fit(df)
     >>> model.setFeaturesCol("features")
     LinearRegression...
+    >>> model.setPredictionCol("newPrediction")
+    LinearRegression...
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.predict(test0.head().features) - (-1.0)) < 0.001
     True
-    >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
+    >>> abs(model.transform(test0).head().newPrediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
-    >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
+    >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
     >>> lr.setParams("vector")
     Traceback (most recent call last):
@@ -477,6 +479,10 @@ class IsotonicRegression(JavaPredictor, HasWeightCol, JavaMLWritable, JavaMLRead
     >>> model = ir.fit(df)
     >>> model.setFeaturesCol("features")
     IsotonicRegression...
+    >>> model.setLabelCol("newLabel")
+    IsotonicRegression...
+    >>> model.getLabelCol()
+    'newLabel'
     >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
