@@ -46,6 +46,8 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, Utils}
 class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext
     with Eventually {
 
+  private val executorUpTimeout = 1.minute
+
   test("serialized task larger than max RPC message size") {
     val conf = new SparkConf
     conf.set(RPC_MESSAGE_MAX_SIZE, 1)
