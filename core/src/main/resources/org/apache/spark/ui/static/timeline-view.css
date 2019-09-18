@@ -222,12 +222,6 @@ rect.getting-result-time-proportion {
   stroke: #FF4D6D;
 }
 
-.vis-timeline .vis-item.executor.vis-selected {
-  background-color: #A0DFFF;
-  border-color: #3EC0FF;
-  z-index: 2;
-}
-
 tr.corresponding-item-hover > td, tr.corresponding-item-hover > th {
   background-color: #D6FFE4 !important;
 }
