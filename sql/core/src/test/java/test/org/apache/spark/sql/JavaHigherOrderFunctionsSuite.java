@@ -102,4 +102,16 @@ public class JavaHigherOrderFunctionsSuite {
                 null
             ));
     }
+
+    @Test
+    public void testForall() {
+        checkAnswer(
+            df.select(forall(col("x"), x -> x.plus(1).equalTo(10))),
+            toRows(
+                false,
+                false,
+                true,
+                null
+            ));
+    }
 }
