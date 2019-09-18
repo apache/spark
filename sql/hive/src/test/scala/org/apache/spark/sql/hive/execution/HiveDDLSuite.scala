@@ -2435,7 +2435,7 @@ class HiveDDLSuite
         .select("data_type")
       // check if the last access time doesnt have the default date of year
       // 1970 as its a wrong access time
-      assert(!(desc.first.toString.contains("1970")))
+      assert((desc.first.toString.contains("UNKNOWN")))
     }
   }
 
