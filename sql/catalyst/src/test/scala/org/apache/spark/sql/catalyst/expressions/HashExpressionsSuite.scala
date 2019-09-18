@@ -210,7 +210,7 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         expected: Long,
         zoneId: ZoneId = ZoneOffset.UTC): Unit = {
       checkHiveHash(
-        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), zoneId).get,
+        DateTimeUtils.stringToTimestamp(UTF8String.fromString(timestamp), zoneId, false).get,
         TimestampType,
         expected)
     }

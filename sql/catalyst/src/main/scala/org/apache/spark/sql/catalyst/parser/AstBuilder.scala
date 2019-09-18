@@ -1737,7 +1737,8 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         case "DATE" => toLiteral(stringToDate, DateType)
         case "TIMESTAMP" =>
           val zoneId = getZoneId(SQLConf.get.sessionLocalTimeZone)
-          toLiteral(stringToTimestamp(_, zoneId), TimestampType)
+          val supportSpecialValues = SQLConf.get.isPostgreSqlDialect
+          toLiteral(stringToTimestamp(_, zoneId, supportSpecialValues), TimestampType)
         case "INTERVAL" =>
           Literal(CalendarInterval.fromString(value), CalendarIntervalType)
         case "X" =>

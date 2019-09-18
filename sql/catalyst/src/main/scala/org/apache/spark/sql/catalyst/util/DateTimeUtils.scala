@@ -211,7 +211,10 @@ object DateTimeUtils {
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]-[h]h:[m]m`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]+[h]h:[m]m`
    */
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
+  def stringToTimestamp(
+      s: UTF8String,
+      timeZoneId: ZoneId,
+      supportSpecialValues: Boolean): Option[SQLTimestamp] = {
     if (s == null) {
       return None
     }
@@ -220,8 +223,10 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
-    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
-    if (specialTimestamp.isDefined) return specialTimestamp
+    if (supportSpecialValues) {
+      val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
+      if (specialTimestamp.isDefined) return specialTimestamp
+    }
     var j = 0
     var digitsMilli = 0
     var justTime = false

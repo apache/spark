@@ -290,6 +290,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
   private val failOnIntegralTypeOverflow = SQLConf.get.failOnIntegralTypeOverflow
+  private val supportSpecialValues = SQLConf.get.isPostgreSqlDialect
 
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
@@ -423,8 +424,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   // TimestampConverter
   private[this] def castToTimestamp(from: DataType): Any => Any = from match {
-    case StringType =>
-      buildCast[UTF8String](_, utfs => DateTimeUtils.stringToTimestamp(utfs, zoneId).orNull)
+    case StringType => buildCast[UTF8String](_, utfs =>
+      DateTimeUtils.stringToTimestamp(utfs, zoneId, supportSpecialValues).orNull)
     case BooleanType =>
       buildCast[Boolean](_, b => if (b) 1L else 0)
     case LongType =>
@@ -1174,11 +1175,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val zid = JavaCode.global(
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
         zoneIdClass)
+      val sv = ctx.addReferenceObj("supportSpecialValues", supportSpecialValues)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         code"""
           scala.Option<Long> $longOpt =
-            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid);
+            org.apache.spark.sql.catalyst.util.DateTimeUtils.stringToTimestamp($c, $zid, $sv);
           if ($longOpt.isDefined()) {
             $evPrim = ((Long) $longOpt.get()).longValue();
           } else {
