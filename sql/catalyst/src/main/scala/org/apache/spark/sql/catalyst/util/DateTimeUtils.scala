@@ -24,7 +24,6 @@ import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
