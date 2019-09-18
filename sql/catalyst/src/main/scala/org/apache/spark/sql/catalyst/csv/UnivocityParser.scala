@@ -193,7 +193,7 @@ class UnivocityParser(
     (input: String) => convert(tokenizer.parseLine(input))
   } else {
     // If `columnPruning` enabled and partition attributes scanned only,
-    // `schema` gets empty./
+    // `schema` gets empty.
     (_: String) => InternalRow.empty
   }
 
