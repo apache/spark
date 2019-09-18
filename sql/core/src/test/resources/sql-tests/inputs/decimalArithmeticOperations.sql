@@ -108,6 +108,3 @@ select 123456789123456789.1234567890 * 1.123456789123456789;
 select 12345678912345.123456789123 / 0.000000012345678;
 
 drop table decimals_test;
-
--- Turns off ANSI mode
-set spark.sql.ansi.enabled=false;

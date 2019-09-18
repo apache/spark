@@ -1708,10 +1708,10 @@ object SQLConf {
       .createOptional
 
   val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, tries to conform to the ANSI SQL specification. For example, Spark will " +
+    .doc("When true, Spark tries to conform to the ANSI SQL specification: 1. Spark will " +
       "throw an runtime exception if an overflow occurs in any operation on integral/decimal " +
-      "field. For another example, Spark will forbid using the reserved keywords of ANSI SQL " +
-      "as identifiers in the SQL parser.")
+      "field. 2. Spark will forbid using the reserved keywords of ANSI SQL as identifiers in " +
+      "the SQL parser.")
     .booleanConf
     .createWithDefault(false)
 
