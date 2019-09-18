@@ -712,7 +712,7 @@ trait ArraySortLike extends ExpectsInputTypes {
 
   protected def nullOrder: NullOrder
 
-  @transient private lazy val lt: Comparator[Any] = {
+  @transient lazy val lt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
@@ -732,7 +732,7 @@ trait ArraySortLike extends ExpectsInputTypes {
     }
   }
 
-  @transient private lazy val gt: Comparator[Any] = {
+  @transient lazy val gt: Comparator[Any] = {
     val ordering = arrayExpression.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
@@ -762,6 +762,14 @@ trait ArraySortLike extends ExpectsInputTypes {
     if (elementType != NullType) {
       java.util.Arrays.sort(data, if (ascending) lt else gt)
     }
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  def sortEval(array: Any, comparator: Comparator[Any]): Any = {
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    if (elementType!= NullType) {
+    java.util.Arrays.sort(data, comparator)
+  }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
   }
 

@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
@@ -309,32 +310,16 @@ case class ArrayTransform(
 case class ArraySort(
     argument: Expression,
     function: Expression)
-  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+  extends ArrayBasedSimpleHigherOrderFunction with ArraySortLike with CodegenFallback {
 
   def this(argument: Expression) = this(argument, Literal(true))
 
   @transient lazy val argumentsType: DataType =
     argument.dataType.asInstanceOf[ArrayType].elementType
 
-  @transient lazy val lt: Comparator[Any] = {
-    val ordering = argument.dataType match {
-      case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
-      case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
-    }
+  override protected def arrayExpression: Expression = argument
 
-    (o1: Any, o2: Any) => {
-      if (o1 == null && o2 == null) {
-        0
-      } else if (o1 == null) {
-        1
-      } else if (o2 == null) {
-        -1
-      } else {
-        ordering.compare(o1, o2)
-      }
-    }
-  }
+  override protected def nullOrder: NullOrder = NullOrder.Greatest
 
   override def dataType: ArrayType = ArrayType(argumentsType, argument.nullable)
 
@@ -398,20 +383,7 @@ case class ArraySort(
         }
       }
     }
-
-    if (function.dataType == BooleanType) {
-      sortEval(arr, lt)
-    } else {
-      sortEval(arr, customComparator)
-    }
-  }
-
-  def sortEval(array: Any, comparator: Comparator[Any]): Any = {
-    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](argumentsType)
-    if (argumentType!= NullType) {
-      java.util.Arrays.sort(data, comparator)
-    }
-    new GenericArrayData(data.asInstanceOf[Array[Any]])
+      sortEval(arr, if (function.dataType == BooleanType) lt else customComparator)
   }
 
   override def prettyName: String = "array_sort"
