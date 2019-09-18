@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time._
 import java.time.temporal.{ChronoField, ChronoUnit, IsoFields}
 import java.util.{Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.types.Decimal
@@ -218,6 +220,8 @@ object DateTimeUtils {
     var i = 0
     var currentSegmentValue = 0
     val bytes = s.trim.getBytes
+    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
+    if (specialTimestamp.isDefined) return specialTimestamp
     var j = 0
     var digitsMilli = 0
     var justTime = false
@@ -847,5 +851,68 @@ object DateTimeUtils {
     val offset = zoneId.getRules.getOffset(microsToInstant(timestamp)).getTotalSeconds
     val sinceEpoch = BigDecimal(timestamp) / MICROS_PER_SECOND + offset
     new Decimal().set(sinceEpoch, 20, 6)
+  }
+
+  def currentTimestamp(): SQLTimestamp = instantToMicros(Instant.now())
+
+  private def today(zoneId: ZoneId): ZonedDateTime = {
+    Instant.now().atZone(zoneId).`with`(LocalTime.MIDNIGHT)
+  }
+
+  private val specialValueRe = """(\p{Alpha}+)\p{Blank}*(.*)""".r
+
+  /**
+   * Extracts special values from an input string ignoring case.
+   * @param input - a trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some special value in lower case or None.
+   */
+  private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
+    def isValid(value: String, timeZoneId: String): Boolean = {
+      // Special value can be without any time zone
+      if (timeZoneId.isEmpty) return true
+      // "now" must not have the time zone field
+      if (value.compareToIgnoreCase("now") == 0) return false
+      // If the time zone field presents in the input, it must be resolvable
+      try {
+        getZoneId(timeZoneId)
+        true
+      } catch {
+        case NonFatal(_) => false
+      }
+    }
+
+    assert(input.trim.length == input.length)
+    if (input.length < 3 || !input(0).isLetter) return None
+    input match {
+      case specialValueRe(v, z) if isValid(v, z) => Some(v.toLowerCase(Locale.US))
+      case _ => None
+    }
+  }
+
+  /**
+   * Converts notational shorthands that are converted to ordinary timestamps.
+   * @param input - a trimmed string
+   * @param zoneId - zone identifier used to get the current date.
+   * @return some of microseconds since the epoch if the conversion completed
+   *         successfully otherwise None.
+   */
+  def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+    extractSpecialValue(input, zoneId).flatMap {
+      case "epoch" => Some(0)
+      case "now" => Some(currentTimestamp())
+      case "today" => Some(instantToMicros(today(zoneId).toInstant))
+      case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
+      case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+      case _ => None
+    }
+  }
+
+  private def convertSpecialTimestamp(bytes: Array[Byte], zoneId: ZoneId): Option[SQLTimestamp] = {
+    if (bytes.length > 0 && Character.isAlphabetic(bytes(0))) {
+      convertSpecialTimestamp(new String(bytes, StandardCharsets.UTF_8), zoneId)
+    } else {
+      None
+    }
   }
 }
