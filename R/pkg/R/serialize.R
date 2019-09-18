@@ -69,19 +69,19 @@ writeObject <- function(con, object, writeType = TRUE) {
   switch(serdeType,
          NULL = writeVoid(con),
          integer = writeInt(con, object),
-         glue = ,
+         glue = , # nolint
          character = writeString(con, object),
          logical = writeBoolean(con, object),
-         double = ,
+         double = , # nolint
          numeric = writeDouble(con, object),
          raw = writeRaw(con, object),
          array = writeArray(con, object),
-         list = ,
+         list = , # nolint
          struct = writeList(con, object),
          jobj = writeJobj(con, object),
          environment = writeEnv(con, object),
          Date = writeDate(con, object),
-         POSIXlt = ,
+         POSIXlt = , # nolint
          POSIXct = writeTime(con, object),
          stop(paste("Unsupported type for serialization", type)))
 }
@@ -144,10 +144,10 @@ writeType <- function(con, class) {
   type <- switch(class,
                  NULL = "n",
                  integer = "i",
-                 glue = ,
+                 glue = , # nolint
                  character = "c",
                  logical = "b",
-                 double = ,
+                 double = , # nolint
                  numeric = "d",
                  raw = "r",
                  array = "a",
@@ -156,7 +156,7 @@ writeType <- function(con, class) {
                  jobj = "j",
                  environment = "e",
                  Date = "D",
-                 POSIXlt = ,
+                 POSIXlt = , # nolint
                  POSIXct = "t",
                  stop(paste("Unsupported type for serialization", class)))
   writeBin(charToRaw(type), con)
