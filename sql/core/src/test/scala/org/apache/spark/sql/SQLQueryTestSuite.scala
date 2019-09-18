@@ -315,6 +315,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession {
         // TODO: remove this after SPARK-29122 is resolved.
         localSparkSession.sparkContext.setLocalProperty(
           SQLConf.FAIL_ON_INTEGRAL_TYPE_OVERFLOW.key, "true")
+        localSparkSession.conf.set(SQLConf.DIALECT.key, SQLConf.Dialect.POSTGRESQL.toString)
       case _ =>
     }
 
