@@ -625,7 +625,7 @@ case class HiveTableRelation(
       storage = CatalogStorageFormat.empty,
       createTime = -1
     ),
-    dataCols = dataCols.zipWithIndex.map {
+    dataCols = dataCols.zipWithIndex.map sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/CodeGenerator.scala{
       case (attr, index) => attr.withExprId(ExprId(index))
     },
     partitionCols = partitionCols.zipWithIndex.map {

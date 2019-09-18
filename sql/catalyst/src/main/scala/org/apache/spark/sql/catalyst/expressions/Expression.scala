@@ -156,6 +156,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
+    //
+    // NOTE: We could use `CodeGenerator.defineIndependentFunction` here for the code path
+    // of the whole stage codegen. But, we don't do so now because the performance changes that
+    // we don't expect might occur in many queries. Therefore, we currently apply
+    // this split function to specific performance-sensitive places only,
+    // e.g., common subexpression elimination for the whole stage codegen and OR expressions.
     val splitThreshold = SQLConf.get.methodSplitThreshold
     if (eval.code.length > splitThreshold && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {

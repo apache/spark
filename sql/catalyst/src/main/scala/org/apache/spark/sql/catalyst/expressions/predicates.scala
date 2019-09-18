@@ -629,9 +629,19 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
     }
   }
 
+  // Splits predicate code if the generated code of `expr` is too long
+  private def genSplitCode(ctx: CodegenContext, expr: Expression): ExprCode = {
+    val eval = expr.genCode(ctx)
+    if (eval.code.length > SQLConf.get.methodSplitThreshold) {
+      ctx.defineIndependentFunction(this, eval)
+    } else {
+      eval
+    }
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval1 = left.genCode(ctx)
-    val eval2 = right.genCode(ctx)
+    val eval1 = genSplitCode(ctx, left)
+    val eval2 = genSplitCode(ctx, right)
 
     // The result should be `true`, if any of them is `true` whenever the other is null or not.
     if (!left.nullable && !right.nullable) {

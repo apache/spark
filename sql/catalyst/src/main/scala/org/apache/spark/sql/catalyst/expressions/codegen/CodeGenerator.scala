@@ -1023,6 +1023,45 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * Defines an independent function for a given expression and returns a caller-side code
+   * for the function as `ExprCode`.
+   */
+  def defineIndependentFunction(
+      expr: Expression,
+      ev: ExprCode,
+      funcNameOption: Option[String] = None,
+      inputVarsOption: Option[Seq[VariableValue]] = None): ExprCode = {
+    val inputVars = inputVarsOption.getOrElse(getLocalInputVariableValues(this, expr).toSeq)
+    if (isValidParamLength(calculateParamLengthFromExprValues(inputVars))) {
+      val (isNull, setIsNull) = if (!ev.isNull.isInstanceOf[LiteralValue]) {
+        val globalIsNull = addMutableState(JAVA_BOOLEAN, "globalIsNull")
+        (JavaCode.isNullGlobal(globalIsNull), s"$globalIsNull = ${ev.isNull};")
+      } else {
+        (ev.isNull, "")
+      }
+
+      val fnName = freshName(funcNameOption.getOrElse(expr.prettyName))
+      val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
+      val returnType = javaType(expr.dataType)
+      val funcFullName = addNewFunction(fnName,
+        s"""
+           |private $returnType $fnName(${argList.mkString(", ")}) {
+           |  ${ev.code}
+           |  $setIsNull
+           |  return ${ev.value};
+           |}
+           """.stripMargin)
+
+      val newValue = freshName("value")
+      val inputVariables = inputVars.map(_.variableName).mkString(", ")
+      val code = code"$returnType $newValue = $funcFullName($inputVariables);"
+      ExprCode(code, isNull, JavaCode.variable(newValue, expr.dataType))
+    } else {
+      ev
+    }
+  }
+
+  /**
    * Checks and sets up the state and codegen for subexpression elimination. This finds the
    * common subexpressions, generates the code snippets that evaluate those expressions and
    * populates the mapping of common subexpressions to the generated code snippets. The generated
@@ -1057,39 +1096,15 @@ class CodegenContext extends Logging {
       }
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         commonExprs.zipWithIndex.map { case (exprs, i) =>
-          val expr = exprs.head
-          val eval = commonExprVals(i)
-
-          val isNullLiteral = eval.isNull match {
-            case TrueLiteral | FalseLiteral => true
-            case _ => false
-          }
-          val (isNull, isNullEvalCode) = if (!isNullLiteral) {
-            val v = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
-            (JavaCode.isNullGlobal(v), s"$v = ${eval.isNull};")
-          } else {
-            (eval.isNull, "")
-          }
-
-          // Generate the code for this expression tree and wrap it in a function.
-          val fnName = freshName("subExpr")
-          val inputVars = inputVarsForAllFuncs(i)
-          val argList = inputVars.map(v => s"${v.javaType.getName} ${v.variableName}")
-          val returnType = javaType(expr.dataType)
-          val fn =
-            s"""
-               |private $returnType $fnName(${argList.mkString(", ")}) {
-               |  ${eval.code}
-               |  $isNullEvalCode
-               |  return ${eval.value};
-               |}
-               """.stripMargin
-
-          val value = freshName("subExprValue")
-          val state = SubExprEliminationState(isNull, JavaCode.variable(value, expr.dataType))
+          val funcEval = defineIndependentFunction(
+            expr = exprs.head,
+            ev = commonExprVals(i),
+            funcNameOption = Some("subExprValue"),
+            inputVarsOption = Some(inputVarsForAllFuncs(i))
+          )
+          val state = SubExprEliminationState(funcEval.isNull, funcEval.value)
           exprs.foreach(localSubExprEliminationExprs.put(_, state))
-          val inputVariables = inputVars.map(_.variableName).mkString(", ")
-          s"$returnType $value = ${addNewFunction(fnName, fn)}($inputVariables);"
+          funcEval.code.toString
         }
       } else {
         val errMsg = "Failed to split subexpression code into small functions because the " +
