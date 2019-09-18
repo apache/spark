@@ -27,36 +27,34 @@ import org.apache.spark._
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
+
 /**
- * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
+ * Python UDF Runner for cogrouped udfs.  Although the data is exchanged with the python
+ * worker via arrow, we cannot use `ArrowPythonRunner` as we need to send more than one
+ * dataframe.
  */
-class ArrowPythonRunner(
+class CogroupedArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
     argOffsets: Array[Array[Int]],
-    schema: StructType,
+    leftSchema: StructType,
+    rightSchema: StructType,
     timeZoneId: String,
     conf: Map[String, String])
-  extends BaseArrowPythonRunner[Iterator[InternalRow]](
+  extends BaseArrowPythonRunner[(Iterator[InternalRow], Iterator[InternalRow])](
     funcs, evalType, argOffsets) {
 
-  override val bufferSize: Int = SQLConf.get.pandasUDFBufferSize
-  require(
-    bufferSize >= 4,
-    "Pandas execution requires more than 4 bytes. Please set higher buffer. " +
-      s"Please change '${SQLConf.PANDAS_UDF_BUFFER_SIZE.key}'.")
-
-  protected override def newWriterThread(
+  protected def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[Iterator[InternalRow]],
+      inputIterator: Iterator[(Iterator[InternalRow], Iterator[InternalRow])],
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
+
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
@@ -72,47 +70,44 @@ class ArrowPythonRunner(
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        // For each we first send the number of dataframes in each group then send
+        // first df, then send second df.  End of data is marked by sending 0.
+        while (inputIterator.hasNext) {
+          dataOut.writeInt(2)
+          val (nextLeft, nextRight) = inputIterator.next()
+          writeGroup(nextLeft, leftSchema, dataOut, "left")
+          writeGroup(nextRight, rightSchema, dataOut, "right")
+        }
+        dataOut.writeInt(0)
+      }
+
+      def writeGroup(
+          group: Iterator[InternalRow],
+          schema: StructType,
+          dataOut: DataOutputStream,
+          name: String) = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
-          s"stdout writer for $pythonExec", 0, Long.MaxValue)
+          s"stdout writer for $pythonExec ($name)", 0, Long.MaxValue)
         val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
         Utils.tryWithSafeFinally {
-          val arrowWriter = ArrowWriter.create(root)
           val writer = new ArrowStreamWriter(root, null, dataOut)
+          val arrowWriter = ArrowWriter.create(root)
           writer.start()
 
-          while (inputIterator.hasNext) {
-            val nextBatch = inputIterator.next()
-
-            while (nextBatch.hasNext) {
-              arrowWriter.write(nextBatch.next())
-            }
-
-            arrowWriter.finish()
-            writer.writeBatch()
-            arrowWriter.reset()
+          while (group.hasNext) {
+            arrowWriter.write(group.next())
           }
-          // end writes footer to the output stream and doesn't clean any resources.
-          // It could throw exception if the output stream is closed, so it should be
-          // in the try block.
+          arrowWriter.finish()
+          writer.writeBatch()
           writer.end()
-        } {
-          // If we close root and allocator in TaskCompletionListener, there could be a race
-          // condition where the writer thread keeps writing to the VectorSchemaRoot while
-          // it's being closed by the TaskCompletion listener.
-          // Closing root and allocator here is cleaner because root and allocator is owned
-          // by the writer thread and is only visible to the writer thread.
-          //
-          // If the writer thread is interrupted by TaskCompletionListener, it should either
-          // (1) in the try block, in which case it will get an InterruptedException when
-          // performing io, and goes into the finally block or (2) in the finally block,
-          // in which case it will ignore the interruption and close the resources.
+        }{
           root.close()
           allocator.close()
         }
       }
     }
   }
-
 }
+
