@@ -193,7 +193,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
    * Exposed for testing.
    */
   @throws(classOf[TimeoutException])
-  def waitUntilEmpty(): Unit = {
+  private[spark] def waitUntilEmpty(): Unit = {
     waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
   }
 
