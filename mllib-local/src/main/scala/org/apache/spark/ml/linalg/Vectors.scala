@@ -253,7 +253,7 @@ object Vectors {
    * If `size` does not match an [[IllegalArgumentException]] is thrown.
    */
   @Since("3.0.0")
-  def dot(v1: Vector, v2: Vector): Double = BLAS.dot(v1, v2)
+  def dot(v1: Vector, v2: Vector): Double = v1.dot(v2)
 
   /**
    * Creates a vector of all zeros.
